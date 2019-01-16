@@ -1,0 +1,100 @@
+*jobscript*
+graphviz*
+
+# images
+*.jpg
+*.jpeg
+*.eps
+*.png
+*.bmp
+
+
+# Word
+~*
+
+#Tex
+*.aux
+*.log
+*.out
+*.div
+*.bbl
+*.gz
+*.blg
+
+# Matlab
+*.m~
+*.mexa64
+*.mexw64
+*.pdb
+*.mexglx
+*.asv
+
+
+# PyCharm
+*.idea
+
+
+# Python
+*__pycache__*
+
+
+# Specific files/directories
+output.txt
+nohup.out
+toy*.py
+tmp*
+*.rng
+./*.json
+annotations
+tools/data/VG
+checkpoints
+data/
+analysis  # the symlink, not the directory
+
+
+## General
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.cuo
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# Compiled protocol buffers
+*.pb.h
+*.pb.cc
+*_pb2.py
+
+
+# Compiled python
+*.pyc
+
+# Editor temporaries
+*.swp
+*~
+
+# Data and models
+*.caffemodel
+*.solverstate
+*.binaryproto
+*leveldb
+*lmdb
+*.pkl
+*.h5
+*.hdf5
+*.xml
+
+# Archives
+*.tgz
+*.zip
+
+# Exceptions (start with !)

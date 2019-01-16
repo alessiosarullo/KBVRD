@@ -1,0 +1,41 @@
+v1:
+    - Uli's fix
+v2:
+    - onHeadBodyPart: allowing belonging_to animal
+        ear belonging to elephant (28)
+v3:
+    - removed mouth and nose from humanBodyPart
+        mouth belonging to giraffe (3)
+        nose belonging to cat (3)
+v4:
+    - nonHumanBodyPart: allowed belonging_to bird
+    - added plantpart in eating range
+    - animal SubClassOf has only: added (or itemsOfClothing)
+        man has shirt (914)
+
+v5:
+    - "arm SubClassOf bodypart" instead of "arm SubClassOf humanBodypart"
+        bear has arm (60)
+    - vehicle: can now "have" basket
+      door, seat, tail, wing now are also vehiclepart
+      nonHumanBodypart can now belong to vehicle
+        bike has seat (103)
+        bike has basket (59)
+        train has door (287)
+        plane has tail (469)
+        plane has wing (624)
+    - created mounts under othermammals and added to riding range
+        man riding horse (478)
+
+BUG: now allowed, e.g., airplane has arm (1). How? However, still not allowed: plane has nose (122).
+
+v6:
+    - REVERT (from v4): animal SubClassOf has only: added (or itemsOfClothing)
+        "wearing" should be used instead
+    - finger can now belong_to hand and hand belong_to arm
+        hand has finger (77)
+    - added surfboard to riding range
+        man riding surfboard (155)
+
+BUG: now accepts person riding boat.
+
