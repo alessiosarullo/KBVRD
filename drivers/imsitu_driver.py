@@ -6,8 +6,8 @@ class ImSitu:
     def __init__(self):
         """
         Attributes:
-            - nouns: [dict] More than 80k entries. Keys are ImageNet synsets, which are in turn derived from WordNet 3.0. Values are dictionaries
-                containing the following items:
+            - nouns: [dict(dict)] More than 80k entries. Keys are ImageNet synsets, which are in turn derived from WordNet 3.0. Values are
+                dictionaries containing the following items:
                     - 'gloss': [list(str)] List of nouns  describing the concept.
                     - 'def': [str] A definition.
                 EXAMPLE: Key: 'n03024882'. Value:
@@ -22,7 +22,7 @@ class ImSitu:
                         - 'framenet': See above.
                         - 'def': [str] Describes the role the item specified by this key has.
                 - 'abstract': [str] A string describing the action on a general level.
-                - 'order': [list(str)] The order the roles appear in 'abstract'.
+                - 'order': [list(str)] The order the roles appear in `abstract`.
                 EXAMPLE: Key: 'tattoing'. Value:
                     {'framenet': 'Create_physical_artwork',
                      'def': 'to mark the skin with permanent colors and patterns',
@@ -35,9 +35,9 @@ class ImSitu:
                      'abstract': 'AGENT tattooed TARGET with TOOL in PLACE',
                      'order': ['agent', 'target', 'tool', 'place'],
                     }
-            - train, val, test: [dict] Keys are image file names, values are dictionaries with the following keys:
-                - 'verb': [str] Verb describing the image. It is a key for `verbs`.
-                - 'frames': [list] Each item is a dictionary. Keys are the roles specified in `verbs` for this verb, taking their values from
+            - train, val, test: [dict(dict)] Keys are image file names, values are dictionaries with the following keys:
+                - 'verb': [str] Verb describing the image. It's a key for `verbs`.
+                - 'frames': [list(dict)] Each item is a dictionary. Keys are the roles specified in `verbs` for this verb, taking their values from
                     `nouns`'s keys.
                 EXAMPLE: Key: 'glaring_215.jpg'. Value:
                     {'verb': 'glaring',
@@ -47,7 +47,6 @@ class ImSitu:
                                 ]
                     }
         """
-
         data_dir = os.path.join('data', 'imSitu')
         self.image_dir = os.path.join(data_dir, 'images')
         self.path_domain_file = os.path.join(data_dir, 'imsitu_space.json')
@@ -56,6 +55,33 @@ class ImSitu:
         self.path_test_file = os.path.join(data_dir, 'test.json')
 
         self.nouns, self.verbs, self.train, self.val, self.test = self.load()
+        self.verbs = self.fix_verbs(self.verbs)
+
+        self._print_verb_entry('riding')
+
+    @staticmethod
+    def fix_verbs(verbs):
+        verbs['riding']['abstract'] = verbs['riding']['abstract'].replace(' then ', ' the ')
+        verbs['teaching']['abstract'] = verbs['teaching']['abstract'].replace(' to teach ', ' teaches ')
+        return verbs
+
+    def get_annotations(self, split):
+        splits = {'train': self.train,
+                  'val': self.val,
+                  'test': self.test,
+                  }
+        return splits[split]
+
+    def _print_verb_entry(self, verb):
+        print('ImSitu verb entry example:')
+        for k, v in self.verbs[verb].items():
+            if k != 'roles':
+                print('%15s: %s' % (k, v))
+            else:
+                print('%15s:' % k)
+                ln = max([len(r) for r in v.keys()]) + 1
+                for r, d in v.items():
+                    print(('%15s  - %-' + str(ln) + 's %s') % ('', r + ':', d))
 
     def load(self):
         with open(self.path_domain_file, 'r') as f:
@@ -74,6 +100,7 @@ class ImSitu:
 
 def main():
     imsitu = ImSitu()
+
 
 if __name__ == '__main__':
     main()

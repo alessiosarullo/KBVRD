@@ -1,18 +1,18 @@
 import numpy as np
 
-from drivers.hicodet_driver import HicoDetLoader
-from utils.plot_utils import plot_mat
+from drivers.hicodet_driver import HicoDet
+from utils.plot import plot_mat
 
 
 def main():
-    hd = HicoDetLoader()
+    hd = HicoDet()
 
-    predwid_to_idx = {k: i for i, k in enumerate(hd.predicate_dict.keys())}
+    pred_to_idx = {k: i for i, k in enumerate(hd.predicate_dict.keys())}
     obj_to_idx = {o: i for i, o in enumerate(hd.objects)}
 
-    op_mat = np.zeros([len(obj_to_idx), len(predwid_to_idx)])
-    for inter in hd.interaction_list:
-        op_mat[obj_to_idx[inter['obj']], predwid_to_idx[inter['predicate_wid']]] = 1
+    op_mat = np.zeros([len(obj_to_idx), len(pred_to_idx)])
+    for inter in hd.interactions:
+        op_mat[obj_to_idx[inter['obj']], pred_to_idx[inter['pred']]] = 1
     pred_labels = hd.predicates
     obj_labels = hd.objects
 

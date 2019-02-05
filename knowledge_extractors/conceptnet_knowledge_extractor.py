@@ -1,23 +1,26 @@
+import os
 import pickle
 import random
 
 import numpy as np
 
 from drivers.conceptnet_driver import Conceptnet
-from drivers.hicodet_driver import HicoDetLoader
+from drivers.hicodet_driver import HicoDet
 from drivers.word_embeddings import WordEmbeddings
-from utils.plot_utils import plot_mat
+from utils.plot import plot_mat
 
+#TODO class
+# TODO check after Hico predicate refactor
 
 def print_edges(edges):
     print('\n'.join([' '.join(['%40s' % str(entry) for entry in e.values()]) for e in edges]))
 
 
-def tailor_to(cnet, dataset='HICO-DET'):
+def tailor_to(cnet, len_max_path, dataset='HICO-DET',):
     assert dataset in ['HICO-DET']
 
     if dataset == 'HICO-DET':
-        hd = HicoDetLoader()
+        hd = HicoDet()
         predicates = hd.predicates
         objects = hd.objects
         print(predicates)
@@ -28,11 +31,11 @@ def tailor_to(cnet, dataset='HICO-DET'):
 
         # Compute paths
         try:
-            with open('paths.pkl', 'rb') as f:
+            with open(os.path.join('cache', 'paths%d.pkl' % len_max_path), 'rb') as f:
                 all_paths = pickle.load(f)
         except FileNotFoundError:
-            all_paths = [cnet.find_paths(pred, objects, max_length=2) for pred in predicates]
-            with open('paths.pkl', 'wb') as f:
+            all_paths = [cnet.find_paths(pred, objects, max_length=len_max_path) for pred in predicates]
+            with open(os.path.join('cache', 'paths%d.pkl' % len_max_path), 'wb') as f:
                 pickle.dump(all_paths, f)
 
         wes = [WordEmbeddings(source='numberbatch'),
@@ -61,7 +64,7 @@ def tailor_to(cnet, dataset='HICO-DET'):
                 for path in pred_paths.get(obj, []):
                     print_lines += [' '.join([('%-20s' if i % 2 == 0 and i > 0 else '%20s') % str(x)
                                               for i, x in enumerate(path.split(cnet.PATH_SEP))])]
-        with open('paths.txt', 'w', encoding='utf-8') as f:
+        with open(os.path.join('cache', 'paths%d.txt' % len_max_path), 'w', encoding='utf-8') as f:
             paths_str = '\n'.join(print_lines)
             f.write(paths_str)
 
@@ -69,11 +72,11 @@ def tailor_to(cnet, dataset='HICO-DET'):
         cnet_op_mat = np.array([[1 if obj in pred_paths.keys() else 0 for obj in objects] for pred_paths in all_paths]).T
 
         # Hico object-predicate matrix
-        predwid_to_idx = {k: i for i, k in enumerate(hd.predicate_dict.keys())}
+        pred_to_idx = {k: i for i, k in enumerate(hd.predicate_dict.keys())}
         obj_to_idx = {o: i for i, o in enumerate(hd.objects)}
-        hico_op_mat = np.zeros([len(obj_to_idx), len(predwid_to_idx)])
-        for inter in hd.interaction_list:
-            hico_op_mat[obj_to_idx[inter['obj']], predwid_to_idx[inter['predicate_wid']]] = 1
+        hico_op_mat = np.zeros([len(obj_to_idx), len(pred_to_idx)])
+        for inter in hd.interactions:
+            hico_op_mat[obj_to_idx[inter['obj']], pred_to_idx[inter['pred']]] = 1
 
         # Plot
         plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, predicates, objects)
@@ -85,7 +88,7 @@ def main():
     random.seed(3)
 
     cnet = Conceptnet()
-    tailor_to(cnet, dataset='HICO-DET')
+    tailor_to(cnet, len_max_path=2, dataset='HICO-DET')
     # for k, v in cnet.get_rel_occurrences().items():
     #     print('%7d %s' % (v, k))
 

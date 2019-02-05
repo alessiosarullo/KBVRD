@@ -11,7 +11,8 @@ class Conceptnet:
         self.RELS_TO_FILTER = ['Antonym', 'DistinctFrom', 'NotCapableOf', 'NotDesires', 'NotHasProperty',
                                'dbpedia/capital', 'dbpedia/field', 'dbpedia/genre', 'dbpedia/genus', 'dbpedia/influencedBy',
                                'dbpedia/knownFor', 'dbpedia/language', 'dbpedia/leader', 'dbpedia/occupation', 'dbpedia/product']
-        self.USELESS_RELS = ['MannerOf', 'EtymologicallyRelatedTo', 'DerivedFrom', 'AtLocation']
+        self.USELESS_RELS = ['MannerOf', 'EtymologicallyRelatedTo', 'DerivedFrom', 'AtLocation',
+                             'PartOf', 'IsA']
 
         data_dir = os.path.join('data', 'ConceptNet')
         self.path_cnet = os.path.join(data_dir, 'conceptnet.pkl')
@@ -23,7 +24,7 @@ class Conceptnet:
         self.nodes, self.edges_from, self.edges_to, self.rel_occurrs = self.build_cache()
 
         self._relations = None
-        self._hico_rels = None
+        self._filtered_rels = None
 
     def find_outgoing_edges_inds(self, query, include_unk_pos=True):
         if not self.has_pos_tag(query):
@@ -53,13 +54,13 @@ class Conceptnet:
         paths = []
         path_inds_per_endpoint = {}
         frontier = set()
-        for form in self.find_pos_forms(src_node):
-            if not self.has_pos_tag(form) or self.has_pos_tag(form, 'n') or self.has_pos_tag(form, 'v'):
-                paths.append([])
-                path_inds_per_endpoint[form] = [len(paths) - 1]
-                frontier.add(form)
+        forms = {src_node, src_node.split('/')[0] + '/v'}  # FIXME hard-coded
+        for form in forms:
+            paths.append([])
+            path_inds_per_endpoint[form] = [len(paths) - 1]
+            frontier.add(form)
 
-        print(src_node)
+        print(src_node, forms)
 
         explored_nodes = set()
         for d in range(max_length):
@@ -169,12 +170,12 @@ class Conceptnet:
                 if _hash(new_edge) not in edges_hash:
                     new_edges.append(new_edge)
 
-                    # if rel == 'IsA':
-                    #     new_edges.append({'src': dst,
-                    #                       'rel': 'hasSubtype',
-                    #                       'dst': src,
-                    #                       'weight': e['weight'],
-                    #                       })
+            if rel == 'IsA':
+                new_edges.append({'src': dst,
+                                  'rel': 'hasSubtype',
+                                  'dst': src,
+                                  'weight': e['weight'],
+                                  })
         return [edges[i] for i in to_keep] + new_edges
 
     def load_raw(self):
@@ -243,9 +244,9 @@ class Conceptnet:
 
     @property
     def hico_rels(self):
-        if self._hico_rels is None:
-            self._hico_rels = [r for r in self.relations if r not in self.RELS_TO_FILTER]
-        return self._hico_rels
+        if self._filtered_rels is None:
+            self._filtered_rels = [r for r in self.relations if r not in self.RELS_TO_FILTER]
+        return self._filtered_rels
 
     def has_pos_tag(self, entry, tag=None):
         if len(entry) > 2 and entry[-2] == '/':
