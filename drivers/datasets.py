@@ -2,14 +2,8 @@
 File that involves dataloaders for the Visual Genome dataset.
 """
 
-import json
 import os
-import random
-# from dataloaders.blob import Blob
-# from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps
-from collections import defaultdict
 
-import h5py
 import numpy as np
 import torch
 from PIL import Image, ImageOps
@@ -19,10 +13,12 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 from drivers.hicodet_driver import HicoDet as HicoDetDriver
 from utils.data import Splits
 
+from models.pydetectron.lib.utils.blob import im_list_to_blob
+
 # FIXME normalisation values
 NORM_MEAN = [0.485, 0.456, 0.406]
 NORM_STD = [0.229, 0.224, 0.225]
-IM_SCALE = 480
+IM_SCALE = 600
 
 
 class SquarePad(object):
@@ -62,11 +58,19 @@ class HicoDetSplit(Dataset):
         # Image transformation pipeline
         tform = [
             SquarePad,
-            Resize(IM_SCALE),
+            Resize(IM_SCALE),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
             ToTensor(),
             Normalize(mean=NORM_MEAN, std=NORM_STD),
         ]
         self.transform_pipeline = Compose(tform)
+
+    @property
+    def num_predicates(self):
+        return len(self.driver.predicates)
+
+    @property
+    def num_object_classes(self):
+        return len(self.driver.objects)
 
     def compute_gt_data(self):
         im_without_visible_interactions = []
@@ -125,16 +129,18 @@ class HicoDetSplit(Dataset):
         assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
 
         # Compute rescaling factor
-        img_scale_factor = IM_SCALE / max(img_w, img_h)
         if img_h > img_w:
-            im_size = (IM_SCALE, int(img_w * img_scale_factor), image_unpadded.size[2])
+            img_scale_factor = IM_SCALE / img_w
+            im_size = (int(img_h * img_scale_factor), IM_SCALE)
         elif img_h < img_w:
-            im_size = (int(img_h * img_scale_factor), IM_SCALE, image_unpadded.size[2])
+            img_scale_factor = IM_SCALE / img_h
+            im_size = (IM_SCALE, int(img_w * img_scale_factor))
         else:
-            im_size = (IM_SCALE, IM_SCALE, image_unpadded.size[2])
+            img_scale_factor = IM_SCALE / img_w
+            im_size = (IM_SCALE, IM_SCALE)
 
         # Optionally flip the image if we're doing training
-        gt_boxes = self._im_boxes[index].copy()
+        gt_boxes = self._im_boxes[index].astype(np.float)
         flipped = self.is_train and np.random.random() > 0.5
         if flipped:
             image_unpadded = image_unpadded.transpose(Image.FLIP_LEFT_RIGHT)
@@ -153,60 +159,55 @@ class HicoDetSplit(Dataset):
         }
         return entry
 
-    def __len__(self):
-        return len(self.image_index)
-
-    @property
-    def num_predicates(self):
-        return len(self.driver.predicates)
-
-    @property
-    def num_object_classes(self):
-        return len(self.driver.objects)
-
-
-class VGDataLoader(torch.utils.data.DataLoader):
-    """
-    Iterates through the data, filtering out None,
-     but also loads everything as a (cuda) variable
-    """
-
     @staticmethod
-    def vg_collate(data, num_gpus=3, is_train=False, mode='det'):
-        assert mode in ('det', 'rel')
-        blob = Blob(mode=mode, is_train=is_train, num_gpus=num_gpus, batch_size_per_gpu=len(data) // num_gpus)
-        for d in data:
-            blob.append(d)
-        blob.reduce()
-        return blob
+    def collate(examples):
+        minibatch = {'img': [],
+                     'img_info': [],
+                     'gt_boxes': [],
+                     'gt_box_classes': [],
+                     'gt_inters': [],
+                     }
+
+        # Aggregate
+        for ex in examples:
+            for k in minibatch.keys():
+                if k == 'img_info':
+                    minibatch[k].append(np.array([*ex['img_size'], ex['scale']], dtype=np.float32))
+                else:
+                    value = ex[k]
+                    if k == 'gt_boxes':
+                        value *= ex['scale']
+                    minibatch[k].append(value)
+
+        # Map to PyTorch tensors
+        device = torch.device('cuda')  # FIXME
+        for k in minibatch.keys():
+            if k == 'img_info':
+                minibatch[k] = np.stack(minibatch[k], axis=0)
+            elif k == 'img':
+                # FIXME? The image being a PyTorch tensor might cause problems for this method
+                minibatch[k] = torch.Tensor(im_list_to_blob(minibatch[k]), device=device)  # 4D NCHW tensor
+            else:
+                minibatch[k] = [torch.Tensor(v, device=device) for v in minibatch[k]]
+
+        return minibatch
 
     @classmethod
-    def get_split(cls, dataset, is_train, batch_size=3, num_workers=1, num_gpus=3, mode='det',
-                  **kwargs):
-        assert mode in ('det', 'rel')
-        if is_train:
-            data_loader = cls(
-                dataset=dataset,
-                batch_size=batch_size * num_gpus,
-                shuffle=True,
-                num_workers=num_workers,
-                collate_fn=lambda x: cls.vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=True),
-                drop_last=True,
-                # pin_memory=True,
-                **kwargs,
-            )
-        else:
-            data_loader = cls(
-                dataset=dataset,
-                batch_size=batch_size * num_gpus if mode == 'det' else num_gpus,
-                shuffle=False,
-                num_workers=num_workers,
-                collate_fn=lambda x: cls.vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=False),
-                drop_last=True,
-                # pin_memory=True,
-                **kwargs,
-            )
+    def get_loader(cls, dataset, is_train, batch_size=3, num_workers=1, num_gpus=1, **kwargs):
+        data_loader = torch.utils.data.DataLoader(
+            dataset=dataset,
+            batch_size=batch_size * num_gpus,
+            shuffle=True if is_train else False,
+            num_workers=num_workers,
+            collate_fn=lambda x: cls.collate(x),
+            drop_last=True,
+            # pin_memory=True,  # disable this in case of freezes
+            **kwargs,
+        )
         return data_loader
+
+    def __len__(self):
+        return len(self.image_index)
 
 
 def main():

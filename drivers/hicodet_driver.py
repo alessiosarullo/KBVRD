@@ -185,10 +185,10 @@ class HicoDet:
             assert np.all(inds == np.arange(600)), inds
             split_data['inter_occurrences'] = split_counts
 
-            # print('#' * 50, split)
-            # img_sizes = sorted(set(['{:3d} x {:3d} x {:d}'.format(*ann['img_size']) for ann in split_data['annotations']]))
-            # for isize in img_sizes:
-            #     print(isize)
+            print('#' * 50, split)
+            img_sizes = sorted(set([ann['img_size'][2] for ann in split_data['annotations']]))
+            for isize in img_sizes:
+                print(isize)
 
     def load_annotations(self, use_hico_det=True):
         """
