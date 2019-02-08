@@ -1,8 +1,5 @@
-"""
-File that involves dataloaders for the Visual Genome dataset.
-"""
-
 import os
+import h5py
 
 import numpy as np
 import torch
@@ -12,20 +9,17 @@ from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 
 from drivers.hicodet_driver import HicoDet as HicoDetDriver
 from utils.data import Splits
+from config import Configs as cfg
 
-from models.pydetectron.lib.utils.blob import im_list_to_blob
-
-# FIXME normalisation values
-NORM_MEAN = [0.485, 0.456, 0.406]
-NORM_STD = [0.229, 0.224, 0.225]
-IM_SCALE = 600
+# from models.pydetectron.lib.utils.blob import im_list_to_blob
 
 
 class SquarePad(object):
     def __call__(self, img):
         w, h = img.size
+        pixel_mean = cfg.data.pixel_mean
         img_padded = ImageOps.expand(img, border=(0, 0, max(h - w, 0), max(w - h, 0)),
-                                     fill=(int(NORM_MEAN[0] * 256), int(NORM_MEAN[1] * 256), int(NORM_MEAN[2] * 256)))
+                                     fill=(int(pixel_mean[0] * 256), int(pixel_mean[1] * 256), int(pixel_mean[2] * 256)))
         return img_padded
 
 
@@ -55,14 +49,20 @@ class HicoDetSplit(Dataset):
         # You could add data augmentation here.
         pass
 
-        # Image transformation pipeline
-        tform = [
-            SquarePad,
-            Resize(IM_SCALE),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
-            ToTensor(),
-            Normalize(mean=NORM_MEAN, std=NORM_STD),
-        ]
-        self.transform_pipeline = Compose(tform)
+        if cfg.data.pretrained_features:
+            self.use_pretrained_feats = True
+            self.feats_file = h5py.File(cfg.data.pretrained_features)
+            #TODO
+        else:
+            self.use_pretrained_feats = False
+            # Image transformation pipeline
+            tform = [
+                SquarePad,
+                Resize(cfg.data.im_scale),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
+                ToTensor(),
+                Normalize(mean=cfg.data.pixel_mean, std=cfg.data.pixel_std),
+            ]
+            self.transform_pipeline = Compose(tform)
 
     @property
     def num_predicates(self):
@@ -124,20 +124,26 @@ class HicoDetSplit(Dataset):
     def __getitem__(self, index):
         # Read the image
         img_fn = self.annotations[index]['file']
-        image_unpadded = Image.open(os.path.join(self.driver.split_data[self.split]['img_dir'], img_fn)).convert('RGB')
-        img_w, img_h = image_unpadded.size
-        assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
+        if self.use_pretrained_feats:
+            pass
+            # TODO
+            # FIXME the rest of the method, to make up for not having an image etc
+        else:
+            image_unpadded = Image.open(os.path.join(self.driver.split_data[self.split]['img_dir'], img_fn)).convert('RGB')
+            img_w, img_h = image_unpadded.size
+            assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
 
         # Compute rescaling factor
+        im_scale = cfg.data.im_scale
         if img_h > img_w:
-            img_scale_factor = IM_SCALE / img_w
-            im_size = (int(img_h * img_scale_factor), IM_SCALE)
+            img_scale_factor = im_scale / img_w
+            im_size = (int(img_h * img_scale_factor), im_scale)
         elif img_h < img_w:
-            img_scale_factor = IM_SCALE / img_h
-            im_size = (IM_SCALE, int(img_w * img_scale_factor))
+            img_scale_factor = im_scale / img_h
+            im_size = (im_scale, int(img_w * img_scale_factor))
         else:
-            img_scale_factor = IM_SCALE / img_w
-            im_size = (IM_SCALE, IM_SCALE)
+            img_scale_factor = im_scale / img_w
+            im_size = (im_scale, im_scale)
 
         # Optionally flip the image if we're doing training
         gt_boxes = self._im_boxes[index].astype(np.float)

@@ -13,37 +13,37 @@ class HicoDet:
     def __init__(self):
         """
         Class attributes:
-            - wn_predicate_dict: [dict] The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
-                - 'wname': [str] The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
+            - wn_predicate_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
+                - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
-                - 'id': [int] A number I have not understood the use of.
-                - 'count': [int] Another number I have not understood the use of.
-                - 'syn': [list] Set of synonyms
-                - 'def': [str] A definition
-                - 'ex': [str] An example (sometimes not provided)
+                - 'id' [int]: A number I have not understood the use of.
+                - 'count' [int]: Another number I have not understood the use of.
+                - 'syn' [list]: Set of synonyms
+                - 'def' [str]: A definition
+                - 'ex' [str]: An example (sometimes not provided)
                 EXAMPLE: key: v00007012, entry:
                     {'id': 1, 'wname': 'blow.v.01', 'count': 6, 'syn': ['blow'], 'def': 'exhale hard', 'ex': 'blow on the soup to cool it down'}
-            - predicate_dict: [dict] The 117 possible predicates, including a null one. They are less than the entries in the WordNet dictionary
+            - predicate_dict [dict]: The 117 possible predicates, including a null one. They are less than the entries in the WordNet dictionary
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
-                    - 'ing': [str] -ing form of the verb ('no_interaction' for the null one).
-                    - 'wn_ids': [list(str)] The WordNet IDs (AKA keys in `wn_predicate_dict`) corresponding to this verb (empty for the null one).
-            - interaction_list: [list(dict)] The 600 interactions in HICO-DET. Each element consists of:
-                - 'obj': [str] The name of the object of the action (i.e., the target).
-                - 'pred': [str] The verb describing the action (key in `predicate_dict`).
-                - 'pred_wid': [str] The WordNet ID of the action (key in `wn_predicate_dict`).
-            - split_data: [dict(dict)] One entry per split, with keys in `Splits`. Each entry is a dictionary with the following items:
-                - 'img_dir': [str] Path to the folder containing the images
-                - 'annotations': [list(dict)] Annotations for each image, thus structured:
-                    - 'file': [str] The file name
-                    - 'img_size': [array] Image size expressed in [width, height, depth]
-                    - 'interactions': [list(dict)] Each entry has:
-                            - 'id': [int] The id of the interaction in `interaction_list`.
-                            - 'invis': [bool] Whether the interaction is invisible or not. It does NOT necesserily mean that it is not in the image.
+                    - 'ing' [str]: -ing form of the verb ('no_interaction' for the null one).
+                    - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_predicate_dict`) corresponding to this verb (empty for the null one).
+            - interaction_list [list(dict)]: The 600 interactions in HICO-DET. Each element consists of:
+                - 'obj' [str]: The name of the object of the action (i.e., the target).
+                - 'pred' [str]: The verb describing the action (key in `predicate_dict`).
+                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`).
+            - split_data [dict(dict)]: One entry per split, with keys in `Splits`. Each entry is a dictionary with the following items:
+                - 'img_dir' [str]: Path to the folder containing the images
+                - 'annotations' [list(dict)]: Annotations for each image, thus structured:
+                    - 'file' [str]: The file name
+                    - 'img_size' [array]: Image size expressed in [width, height, depth]
+                    - 'interactions' [list(dict)]: Each entry has:
+                            - 'id' [int]: The id of the interaction in `interaction_list`.
+                            - 'invis' [bool]: Whether the interaction is invisible or not. It does NOT necesserily mean that it is not in the image.
                         If 'invis' is False then there are three more fields:
-                            - 'hum_bbox': [array] Hx4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to a human.
-                            - 'obj_bbox': [array] Ox4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to an object.
-                            - 'conn': [array] Cx2 with a pair of human-object indices for each interaction
+                            - 'hum_bbox' [array]: Hx4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to a human.
+                            - 'obj_bbox' [array]: Ox4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to an object.
+                            - 'conn' [array]: Cx2 with a pair of human-object indices for each interaction
                 Other entries might be added to this dictionary for caching reasons.
         """
         # FIXME what are the 'id' and 'count' field for?

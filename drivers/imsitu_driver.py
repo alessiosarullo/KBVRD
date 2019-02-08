@@ -6,23 +6,23 @@ class ImSitu:
     def __init__(self):
         """
         Attributes:
-            - nouns: [dict(dict)] More than 80k entries. Keys are ImageNet synsets, which are in turn derived from WordNet 3.0. Values are
+            - nouns [dict(dict)]: More than 80k entries. Keys are ImageNet synsets, which are in turn derived from WordNet 3.0. Values are
                 dictionaries containing the following items:
-                    - 'gloss': [list(str)] List of nouns  describing the concept.
-                    - 'def': [str] A definition.
+                    - 'gloss' [list(str)]: List of nouns  describing the concept.
+                    - 'def' [str]: A definition.
                 EXAMPLE: Key: 'n03024882'. Value:
                     {'gloss': ['choker', 'collar', 'dog collar', 'neckband'],
                      'def': "necklace that fits tightly around a woman's neck"
                      }
-            - verbs: [dict] Around 500 entries. Keys are verbs themselves [str], while values are dictionaries of:
-                - 'framenet': [str] ID of the verb in FrameNet. Seems to somehow describe the category the verb belongs to.
-                - 'def': [str] Definition of the verb.
-                - 'roles': [dict] A dictionaries of the roles involved in the action specified by this verb. Keys vary according to the verb and
+            - verbs [dict]: Around 500 entries. Keys are verbs themselves [str], while values are dictionaries of:
+                - 'framenet' [str]: ID of the verb in FrameNet. Seems to somehow describe the category the verb belongs to.
+                - 'def' [str]: Definition of the verb.
+                - 'roles' [dict]: A dictionaries of the roles involved in the action specified by this verb. Keys vary according to the verb and
                     each item contains:
                         - 'framenet': See above.
-                        - 'def': [str] Describes the role the item specified by this key has.
-                - 'abstract': [str] A string describing the action on a general level.
-                - 'order': [list(str)] The order the roles appear in `abstract`.
+                        - 'def' [str]: Describes the role the item specified by this key has.
+                - 'abstract' [str]: A string describing the action on a general level.
+                - 'order' [list(str)]: The order the roles appear in `abstract`.
                 EXAMPLE: Key: 'tattoing'. Value:
                     {'framenet': 'Create_physical_artwork',
                      'def': 'to mark the skin with permanent colors and patterns',
@@ -35,9 +35,9 @@ class ImSitu:
                      'abstract': 'AGENT tattooed TARGET with TOOL in PLACE',
                      'order': ['agent', 'target', 'tool', 'place'],
                     }
-            - train, val, test: [dict(dict)] Keys are image file names, values are dictionaries with the following keys:
-                - 'verb': [str] Verb describing the image. It's a key for `verbs`.
-                - 'frames': [list(dict)] Each item is a dictionary. Keys are the roles specified in `verbs` for this verb, taking their values from
+            - train, val, test [dict(dict)]: Keys are image file names, values are dictionaries with the following keys:
+                - 'verb' [str]: Verb describing the image. It's a key for `verbs`.
+                - 'frames' [list(dict)]: Each item is a dictionary. Keys are the roles specified in `verbs` for this verb, taking their values from
                     `nouns`'s keys.
                 EXAMPLE: Key: 'glaring_215.jpg'. Value:
                     {'verb': 'glaring',

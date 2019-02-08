@@ -3,7 +3,6 @@ import sys
 from collections import defaultdict
 
 import numpy as np
-import pycocotools.mask as mask_util
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -25,15 +24,20 @@ class MaskRCNN(nn.Module):
 
     def forward(self, x, **kwargs):
         """
+        Given N = # images in batch, F and L the spatial dimension of the feature map (usually 7) and L the number of channels (1024 or
+        something similar).
         :param x:  {'imgs': [],
                     'img_size': [],
                     'gt_boxes': [],
                     'gt_box_classes': [],
                     'gt_inters': [],
                     }
-        :return:
+        :return: - feature_maps [tensor N*FxFxL]: Feature maps returned by the last convolutional layer of Mask-RCNN
+                 - boxes [list(tensor ?x(4+C)) of length N]: a set of predicted bounding boxes in the format [x1 y1 x2 y2 scores]. The number of
+                        boxes varies across images.
+                 - masks [list(tensor ?xFxF) of length N]: a set of binary masks, one for each bounding box.
         """
-
+        assert not self.training  # only pretrained
         with torch.set_grad_enabled(self.training):
             return self._forward(x, **kwargs)
 
