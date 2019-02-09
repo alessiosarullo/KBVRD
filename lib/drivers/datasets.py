@@ -1,5 +1,4 @@
 import os
-import h5py
 
 import numpy as np
 import torch
@@ -7,11 +6,9 @@ from PIL import Image, ImageOps
 from torch.utils.data import Dataset
 from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 
-from drivers.hicodet_driver import HicoDet as HicoDetDriver
-from utils.data import Splits
 from config import Configs as cfg
-
-# from models.pydetectron.lib.utils.blob import im_list_to_blob
+from lib.drivers.hicodet_driver import HicoDet as HicoDetDriver
+from lib.utils.data import Splits
 
 
 class SquarePad(object):
@@ -49,20 +46,14 @@ class HicoDetSplit(Dataset):
         # You could add data augmentation here.
         pass
 
-        if cfg.data.pretrained_features:
-            self.use_pretrained_feats = True
-            self.feats_file = h5py.File(cfg.data.pretrained_features)
-            #TODO
-        else:
-            self.use_pretrained_feats = False
-            # Image transformation pipeline
-            tform = [
-                SquarePad,
-                Resize(cfg.data.im_scale),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
-                ToTensor(),
-                Normalize(mean=cfg.data.pixel_mean, std=cfg.data.pixel_std),
-            ]
-            self.transform_pipeline = Compose(tform)
+        # Image transformation pipeline
+        tform = [
+            SquarePad(),
+            Resize(cfg.data.im_scale),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
+            ToTensor(),
+            Normalize(mean=cfg.data.pixel_mean, std=cfg.data.pixel_std),
+        ]
+        self.transform_pipeline = Compose(tform)
 
     @property
     def num_predicates(self):
@@ -124,14 +115,10 @@ class HicoDetSplit(Dataset):
     def __getitem__(self, index):
         # Read the image
         img_fn = self.annotations[index]['file']
-        if self.use_pretrained_feats:
-            pass
-            # TODO
-            # FIXME the rest of the method, to make up for not having an image etc
-        else:
-            image_unpadded = Image.open(os.path.join(self.driver.split_data[self.split]['img_dir'], img_fn)).convert('RGB')
-            img_w, img_h = image_unpadded.size
-            assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
+
+        image_unpadded = Image.open(os.path.join(self.driver.split_data[self.split]['img_dir'], img_fn)).convert('RGB')
+        img_w, img_h = image_unpadded.size
+        assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
 
         # Compute rescaling factor
         im_scale = cfg.data.im_scale
@@ -191,8 +178,7 @@ class HicoDetSplit(Dataset):
             if k == 'img_info':
                 minibatch[k] = np.stack(minibatch[k], axis=0)
             elif k == 'img':
-                # FIXME? The image being a PyTorch tensor might cause problems for this method
-                minibatch[k] = torch.Tensor(im_list_to_blob(minibatch[k]), device=device)  # 4D NCHW tensor
+                minibatch[k] = torch.Tensor(im_list_to_4d_tensor(minibatch[k]), device=device)  # 4D NCHW tensor
             else:
                 minibatch[k] = [torch.Tensor(v, device=device) for v in minibatch[k]]
 
@@ -214,6 +200,30 @@ class HicoDetSplit(Dataset):
 
     def __len__(self):
         return len(self.image_index)
+
+
+def im_list_to_4d_tensor(ims):
+    assert isinstance(ims, list)
+    max_shape = get_max_shape([im.shape[1:] for im in ims], stride=32.)  # FIXME magic constant stride
+
+    num_images = len(ims)
+    im_tensor = ims[0].new_zeros((num_images, 3, max_shape[0], max_shape[1]), dtype=torch.float32)
+    for i in range(num_images):
+        im = ims[i]
+        im_tensor[i, :, 0:im.shape[1], 0:im.shape[2]] = im
+    return im_tensor
+
+
+def get_max_shape(im_shapes, stride=1.):
+    """
+    Calculate max spatial size (h, w) for batching given a list of image shapes. Takes into account FPN coarsest stride if using it.
+    """
+    max_shape = np.array(im_shapes).max(axis=0)
+    assert max_shape.size == 2
+    # Pad the image so they can be divisible by `stride`
+    max_shape[0] = int(np.ceil(max_shape[0] / stride) * stride)
+    max_shape[1] = int(np.ceil(max_shape[1] / stride) * stride)
+    return max_shape
 
 
 def main():

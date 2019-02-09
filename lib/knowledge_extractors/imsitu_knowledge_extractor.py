@@ -3,11 +3,11 @@ import pickle
 
 import numpy as np
 import requests
-from nltk.parse.corenlp import CoreNLPServer, CoreNLPServerError, CoreNLPDependencyParser
-
-from drivers.hicodet_driver import HicoDet
 from drivers.imsitu_driver import ImSitu
+from nltk.parse.corenlp import CoreNLPServer, CoreNLPServerError, CoreNLPDependencyParser
 from utils.plot import plot_mat
+
+from lib.drivers.hicodet_driver import HicoDet
 
 
 # TODO check after Hico predicate refactor

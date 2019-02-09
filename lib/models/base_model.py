@@ -1,14 +1,12 @@
 import argparse
-import sys
-from collections import defaultdict
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
 
-from drivers.datasets import HicoDetSplit
-from .rcnn.mask_rcnn import MaskRCNN
+from lib.drivers.datasets import HicoDetSplit
+from .models.mask_rcnn import MaskRCNN
 
 
 class BaseModel(nn.Module):

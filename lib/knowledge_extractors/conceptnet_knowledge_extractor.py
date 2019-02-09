@@ -3,11 +3,12 @@ import pickle
 import random
 
 import numpy as np
-
 from drivers.conceptnet_driver import Conceptnet
 from drivers.hicodet_driver import HicoDet
-from drivers.word_embeddings import WordEmbeddings
 from utils.plot import plot_mat
+
+from lib.drivers.word_embeddings import WordEmbeddings
+
 
 #TODO class
 # TODO check after Hico predicate refactor

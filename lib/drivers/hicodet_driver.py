@@ -1,12 +1,13 @@
 import os
 import pickle
+from typing import List
 
 import numpy as np
 from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
-from utils.data import Splits
-from typing import List, Dict
+
+from lib.utils.data import Splits
 
 
 class HicoDet:

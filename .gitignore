@@ -1,7 +1,23 @@
+# Specific files/directories
+toy*.py
+tmp*
+*jobscript*
 CoreNLP/
 cache/
-*jobscript*
-graphviz*
+pydetectron/
+detectron_outputs/
+
+# Data and models
+data/
+data
+*.pkl
+*.h5
+*.hdf5
+*.xml
+
+# Archives
+*.tgz
+*.zip
 
 # images
 *.jpg
@@ -40,20 +56,6 @@ graphviz*
 *__pycache__*
 
 
-# Specific files/directories
-output.txt
-nohup.out
-toy*.py
-tmp*
-*.rng
-./*.json
-annotations
-tools/data/VG
-checkpoints
-data/
-analysis  # the symlink, not the directory
-
-
 ## General
 
 # Compiled Object files
@@ -83,20 +85,5 @@ analysis  # the symlink, not the directory
 # Editor temporaries
 *.swp
 *~
-
-# Data and models
-*.caffemodel
-*.solverstate
-*.binaryproto
-*leveldb
-*lmdb
-*.pkl
-*.h5
-*.hdf5
-*.xml
-
-# Archives
-*.tgz
-*.zip
 
 # Exceptions (start with !)
