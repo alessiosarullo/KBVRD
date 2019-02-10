@@ -1,21 +1,14 @@
-import argparse
-import torch
-import sys
-import os
-import os.path as osp
 from collections import defaultdict
-import numpy as np
 
-sys.path.insert(0, osp.abspath(osp.join('pydetectron', 'lib')))
-from core.config import cfg, cfg_from_file, cfg_from_list, assert_and_infer_cfg
-from utils.timer import Timer
-from core.test import _get_blobs, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
-sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))
+import numpy as np
+import torch
+
+from .wrappers import cfg, Timer, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
 
 
 def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     """
-    Returned `scores`, `boxes`, feat_map is Torch
+    Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
     """
 
     assert not cfg.TEST.BBOX_AUG.ENABLED

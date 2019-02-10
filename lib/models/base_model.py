@@ -3,10 +3,9 @@ import argparse
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.parallel
 
 from lib.drivers.datasets import HicoDetSplit
-from .models.mask_rcnn import MaskRCNN
+from .mask_rcnn import MaskRCNN
 
 
 class BaseModel(nn.Module):

@@ -16,11 +16,14 @@ class BaseConfigs:
 class DataConfig(BaseConfigs):
     def __init__(self):
         self.pretrained_features = None
+        self.pixel_mean = None
+        self.pixel_std = None
+        self.im_scale = None
 
-        # FIXME normalisation values
-        self.pixel_mean = [0.485, 0.456, 0.406]
-        self.pixel_std = [0.229, 0.224, 0.225]
-        self.im_scale = 600
+        # # Normalisation values used in NeuralMotifs
+        # self.pixel_mean = [0.485, 0.456, 0.406]
+        # self.pixel_std = [0.229, 0.224, 0.225]
+        # self.im_scale = 600
 
     def parse_args(self):
         parser = argparse.ArgumentParser(description='Data settings')

@@ -1,28 +1,19 @@
 import argparse
-import torch
-import sys
 import os
-import os.path as osp
+import sys
 from collections import defaultdict
-import numpy as np
+
 import cv2
+import numpy as np
+import torch
 
 from lib.pydetectron_api.detection import im_detect_all_with_feats
-
-sys.path.insert(0, osp.abspath(osp.join('pydetectron', 'lib')))
-
-# Note: fixing these imports doesn't work if Detectron's ones stay the same, because they end up looking at different configs (for some reason).
-import nn as mynn
-import datasets.dummy_datasets as dummy_datasets
-import utils.misc as misc_utils
-import utils.vis as vis_utils
-from core.config import cfg, cfg_from_file, cfg_from_list, assert_and_infer_cfg
-from core.test import segm_results
-from modeling.model_builder import Generalized_RCNN
-from utils.detectron_weight_helper import load_detectron_weight
-from utils.timer import Timer
-from utils.blob import get_image_blob
-sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))
+from lib.pydetectron_api.wrappers import \
+    cfg, cfg_from_file, assert_and_infer_cfg, \
+    segm_results, \
+    dummy_datasets, \
+    Generalized_RCNN, \
+    misc_utils, vis_utils, Timer, load_detectron_weight, get_image_blob
 
 
 def parse_args():
@@ -31,6 +22,7 @@ def parse_args():
     parser.add_argument('--cfg', dest='cfg_file', help='config file', required=True)
     parser.add_argument('--load_detectron', help='path to the detectron weight pickle file', required=True)
     parser.add_argument('--image_dir', help='directory to load images for demo', required=True)
+    parser.add_argument('--num_imgs', help='how many images to perform detection on', default=8)
     parser.add_argument('--output_dir', help='directory to save demo results', default="detectron_outputs")
 
     return parser.parse_args()
@@ -45,7 +37,7 @@ def main():
     model = 'e2e_mask_rcnn_R-50-C4_2x'
     sys.argv += ['--cfg', 'pydetectron/configs/baselines/%s.yaml' % model,
                  '--load_detectron', 'data/pretrained_model/%s.pkl' % model,
-                 '--image_dir', '/media/alex/Woodo/PhD/KB-HOI data/fake_HICO-DET',
+                 '--image_dir', 'data/HICO-DET/images/test2015',
                  '--output_dir', 'detectron_outputs/test/',
                  ]
 
@@ -69,7 +61,7 @@ def main():
         print("loading detectron weights %s" % args.load_detectron)
         load_detectron_weight(maskRCNN, args.load_detectron)
 
-    imglist = misc_utils.get_imagelist_from_dir(args.image_dir)
+    imglist = sorted(misc_utils.get_imagelist_from_dir(args.image_dir))[:args.num_imgs]
     num_images = len(imglist)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)

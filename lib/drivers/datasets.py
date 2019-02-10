@@ -1,36 +1,27 @@
 import os
 
+import cv2
 import numpy as np
 import torch
-from PIL import Image, ImageOps
 from torch.utils.data import Dataset
-from torchvision.transforms import Compose, ToTensor, Normalize, Resize
 
-from config import Configs as cfg
 from lib.drivers.hicodet_driver import HicoDet as HicoDetDriver
-from lib.utils.data import Splits
-
-
-class SquarePad(object):
-    def __call__(self, img):
-        w, h = img.size
-        pixel_mean = cfg.data.pixel_mean
-        img_padded = ImageOps.expand(img, border=(0, 0, max(h - w, 0), max(w - h, 0)),
-                                     fill=(int(pixel_mean[0] * 256), int(pixel_mean[1] * 256), int(pixel_mean[2] * 256)))
-        return img_padded
+from lib.utils.data import Splits, Minibatch, preprocess_img, _im_list_to_4d_tensor
 
 
 class HicoDetSplit(Dataset):
-    def __init__(self, driver: HicoDetDriver, split, im_inds=None, filter_invisible=True):
+    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None):
         """
         """
         assert split in Splits
+        hicodet_driver = hicodet_driver or HicoDetDriver()
+
         self.split = split
-        self.driver = driver
+        self.hicodet = hicodet_driver
         self.image_index = im_inds
 
         # Initialize
-        self.annotations = driver.split_data[split]['annotations']
+        self.annotations = hicodet_driver.split_data[split]['annotations']
         if im_inds is not None:
             self.annotations = [self.annotations[i] for i in im_inds]
         if filter_invisible:
@@ -46,24 +37,20 @@ class HicoDetSplit(Dataset):
         # You could add data augmentation here.
         pass
 
-        # Image transformation pipeline
-        tform = [
-            SquarePad(),
-            Resize(cfg.data.im_scale),  # TODO move it so that the rescaling can be capped at a maximum value? (Probably not)
-            ToTensor(),
-            Normalize(mean=cfg.data.pixel_mean, std=cfg.data.pixel_std),
-        ]
-        self.transform_pipeline = Compose(tform)
-
     @property
     def num_predicates(self):
-        return len(self.driver.predicates)
+        return len(self.hicodet.predicates)
 
     @property
     def num_object_classes(self):
-        return len(self.driver.objects)
+        return len(self.hicodet.objects)
+
+    @property
+    def img_dir(self):
+        return self.hicodet.split_data[self.split]['img_dir']
 
     def compute_gt_data(self):
+        hd = self.hicodet
         im_without_visible_interactions = []
         boxes, box_classes, interactions = [], [], []
         for i, img_ann in enumerate(self.annotations):
@@ -73,14 +60,14 @@ class HicoDetSplit(Dataset):
                     curr_num_hum_boxes = sum([b.shape[0] for b in im_hum_boxes])
                     curr_num_obj_boxes = sum([b.shape[0] for b in im_obj_boxes])
                     inters = inter['conn']
-                    pred_class = self.driver.interactions[inter['id']]['pred']
+                    pred_class = hd.pred_index[hd.interactions[inter['id']]['pred']]
                     inters = np.stack([inters[:, 0], np.ones(inters.shape[0], dtype=np.int) * pred_class, inters[:, 1]], axis=1)
                     im_interactions.append(inters + np.array([[curr_num_hum_boxes, 0, curr_num_obj_boxes]], dtype=np.int))
 
                     im_hum_boxes.append(inter['hum_bbox'])
 
                     obj_boxes = inter['obj_bbox']
-                    obj_class = self.driver.obj_class_index[self.driver.interactions[inter['id']]['obj']]
+                    obj_class = hd.obj_class_index[hd.interactions[inter['id']]['obj']]
                     im_obj_boxes.append(obj_boxes)
                     im_obj_box_classes.append(np.ones(obj_boxes.shape[0], dtype=np.int) * obj_class)
 
@@ -116,35 +103,23 @@ class HicoDetSplit(Dataset):
         # Read the image
         img_fn = self.annotations[index]['file']
 
-        image_unpadded = Image.open(os.path.join(self.driver.split_data[self.split]['img_dir'], img_fn)).convert('RGB')
-        img_w, img_h = image_unpadded.size
-        assert (img_w, img_h) == self.annotations[index]['img_size'][:2], ((img_w, img_h), self.annotations[index]['img_size'][:2])
-
-        # Compute rescaling factor
-        im_scale = cfg.data.im_scale
-        if img_h > img_w:
-            img_scale_factor = im_scale / img_w
-            im_size = (int(img_h * img_scale_factor), im_scale)
-        elif img_h < img_w:
-            img_scale_factor = im_scale / img_h
-            im_size = (im_scale, int(img_w * img_scale_factor))
-        else:
-            img_scale_factor = im_scale / img_w
-            im_size = (im_scale, im_scale)
+        img = cv2.imread(os.path.join(self.img_dir, img_fn))
+        img_h, img_w = img.shape[:2]
+        gt_boxes = self._im_boxes[index].astype(np.float, copy=False)
 
         # Optionally flip the image if we're doing training
-        gt_boxes = self._im_boxes[index].astype(np.float)
         flipped = self.is_train and np.random.random() > 0.5
         if flipped:
-            image_unpadded = image_unpadded.transpose(Image.FLIP_LEFT_RIGHT)
+            img = img[:, :, ::-1]
             gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
 
+        preprocessed_im, img_scale_factor = preprocess_img(img)
         entry = {
             'index': index,
             'fn': img_fn,
-            'img': self.transform_pipeline(image_unpadded),
-            'img_size': im_size,
-            'scale': img_scale_factor,  # Multiply the boxes by this.
+            'img': preprocessed_im,
+            'img_size': (img_h, img_w),
+            'scale': img_scale_factor,
             'gt_boxes': gt_boxes,
             'gt_box_classes': self._im_box_classes[index].copy(),
             'gt_inters': self._im_inters[index].copy(),
@@ -152,78 +127,21 @@ class HicoDetSplit(Dataset):
         }
         return entry
 
-    @staticmethod
-    def collate(examples):
-        minibatch = {'img': [],
-                     'img_info': [],
-                     'gt_boxes': [],
-                     'gt_box_classes': [],
-                     'gt_inters': [],
-                     }
+    def __len__(self):
+        return len(self.image_index)
 
-        # Aggregate
-        for ex in examples:
-            for k in minibatch.keys():
-                if k == 'img_info':
-                    minibatch[k].append(np.array([*ex['img_size'], ex['scale']], dtype=np.float32))
-                else:
-                    value = ex[k]
-                    if k == 'gt_boxes':
-                        value *= ex['scale']
-                    minibatch[k].append(value)
-
-        # Map to PyTorch tensors
-        device = torch.device('cuda')  # FIXME
-        for k in minibatch.keys():
-            if k == 'img_info':
-                minibatch[k] = np.stack(minibatch[k], axis=0)
-            elif k == 'img':
-                minibatch[k] = torch.Tensor(im_list_to_4d_tensor(minibatch[k]), device=device)  # 4D NCHW tensor
-            else:
-                minibatch[k] = [torch.Tensor(v, device=device) for v in minibatch[k]]
-
-        return minibatch
-
-    @classmethod
-    def get_loader(cls, dataset, is_train, batch_size=3, num_workers=1, num_gpus=1, **kwargs):
+    def get_loader(self, batch_size=3, num_workers=0, num_gpus=1, **kwargs):
         data_loader = torch.utils.data.DataLoader(
-            dataset=dataset,
+            dataset=self,
             batch_size=batch_size * num_gpus,
-            shuffle=True if is_train else False,
+            shuffle=True if self.is_train else False,
             num_workers=num_workers,
-            collate_fn=lambda x: cls.collate(x),
+            collate_fn=Minibatch.collate,
             drop_last=True,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
         )
         return data_loader
-
-    def __len__(self):
-        return len(self.image_index)
-
-
-def im_list_to_4d_tensor(ims, use_fpn=False):
-    assert isinstance(ims, list)
-    max_shape = get_max_shape([im.shape[1:] for im in ims], stride=32. if use_fpn else 1)  # FIXME magic constant stride
-
-    num_images = len(ims)
-    im_tensor = ims[0].new_zeros((num_images, 3, max_shape[0], max_shape[1]), dtype=torch.float32)
-    for i in range(num_images):
-        im = ims[i]
-        im_tensor[i, :, 0:im.shape[1], 0:im.shape[2]] = im
-    return im_tensor
-
-
-def get_max_shape(im_shapes, stride=1.):
-    """
-    Calculate max spatial size (h, w) for batching given a list of image shapes. Takes into account FPN coarsest stride if using it.
-    """
-    max_shape = np.array(im_shapes).max(axis=0)
-    assert max_shape.size == 2
-    # Pad the image so they can be divisible by `stride`
-    max_shape[0] = int(np.ceil(max_shape[0] / stride) * stride)
-    max_shape[1] = int(np.ceil(max_shape[1] / stride) * stride)
-    return max_shape
 
 
 def main():

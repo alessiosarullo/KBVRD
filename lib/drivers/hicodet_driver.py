@@ -186,10 +186,10 @@ class HicoDet:
             assert np.all(inds == np.arange(600)), inds
             split_data['inter_occurrences'] = split_counts
 
-            print('#' * 50, split)
-            img_sizes = sorted(set([ann['img_size'][2] for ann in split_data['annotations']]))
-            for isize in img_sizes:
-                print(isize)
+            # print('#' * 50, split)
+            # img_sizes = sorted(set([ann['img_size'][2] for ann in split_data['annotations']]))
+            # for isize in img_sizes:
+            #     print(isize)
 
     def load_annotations(self, use_hico_det=True):
         """
@@ -228,8 +228,8 @@ class HicoDet:
         try:
             with open(self.path_pickle_annotation_file, 'rb') as f:
                 d = pickle.load(f)
-                train_annotations = d[Splits.TRAIN]
-                test_annotations = d[Splits.TEST]
+                train_annotations = d[Splits.TRAIN.value]
+                test_annotations = d[Splits.TEST.value]
                 interaction_list = d['interaction_list']
                 wn_pred_dict = d['wn_pred_dict']
                 pred_dict = d['pred_dict']
@@ -251,8 +251,8 @@ class HicoDet:
             interaction_list, wn_pred_dict, pred_dict = self.parse_interaction_list(src_anns['list_action'])
 
             with open(self.path_pickle_annotation_file, 'wb') as f:
-                pickle.dump({Splits.TRAIN: train_annotations,
-                             Splits.TEST: test_annotations,
+                pickle.dump({Splits.TRAIN.value: train_annotations,
+                             Splits.TEST.value: test_annotations,
                              'interaction_list': interaction_list,
                              'wn_pred_dict': wn_pred_dict,
                              'pred_dict': pred_dict,

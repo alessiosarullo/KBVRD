@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument('--cfg', dest='cfg_file', help='config file', required=True)
     parser.add_argument('--load_detectron', help='path to the detectron weight pickle file', required=True)
     parser.add_argument('--image_dir', help='directory to load images for demo', required=True)
+    parser.add_argument('--num_imgs', help='how many images to perform detection on', default=8)
     parser.add_argument('--output_dir', help='directory to save demo results', default="detectron_outputs")
 
     return parser.parse_args()
@@ -41,7 +42,7 @@ def main():
     model = 'e2e_mask_rcnn_R-50-C4_2x'
     sys.argv += ['--cfg', 'pydetectron/configs/baselines/%s.yaml' % model,
                  '--load_detectron', 'data/pretrained_model/%s.pkl' % model,
-                 '--image_dir', '/media/alex/Woodo/PhD/KB-HOI data/fake_HICO-DET',
+                 '--image_dir', 'data/HICO-DET/images/test2015',
                  ]
 
     args = parse_args()
@@ -71,7 +72,7 @@ def main():
     maskRCNN = mynn.DataParallel(maskRCNN, cpu_keywords=['im_info', 'roidb'], minibatch=True, device_ids=[0])  # only support single GPU
     maskRCNN.eval()
 
-    imglist = misc_utils.get_imagelist_from_dir(args.image_dir)
+    imglist = sorted(misc_utils.get_imagelist_from_dir(args.image_dir))[:args.num_imgs]
     num_images = len(imglist)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
