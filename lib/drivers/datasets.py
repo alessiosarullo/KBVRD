@@ -202,9 +202,9 @@ class HicoDetSplit(Dataset):
         return len(self.image_index)
 
 
-def im_list_to_4d_tensor(ims):
+def im_list_to_4d_tensor(ims, use_fpn=False):
     assert isinstance(ims, list)
-    max_shape = get_max_shape([im.shape[1:] for im in ims], stride=32.)  # FIXME magic constant stride
+    max_shape = get_max_shape([im.shape[1:] for im in ims], stride=32. if use_fpn else 1)  # FIXME magic constant stride
 
     num_images = len(ims)
     im_tensor = ims[0].new_zeros((num_images, 3, max_shape[0], max_shape[1]), dtype=torch.float32)

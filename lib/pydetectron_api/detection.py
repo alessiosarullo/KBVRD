@@ -15,7 +15,7 @@ sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))
 
 def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     """
-    Returned `scores`, `boxes` and `cls_boxes` are Numpy (cls_boxes is a list), feat_map is Torch
+    Returned `scores`, `boxes`, feat_map is Torch
     """
 
     assert not cfg.TEST.BBOX_AUG.ENABLED
@@ -32,31 +32,28 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
 
     timers['im_detect_bbox'].tic()
-    scores, all_boxes, feat_map, im_inds = _im_detect_bbox(model, inputs, im_scales, timers)
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales, timers)
     timers['im_detect_bbox'].toc()
+    assert nonnms_boxes.shape[0] > 0
 
     timers['device_transfer'].tic()
-    scores = scores.cpu().numpy()
-    all_boxes = all_boxes.cpu().numpy()
+    nonnms_scores = nonnms_scores.cpu().numpy()
+    nonnms_boxes = nonnms_boxes.cpu().numpy()
     timers['device_transfer'].toc()
 
-    # score and boxes are from the whole image after score thresholding and nms (they are not separated by class) (numpy.ndarray)
-    # cls_boxes boxes and scores are separated by class and in the format used for evaluating results
-    timers['misc_bbox'].tic()
-    scores, boxes, cls_boxes, box_inds, classes = _box_results_with_nms_and_limit(scores, all_boxes)
-    timers['misc_bbox'].toc()
+    timers['bbox_nms'].tic()
+    box_inds, box_classes, scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    im_ids = nonnms_im_ids[box_inds]
+    timers['bbox_nms'].toc()
 
-    # timers['device_transfer'].tic()
-    # boxes = boxes.cpu().numpy()
-    # timers['device_transfer'].toc()
     assert boxes.shape[0] > 0
-    assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
+    # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
 
     timers['im_detect_mask'].tic()
-    masks = _im_detect_mask(model, im_scales, im_inds[box_inds], boxes, feat_map)
+    masks = _im_detect_mask(model, im_scales, im_ids, boxes, feat_map)
     timers['im_detect_mask'].toc()
 
-    return scores, boxes, masks, feat_map, cls_boxes
+    return scores, boxes, box_classes, im_ids, masks, feat_map
 
 
 def _im_detect_bbox(model, inputs, im_scales, timers=None):
@@ -142,54 +139,66 @@ def _clip_tiled_boxes(boxes, im_shape):
     return boxes
 
 
-def _box_results_with_nms_and_limit(scores, boxes):  # NOTE: support single-batch
-    """Returns bounding-box detection results by thresholding on scores and
-    applying non-maximum suppression (NMS).
-
-    `boxes` has shape (#detections, 4 * #classes), where each row represents
-    a list of predicted bounding boxes for each of the object classes in the
-    dataset (including the background class). The detections in each row
-    originate from the same object proposal.
-
-    `scores` has shape (#detection, #classes), where each row represents a list
-    of object detection confidence scores for each of the object classes in the
-    dataset (including the background class). `scores[i, j]`` corresponds to the
-    box at `boxes[i, j * 4:(j + 1) * 4]`.
+def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
+    """
+    Returns bounding-box detection results by thresholding on scores and applying non-maximum suppression (NMS). In the following R denotes the
+    number of detections and C the number of classes
+    :param all_scores [array, R x C]: Each row represents a list of object detection confidence scores for each of the object classes in the dataset
+                (including the background class). Element (i, j) corresponds to the box at `all_boxes[i, j * 4:(j + 1) * 4]`.
+    :param all_boxes [array, R x 4C]: Each row represents a list of predicted bounding boxes for each of the object classes in  the dataset
+                (including the background class). The detections in each row originate from the same object proposal.
+    :param im_inds [array, R]: Which image the corresponding box belongs to.
+    :return:
     """
     assert not cfg.TEST.SOFT_NMS.ENABLED
     assert not cfg.TEST.BBOX_VOTE.ENABLED
 
     num_classes = cfg.MODEL.NUM_CLASSES
-    cls_boxes = [[] for _ in range(num_classes)]
-    box_inds = np.arange(boxes.shape[0])
+
+    image_masks = [im_ids == im_id for im_id in np.unique(im_ids)]
+    all_boxes_ids = np.arange(all_boxes.shape[0])
 
     # Apply threshold on detection probabilities and apply NMS. Skip j = 0, because it's the background class
-    for j in range(1, num_classes):
-        inds = scores[:, j] > cfg.TEST.SCORE_THRESH
-        scores_j = scores[inds, j]
-        boxes_j = boxes[inds, j * 4:(j + 1) * 4]
-        dets_j = np.concatenate([boxes_j, scores_j[:, None]], axis=1).astype(np.float32, copy=False)
-        keep = box_utils.nms(dets_j, cfg.TEST.NMS)
-        box_inds_j = box_inds[inds][keep, None]
-        cls_boxes[j] = np.concatenate([dets_j[keep, :], box_inds_j, np.ones_like(box_inds_j) * j], axis=1)
-        assert np.all(cls_boxes[j][:, :4] == boxes[cls_boxes[j][:, 5].astype(np.int), j * 4:(j + 1) * 4])
+    all_results = []
+    for mask_i in image_masks:
+        scores_i = all_scores[mask_i, :]
+        boxes_i = all_boxes[mask_i, :]
+        boxes_ids_i = all_boxes_ids[mask_i]
 
-    # Limit to max_per_image detections **over all classes**
-    if cfg.TEST.DETECTIONS_PER_IM > 0:
-        image_scores = np.concatenate([cls_boxes[j][:, 4] for j in range(1, num_classes)])
-        if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
-            image_thresh = np.sort(image_scores)[-cfg.TEST.DETECTIONS_PER_IM]
-            for j in range(1, num_classes):
-                keep = cls_boxes[j][:, 4] >= image_thresh
-                cls_boxes[j] = cls_boxes[j][keep, :]
+        boxes_and_infos_per_class = {}
+        for j in range(1, num_classes):
+            class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            scores_ij = scores_i[class_boxes_mask, j]
+            boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
+            boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
-    im_results = np.concatenate([cls_boxes[j] for j in range(1, num_classes)], axis=0)
-    boxes = im_results[:, :4]
-    scores = im_results[:, 4]
-    inds = im_results[:, 5].astype(np.int)
-    classes = im_results[:, 6].astype(np.int)
-    cls_boxes = [[]] + [cls_boxes[j][:, :5] for j in range(1, num_classes)]
-    return scores, boxes, cls_boxes, inds, classes
+            keep = box_utils.nms(np.concatenate([boxes_ij, scores_ij[:, None]], axis=1).astype(np.float32, copy=False), cfg.TEST.NMS)
+
+            scores_ij = scores_ij[keep]
+            boxes_ids_ij = boxes_ids_ij[keep]
+            boxes_ij = boxes_ij[keep, :]
+            j_vec = np.ones_like(boxes_ids_ij) * j
+            box_infos_ij = np.stack([scores_ij, boxes_ids_ij, j_vec], axis=1)
+            boxes_and_infos_per_class[j] = np.concatenate([boxes_ij, box_infos_ij], axis=1)
+
+        # Limit to max_per_image detections **over all classes**
+        if cfg.TEST.DETECTIONS_PER_IM > 0:
+            image_scores = np.concatenate([boxes_and_infos_per_class[j][:, 4] for j in range(1, num_classes)])
+            if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
+                image_thresh = np.sort(image_scores)[-cfg.TEST.DETECTIONS_PER_IM]
+                for j in range(1, num_classes):
+                    keep = boxes_and_infos_per_class[j][:, 4] >= image_thresh
+                    boxes_and_infos_per_class[j] = boxes_and_infos_per_class[j][keep, :]
+
+        im_result = np.concatenate([boxes_and_infos_per_class[j] for j in range(1, num_classes)], axis=0)
+        all_results.append(im_result)
+
+    all_results = np.concatenate(all_results, axis=0)
+    boxes_ids = all_results[:, 5].astype(np.int)
+    box_classes = all_results[:, 6].astype(np.int)
+    scores = all_results[:, 4]
+    boxes = all_results[:, :4]
+    return boxes_ids, box_classes, scores, boxes
 
 
 def _im_detect_mask(model, im_scales, im_inds, boxes, blob_conv):

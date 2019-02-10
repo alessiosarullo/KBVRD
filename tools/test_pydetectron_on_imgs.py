@@ -69,13 +69,11 @@ def main():
         print("loading detectron weights %s" % args.load_detectron)
         load_detectron_weight(maskRCNN, args.load_detectron)
 
-
     imglist = misc_utils.get_imagelist_from_dir(args.image_dir)
     num_images = len(imglist)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    vis = False
     timers = defaultdict(Timer)
     for i in range(num_images):
         print('img', i)
@@ -86,7 +84,9 @@ def main():
         inputs = {'data': torch.tensor(im_blob, device=device),
                   'im_info': torch.Tensor(im_info),
                   }
-        scores, boxes, masks, feat_map, cls_boxes = im_detect_all_with_feats(maskRCNN, inputs, timers=timers)
+        scores, boxes, box_classes, im_ids, masks, feat_map = im_detect_all_with_feats(maskRCNN, inputs, timers=timers)
+        boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
+        cls_boxes = [[]] + [boxes_with_scores[box_classes == j, :] for j in range(1, cfg.MODEL.NUM_CLASSES)]
 
         timers['device_transfer'].tic()
         masks = masks.cpu().numpy()
@@ -96,21 +96,20 @@ def main():
         cls_segms = segm_results(cls_boxes, masks, boxes, im.shape[0], im.shape[1])
         timers['misc_mask'].toc()
 
-        if vis:
-            im_name, _ = os.path.splitext(os.path.basename(imglist[i]))
-            vis_utils.vis_one_image(
-                im[:, :, ::-1],  # BGR -> RGB for visualization
-                im_name,
-                args.output_dir,
-                cls_boxes,
-                cls_segms,
-                None,
-                dataset=dataset,
-                box_alpha=0.3,
-                show_class=True,
-                thresh=0.7,
-                kp_thresh=2
-            )
+        im_name, _ = os.path.splitext(os.path.basename(imglist[i]))
+        vis_utils.vis_one_image(
+            im[:, :, ::-1],  # BGR -> RGB for visualization
+            im_name,
+            args.output_dir,
+            cls_boxes,
+            cls_segms,
+            None,
+            dataset=dataset,
+            box_alpha=0.3,
+            show_class=True,
+            thresh=0.7,
+            kp_thresh=2
+        )
     print('\n'.join(['%-30s %6.4fs' % (k, t.average_time) for k, t in timers.items()]))
 
 
