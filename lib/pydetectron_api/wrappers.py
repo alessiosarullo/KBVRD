@@ -51,3 +51,6 @@ vis_utils = _pydet_vis_utils
 load_detectron_weight = _pydet_load_detectron_weight
 prep_im_for_blob = _pydet_prep_im_for_blob
 get_image_blob = _pydet_get_image_blob
+
+# Derived
+COCO_CLASSES = dummy_datasets.get_coco_dataset().classes

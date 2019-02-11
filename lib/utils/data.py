@@ -21,7 +21,9 @@ class Minibatch:
         self.img_fns = []
         self.gt_boxes = []
         self.gt_box_classes = []
+        self.gt_box_im_ids = []
         self.gt_inters = []
+        self.gt_inters_im_ids = []
 
         if kwargs:
             for k, v in vars(kwargs).items():
@@ -30,34 +32,47 @@ class Minibatch:
                 self.__dict__[k] = v
 
     def append(self, ex):
-        self.imgs.append(ex['img'])
-        self.img_infos.append(np.array([*ex['img_size'], ex['scale']], dtype=np.float32))
-        self.img_fns.append(ex['fn'])
-        self.gt_boxes.append(ex['gt_boxes'] * ex['scale'])
-        self.gt_box_classes.append(ex['gt_box_classes'])
-        self.gt_inters.append(ex['gt_inters'])
+        self.imgs += [ex['img']]
+        self.img_infos += [np.array([*ex['img_size'], ex['scale']], dtype=np.float32)]
+        self.img_fns += [ex['fn']]
+        self.gt_boxes += [ex['gt_boxes'] * ex['scale']]
+        self.gt_box_classes += [ex['gt_box_classes']]
+        self.gt_inters += [ex['gt_inters']]
 
-    def combine_and_place(self, device):  # TODO find a better name
+        self.gt_box_im_ids += [np.ones_like(ex['gt_box_classes']) * len(self.gt_box_im_ids)]
+        self.gt_inters_im_ids += [np.ones_like(ex['gt_inters']) * len(self.gt_inters_im_ids)]
+
+    def vectorize(self, device):  # TODO find a better name
         self.img_infos = np.stack(self.img_infos, axis=0)
+        self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
+        self.gt_inters_im_ids = np.concatenate(self.gt_inters_im_ids, axis=0)
 
         # Maps to PyTorch tensors on the specified device
-        self.gt_boxes = self._convert(self.gt_boxes, device=device)
-        self.gt_box_classes = self._convert(self.gt_box_classes, device=device)
-        self.gt_inters = self._convert(self.gt_inters, device=device)
+        self.gt_boxes = self._to_tensor(self.gt_boxes, device=device, concat=True)
+        self.gt_box_classes = self._to_tensor(self.gt_box_classes, device=device, concat=True)
+        self.gt_inters = self._to_tensor(self.gt_inters, device=device, concat=True)
 
-        self.imgs = _im_list_to_4d_tensor(self._convert(self.imgs, device=device))  # 4D NCHW tensor
+        self.imgs = _im_list_to_4d_tensor(self._to_tensor(self.imgs, device=device))  # 4D NCHW tensor
+
+        assert len(self.gt_boxes) == len(self.gt_box_classes) == len(self.gt_box_im_ids)
+        assert len(self.gt_inters) == len(self.gt_inters_im_ids)
+        assert self.imgs.shape[0] == self.img_infos.shape[0]
 
     @classmethod
     def collate(cls, examples):
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
-        minibatch.combine_and_place(device=torch.device('cuda'))  # FIXME magic constant
+        minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant
         return minibatch
 
     @staticmethod
-    def _convert(values, device):
-        return [torch.tensor(v, device=device) for v in values]
+    def _to_tensor(values, device, concat=False):
+        tensor_list = [torch.tensor(v, device=device) for v in values]
+        if concat:
+            return torch.cat(tensor_list, dim=0)
+        else:
+            return tensor_list
 
 
 class SquarePad(object):

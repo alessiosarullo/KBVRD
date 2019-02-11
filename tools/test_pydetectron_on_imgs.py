@@ -76,8 +76,8 @@ def main():
         inputs = {'data': torch.tensor(im_blob, device=device),
                   'im_info': torch.Tensor(im_info),
                   }
-        scores, boxes, box_classes, im_ids, masks, feat_map = im_detect_all_with_feats(maskRCNN, inputs, timers=timers)
-        boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
+        box_class_scores, boxes, box_classes, im_ids, masks, feat_map, all_scores = im_detect_all_with_feats(maskRCNN, inputs, timers=timers)
+        boxes_with_scores = np.concatenate([boxes, box_class_scores[:, None]], axis=1)
         cls_boxes = [[]] + [boxes_with_scores[box_classes == j, :] for j in range(1, cfg.MODEL.NUM_CLASSES)]
 
         timers['device_transfer'].tic()

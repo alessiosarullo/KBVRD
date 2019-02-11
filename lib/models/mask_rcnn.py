@@ -42,9 +42,9 @@ class MaskRCNN(nn.Module):
         print("Loading Mask-RCNN's weights from {}.".format(weight_file))
         load_detectron_weight(mask_rcnn, weight_file)
 
-        # self.device = torch.device('cuda')  # FIXME is this needed?
         self.cfg = cfg
         self.mask_rcnn = mask_rcnn
+        self.mask_resolution = cfg.MRCNN.RESOLUTION
 
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -54,23 +54,49 @@ class MaskRCNN(nn.Module):
         """
         :param x:
         :param kwargs:
-        :return: NOTE: classes here include BG one, not present in HICO
+        :return: - scores [array]:
+                 - boxes [array]:
+                 - box_classes [array]: NOTE: classes here include BG one, not present in HICO
+                 - box_im_ids [array]:
+                 - masks [tensor]:
+                 - feat_map [tensor]:
         """
         # TODO docs
-        # TODO coco-hico class mapping
 
         assert not self.training
-        batch_tensor = x.imgs
-        orig_im_infos = x.img_infos
+        apply_head_only = kwargs.get('head_only', False)
 
-        im_scales = orig_im_infos[:, 2]
-        im_infos = np.concatenate([np.tile(batch_tensor.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
-        inputs = {'data': batch_tensor,
-                  'im_info': torch.Tensor(im_infos), }
-        print(orig_im_infos)
-        print(im_infos)
-        scores, boxes, box_classes, im_ids, masks, feat_map = im_detect_all_with_feats(self.mask_rcnn, inputs, timers=None)
-        return scores, boxes, box_classes, im_ids, masks, feat_map
+        if not apply_head_only:
+            batch_tensor = x.imgs
+            orig_im_infos = x.img_infos
+
+            im_scales = orig_im_infos[:, 2]
+            im_infos = np.concatenate([np.tile(batch_tensor.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
+            inputs = {'data': batch_tensor,
+                      'im_info': torch.Tensor(im_infos), }
+            print(orig_im_infos)
+            print(im_infos)
+            box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs, timers=None)
+
+            # pick the mask corresponding to the predicted class and binarize it
+            masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
+
+            boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
+                                        boxes.astype(np.float32, copy=False),
+                                        scores.astype(np.float32, copy=False)
+                                        ], axis=1)
+            box_feats = self.mask_rcnn.Box_Head(feat_map, {'rois': boxes_ext[:, :5]})  # FIXME seems like a waste to repeat it
+            return boxes_ext, masks, feat_map, box_feats
+        else:
+            try:
+                fmap = kwargs['fmap']
+                rois = kwargs['rois']
+            except KeyError:
+                raise
+
+            # Input to Box_Head should be a dictionary with the field 'rois' as a Bx5 NumPy array, where each row is [im_id, x1, y1, x2, y2]
+            rois_feats = self.mask_rcnn.Box_Head(fmap, {'rois': rois})
+            return rois_feats
 
 
 def main():

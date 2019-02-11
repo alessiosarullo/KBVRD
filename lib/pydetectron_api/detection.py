@@ -10,6 +10,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     """
     Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
     """
+    # TODO docs
 
     assert not cfg.TEST.BBOX_AUG.ENABLED
     assert not cfg.MODEL.KEYPOINTS_ON
@@ -35,7 +36,8 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     timers['device_transfer'].toc()
 
     timers['bbox_nms'].tic()
-    box_inds, box_classes, scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds]
     timers['bbox_nms'].toc()
 
@@ -46,7 +48,8 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     masks = _im_detect_mask(model, im_scales, im_ids, boxes, feat_map)
     timers['im_detect_mask'].toc()
 
-    return scores, boxes, box_classes, im_ids, masks, feat_map
+    assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == masks.shape[0] == scores.shape[0]
+    return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, scores
 
 
 def _im_detect_bbox(model, inputs, im_scales, timers=None):
@@ -134,11 +137,11 @@ def _clip_tiled_boxes(boxes, im_shape):
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
     """
-    Returns bounding-box detection results by thresholding on scores and applying non-maximum suppression (NMS). In the following R denotes the
+    Returns bounding-box detection results by thresholding on scores and applying non-maximum suppression (NMS). In the following B denotes the
     number of detections and C the number of classes
-    :param all_scores [array, R x C]: Each row represents a list of object detection confidence scores for each of the object classes in the dataset
+    :param all_scores [array, B x C]: Each row represents a list of object detection confidence scores for each of the object classes in the dataset
                 (including the background class). Element (i, j) corresponds to the box at `all_boxes[i, j * 4:(j + 1) * 4]`.
-    :param all_boxes [array, R x 4C]: Each row represents a list of predicted bounding boxes for each of the object classes in  the dataset
+    :param all_boxes [array, B x 4C]: Each row represents a list of predicted bounding boxes for each of the object classes in  the dataset
                 (including the background class). The detections in each row originate from the same object proposal.
     :param im_inds [array, R]: Which image the corresponding box belongs to.
     :return:
@@ -199,11 +202,11 @@ def _im_detect_mask(model, im_scales, im_inds, boxes, blob_conv):
     Arguments:
         model (DetectionModelHelper): the detection model to use
         im_scale (list): image blob scales as returned by im_detect_bbox
-        boxes (ndarray): R x 4 array of bounding box detections (e.g., as returned by im_detect_bbox)
+        boxes (ndarray): B x 4 array of bounding box detections (e.g., as returned by im_detect_bbox)
         blob_conv (Variable): base features from the backbone network.
 
     Returns:
-        pred_masks (ndarray): R x K x M x M array of class specific soft masks output by the network (must be processed by segm_results to convert
+        pred_masks (ndarray): B x K x M x M array of class specific soft masks output by the network (must be processed by segm_results to convert
             into hard masks in the original image coordinate space)
     """
 

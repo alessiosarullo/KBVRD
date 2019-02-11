@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import Dataset
 
 from lib.drivers.hicodet_driver import HicoDet as HicoDetDriver
-from lib.utils.data import Splits, Minibatch, preprocess_img, _im_list_to_4d_tensor
+from lib.utils.data import Splits, Minibatch, preprocess_img
 
 
 class HicoDetSplit(Dataset):
@@ -47,7 +47,11 @@ class HicoDetSplit(Dataset):
 
     @property
     def img_dir(self):
-        return self.hicodet.split_data[self.split]['img_dir']
+        return self.hicodet.get_img_dir(self.split)
+
+    @property
+    def is_train(self):
+        return self.split == Splits.TRAIN
 
     def compute_gt_data(self):
         hd = self.hicodet
@@ -95,9 +99,18 @@ class HicoDetSplit(Dataset):
                 im_without_visible_interactions.append(i)
         return boxes, box_classes, interactions
 
-    @property
-    def is_train(self):
-        return self.split == Splits.TRAIN
+    def get_loader(self, batch_size=3, num_workers=0, num_gpus=1, **kwargs):
+        data_loader = torch.utils.data.DataLoader(
+            dataset=self,
+            batch_size=batch_size * num_gpus,
+            shuffle=True if self.is_train else False,
+            num_workers=num_workers,
+            collate_fn=Minibatch.collate,
+            drop_last=True,
+            # pin_memory=True,  # disable this in case of freezes
+            **kwargs,
+        )
+        return data_loader
 
     def __getitem__(self, index):
         # Read the image
@@ -129,19 +142,6 @@ class HicoDetSplit(Dataset):
 
     def __len__(self):
         return len(self.image_index)
-
-    def get_loader(self, batch_size=3, num_workers=0, num_gpus=1, **kwargs):
-        data_loader = torch.utils.data.DataLoader(
-            dataset=self,
-            batch_size=batch_size * num_gpus,
-            shuffle=True if self.is_train else False,
-            num_workers=num_workers,
-            collate_fn=Minibatch.collate,
-            drop_last=True,
-            # pin_memory=True,  # disable this in case of freezes
-            **kwargs,
-        )
-        return data_loader
 
 
 def main():

@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
 from lib.utils.data import Splits
+from lib.pydetectron_api.wrappers import COCO_CLASSES
 
 
 class HicoDet:
@@ -123,6 +124,20 @@ class HicoDet:
     @property
     def objects(self) -> List:
         return self._objects
+
+    @property
+    def person_class(self) -> int:
+        return self.obj_class_index['person']
+
+    def map_coco_classes_to_hico(self, coco_values=None):
+        if coco_values is None:  # give an index mapping
+            coco_obj_to_idx = {v: k for k, v in COCO_CLASSES.items()}
+            coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
+            return coco_to_hico_mapping
+        else:
+            # Note: this will raise a KeyError if any of `coco_values` is the background class
+            hico_values = np.array([self.obj_class_index[COCO_CLASSES[v]] for v in coco_values])
+            return hico_values
 
     def get_occurrences(self, interaction, split=Splits.TRAIN):
         """

@@ -4,6 +4,10 @@ import argparse
 
 class BaseConfigs:
     def parse_args(self):
+        args = self.get_arg_parser().parse_args()
+        self.__dict__.update({k: v for k, v in vars(args).items() if v is not None})
+
+    def get_arg_parser(self):
         raise NotImplementedError
 
     def __str__(self):
@@ -25,30 +29,28 @@ class DataConfig(BaseConfigs):
         # self.pixel_std = [0.229, 0.224, 0.225]
         # self.im_scale = 600
 
-    def parse_args(self):
+    def get_arg_parser(self):
         parser = argparse.ArgumentParser(description='Data settings')
-
-        # Program arguments
-        parser.add_argument('--feats', dest='pretrained_features', type=str,
-                            help='If specified, absolute path to the file contained Mask-RCNN pretrained features.')
-
-        args = parser.parse_args()
-        self.__dict__.update({k: v for k, v in vars(args).items() if v is not None})
-
+        # parser.add_argument('--feats', dest='pretrained_features', type=str,
+        #                     help='If specified, absolute path to the file contained Mask-RCNN pretrained features.')
+        return parser
 
 class ModelConfig(BaseConfigs):
     def __init__(self):
-        pass
+        self.rcnn_arch = None
 
-    def parse_args(self):
-        pass
+    def get_arg_parser(self):
+        parser = argparse.ArgumentParser(description='Model settings')
+        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str, required=True,
+                            help='Name of the RCNN architecture to use. Pretrained weights and configurations will be loaded according to this.')
+        return parser
 
 
 class OptimConfig(BaseConfigs):
     def __init__(self):
         pass
 
-    def parse_args(self):
+    def get_arg_parser(self):
         pass
 
 
@@ -64,9 +66,9 @@ class Configs:
 
     @classmethod
     def parse_args(cls):
-        cls.data.parse_args()
-        cls.model.parse_args()
-        cls.optim.parse_args()
+        cls.data.get_arg_parser()
+        cls.model.get_arg_parser()
+        cls.optim.get_arg_parser()
 
     @classmethod
     def print(cls):
