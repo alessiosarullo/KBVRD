@@ -9,7 +9,7 @@ from lib.dataset.hicodet import HicoDetSplit
 from lib.utils.data import Minibatch
 from config import Configs as cfg
 from .mask_rcnn import MaskRCNN
-from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
+# from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
 
 
 class BaseModel(nn.Module):

@@ -19,7 +19,7 @@
     ```
     conda install pytorch=0.4.1 -c pytorch
     conda install torchvision -c pytorch
-    conda install cython matplotlib numpy scipy opencv pyyaml packaging
+    conda install cython matplotlib numpy scipy opencv pyyaml packaging pandas
     pip install pycocotools
     ```
         
@@ -31,4 +31,5 @@
     cd pydetectron/lib
     ./make.sh
     ```
-    
+
+1) 
