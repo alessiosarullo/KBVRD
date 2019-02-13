@@ -15,52 +15,51 @@ class Splits(Enum):
 
 
 class Minibatch:
-    def __init__(self, **kwargs):
+    def __init__(self, training):
+        self.training = training
+
         self.imgs = []
         self.img_infos = []
         self.img_fns = []
-        self.gt_boxes = []
-        self.gt_box_classes = []
-        self.gt_box_im_ids = []
-        self.gt_inters = []
-        self.gt_inters_im_ids = []
 
-        if kwargs:
-            for k, v in vars(kwargs).items():
-                if k not in self.__dict__.keys():
-                    raise AttributeError('Minibatch has no attribute %s' % k)
-                self.__dict__[k] = v
+        if training:
+            self.gt_boxes = []
+            self.gt_box_classes = []
+            self.gt_box_im_ids = []
+            self.gt_inters = []
+            self.gt_inters_im_ids = []
 
     def append(self, ex):
         self.imgs += [ex['img']]
         self.img_infos += [np.array([*ex['img_size'], ex['scale']], dtype=np.float32)]
         self.img_fns += [ex['fn']]
-        self.gt_boxes += [ex['gt_boxes'] * ex['scale']]
-        self.gt_box_classes += [ex['gt_box_classes']]
-        self.gt_inters += [ex['gt_inters']]
 
-        self.gt_box_im_ids += [np.ones_like(ex['gt_box_classes']) * len(self.gt_box_im_ids)]
-        self.gt_inters_im_ids += [np.ones_like(ex['gt_inters']) * len(self.gt_inters_im_ids)]
+        if self.training:
+            self.gt_boxes += [ex['gt_boxes'] * ex['scale']]
+            self.gt_box_classes += [ex['gt_box_classes']]
+            self.gt_inters += [ex['gt_inters']]
 
-    def vectorize(self, device):  # TODO find a better name
-        self.img_infos = np.stack(self.img_infos, axis=0)
-        self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
-        self.gt_inters_im_ids = np.concatenate(self.gt_inters_im_ids, axis=0)
+            self.gt_box_im_ids += [np.ones_like(ex['gt_box_classes']) * len(self.gt_box_im_ids)]
+            self.gt_inters_im_ids += [np.ones_like(ex['gt_inters']) * len(self.gt_inters_im_ids)]
 
-        # Maps to PyTorch tensors on the specified device
-        self.gt_boxes = self._to_tensor(self.gt_boxes, device=device, concat=True)
-        self.gt_box_classes = self._to_tensor(self.gt_box_classes, device=device, concat=True)
-        self.gt_inters = self._to_tensor(self.gt_inters, device=device, concat=True)
-
+    def vectorize(self, device):
         self.imgs = _im_list_to_4d_tensor(self._to_tensor(self.imgs, device=device))  # 4D NCHW tensor
-
-        assert len(self.gt_boxes) == len(self.gt_box_classes) == len(self.gt_box_im_ids)
-        assert len(self.gt_inters) == len(self.gt_inters_im_ids)
+        self.img_infos = np.stack(self.img_infos, axis=0)
         assert self.imgs.shape[0] == self.img_infos.shape[0]
 
+        if self.training:
+            self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
+            self.gt_inters_im_ids = np.concatenate(self.gt_inters_im_ids, axis=0)
+            self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
+            self.gt_box_classes = np.concatenate(self.gt_box_classes, axis=0)
+            self.gt_inters = np.concatenate(self.gt_inters, axis=0)
+
+            assert len(self.gt_boxes) == len(self.gt_box_classes) == len(self.gt_box_im_ids)
+            assert len(self.gt_inters) == len(self.gt_inters_im_ids)
+
     @classmethod
-    def collate(cls, examples):
-        minibatch = cls()
+    def collate(cls, examples, training):
+        minibatch = cls(training)
         for ex in examples:
             minibatch.append(ex)
         minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant

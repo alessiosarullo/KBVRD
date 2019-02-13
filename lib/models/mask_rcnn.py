@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lib.drivers.datasets import HicoDetSplit, Splits, Minibatch
+from lib.dataset.hicodet import HicoDetSplit, Splits, Minibatch
 from lib.pydetectron_api.detection import im_detect_all_with_feats
 from lib.pydetectron_api.wrappers import \
     cfg, cfg_from_file, assert_and_infer_cfg, \

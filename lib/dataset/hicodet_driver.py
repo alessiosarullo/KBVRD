@@ -7,8 +7,8 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
-from lib.utils.data import Splits
 from lib.pydetectron_api.wrappers import COCO_CLASSES
+from lib.utils.data import Splits
 
 
 class HicoDet:
@@ -340,9 +340,12 @@ def main():
 
     # Save lists
     path_objects_file = os.path.join(hd.data_dir, 'objects.txt')
-    path_action_synsets_file = os.path.join(hd.data_dir, 'action_synsets.txt')
     with open(path_objects_file, 'w') as f:
         f.write('\n'.join(hd.objects))
+    path_objects_file = os.path.join(hd.data_dir, 'predicates.txt')
+    with open(path_objects_file, 'w') as f:
+        f.write('\n'.join(hd.predicates))
+    path_action_synsets_file = os.path.join(hd.data_dir, 'action_synsets.txt')
     with open(path_action_synsets_file, 'w') as f:
         f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', ['no_interaction'])]) for predicate in hd.wn_predicate_dict.values()]))
 

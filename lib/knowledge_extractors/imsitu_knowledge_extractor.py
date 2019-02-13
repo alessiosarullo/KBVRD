@@ -7,7 +7,7 @@ from drivers.imsitu_driver import ImSitu
 from nltk.parse.corenlp import CoreNLPServer, CoreNLPServerError, CoreNLPDependencyParser
 from utils.plot import plot_mat
 
-from lib.drivers.hicodet_driver import HicoDet
+from lib.dataset.hicodet_driver import HicoDet
 
 
 # TODO check after Hico predicate refactor

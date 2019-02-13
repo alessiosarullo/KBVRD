@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from lib.drivers.hicodet_driver import HicoDet as HicoDetDriver
+from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.utils.data import Splits, Minibatch, preprocess_img
 
 
@@ -105,7 +105,7 @@ class HicoDetSplit(Dataset):
             batch_size=batch_size * num_gpus,
             shuffle=True if self.is_train else False,
             num_workers=num_workers,
-            collate_fn=Minibatch.collate,
+            collate_fn=lambda x: Minibatch.collate(x, training=self.is_train),
             drop_last=True,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
@@ -145,7 +145,7 @@ class HicoDetSplit(Dataset):
 
 
 def main():
-    hds = HicoDetSplit(HicoDetDriver(), Splits.TRAIN, im_inds=[12, 13, 14])
+    hds = HicoDetSplit(Splits.TRAIN, im_inds=[12, 13, 14])
 
 
 if __name__ == '__main__':

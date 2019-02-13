@@ -1,7 +1,7 @@
 import numpy as np
 from utils.plot import plot_mat
 
-from lib.drivers.hicodet_driver import HicoDet
+from lib.dataset.hicodet_driver import HicoDet
 
 
 def main():

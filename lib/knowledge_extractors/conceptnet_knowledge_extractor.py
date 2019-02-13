@@ -7,7 +7,7 @@ from drivers.conceptnet_driver import Conceptnet
 from drivers.hicodet_driver import HicoDet
 from utils.plot import plot_mat
 
-from lib.drivers.word_embeddings import WordEmbeddings
+from lib.dataset.word_embeddings import WordEmbeddings
 
 
 #TODO class
