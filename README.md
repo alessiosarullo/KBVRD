@@ -1,6 +1,9 @@
-## Download the data
+## Download data and pretrained models
 
 1) [HICO-DET](http://www-personal.umich.edu/~ywchao/hico/)
+
+1) The model you plan on using from [Detectron's model zoo](https://github.com/facebookresearch/Detectron/blob/master/MODEL_ZOO.md).
+    The default is [this](https://dl.fbaipublicfiles.com/detectron/35858828/12_2017_baselines/e2e_mask_rcnn_R-50-C4_2x.yaml.01_46_47.HBThTerB/output/train/coco_2014_train%3Acoco_2014_valminusminival/generalized_rcnn/model_final.pkl).
 
 ## Installation instructions
 

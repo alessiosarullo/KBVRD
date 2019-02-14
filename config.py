@@ -1,13 +1,15 @@
 import sys
 import argparse
+import os
+import lib.pydetectron_api.wrappers as pydet
 
 
 class BaseConfigs:
     def parse_args(self):
-        args = self.get_arg_parser().parse_args()
+        args = self._get_arg_parser().parse_args()
         self.__dict__.update({k: v for k, v in vars(args).items() if v is not None})
 
-    def get_arg_parser(self):
+    def _get_arg_parser(self):
         raise NotImplementedError
 
     def __str__(self):
@@ -20,11 +22,14 @@ class BaseConfigs:
 class ProgramConfig(BaseConfigs):
     def __init__(self):
         self.print_interval = 10
-        self.save_dir = 'exp'
         self.randomize = False
 
-    def get_arg_parser(self):
-        pass
+        self.save_dir = 'exp'
+        self.detectron_pretrained_file_format = os.path.join('data', 'pretrained_model', '%s.pkl')
+
+    def _get_arg_parser(self):
+        parser = argparse.ArgumentParser(description='Program settings')
+        return parser
 
 
 class DataConfig(BaseConfigs):
@@ -33,13 +38,14 @@ class DataConfig(BaseConfigs):
         self.pixel_mean = None
         self.pixel_std = None
         self.im_scale = None
+        self.im_max_size = None
 
         # # Normalisation values used in NeuralMotifs
         # self.pixel_mean = [0.485, 0.456, 0.406]
         # self.pixel_std = [0.229, 0.224, 0.225]
         # self.im_scale = 600
 
-    def get_arg_parser(self):
+    def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='Data settings')
         # parser.add_argument('--feats', dest='pretrained_features', type=str,
         #                     help='If specified, absolute path to the file contained Mask-RCNN pretrained features.')
@@ -48,11 +54,12 @@ class DataConfig(BaseConfigs):
 
 class ModelConfig(BaseConfigs):
     def __init__(self):
-        self.rcnn_arch = None
+        self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
+        self.mask_resolution = None
 
-    def get_arg_parser(self):
+    def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='Model settings')
-        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str, default='e2e_mask_rcnn_R-50-C4_2x',
+        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str,
                             help='Name of the RCNN architecture to use. Pretrained weights and configurations will be loaded according to this.')
         return parser
 
@@ -66,8 +73,9 @@ class OptimizerConfig(BaseConfigs):
 
         self.num_epochs = 10
 
-    def get_arg_parser(self):
-        pass
+    def _get_arg_parser(self):
+        parser = argparse.ArgumentParser(description='Optimizer settings')
+        return parser
 
 
 class Configs:
@@ -86,7 +94,23 @@ class Configs:
     def parse_args(cls):
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
-                v.get_arg_parser()
+                v.parse_args()
+        cls.init_detectron_cfgs()
+
+    @classmethod
+    def init_detectron_cfgs(cls):
+        cfg_file = 'pydetectron/configs/baselines/%s.yaml' % cls.model.rcnn_arch
+
+        print("Loading Detectron's configs from {}.".format(cfg_file))
+        pydet.cfg_from_file(cfg_file)
+        pydet.cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS = False  # Don't need to load imagenet pretrained weights
+        pydet.cfg.MODEL.NUM_CLASSES = len(pydet.COCO_CLASSES)
+        pydet.assert_and_infer_cfg()
+
+        cls.data.pixel_mean = pydet.cfg.PIXEL_MEANS
+        cls.data.im_scale = pydet.cfg.TEST.SCALE
+        cls.data.im_max_size = pydet.cfg.TEST.MAX_SIZE
+        cls.model.mask_resolution = pydet.cfg.MRCNN.RESOLUTION
 
     @classmethod
     def print(cls):
@@ -104,7 +128,7 @@ def main():
     print('Default configs')
     Configs.print()
 
-    sys.argv += ['--feats', '/path/to/feats']
+    # sys.argv += ['--feats', '/path/to/feats']
     Configs.parse_args()
     print('Updated with args:', sys.argv)
     Configs.print()

@@ -1,21 +1,14 @@
-import argparse
 import os
-import sys
-from collections import defaultdict
 
 import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 
+from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit, Splits, Minibatch
 from lib.pydetectron_api.detection import im_detect_all_with_feats
-from lib.pydetectron_api.wrappers import \
-    cfg, cfg_from_file, assert_and_infer_cfg, \
-    segm_results, \
-    dummy_datasets, \
-    Generalized_RCNN, \
-    misc_utils, vis_utils, Timer, load_detectron_weight
+from lib.pydetectron_api.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 
 
 class MaskRCNN(nn.Module):
@@ -23,28 +16,19 @@ class MaskRCNN(nn.Module):
     Wrapper around Detectron's Mask-RCNN
     """
 
-    def __init__(self, model_name, num_classes):
+    def __init__(self):
         super().__init__()
 
         if not torch.cuda.is_available():
-            raise ValueError("Need a CUDA device to run the code.")  # TODO check if this is true
-
-        cfg_file = 'pydetectron/configs/baselines/%s.yaml' % model_name
-        weight_file = 'data/pretrained_model/%s.pkl' % model_name
-
-        print("Loading Detectron's configs from {}.".format(cfg_file))
-        cfg_from_file(cfg_file)
-        cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS = False  # Don't need to load imagenet pretrained weights
-        cfg.MODEL.NUM_CLASSES = num_classes
-        assert_and_infer_cfg()
+            raise ValueError("Need a CUDA device to run the code.")
 
         mask_rcnn = Generalized_RCNN()
+        weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
         print("Loading Mask-RCNN's weights from {}.".format(weight_file))
         load_detectron_weight(mask_rcnn, weight_file)
 
-        self.cfg = cfg
         self.mask_rcnn = mask_rcnn
-        self.mask_resolution = cfg.MRCNN.RESOLUTION
+        self.mask_resolution = cfg.model.mask_resolution
 
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -130,7 +114,7 @@ def main():
             im_fn = batch.img_fns[i]
             im = cv2.imread(os.path.join(hds.img_dir, im_fn))
 
-            cls_boxes = [[]] + [boxes_with_scores_i[box_classes_i == j, :] for j in range(1, cfg.MODEL.NUM_CLASSES)]
+            cls_boxes = [[]] + [boxes_with_scores_i[box_classes_i == j, :] for j in range(1, 81)]  # 81 = #coco classes + background
             cls_segms = segm_results(cls_boxes, masks_i, boxes_with_scores_i[:, :-1], im.shape[0], im.shape[1])
 
             vis_utils.vis_one_image(

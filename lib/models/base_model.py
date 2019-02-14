@@ -35,8 +35,7 @@ class BaseModel(nn.Module):
         self.mask_rcnn_vis_feat_dim = 4096  # FIXME this should be read from somewhere
 
         self.dataset = dataset
-
-        self.mask_rcnn = MaskRCNN(model_name=cfg.model.rcnn_arch, num_classes=dataset.num_object_classes + 1)  # +1 to add BG class
+        self.mask_rcnn = MaskRCNN()
 
         # Spatial pipeline
         self.spatial_rels_fc = nn.Sequential(*[

@@ -5,7 +5,7 @@ import torch
 from PIL import ImageOps
 
 from config import Configs as cfg
-from lib.pydetectron_api.wrappers import prep_im_for_blob, cfg as pydet_cfg  # FIXME merge configs
+from lib.pydetectron_api.wrappers import prep_im_for_blob
 
 
 class Splits(Enum):
@@ -91,7 +91,7 @@ def preprocess_img(im):
     :return: - processed_im [image]: The transformed image, in CHW format with BGR channels.
              - im_scale [scalar]: The scale factor that was used.
     """
-    ims, im_scale = prep_im_for_blob(im, pydet_cfg.PIXEL_MEANS, [pydet_cfg.TEST.SCALE], pydet_cfg.TEST.MAX_SIZE)
+    ims, im_scale = prep_im_for_blob(im, cfg.data.pixel_mean, [cfg.data.im_scale], cfg.data.im_max_size)
     assert len(ims) == 1
     processed_im = np.transpose(ims[0], axes=(2, 0, 1))  # to CHW
     im_scale = np.squeeze(im_scale)
