@@ -70,6 +70,7 @@ class HicoDet:
         self._predicates = list(self.predicate_dict.keys())
         self.obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
         self.pred_index = {pred: i for i, pred in enumerate(self.predicates)}
+        self._coco_to_hico_mapping = self._compute_coco_to_hico_mapping()
 
         # Statistics
         self.compute_stats()
@@ -129,11 +130,15 @@ class HicoDet:
     def person_class(self) -> int:
         return self.obj_class_index['person']
 
+    def _compute_coco_to_hico_mapping(self):
+        coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
+        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(self.objects)
+        coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
+        return coco_to_hico_mapping
+
     def map_coco_classes_to_hico(self, coco_values=None):
         if coco_values is None:  # give an index mapping
-            coco_obj_to_idx = {v: k for k, v in COCO_CLASSES.items()}
-            coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
-            return coco_to_hico_mapping
+            return self._coco_to_hico_mapping
         else:
             # Note: this will raise a KeyError if any of `coco_values` is the background class
             hico_values = np.array([self.obj_class_index[COCO_CLASSES[v]] for v in coco_values])
@@ -178,10 +183,8 @@ class HicoDet:
                 if not inter['invis']:
                     for k in ['hum_bbox', 'obj_bbox']:
                         for bbox in inter[k]:
-                            assert 0 <= bbox[0] < bbox[2] and \
-                                   0 <= bbox[1] < bbox[3] and \
-                                   bbox[2] < im_w and \
-                                   bbox[3] < im_h, (ann['file'], bbox, im_w, im_h)
+                            assert 0 <= bbox[0] < bbox[2] < im_w and 0 <= bbox[1] < bbox[3] < im_h, \
+                                (ann['file'], bbox, im_w, im_h)
 
         pass
         # # Trying to understand what `count` is

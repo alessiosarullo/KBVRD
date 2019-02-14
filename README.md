@@ -38,5 +38,7 @@
     cd pydetectron/lib
     ./make.sh
     ```
+    Note that you might have to modify `make.sh`  to change CUDA_PATH and CUDA_ARCH to fit
+    your system's configuration (for example enabling compute capability 70 for Volta GPUs). 
 
 1) 
