@@ -53,7 +53,7 @@ class BaseModel(nn.Module):
             input_size=self.spatial_emb_dim,
             hidden_size=self.spatial_rnn_emb_dim,
             num_layers=1,
-            dropout=self.spatial_rnn_dropout,
+            # dropout=self.spatial_rnn_dropout,  # dropout requires a number of layers greater than 1, since it's not added after the last one
             bidirectional=True)
 
         # Object pipeline
@@ -65,7 +65,7 @@ class BaseModel(nn.Module):
             input_size=self.obj_fc_dim,
             hidden_size=self.obj_rnn_emb_dim,
             num_layers=1,
-            dropout=self.obj_rnn_dropout,
+            # dropout=self.obj_rnn_dropout,  # dropout requires a number of layers greater than 1, since it's not added after the last one
             bidirectional=True)
         self.obj_output_fc = nn.Linear(self.obj_fc_dim, self.dataset.num_object_classes)
 
@@ -209,7 +209,7 @@ class BaseModel(nn.Module):
         return boxes_ext, masks
 
     def get_all_pairs(self, boxes_ext, box_classes=None):
-        box_classes = box_classes or np.argmax(boxes_ext[5:], axis=1)
+        box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)
         person_box_inds = (box_classes == self.dataset.hicodet.person_class)
         person_boxes_ext = boxes_ext[person_box_inds, :]
 
@@ -244,7 +244,7 @@ def rel_assignments(boxes_ext_np, gt_boxes, gt_box_im_ids, gt_box_classes, gt_in
     # FIXME enforce human subject only
     pred_box_im_ids = boxes_ext_np[:, 0]
     pred_boxes = boxes_ext_np[:, 1:5]
-    pred_box_classes = np.argmax(boxes_ext_np[5:], axis=1)
+    pred_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
 
     rel_infos = []
     num_box_seen = 0
