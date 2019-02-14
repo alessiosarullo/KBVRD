@@ -28,14 +28,15 @@ class Trainer:
         cfg.parse_args()
         cfg.print()
 
-        detector, train_loaders = self.setup()
+        detector, train_loader = self.setup()
         print(print_para(detector), flush=True)
         detector.cuda()
 
         print("Training starts now!")
         optimizer, scheduler = self.get_optim(detector)
         for epoch in range(cfg.opt.num_epochs):
-            self.train_epoch(epoch, train_loaders, optimizer, detector)
+            detector.train()
+            self.train_epoch(epoch, train_loader, optimizer, detector)
             if cfg.program.save_dir is not None:
                 save_file = os.path.join(cfg.program.save_dir, 'ckpt.tar')
                 torch.save({
@@ -57,9 +58,9 @@ class Trainer:
 
         train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(8)))  # FIXME
         detector = BaseModel(train)
-        train_loaders = train.get_loader(batch_size=1)
+        train_loader = train.get_loader(batch_size=1)
 
-        return detector, train_loaders
+        return detector, train_loader
 
     def get_optim(self, detector):
         conf = cfg.opt
@@ -77,26 +78,23 @@ class Trainer:
         scheduler = ReduceLROnPlateau(optimizer, 'max', patience=3, factor=0.1, verbose=True, threshold=0.0001, threshold_mode='abs', cooldown=1)
         return optimizer, scheduler
 
-    def train_epoch(self, epoch_num, train_loaders, optimizer, detector):
+    def train_epoch(self, epoch_num, train_loader, optimizer, detector):
         print_interval = cfg.program.print_interval
-        for train_split_idx, train_loader in enumerate(train_loaders):
-            tr = []
-            print('Using train split %d.' % train_split_idx)
-            detector.set_training_mode(param_set_id=train_split_idx)
-            num_batches = len(train_loader)
+        tr = []
+        num_batches = len(train_loader)
 
-            start_time = time.time()
-            for b, batch in enumerate(train_loader):
-                batch.iter_num = num_batches * epoch_num + b
-                tr.append(self.train_batch(batch, optimizer, detector))
+        start_time = time.time()
+        for b, batch in enumerate(train_loader):
+            batch.iter_num = num_batches * epoch_num + b
+            tr.append(self.train_batch(batch, optimizer, detector))
 
-                if b % print_interval == 0 and b >= print_interval:
-                    time_per_batch = (time.time() - start_time) / (b + 1)
-                    print("\nIter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
-                        batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
-                    print(pd.concat(tr[-print_interval:], axis=1).mean(1))
-                    print('-----------', flush=True)
-            print('Time for epoch %d, train split %d: %.0fm' % (epoch_num, train_split_idx, (time.time() - start_time) / 60))
+            if b % print_interval == 0 and b >= print_interval:
+                time_per_batch = (time.time() - start_time) / (b + 1)
+                print("\nIter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
+                    batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
+                print(pd.concat(tr[-print_interval:], axis=1).mean(1))
+                print('-----------', flush=True)
+            print('Time for epoch %d: %.0fm' % (epoch_num, (time.time() - start_time) / 60))
 
     def train_batch(self, b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)
