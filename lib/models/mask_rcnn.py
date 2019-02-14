@@ -31,7 +31,7 @@ class MaskRCNN(nn.Module):
         self.mask_resolution = cfg.model.mask_resolution
 
     def train(self, mode=True):
-        super().train(mode=False)
+        super().train(mode=False)  # FIXME freeze weights as well
 
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -61,8 +61,6 @@ class MaskRCNN(nn.Module):
             im_infos = np.concatenate([np.tile(batch_tensor.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
             inputs = {'data': batch_tensor,
                       'im_info': torch.Tensor(im_infos), }
-            print(orig_im_infos)
-            print(im_infos)
             box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs, timers=None)
 
             # pick the mask corresponding to the predicted class and binarize it

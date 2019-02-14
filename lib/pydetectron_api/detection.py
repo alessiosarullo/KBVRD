@@ -65,7 +65,9 @@ def _im_detect_bbox(model, inputs, im_scales, timers=None):
         timers = defaultdict(Timer)
 
     timers['im_detect_bbox - detect'].tic()
+    print('########################################' * 20)
     return_dict = model(**inputs)
+    print('########################################' * 20)
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
     boxes = torch.tensor(return_dict['rois'][:, 1:5], device=box_deltas.device)
