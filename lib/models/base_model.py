@@ -199,12 +199,12 @@ class BaseModel(nn.Module):
         else:
             return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos
 
-    def filter_and_map_to_hico(self, boxes_ext, masks):
+    def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor):
         class_scores = boxes_ext[:, 5:]
         classes = np.argmax(class_scores, axis=1)
         fg_inds = (classes > 0)
         assert fg_inds.shape[0] == boxes_ext.shape[0] == masks.shape[0]
-        boxes_ext, masks = boxes_ext[fg_inds, :], masks[fg_inds, :]
+        boxes_ext, masks = boxes_ext[fg_inds, :], masks[np.flatnonzero(fg_inds), :]
         boxes_ext = boxes_ext[:, list(range(5)) + self.dataset.hicodet.map_coco_classes_to_hico()]  # convert to Hico classes by swapping columns
         return boxes_ext, masks
 
