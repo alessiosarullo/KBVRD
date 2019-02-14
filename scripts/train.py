@@ -26,6 +26,7 @@ class Trainer:
     def train(self):
         print('Start train:', datetime.datetime.now())
         cfg.parse_args()
+        cfg.print()
 
         detector, train_loaders = self.setup()
         print(print_para(detector), flush=True)
