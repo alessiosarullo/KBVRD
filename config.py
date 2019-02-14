@@ -52,7 +52,7 @@ class ModelConfig(BaseConfigs):
 
     def get_arg_parser(self):
         parser = argparse.ArgumentParser(description='Model settings')
-        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str, required=True,
+        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str, default='e2e_mask_rcnn_R-50-C4_2x',
                             help='Name of the RCNN architecture to use. Pretrained weights and configurations will be loaded according to this.')
         return parser
 
@@ -84,9 +84,9 @@ class Configs:
 
     @classmethod
     def parse_args(cls):
-        cls.data.get_arg_parser()
-        cls.model.get_arg_parser()
-        cls.opt.get_arg_parser()
+        for k, v in sorted(cls.__dict__.items()):
+            if isinstance(v, BaseConfigs):
+                v.get_arg_parser()
 
     @classmethod
     def print(cls):
