@@ -1,3 +1,7 @@
+## Download the data
+
+1) [HICO-DET](http://www-personal.umich.edu/~ywchao/hico/)
+
 ## Installation instructions
 
 1) Make sure CUDA code can run on your machine. To install CUDA Toolkit follow 

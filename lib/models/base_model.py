@@ -30,7 +30,7 @@ class BaseModel(nn.Module):
         self.rel_vis_hidden_dim = 1024
         self.rel_hidden_dim = 1024
         self.filter_rels_of_non_overlapping_boxes = True
-        self.__dict__.update({k: v for k, v in vars(kwargs).items() if k in self.__dict__.keys() and v is not None})
+        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.mask_rcnn_vis_feat_dim = 4096  # FIXME this should be read from somewhere
 
