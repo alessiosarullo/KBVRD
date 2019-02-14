@@ -30,6 +30,9 @@ class MaskRCNN(nn.Module):
         self.mask_rcnn = mask_rcnn
         self.mask_resolution = cfg.model.mask_resolution
 
+    def train(self, mode=True):
+        super().train(mode=False)
+
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):
             return self._forward(x, **kwargs)
