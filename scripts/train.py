@@ -61,7 +61,7 @@ class Trainer:
 
         train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(40)))  # FIXME
         detector = BaseModel(train)
-        train_loader = train.get_loader(batch_size=1)
+        train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
 
         return detector, train_loader
 

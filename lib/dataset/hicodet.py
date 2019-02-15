@@ -99,7 +99,7 @@ class HicoDetSplit(Dataset):
                 im_without_visible_interactions.append(i)
         return boxes, box_classes, interactions
 
-    def get_loader(self, batch_size=3, num_workers=0, num_gpus=1, **kwargs):
+    def get_loader(self, batch_size, num_workers=0, num_gpus=1, **kwargs):
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
             batch_size=batch_size * num_gpus,
