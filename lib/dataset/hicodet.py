@@ -18,17 +18,18 @@ class HicoDetSplit(Dataset):
 
         self.split = split
         self.hicodet = hicodet_driver
-        self.image_index = im_inds
 
         # Initialize
         self.annotations = hicodet_driver.split_data[split]['annotations']
         if im_inds is not None:
             self.annotations = [self.annotations[i] for i in im_inds]
+            self.image_index = im_inds
+        else:
+            im_inds = list(range(len(self.annotations)))
         if filter_invisible:
             vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
                                                   if any([not inter['invis'] for inter in ann['interactions']])])
-            if im_inds is not None:
-                self.image_index = [im_inds[i] for i in vis_im_inds]
+            self.image_index = [im_inds[i] for i in vis_im_inds]
             print('Some images have been discarded due to not having visible interactions. Image index has changed.')
 
         self._im_boxes, self._im_box_classes, self._im_inters = self.compute_gt_data()

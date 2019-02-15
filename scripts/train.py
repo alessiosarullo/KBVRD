@@ -59,7 +59,7 @@ class Trainer:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(40)))  # FIXME
+        train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(16)))  # FIXME
         detector = BaseModel(train)
         train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
 
