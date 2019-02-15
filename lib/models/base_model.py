@@ -20,7 +20,7 @@ class BaseModel(nn.Module):
         self.mask_rcnn = MaskRCNN()
 
         # FIXME params
-        self.use_bn = False
+        self.use_bn = False  # Since the batches are small due to memory constraint, BN is not suitable. TODO Maybe switch to GN?
         # Spatial
         self.spatial_dropout = 0.1
         self.spatial_emb_dim = 64
