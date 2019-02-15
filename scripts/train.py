@@ -32,6 +32,9 @@ class Trainer:
         print(print_para(detector), flush=True)
         detector.cuda()
 
+        if cfg.program.save_dir is not None:
+            os.makedirs(cfg.program.save_dir, exist_ok=True)
+
         print("Training starts now!")
         optimizer, scheduler = self.get_optim(detector)
         for epoch in range(cfg.opt.num_epochs):
