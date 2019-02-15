@@ -113,7 +113,7 @@ class BaseModel(nn.Module):
         # TODO docs
 
         # Compute quantities used later
-        box_im_ids = boxes_ext[:, 0]
+        box_im_ids = boxes_ext[:, 0].int()
         rel_im_ids = torch.tensor(rel_infos[:, 0], device=union_boxes_feats.device)
         sub_inds = torch.tensor(rel_infos[:, 1], device=union_boxes_feats.device)
         obj_inds = torch.tensor(rel_infos[:, 2], device=union_boxes_feats.device)
