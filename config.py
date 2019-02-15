@@ -64,6 +64,7 @@ class OptimizerConfig(BaseConfigs):
         self.grad_clip = 5.0
 
         self.num_epochs = 10
+        self.batch_size = 2
 
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='Optimizer settings')
