@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def print_para(model):
+def print_para(model, breakdown=False):
     """
     Prints parameters of a model
     """
@@ -30,24 +30,26 @@ def print_para(model):
             else:
                 module = 'Other'
             modules[module][p_name] = ([str(x) for x in p.size()], np.prod(p.size()), p.requires_grad)
+    if modules['Other'] == 0:
+        del modules['Other']
 
-    total_params = {}
-    trainable_params = {}
-    strings = []
+    total_params, trainable_params = 0, 0
+    summary_strings, strings = [], []
     for module, mod_data in modules.items():
-        total_params[module] = sum([s[1] for s in mod_data.values()])
-        trainable_params[module] = sum([s[1] for s in mod_data.values() if s[2]])
+        module_tot = sum([s[1] for s in mod_data.values()])
+        module_trainable = sum([s[1] for s in mod_data.values() if s[2]])
+        total_params += module_tot
+        trainable_params += module_trainable
+
+        summary_strings.append(' - %6s (%6s) %s' % (_format(module_tot), _format(module_trainable), module))
+
         strings.append('### %s' % module)
         for p_name, (size, prod, p_req_grad) in sorted(mod_data.items(), key=lambda x: -x[1][1]):
-            strings.append("{:<100s}: {:<16s}({:8d}) ({})".format(
-                p_name, '[{}]'.format(','.join(size)), prod, 'grad' if p_req_grad else '    '
-            ))
+            strings.append("{:<100s}: {:<16s}({:8d})".format(p_name, '[{}]'.format(','.join(size)), prod))
 
-    print(total_params)
-    s = '\n{}\n{} total parameters ({} trainable):\n{}\n{}'.format(
-        '#' * 50,
-        _format(sum(total_params.values())),
-        _format(sum(trainable_params.values())),
-        '\n'.join([' - %6s (%6s) %s' % (_format(tot_param), _format(trainable_params[mod]), mod) for mod, tot_param in total_params.items()]),
-        '\n'.join(strings))
+    s = '\n{0}\n{1} total parameters ({2} trainable ones):\n{3}\n{4}\n{0}'.format('#' * 100,
+                                                                                  _format(total_params),
+                                                                                  _format(trainable_params),
+                                                                                  '\n'.join(summary_strings),
+                                                                                  '\n'.join(strings) if breakdown else '')
     print(s, flush=True)
