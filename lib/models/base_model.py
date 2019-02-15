@@ -213,7 +213,7 @@ class BaseModel(nn.Module):
         fg_inds = np.flatnonzero(fg_inds)  # this is needed for torch tensors
         boxes_ext, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
         boxes_ext = boxes_ext[:, list(range(5)) + self.dataset.hicodet.map_coco_classes_to_hico()]  # convert to Hico classes by swapping columns
-        return boxes_ext, masks
+        return boxes_ext, masks, box_feats
 
     def get_all_pairs(self, boxes_ext, box_classes=None):
         box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)
