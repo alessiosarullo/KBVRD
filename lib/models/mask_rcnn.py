@@ -79,8 +79,8 @@ class MaskRCNN(nn.Module):
                 rois = kwargs['rois']
             except KeyError:
                 raise
-            rois_feats = self.get_rois_feats(fmap, rois)
             print(rois.shape)
+            rois_feats = self.get_rois_feats(fmap, rois)
             print(rois_feats.shape)
             return rois_feats
 
@@ -88,8 +88,8 @@ class MaskRCNN(nn.Module):
         # Input to Box_Head should be a dictionary with the field 'rois' as a Bx5 NumPy array, where each row is [im_id, x1, y1, x2, y2]
         rois_feats = self.mask_rcnn.Box_Head(fmap, {'rois': rois})
         assert all([s == 1 for s in rois_feats.shape[2:]])
-        rois_feats.squeeze_(dim=2)
         rois_feats.squeeze_(dim=3)
+        rois_feats.squeeze_(dim=2)
         return rois_feats
 
 

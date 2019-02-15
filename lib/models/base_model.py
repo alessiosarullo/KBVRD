@@ -103,7 +103,6 @@ class BaseModel(nn.Module):
 
             if self.training:
                 boxes_ext, box_feats, masks, union_boxes_feats, rel_infos, box_labels, rel_labels = self.first_step(x)
-                # `box_labels` and `rel_labels` variables are NumPy arrays
 
                 obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, rel_infos)
                 return obj_output, rel_output, box_labels, rel_labels
@@ -207,6 +206,8 @@ class BaseModel(nn.Module):
         rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1)
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device)
         if self.training:
+            box_labels = torch.tensor(box_labels, device=masks.device)
+            rel_labels = torch.tensor(rel_labels, device=masks.device)
             return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos, box_labels, rel_labels
         else:
             return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos
