@@ -6,6 +6,7 @@ CoreNLP/
 cache/
 pydetectron/
 detectron_outputs/
+exp/
 
 # Data and models
 data/

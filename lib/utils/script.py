@@ -10,9 +10,9 @@ def print_para(model):
         if _n < 10 ** 3:
             return '%d' % _n
         elif _n < 10 ** 6:
-            return '%.1fk' % _n / 10 ** 3
+            return '%.1fk' % (_n / 10 ** 3)
         else:
-            return '%.1fM' % _n / 10 ** 6
+            return '%.1fM' % (_n / 10 ** 6)
 
     modules = {'RCNN': {}, 'Object stream': {}, 'Spatial stream': {}, 'Relationship stream': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
