@@ -3,14 +3,16 @@ import argparse
 import os
 import lib.pydetectron_api.wrappers as pydet
 
-
 class BaseConfigs:
     def parse_args(self):
         args = self._get_arg_parser().parse_args()
         self.__dict__.update({k: v for k, v in vars(args).items() if v is not None})
 
     def _get_arg_parser(self):
-        raise NotImplementedError
+        parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
+        for k, v in vars(self).items():
+            parser.add_argument('--%s' % k, dest=k, type=type(v))
+        return parser
 
     def __str__(self):
         s = []
@@ -25,11 +27,10 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
 
         self.save_dir = 'exp'
-        self.detectron_pretrained_file_format = os.path.join('data', 'pretrained_model', '%s.pkl')
 
-    def _get_arg_parser(self):
-        parser = argparse.ArgumentParser(description='Program settings')
-        return parser
+    @property
+    def detectron_pretrained_file_format(self):
+        return os.path.join('data', 'pretrained_model', '%s.pkl')
 
 
 class DataConfig(BaseConfigs):
@@ -39,21 +40,11 @@ class DataConfig(BaseConfigs):
         self.im_scale = None
         self.im_max_size = None
 
-    def _get_arg_parser(self):
-        parser = argparse.ArgumentParser(description='Data settings')
-        return parser
-
 
 class ModelConfig(BaseConfigs):
     def __init__(self):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
-
-    def _get_arg_parser(self):
-        parser = argparse.ArgumentParser(description='Model settings')
-        parser.add_argument('--rcnn_arch', dest='rcnn_arch', type=str,
-                            help='Name of the RCNN architecture to use. Pretrained weights and configurations will be loaded according to this.')
-        return parser
 
 
 class OptimizerConfig(BaseConfigs):
@@ -65,10 +56,6 @@ class OptimizerConfig(BaseConfigs):
 
         self.num_epochs = 10
         self.batch_size = 4
-
-    def _get_arg_parser(self):
-        parser = argparse.ArgumentParser(description='Optimizer settings')
-        return parser
 
 
 class Configs:
@@ -112,7 +99,7 @@ class Configs:
             if isinstance(v, BaseConfigs):
                 str_cfg = str(v)
                 if str_cfg.strip():
-                    s += ['{0}\n{1} configs\n{0}'.format('=' * 50, k.strip('_').capitalize())]
+                    s += ['{0}\n{1} configs\n{0}'.format('=' * 70, type(v).__name__.split('Config')[0].capitalize())]
                     s += [str_cfg, '']
         print('\n'.join(s))
 
