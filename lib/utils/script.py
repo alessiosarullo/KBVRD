@@ -30,7 +30,7 @@ def print_para(model, breakdown=False):
             else:
                 module = 'Other'
             modules[module][p_name] = ([str(x) for x in p.size()], np.prod(p.size()), p.requires_grad)
-    if modules['Other'] == 0:
+    if not modules['Other']:
         del modules['Other']
 
     total_params, trainable_params = 0, 0
