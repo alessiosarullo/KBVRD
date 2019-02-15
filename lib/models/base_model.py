@@ -20,6 +20,7 @@ class BaseModel(nn.Module):
         self.mask_rcnn = MaskRCNN()
 
         # FIXME params
+        self.use_bn = False
         # Spatial
         self.spatial_dropout = 0.1
         self.spatial_emb_dim = 64
@@ -39,12 +40,14 @@ class BaseModel(nn.Module):
         self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
 
         # Spatial pipeline
-        self.spatial_rels_fc = nn.Sequential(*[
-            nn.BatchNorm1d(2 * (self.mask_rcnn.mask_resolution ** 2)),
-            nn.Linear(2 * (self.mask_rcnn.mask_resolution ** 2), self.spatial_emb_dim),
+        self.spatial_rels_fc = nn.Sequential(*(
+            ([nn.BatchNorm1d(2 * (self.mask_rcnn.mask_resolution ** 2))] if self.use_bn else [])
+            +
+            [nn.Linear(2 * (self.mask_rcnn.mask_resolution ** 2), self.spatial_emb_dim),
             nn.ReLU(inplace=True),
-            nn.Dropout(self.spatial_dropout),
-        ])
+            nn.Dropout(self.spatial_dropout)
+             ]
+        ))
         # self.spatial_rels_bilstm = AlternatingHighwayLSTM(
         #     input_size=self.spatial_emb_dim,
         #     hidden_size=self.spatial_emb_dim,
@@ -74,15 +77,17 @@ class BaseModel(nn.Module):
         self.rel_sub_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_obj_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_union_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
-        self.rel_output_fc = nn.Sequential(*[
-            nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim),  # 2 = biLSTM
-            nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),  # 2 = biLSTM
+        self.rel_output_fc = nn.Sequential(*(
+                ([nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim)] if self.use_bn else [])  # 2 = biLSTM]
+                +
+                [nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),  # 2 = biLSTM
             nn.ReLU(inplace=True),
-            nn.Dropout(self.spatial_dropout),
-
-            nn.BatchNorm1d(self.rel_hidden_dim),
-            nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates),
-        ])
+            nn.Dropout(self.spatial_dropout)]
+                +
+                ([nn.BatchNorm1d(self.rel_hidden_dim)] if self.use_bn else [])
+                +
+                [nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates)]
+        ))
 
     def get_losses(self, x, **kwargs):
         obj_output, rel_output, box_labels, rel_labels = self(x)
