@@ -32,18 +32,22 @@ def print_para(model):
             modules[module][p_name] = ([str(x) for x in p.size()], np.prod(p.size()), p.requires_grad)
 
     total_params = {}
+    trainable_params = {}
     strings = []
-    for module, st in modules.items():
-        total_params[module] = sum([s[1] for s in st.values()])
+    for module, mod_data in modules.items():
+        total_params[module] = sum([s[1] for s in mod_data.values()])
+        trainable_params[module] = sum([s[1] for s in mod_data.values() if s[2]])
         strings.append('### %s' % module)
-        for p_name, (size, prod, p_req_grad) in sorted(st.items(), key=lambda x: -x[1][1]):
+        for p_name, (size, prod, p_req_grad) in sorted(mod_data.items(), key=lambda x: -x[1][1]):
             strings.append("{:<100s}: {:<16s}({:8d}) ({})".format(
                 p_name, '[{}]'.format(','.join(size)), prod, 'grad' if p_req_grad else '    '
             ))
 
     print(total_params)
-    s = '\n{}\n{} total parameters:\n{}\n{}'.format('#' * 50,
-                                                    _format(sum(total_params.values())),
-                                                    '\n'.join([' - %-15s: %s' % (module, _format(tp)) for module, tp in total_params.items()]),
-                                                    '\n'.join(strings))
+    s = '\n{}\n{} total parameters ({} trainable):\n{}\n{}'.format(
+        '#' * 50,
+        _format(sum(total_params.values())),
+        _format(sum(trainable_params.values())),
+        '\n'.join([' - %6s (%6s) %s' % (_format(tot_param), _format(trainable_params[mod]), mod) for mod, tot_param in total_params.items()]),
+        '\n'.join(strings))
     print(s, flush=True)
