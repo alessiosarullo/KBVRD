@@ -29,6 +29,7 @@ class MaskRCNN(nn.Module):
 
         self.mask_rcnn = mask_rcnn
         self.mask_resolution = cfg.model.mask_resolution
+        self.output_feat_dim = 2048  # this is hardcoded in `ResNet_roi_conv5_head_for_masks()`, so I can't actually read it from configs
 
     def train(self, mode=True):
         super().train(mode=False)  # FIXME freeze weights as well

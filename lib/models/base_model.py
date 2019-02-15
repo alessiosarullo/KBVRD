@@ -16,6 +16,9 @@ class BaseModel(nn.Module):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__()
 
+        self.dataset = dataset
+        self.mask_rcnn = MaskRCNN()
+
         # FIXME params
         # Spatial
         self.spatial_dropout = 0.1
@@ -26,16 +29,14 @@ class BaseModel(nn.Module):
         self.obj_fc_dim = 1024
         self.obj_rnn_emb_dim = 1024
         self.obj_rnn_dropout = 0.1
-        #Rel
+        # Rel
         self.rel_vis_hidden_dim = 1024
         self.rel_hidden_dim = 1024
         self.filter_rels_of_non_overlapping_boxes = True
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
-        self.mask_rcnn_vis_feat_dim = 4096  # FIXME this should be read from somewhere
-
-        self.dataset = dataset
-        self.mask_rcnn = MaskRCNN()
+        # Derived
+        self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
 
         # Spatial pipeline
         self.spatial_rels_fc = nn.Sequential(*[
@@ -58,7 +59,7 @@ class BaseModel(nn.Module):
 
         # Object pipeline
         self.obj_emb_fc = nn.Sequential(*[
-            nn.Linear(self.mask_rcnn_vis_feat_dim + self.dataset.num_object_classes + self.spatial_rnn_emb_dim, self.obj_fc_dim),
+            nn.Linear(self.mask_rcnn_vis_feat_dim + self.dataset.num_object_classes + 2 * self.spatial_rnn_emb_dim, self.obj_fc_dim),  # 2 = biLSTM
             nn.ReLU(inplace=True),
         ])
         self.obj_ctx_bilstm = nn.LSTM(
@@ -74,8 +75,8 @@ class BaseModel(nn.Module):
         self.rel_obj_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_union_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_output_fc = nn.Sequential(*[
-            nn.BatchNorm1d(self.rel_vis_hidden_dim + self.obj_rnn_emb_dim + self.spatial_emb_dim),
-            nn.Linear(self.rel_vis_hidden_dim + self.obj_rnn_emb_dim + self.spatial_emb_dim, self.rel_hidden_dim),
+            nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim),  # 2 = biLSTM
+            nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),  # 2 = biLSTM
             nn.ReLU(inplace=True),
             nn.Dropout(self.spatial_dropout),
 
