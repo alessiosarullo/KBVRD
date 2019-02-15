@@ -24,7 +24,7 @@ class Trainer:
         pass
 
     def train(self):
-        print('Start train:', datetime.datetime.now())
+        print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         cfg.parse_args()
         cfg.print()
 
@@ -49,7 +49,7 @@ class Trainer:
 
         if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
             os.symlink(save_file, os.path.join(cfg.program.save_dir, 'final.tar'))
-        print('End train:', datetime.datetime.now())
+        print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def setup(self):
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -97,7 +97,8 @@ class Trainer:
                     batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
                 print(pd.concat(tr[-print_interval:], axis=1).mean(1))
                 print('-----------', flush=True)
-            print('Time for epoch %d: %.0fm' % (epoch_num, (time.time() - start_time) / 60))
+        end_time = (time.time() - start_time)
+        print('Time for epoch %d: %.0fm. Per batch: %.1fs.' % (epoch_num, end_time / 60, end_time / num_batches))
 
     def train_batch(self, b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)
