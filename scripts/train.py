@@ -59,7 +59,7 @@ class Trainer:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(8)))  # FIXME
+        train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(40)))  # FIXME
         detector = BaseModel(train)
         train_loader = train.get_loader(batch_size=1)
 
@@ -108,7 +108,7 @@ class Trainer:
         loss = sum(losses.values())  # type: torch.Tensor
         loss.backward()
         losses['total'] = loss
-        res = pd.Series({x: y.data[0] for x, y in losses.items()})
+        res = pd.Series({x: y.item() for x, y in losses.items()})
 
         nn.utils.clip_grad_norm_([p for p in detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
         optimizer.step()
