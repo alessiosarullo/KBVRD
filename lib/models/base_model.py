@@ -173,9 +173,9 @@ class BaseModel(nn.Module):
         feat_map = feat_map.detach()
         box_feats = box_feats.detach()
         masks = masks.detach()
-        assert boxes_ext_np.shape[0] == box_feats.shape[0].cpu().numpy() == masks.shape[0].cpu().numpy()
+        assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
 
-        boxes_ext_np, masks = self.filter_and_map_to_hico(boxes_ext_np, masks)
+        boxes_ext_np, masks, box_feats = self.filter_and_map_to_hico(boxes_ext_np, masks, box_feats)
 
         if self.training:
             gt_boxes_ext = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
@@ -205,12 +205,13 @@ class BaseModel(nn.Module):
         else:
             return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos
 
-    def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor):
+    def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor, box_feats: torch.Tensor):
         class_scores = boxes_ext[:, 5:]
         classes = np.argmax(class_scores, axis=1)
         fg_inds = (classes > 0)
         assert fg_inds.shape[0] == boxes_ext.shape[0] == masks.shape[0]
-        boxes_ext, masks = boxes_ext[fg_inds, :], masks[np.flatnonzero(fg_inds), :]
+        fg_inds = np.flatnonzero(fg_inds)  # this is needed for torch tensors
+        boxes_ext, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
         boxes_ext = boxes_ext[:, list(range(5)) + self.dataset.hicodet.map_coco_classes_to_hico()]  # convert to Hico classes by swapping columns
         return boxes_ext, masks
 
