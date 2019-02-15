@@ -16,7 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from lib.dataset.hicodet import HicoDetSplit, Splits
 from config import Configs as cfg
 from lib.models.base_model import BaseModel
-from scripts.utils import print_para
+from lib.utils.script import print_para
 
 
 class Trainer:
@@ -29,7 +29,7 @@ class Trainer:
         cfg.print()
 
         detector, train_loader = self.setup()
-        print(print_para(detector), flush=True)
+        print_para(detector)
         detector.cuda()
 
         if cfg.program.save_dir is not None:

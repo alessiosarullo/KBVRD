@@ -4,8 +4,6 @@ import numpy as np
 def print_para(model):
     """
     Prints parameters of a model
-    :param opt:
-    :return:
     """
 
     def _format(_n):
@@ -43,8 +41,9 @@ def print_para(model):
                 p_name, '[{}]'.format(','.join(size)), prod, 'grad' if p_req_grad else '    '
             ))
 
+    print(total_params)
     s = '\n{}\n{} total parameters:\n{}\n{}'.format('#' * 50,
-                                                    sum(total_params.values()),
+                                                    _format(sum(total_params.values())),
                                                     '\n'.join([' - %-15s: %s' % (module, _format(tp)) for module, tp in total_params.items()]),
                                                     '\n'.join(strings))
-    return s
+    print(s, flush=True)
