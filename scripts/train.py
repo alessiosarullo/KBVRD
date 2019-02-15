@@ -106,7 +106,7 @@ class Trainer:
         losses['total'] = loss
         res = pd.Series({x: y.data[0] for x, y in losses.items()})
 
-        nn.utils.clip_grad_norm([(n, p) for n, p in detector.named_parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
+        nn.utils.clip_grad_norm_([p for p in detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
         optimizer.step()
         return res
 
