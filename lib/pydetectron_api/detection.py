@@ -173,7 +173,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
             scores_ij = scores_ij[keep]
             boxes_ids_ij = boxes_ids_ij[keep]
             boxes_ij = boxes_ij[keep, :]
-            j_vec = np.ones_like(boxes_ids_ij) * j
+            j_vec = np.full_like(boxes_ids_ij, fill_value=j)
             box_infos_ij = np.stack([scores_ij, boxes_ids_ij, j_vec], axis=1)
             boxes_and_infos_per_class[j] = np.concatenate([boxes_ij, box_infos_ij], axis=1)
 

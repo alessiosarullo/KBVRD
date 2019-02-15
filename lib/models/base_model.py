@@ -133,9 +133,6 @@ class BaseModel(nn.Module):
 
         # Object
         spatial_rel_ctx_rep = torch.cat([spatial_rel_ctx[i, :].expand((box_im_ids == im_id).sum(), -1) for i, im_id in enumerate(im_ids)], dim=0)
-        print(spatial_rel_ctx.shape, box_im_ids.shape, box_feats.shape, boxes_ext.shape, spatial_rel_ctx_rep.shape)
-        print(box_im_ids)
-        print(im_ids)
         obj_feats = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_rel_ctx_rep], dim=1))
         obj_ctx = self.compute_context(self.obj_ctx_bilstm, obj_feats, im_ids, box_im_ids)
         obj_output = self.obj_output_fc(obj_feats)
@@ -340,7 +337,7 @@ def rel_assignments(boxes_ext_np, gt_boxes, gt_box_im_ids, gt_box_classes, gt_in
         all_rels_i = all_rels_i[np.lexsort((all_rels_i[:, 1], all_rels_i[:, 0]))]
 
         rel_infos.append(np.column_stack([
-            im_id * np.ones(all_rels_i.shape[0], dtype=np.int64),
+            np.full(all_rels_i.shape[0], fill_value=im_id, dtype=np.int64),
             all_rels_i,
         ]))
 

@@ -65,7 +65,7 @@ class HicoDetSplit(Dataset):
                     curr_num_obj_boxes = sum([b.shape[0] for b in im_obj_boxes])
                     inters = inter['conn']
                     pred_class = hd.pred_index[hd.interactions[inter['id']]['pred']]
-                    inters = np.stack([inters[:, 0], np.ones(inters.shape[0], dtype=np.int) * pred_class, inters[:, 1]], axis=1)
+                    inters = np.stack([inters[:, 0], np.full(inters.shape[0], fill_value=pred_class, dtype=np.int), inters[:, 1]], axis=1)
                     im_interactions.append(inters + np.array([[curr_num_hum_boxes, 0, curr_num_obj_boxes]], dtype=np.int))
 
                     im_hum_boxes.append(inter['hum_bbox'])
@@ -73,7 +73,7 @@ class HicoDetSplit(Dataset):
                     obj_boxes = inter['obj_bbox']
                     obj_class = hd.obj_class_index[hd.interactions[inter['id']]['obj']]
                     im_obj_boxes.append(obj_boxes)
-                    im_obj_box_classes.append(np.ones(obj_boxes.shape[0], dtype=np.int) * obj_class)
+                    im_obj_box_classes.append(np.full(obj_boxes.shape[0], fill_value=obj_class, dtype=np.int))
 
             if im_hum_boxes:
                 assert im_obj_boxes
@@ -90,7 +90,7 @@ class HicoDetSplit(Dataset):
                 im_interactions[:, 2] += num_hum_boxes
 
                 boxes.append(np.concatenate([im_hum_boxes, im_obj_boxes], axis=0))
-                box_classes.append(np.concatenate([-np.ones(num_hum_boxes, dtype=np.int), im_obj_box_classes]))  # humans have class -1
+                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self.hicodet.person_class, dtype=np.int), im_obj_box_classes]))
                 interactions.append(im_interactions)
             else:
                 boxes.append([])

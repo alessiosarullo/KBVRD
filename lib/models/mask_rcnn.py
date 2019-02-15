@@ -79,9 +79,7 @@ class MaskRCNN(nn.Module):
                 rois = kwargs['rois']
             except KeyError:
                 raise
-            print(rois.shape)
             rois_feats = self.get_rois_feats(fmap, rois)
-            print(rois_feats.shape)
             return rois_feats
 
     def get_rois_feats(self, fmap, rois):

@@ -101,7 +101,7 @@ class Trainer:
         optimizer.zero_grad()
 
         assert losses is not None
-        loss = sum(losses.values())
+        loss = sum(losses.values())  # type: torch.Tensor
         loss.backward()
         losses['total'] = loss
         res = pd.Series({x: y.data[0] for x, y in losses.items()})

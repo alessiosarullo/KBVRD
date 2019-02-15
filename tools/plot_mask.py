@@ -61,7 +61,7 @@ def main(recolor=True, lw=10):
             img_with_bbs[bb[2] - lw:bb[2], bb[1]:bb[3]] = mask_color
 
         # Save bounding box only
-        bb_only_img = np.ones_like(img) * 255
+        bb_only_img = np.full_like(img, fill_value=255)
         bb_only_img[bb[0]:bb[2], bb[1]:bb[3]] = mask_color
         bb_only_img[bb[0] + lw:bb[2] - lw, bb[1] + lw:bb[3] - lw] = 255
         save_plot(bb_only_img, os.path.join(data_dir, 'im_friends_bbonly_%s.png' % name))
