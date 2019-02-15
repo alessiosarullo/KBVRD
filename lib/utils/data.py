@@ -40,7 +40,7 @@ class Minibatch:
             self.gt_inters += [ex['gt_inters']]
 
             self.gt_box_im_ids += [np.ones_like(ex['gt_box_classes']) * len(self.gt_box_im_ids)]
-            self.gt_inters_im_ids += [np.ones_like(ex['gt_inters']) * len(self.gt_inters_im_ids)]
+            self.gt_inters_im_ids += [np.ones(ex['gt_inters'].shape[0]) * len(self.gt_inters_im_ids)]
 
     def vectorize(self, device):
         self.imgs = _im_list_to_4d_tensor(self._to_tensor(self.imgs, device=device))  # 4D NCHW tensor
