@@ -128,7 +128,7 @@ class BaseModel(nn.Module):
 
         # Object
         spatial_rel_ctx_rep = torch.cat([spatial_rel_ctx[i, :].expand((box_im_ids == im_id).sum(), -1) for i, im_id in enumerate(im_ids)], dim=0)
-        obj_feats = self.obj_emb_fc(torch.cat(box_feats, boxes_ext[:, 5:], spatial_rel_ctx_rep))
+        obj_feats = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_rel_ctx_rep], dim=1))
         obj_ctx = self.compute_context(self.obj_ctx_bilstm, obj_feats, im_ids, box_im_ids)
         obj_output = self.obj_output_fc(obj_feats)
 
