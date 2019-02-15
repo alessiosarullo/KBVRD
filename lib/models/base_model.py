@@ -128,6 +128,9 @@ class BaseModel(nn.Module):
 
         # Object
         spatial_rel_ctx_rep = torch.cat([spatial_rel_ctx[i, :].expand((box_im_ids == im_id).sum(), -1) for i, im_id in enumerate(im_ids)], dim=0)
+        print(spatial_rel_ctx.shape, box_im_ids.shape, box_feats.shape, boxes_ext.shape, spatial_rel_ctx_rep.shape)
+        print(box_im_ids)
+        print(im_ids)
         obj_feats = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_rel_ctx_rep], dim=1))
         obj_ctx = self.compute_context(self.obj_ctx_bilstm, obj_feats, im_ids, box_im_ids)
         obj_output = self.obj_output_fc(obj_feats)
@@ -170,6 +173,7 @@ class BaseModel(nn.Module):
         feat_map = feat_map.detach()
         box_feats = box_feats.detach()
         masks = masks.detach()
+        assert boxes_ext_np.shape[0] == box_feats.shape[0].cpu().numpy() == masks.shape[0].cpu().numpy()
 
         boxes_ext_np, masks = self.filter_and_map_to_hico(boxes_ext_np, masks)
 
@@ -178,9 +182,11 @@ class BaseModel(nn.Module):
             gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext_np[:, :5], gt_boxes_ext)
             # TODO add gt boxes to predicted boxes, maybe?
             box_labels = batch.gt_box_classes[gt_idx_per_pred_box]
+            assert box_labels.shape[0] == boxes_ext_np.shape[0]
 
             rel_im_ids, ho_pairs, rel_labels = \
                 rel_assignments(boxes_ext_np, batch.gt_boxes, batch.gt_box_im_ids, batch.gt_box_classes, batch.gt_inters, batch.gt_inters_im_ids)
+            assert rel_im_ids.shape[0] == rel_labels.shape[0]
 
             assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
         else:

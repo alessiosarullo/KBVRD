@@ -70,7 +70,9 @@ class MaskRCNN(nn.Module):
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)
                                         ], axis=1)
+            print(boxes_ext.shape)
             box_feats = self.mask_rcnn.Box_Head(feat_map, {'rois': boxes_ext[:, :5]})  # FIXME seems like a waste to repeat it
+            print(box_feats.shape)
             return boxes_ext, masks, feat_map, box_feats
         else:
             try:
