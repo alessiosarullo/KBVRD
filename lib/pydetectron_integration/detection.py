@@ -123,7 +123,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
             print(class_boxes_mask)
 
             scores_ij = scores_i[class_boxes_mask, j]
-            print(bool(scores_ij.shape[0]))
+            print(scores_ij.shape[0])
 
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
