@@ -19,13 +19,13 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     assert not cfg.TEST.MASK_AUG.ENABLED
 
     im_scales = inputs['im_info'][:, 2]
-    im_scales = inputs['im_info'][:, 2].cpu().numpy()
+    im_scales_np = inputs['im_info'][:, 2].cpu().numpy()
     if box_proposals is not None:
         assert False  # FIXME did not check if this works
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
 
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales)
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales_np)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
@@ -45,7 +45,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-    masks = _im_detect_mask(model, im_scales.cpu().numpy(), im_ids, boxes, feat_map)
+    masks = _im_detect_mask(model, im_scales_np, im_ids, boxes, feat_map)
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
     assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == masks.shape[0] == scores.shape[0]
