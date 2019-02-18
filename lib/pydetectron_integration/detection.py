@@ -120,26 +120,26 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
-            print(class_boxes_mask)
 
             scores_ij = scores_i[class_boxes_mask, j]
-            print(scores_ij.shape[0])
+            if scores_ij.shape[0] > 0:
+                boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
+                boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
-            boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
-            boxes_ids_ij = boxes_ids_i[class_boxes_mask]
+                rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
+                keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze()
 
-            rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
-            keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze()
-
-            scores_ij = scores_ij[keep]
-            boxes_ids_ij = boxes_ids_ij[keep]
-            boxes_ij = boxes_ij[keep, :]
-            j_vec = torch.full_like(boxes_ids_ij, fill_value=j)
-            box_infos_ij = torch.stack([scores_ij, boxes_ids_ij, j_vec], dim=1)
-            boxes_and_infos_per_class[j] = torch.cat([boxes_ij, box_infos_ij], dim=1)
+                scores_ij = scores_ij[keep]
+                boxes_ids_ij = boxes_ids_ij[keep]
+                boxes_ij = boxes_ij[keep, :]
+                j_vec = torch.full_like(boxes_ids_ij, fill_value=j)
+                box_infos_ij = torch.stack([scores_ij, boxes_ids_ij, j_vec], dim=1)
+                boxes_and_infos_per_class[j] = torch.cat([boxes_ij, box_infos_ij], dim=1)
+            else:
+                boxes_and_infos_per_class[j] = torch.zeros([0, 4 + 1 + 1 + 1], dim=1)
 
         # Limit to max_per_image detections **over all classes**
-        if cfg.TEST.DETECTIONS_PER_IM > 0:
+        if cfg.TEST.DETECTIONS_PER_IM > 0 and boxes_and_infos_per_class[j].shape[0] > 0:
             image_scores = torch.cat([boxes_and_infos_per_class[j][:, 4] for j in range(1, num_classes)])
             if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
                 image_thresh = torch.sort(image_scores)[0][-cfg.TEST.DETECTIONS_PER_IM]
