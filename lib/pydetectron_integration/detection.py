@@ -18,7 +18,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
-    im_scales = inputs['im_info'][:, 2].cpu().numpy()
+    im_scales = inputs['im_info'][:, 2]
     if box_proposals is not None:
         assert False  # FIXME did not check if this works
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
@@ -41,7 +41,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-    masks = _im_detect_mask(model, im_scales, im_ids, boxes, feat_map)
+    masks = _im_detect_mask(model, im_scales.cpu().numpy(), im_ids, boxes, feat_map)
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
     assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == masks.shape[0] == scores.shape[0]
@@ -62,19 +62,20 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
-    try:  # Torch
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
-        boxes = return_dict['rois'][:, 1:5]
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
-        im_inds = return_dict['rois'][:, 0].cpu().numpy().astype(np.int, copy=False)
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
-    except AttributeError:  # Numpy
-        boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
-        im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
+
+    # try:  # Torch
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
+    boxes = return_dict['rois'][:, 1:5]
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
+    im_inds = return_dict['rois'][:, 0].long()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
+    # except AttributeError:  # Numpy
+    #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
+    #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     factors = im_scales[im_inds]
-    boxes /= boxes.new_tensor(factors).view(-1, 1)  # unscale back to raw image space
+    boxes /= factors.to(boxes.device).view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
