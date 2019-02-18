@@ -28,6 +28,9 @@ def im_detect_all_with_feats(model, inputs):
 
     print(nonnms_boxes.shape, nonnms_scores.shape, nonnms_im_ids.shape)
     print(nonnms_boxes.dtype, nonnms_scores.dtype, nonnms_im_ids.dtype)
+    Timer.get('Epoch', 'Batch', 'Detect', 'Sync').tic()
+    torch.cuda.synchronize()
+    Timer.get('Epoch', 'Batch', 'Detect', 'Sync').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'To CPU - Scores').tic()
     nonnms_scores = nonnms_scores.cpu()
     Timer.get('Epoch', 'Batch', 'Detect', 'To CPU - Scores').toc()
