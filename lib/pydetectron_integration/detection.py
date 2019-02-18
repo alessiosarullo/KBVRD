@@ -83,7 +83,7 @@ def _im_detect_bbox(model, inputs, im_scales):
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
-    return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the original image size
+    return scores, pred_boxes, return_dict['blob_conv'], im_inds.cpu().numpy()  # NOTE: pred_boxes are scaled back to the original image size
 
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
