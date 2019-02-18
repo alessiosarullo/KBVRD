@@ -136,7 +136,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
                 box_infos_ij = torch.stack([scores_ij, boxes_ids_ij, j_vec], dim=1)
                 boxes_and_infos_per_class[j] = torch.cat([boxes_ij, box_infos_ij], dim=1)
             else:
-                boxes_and_infos_per_class[j] = torch.zeros([0, 4 + 1 + 1 + 1])
+                boxes_and_infos_per_class[j] = scores_ij.new_zeros((0, 4 + 1 + 1 + 1))
 
         # Limit to max_per_image detections **over all classes**
         if cfg.TEST.DETECTIONS_PER_IM > 0:
