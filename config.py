@@ -7,7 +7,7 @@ import lib.pydetectron_api.wrappers as pydet
 
 class BaseConfigs:
     def parse_args(self):
-        args = self._get_arg_parser().parse_args()
+        args = self._get_arg_parser().parse_known_args()
         self.__dict__.update({k: v for k, v in vars(args).items() if v is not None})
 
     def _get_arg_parser(self):
