@@ -124,7 +124,6 @@ class GenerateProposalsOp(nn.Module):
 
         # 4. sort all (proposal, score) pairs by score from highest to lowest
         # 5. take top pre_nms_topN (e.g. 6000)
-        print(all_anchors.shape)
         if pre_nms_topN <= 0 or pre_nms_topN >= len(scores):
             order = torch.sort(scores.squeeze(), descending=True)[1]
         else:
