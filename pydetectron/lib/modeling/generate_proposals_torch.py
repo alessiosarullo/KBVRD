@@ -112,7 +112,7 @@ class GenerateProposalsOp(nn.Module):
         #   - transpose to (H, W, 4 * A)
         #   - reshape to (H * W * A, 4) where rows are ordered by (H, W, A)
         #     in slowest to fastest order to match the enumerated anchors
-        bbox_deltas = bbox_deltas.transpose((1, 2, 0)).view((-1, 4))
+        bbox_deltas = bbox_deltas.permute(1, 2, 0).view((-1, 4))
 
         # Same story for the scores:
         #   - scores are (A, H, W) format from conv output
