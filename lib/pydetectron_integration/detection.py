@@ -120,13 +120,15 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            print(class_boxes_mask)
+
             scores_ij = scores_i[class_boxes_mask, j]
+            print(bool(scores_ij))
+            
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
-            print(class_boxes_mask)
             rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
-            print(rois_ij)
             keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze()
 
             scores_ij = scores_ij[keep]
