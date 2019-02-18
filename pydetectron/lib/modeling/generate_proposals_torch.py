@@ -125,7 +125,7 @@ class GenerateProposalsOp(nn.Module):
         # 4. sort all (proposal, score) pairs by score from highest to lowest
         # 5. take top pre_nms_topN (e.g. 6000)
         if pre_nms_topN <= 0 or pre_nms_topN >= len(scores):
-            order = torch.sort(scores.view(-1), descending=True)[1]
+            order = torch.sort(scores.squeeze(), descending=True)[1]
         else:
             # Avoid sorting possibly large arrays; First partition to get top K unsorted and then sort just those (~20x faster for 200k scores)
             # FIXME numpy conversion
@@ -144,7 +144,6 @@ class GenerateProposalsOp(nn.Module):
         # 2. clip proposals to image (may result in proposals with zero area
         # that will be removed in the next step)
         proposals = clip_tiled_boxes(proposals, im_info[:2])
-        print(proposals.shape, scores.shape)
 
         # 3. remove predicted boxes with either height or width < min_size
         keep = _filter_boxes(proposals, min_size, im_info)
@@ -159,12 +158,10 @@ class GenerateProposalsOp(nn.Module):
             # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
-            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long()
-            print(proposals.shape, scores.shape)
+            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)
-        print(proposals.shape, scores.shape)
         return proposals, scores
 
 
