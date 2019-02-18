@@ -82,7 +82,7 @@ def _im_detect_bbox(model, inputs, im_scales):
     factors = im_scales[im_inds]
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Fact').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Move').tic()
-    factors = factors.to(boxes.device)
+    factors = boxes.new_tensor(factors)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Move').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').tic()
     boxes /= factors.view(-1, 1)  # unscale back to raw image space
