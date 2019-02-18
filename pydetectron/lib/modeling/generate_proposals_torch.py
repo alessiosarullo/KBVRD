@@ -69,7 +69,10 @@ class GenerateProposalsOp(nn.Module):
         shift_x, shift_y = torch.meshgrid([shift_x, shift_y])
         # Convert to (K, 4), K=H*W, where the columns are (dx, dy, dx, dy)
         # shift pointing to each grid location
-        shifts = torch.stack([shift_x.view(-1), shift_y.view(-1), shift_x.view(-1), shift_y.view(-1)], dim=0)
+        shifts = torch.stack([shift_x.reshape(-1),
+                              shift_y.reshape(-1),
+                              shift_x.reshape(-1),
+                              shift_y.reshape(-1)], dim=0)
 
         # Broadcast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:
