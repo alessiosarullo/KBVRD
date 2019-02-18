@@ -26,11 +26,15 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - IDs').tic()
     nonnms_im_ids = nonnms_im_ids.cpu().numpy()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - IDs').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - Scores').tic()
     nonnms_scores = nonnms_scores.cpu().numpy()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - Scores').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - Boxes').tic()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
-    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP - Boxes').toc()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
