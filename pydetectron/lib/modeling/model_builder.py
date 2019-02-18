@@ -175,6 +175,9 @@ class Generalized_RCNN(nn.Module):
             return_dict['blob_conv'] = blob_conv
 
         if not cfg.MODEL.RPN_ONLY:
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Sync').tic()
+            torch.cuda.synchronize()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Sync').toc()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
             if cfg.MODEL.SHARE_RES5 and self.training:
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)

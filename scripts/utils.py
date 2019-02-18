@@ -66,10 +66,11 @@ class Timer:
     def format(seconds):
         if seconds < 0.001:
             s, unit = '%.2f' % (seconds * 1000), 'ms'
-        elif seconds < 0.1:
-            s, unit = '%.0f' % (seconds * 1000), 'ms'
+        # elif seconds < 0.1:
+        #     s, unit = '%.0f' % (seconds * 1000), 'ms'
         elif seconds < 1:
-            s, unit = '%.2f' % seconds, 's'
+            s, unit = '%.0f' % (seconds * 1000), 'ms'
+            # s, unit = '%.2f' % seconds, 's'
         elif seconds < 10:
             s, unit = '%.1f' % seconds, 's'
         elif seconds < 60:
