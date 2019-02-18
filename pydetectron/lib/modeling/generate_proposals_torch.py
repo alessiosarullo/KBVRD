@@ -5,8 +5,8 @@ import torch
 from torch import nn
 
 from lib.pydetectron_integration.box_utils import bbox_transform, clip_tiled_boxes
-from ..core.config import cfg
-from ..model.nms.nms_gpu import nms_gpu
+from core.config import cfg
+from model.nms.nms_gpu import nms_gpu
 
 logger = logging.getLogger(__name__)
 
