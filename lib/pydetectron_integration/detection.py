@@ -19,6 +19,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     assert not cfg.TEST.MASK_AUG.ENABLED
 
     im_scales = inputs['im_info'][:, 2]
+    im_scales = inputs['im_info'][:, 2].cpu().numpy()
     if box_proposals is not None:
         assert False  # FIXME did not check if this works
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
@@ -71,16 +72,12 @@ def _im_detect_bbox(model, inputs, im_scales):
     boxes = return_dict['rois'][:, 1:5]
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
-    im_inds = return_dict['rois'][:, 0].long()
+    im_inds = return_dict['im_inds_np']
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
     # except AttributeError:  # Numpy
     #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
-    print(boxes.device, box_deltas.device, im_scales.device, im_inds.device)
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').tic()
-    im_scales = im_scales.to(boxes.device)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Fact').tic()
     factors = im_scales[im_inds]
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Fact').toc()

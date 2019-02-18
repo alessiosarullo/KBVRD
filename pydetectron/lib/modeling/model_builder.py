@@ -243,6 +243,7 @@ class Generalized_RCNN(nn.Module):
 
         else:
             # Testing
+            return_dict['im_inds_np'] = rpn_ret['rpn_im_inds']
             return_dict['rois'] = rpn_ret['rois']
             return_dict['cls_score'] = cls_score
             return_dict['bbox_pred'] = bbox_pred
