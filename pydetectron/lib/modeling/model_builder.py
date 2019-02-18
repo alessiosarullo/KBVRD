@@ -154,7 +154,7 @@ class Generalized_RCNN(nn.Module):
 
         blob_conv = self.Conv_Body(im_data)
 
-        rpn_ret = self.RPN(blob_conv, im_info, roidb, **rpn_kwargs)
+        rpn_ret = self.RPN(blob_conv, im_info, roidb)
 
         # if self.training:
         #     # can be used to infer fg/bg ratio
