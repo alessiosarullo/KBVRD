@@ -140,7 +140,6 @@ class ResNet_roi_conv5_head(nn.Module):
         return mapping_to_detectron, orphan_in_detectron
 
     def forward(self, x, rpn_ret):
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 't').tic()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'ROI').tic()
         x = self.roi_xform(
             x, rpn_ret,
@@ -163,7 +162,6 @@ class ResNet_roi_conv5_head(nn.Module):
         if cfg.MODEL.SHARE_RES5 and self.training:
             return x, res5_feat
         else:
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 't').toc()
             return x
 
 

@@ -155,6 +155,8 @@ class Generalized_RCNN(nn.Module):
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').tic()
         blob_conv = self.Conv_Body(im_data)
+        torch.cuda.synchronize()
+        torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc()
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').tic()
