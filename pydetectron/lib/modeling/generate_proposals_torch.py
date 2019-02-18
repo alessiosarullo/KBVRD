@@ -144,6 +144,7 @@ class GenerateProposalsOp(nn.Module):
         # 2. clip proposals to image (may result in proposals with zero area
         # that will be removed in the next step)
         proposals = clip_tiled_boxes(proposals, im_info[:2])
+        print(proposals.shape, scores.shape)
 
         # 3. remove predicted boxes with either height or width < min_size
         keep = _filter_boxes(proposals, min_size, im_info)
@@ -159,6 +160,7 @@ class GenerateProposalsOp(nn.Module):
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
             keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long()
+            print(proposals.shape, scores.shape)
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)
