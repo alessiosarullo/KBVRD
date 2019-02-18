@@ -62,12 +62,16 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
-    boxes = return_dict['rois'][:, 1:5]
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
-    im_inds = return_dict['rois'][:, 0].cpu().numpy().astype(np.int, copy=False)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
+    try:
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
+        boxes = return_dict['rois'][:, 1:5]
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
+        # Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
+        im_inds = return_dict['rois'][:, 0].cpu().numpy().astype(np.int, copy=False)
+        # Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
+    except AttributeError:
+        boxes = torch.tensor(return_dict['rois'][:, 1:5])
+        im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     factors = im_scales[im_inds]
     boxes /= boxes.new_tensor(factors).view(-1, 1)  # unscale back to raw image space

@@ -119,6 +119,11 @@ def main():
         scores, boxes, box_classes, im_ids, masks, feat_map = mask_rcnn(batch, return_det_results=True)
 
         boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
+        print(boxes)
+        print(scores)
+        print()
+        continue
+
         masks = masks.cpu().numpy()
         for i in np.unique(im_ids):
             binmask_i = (im_ids == i)
