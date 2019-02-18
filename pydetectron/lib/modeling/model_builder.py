@@ -179,10 +179,11 @@ class Generalized_RCNN(nn.Module):
             torch.cuda.synchronize()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Sync').toc()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
-            if cfg.MODEL.SHARE_RES5 and self.training:
-                box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
-            else:
-                box_feat = self.Box_Head(blob_conv, rpn_ret)
+            # if cfg.MODEL.SHARE_RES5 and self.training:
+            #     box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
+            # else:
+            #     box_feat = self.Box_Head(blob_conv, rpn_ret)
+            box_feat = self.Box_Head(blob_conv, rpn_ret)
             torch.cuda.synchronize()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').tic()

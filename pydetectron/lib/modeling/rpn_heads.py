@@ -98,6 +98,8 @@ class single_scale_rpn_outputs(nn.Module):
 
         return_dict = {
             'rpn_cls_logits': rpn_cls_logits, 'rpn_bbox_pred': rpn_bbox_pred}
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').tic()
 
         if not self.training or cfg.MODEL.FASTER_RCNN:
             # Proposals are needed during:
@@ -129,7 +131,7 @@ class single_scale_rpn_outputs(nn.Module):
                 return_dict['rois'] = return_dict['rpn_rois']
 
         torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').toc()
         return return_dict
 
 
