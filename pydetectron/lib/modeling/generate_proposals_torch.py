@@ -72,7 +72,7 @@ class GenerateProposalsOp(nn.Module):
         shifts = torch.stack([shift_x.reshape(-1),
                               shift_y.reshape(-1),
                               shift_x.reshape(-1),
-                              shift_y.reshape(-1)], dim=1)
+                              shift_y.reshape(-1)], dim=1).double()
 
         # Broadcast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:
