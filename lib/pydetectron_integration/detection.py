@@ -50,10 +50,12 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
 
     box_inds2 = box_inds.cpu().numpy()
-    assert np.all(box_inds2 == box_inds1), np.stack([box_inds2, box_inds1], axis=1)
-    assert np.all(box_classes == box_classes1), np.stack([box_classes, box_classes1], axis=1)
-    assert np.all(box_class_scores == box_class_scores1), np.stack([box_class_scores, box_class_scores1], axis=1)
-    assert np.all(boxes == boxes1), np.concatenate([boxes, boxes1], axis=1)
+    print(box_inds1)
+    print(box_inds2)
+    # assert np.all(box_inds2 == box_inds1), np.stack([box_inds2, box_inds1], axis=1)
+    # assert np.all(box_classes == box_classes1), np.stack([box_classes, box_classes1], axis=1)
+    # assert np.all(box_class_scores == box_class_scores1), np.stack([box_class_scores, box_class_scores1], axis=1)
+    # assert np.all(boxes == boxes1), np.concatenate([boxes, boxes1], axis=1)
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
