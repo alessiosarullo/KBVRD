@@ -62,14 +62,14 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
-    try:
+    try:  # Torch
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
         boxes = return_dict['rois'][:, 1:5]
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
-        # Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
         im_inds = return_dict['rois'][:, 0].cpu().numpy().astype(np.int, copy=False)
-        # Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
-    except AttributeError:
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
+    except AttributeError:  # Numpy
         boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
         im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
