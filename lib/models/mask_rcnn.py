@@ -104,7 +104,7 @@ def main():
     hdsl = hds.get_loader(batch_size=batch_size)
     dummy_coco = dummy_datasets.get_coco_dataset()  # this is used for class names
 
-    mask_rcnn = MaskRCNN(model_name='e2e_mask_rcnn_R-50-C4_2x', num_classes=hds.num_object_classes + 1)  # add BG class
+    mask_rcnn = MaskRCNN()  # add BG class
     mask_rcnn.cuda()
     mask_rcnn.eval()
 
