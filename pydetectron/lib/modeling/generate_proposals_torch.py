@@ -159,7 +159,7 @@ class GenerateProposalsOp(nn.Module):
         # 7. take after_nms_topN (e.g. 300)
         # 8. return the top proposals (-> RoIs top)
         if nms_thresh > 0:
-            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
+            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze(dim=1)
             if post_nms_topN > 0:
                 keep = keep[:post_nms_topN]
             proposals = proposals[keep, :]
