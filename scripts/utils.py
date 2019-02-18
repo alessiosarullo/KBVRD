@@ -41,13 +41,16 @@ class Timer:
         return self.total_time / (self.num_instances if average else 1)
 
     def __str__(self):
+        return '\n'.join(self._get_lines())
+
+    def _get_lines(self):
         sep = ' ' * 4
         s = [self._format(self.spent(average=self.__class__.print_average))]
         for k, v in self.subtimers.items():
-            sub_s = str(v)
+            sub_s = v._get_lines()
             s.append('%s %s: %s' % (sep, k, sub_s[0]))
             s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
-        return '\n'.join(s)
+        return s
 
     @classmethod
     def print(cls, average=True):

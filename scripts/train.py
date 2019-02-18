@@ -88,6 +88,7 @@ class Trainer:
         tr = []
         num_batches = len(train_loader)
 
+        print('Epoch %d.' % epoch_num)
         Timer.get('Epoch').tic()
         for b, batch in enumerate(train_loader):
             Timer.get('Batch').tic()
