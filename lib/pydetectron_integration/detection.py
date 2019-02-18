@@ -133,10 +133,10 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
-            print(torch.nonzero(class_boxes_mask).squeeze())
 
             scores_ij = scores_i[class_boxes_mask, j]
             if scores_ij.shape[0] > 0:
+                print(mask_i, j, torch.nonzero(class_boxes_mask).squeeze())
                 boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
                 boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
@@ -204,7 +204,8 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
-            print(np.flatnonzero(class_boxes_mask))
+            if np.any(class_boxes_mask):
+                print(mask_i, j, np.flatnonzero(class_boxes_mask))
             scores_ij = scores_i[class_boxes_mask, j]
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
