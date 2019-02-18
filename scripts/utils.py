@@ -47,7 +47,7 @@ class Timer:
             sub_s = str(v)
             s.append('%s %s: %s' % (sep, k, sub_s[0]))
             s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
-        return s
+        return '\n'.join(s)
 
     @classmethod
     def print(cls, average=True):
