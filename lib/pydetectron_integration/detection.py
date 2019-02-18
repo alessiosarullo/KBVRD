@@ -26,10 +26,10 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
-    nonnms_scores_np = nonnms_scores.cpu().numpy()
-    nonnms_boxes_np = nonnms_boxes.cpu().numpy()
-    nonnms_im_ids_np = nonnms_im_ids.cpu().numpy()
-    box_inds1, box_classes1, box_class_scores1, boxes1 = _box_results_with_nms_and_limit_np(nonnms_scores_np, nonnms_boxes_np, nonnms_im_ids_np)
+    # nonnms_scores_np = nonnms_scores.cpu().numpy()
+    # nonnms_boxes_np = nonnms_boxes.cpu().numpy()
+    # nonnms_im_ids_np = nonnms_im_ids.cpu().numpy()
+    # box_inds1, box_classes1, box_class_scores1, boxes1 = _box_results_with_nms_and_limit_np(nonnms_scores_np, nonnms_boxes_np, nonnms_im_ids_np)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
@@ -141,7 +141,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
                 rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
                 keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze(dim=1)
-                print(i, j, len(keep))
+                # print(i, j, len(keep))
 
                 scores_ij = scores_ij[keep]
                 boxes_ids_ij = boxes_ids_ij[keep]
@@ -211,8 +211,8 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
 
             rois_ij = np.concatenate([boxes_ij, scores_ij[:, None]], axis=1).astype(np.float32, copy=False)
             keep = box_utils.nms(rois_ij, cfg.TEST.NMS)
-            if np.any(class_boxes_mask):
-                print(i, j, len(keep))
+            # if np.any(class_boxes_mask):
+            #     print(i, j, len(keep))
 
             scores_ij = scores_ij[keep]
             boxes_ids_ij = boxes_ids_ij[keep]
