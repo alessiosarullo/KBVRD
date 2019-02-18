@@ -27,7 +27,7 @@ def im_detect_all_with_feats(model, inputs):
     assert nonnms_boxes.shape[0] > 0
 
     print(nonnms_boxes.shape, nonnms_scores.shape, nonnms_im_ids.shape)
-    print(type(nonnms_boxes), type(nonnms_scores.shape), type(nonnms_im_ids))
+    print(nonnms_boxes.dtype, nonnms_scores.dtype, nonnms_im_ids.dtype)
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP - IDs').tic()
     nonnms_im_ids = nonnms_im_ids.cpu().numpy()
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP - IDs').toc()
