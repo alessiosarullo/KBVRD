@@ -96,7 +96,7 @@ class GenerateProposalsOp(nn.Module):
             roi_scales.append(im_roi_scales)
             rois.append(im_i_rois)
             roi_probs.append(im_i_probs)
-        roi_scales = np.concatenate(roi_scales)
+        roi_scales = torch.cat(roi_scales)
         rois = torch.cat(rois, dim=0)
         roi_probs = torch.cat(roi_probs, dim=0)
         return roi_scales, rois, roi_probs
