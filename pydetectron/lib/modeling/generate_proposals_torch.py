@@ -58,7 +58,7 @@ class GenerateProposalsOp(nn.Module):
 
         scores = rpn_cls_prob
         bbox_deltas = rpn_bbox_pred
-        im_info = im_info
+        im_info = im_info.to(bbox_deltas)
         anchors = self._anchors_t
 
         # 1. Generate proposals from bbox deltas and shifted anchors
