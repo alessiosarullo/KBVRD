@@ -119,7 +119,7 @@ class GenerateProposalsOp(nn.Module):
         #   - transpose to (H, W, A)
         #   - reshape to (H * W * A, 1) where rows are ordered by (H, W, A)
         #     to match the order of anchors and bbox_deltas
-        scores = scores.permute((1, 2, 0)).view((-1, 1))
+        scores = scores.permute(1, 2, 0).view((-1, 1))
         # print('pre_nms:', bbox_deltas.shape, scores.shape)
 
         # 4. sort all (proposal, score) pairs by score from highest to lowest
