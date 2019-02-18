@@ -107,7 +107,7 @@ class GenerateProposalsOp(nn.Module):
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
         nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
         min_size = cfg[cfg_key].RPN_MIN_SIZE
-        # print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
+        print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
 
         # Transpose and reshape predicted bbox transformations to get them
         # into the same order as the anchors:

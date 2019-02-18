@@ -85,7 +85,6 @@ class GenerateProposalsOp(nn.Module):
         K = shifts.shape[0]
         all_anchors = anchors + shifts.view(shifts.shape[0], 1, shifts.shape[1])
         all_anchors = all_anchors.to(bbox_deltas).view((K * A, 4))
-        print(all_anchors.shape, all_anchors)
 
         rois, roi_probs = [], []
         for im_i in range(num_images):
@@ -105,8 +104,7 @@ class GenerateProposalsOp(nn.Module):
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
         nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
         min_size = cfg[cfg_key].RPN_MIN_SIZE
-        print(pre_nms_topN, post_nms_topN, nms_thresh, min_size)
-        # print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
+        print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
 
         # Transpose and reshape predicted bbox transformations to get them
         # into the same order as the anchors:
@@ -158,9 +156,6 @@ class GenerateProposalsOp(nn.Module):
         # 7. take after_nms_topN (e.g. 300)
         # 8. return the top proposals (-> RoIs top)
         if nms_thresh > 0:
-            # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
-            # num_out = nms.nms_apply(keep, proposals, nms_thresh)
-            # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
             print(proposals.shape)
             keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
             if post_nms_topN > 0:
