@@ -89,8 +89,8 @@ class GenerateProposalsOp(nn.Module):
         roi_scales, rois, roi_probs = [], [], []
         for im_i in range(num_images):
             im_i_boxes, im_i_probs = self.proposals_for_one_image(im_info[im_i, :], all_anchors, bbox_deltas[im_i, :, :, :], scores[im_i, :, :, :])
-            im_roi_scales = im_i_probs.new_full(im_i_probs.shape[0], fill_value=im_info[im_i, 2])
-            im_inds = im_i_probs.new_full(im_i_probs.shape[0], fill_value=im_i)
+            im_roi_scales = im_i_probs.new_full((im_i_probs.shape[0],), fill_value=im_info[im_i, 2])
+            im_inds = im_i_probs.new_full((im_i_probs.shape[0],), fill_value=im_i)
 
             im_i_rois = torch.cat([im_inds.view(-1, 1), im_i_boxes], dim=1)
             roi_scales.append(im_roi_scales)
