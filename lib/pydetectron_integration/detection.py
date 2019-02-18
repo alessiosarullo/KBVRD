@@ -77,6 +77,9 @@ def _im_detect_bbox(model, inputs, im_scales):
     #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').tic()
+    im_scales = im_scales.to(boxes.device)
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Fact').tic()
     factors = im_scales[im_inds]
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Fact').toc()
