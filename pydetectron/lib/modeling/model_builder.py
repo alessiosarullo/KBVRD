@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from scripts.utils import Timer
 
 from core.config import cfg
 from model.roi_pooling.functions.roi_pool import RoIPoolFunction
@@ -144,6 +145,7 @@ class Generalized_RCNN(nn.Module):
                 return self._forward(data, im_info, roidb, **rpn_kwargs)
 
     def _forward(self, data, im_info, roidb=None, **rpn_kwargs):
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Pydet', 'P1').tic()
         im_data = data
         if self.training:
             roidb = list(map(lambda x: blob_utils.deserialize(x)[0], roidb))
@@ -248,6 +250,7 @@ class Generalized_RCNN(nn.Module):
             return_dict['cls_score'] = cls_score
             return_dict['bbox_pred'] = bbox_pred
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Pydet', 'P1').toc()
         return return_dict
 
     def roi_feature_transform(self, blobs_in, rpn_ret, blob_rois='rois', method='RoIPoolF',
