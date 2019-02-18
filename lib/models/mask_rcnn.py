@@ -119,7 +119,7 @@ def main():
         scores, boxes, box_classes, im_ids, masks, feat_map = mask_rcnn(batch, return_det_results=True)
 
         boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
-        print(boxes)
+        print(np.sort(boxes.astype(np.int), axis=0))
         print(scores)
         print()
         continue
