@@ -38,7 +38,7 @@ class Minibatch:
         img_infos = np.stack(self.img_infos, axis=0)
         im_scales = img_infos[:, 2]
         im_infos = np.concatenate([np.tile(self.imgs.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
-        self.img_infos = torch.tensor(im_infos, device=device)
+        self.img_infos = torch.tensor(im_infos, dtype=torch.float32, device=device)
 
         assert self.imgs.shape[0] == self.img_infos.shape[0]
 
