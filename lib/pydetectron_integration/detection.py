@@ -36,7 +36,7 @@ def im_detect_all_with_feats(model, inputs):
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
-    im_ids = nonnms_im_ids[box_inds]
+    im_ids = nonnms_im_ids[box_inds].astype(np.int)
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
