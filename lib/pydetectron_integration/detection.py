@@ -49,9 +49,9 @@ def im_detect_all_with_feats(model, inputs):
     box_class_scores = box_class_scores.cpu().numpy()
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
 
-    box_inds2 = box_inds.cpu().numpy()
-    print(sorted(box_inds1))
-    print(sorted(box_inds2))
+    # box_inds2 = box_inds.cpu().numpy()
+    # print(sorted(box_inds1))
+    # print(sorted(box_inds2))
     # assert np.all(box_inds2 == box_inds1), np.stack([box_inds2, box_inds1], axis=1)
     # assert np.all(box_classes == box_classes1), np.stack([box_classes, box_classes1], axis=1)
     # assert np.all(box_class_scores == box_class_scores1), np.stack([box_class_scores, box_class_scores1], axis=1)
@@ -133,6 +133,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            print(torch.nonzero(class_boxes_mask).squeeze())
 
             scores_ij = scores_i[class_boxes_mask, j]
             if scores_ij.shape[0] > 0:
@@ -203,6 +204,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            print(np.flatnonzero(class_boxes_mask))
             scores_ij = scores_i[class_boxes_mask, j]
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
