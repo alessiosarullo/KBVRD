@@ -145,7 +145,6 @@ class Generalized_RCNN(nn.Module):
                 return self._forward(data, im_info, roidb, **rpn_kwargs)
 
     def _forward(self, data, im_info, roidb=None, **rpn_kwargs):
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P1').tic()
         im_data = data
         if self.training:
             roidb = list(map(lambda x: blob_utils.deserialize(x)[0], roidb))
@@ -154,9 +153,13 @@ class Generalized_RCNN(nn.Module):
 
         return_dict = {}  # A dict to collect return variables
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').tic()
         blob_conv = self.Conv_Body(im_data)
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc()
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').tic()
         rpn_ret = self.RPN(blob_conv, im_info, roidb)
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').toc()
 
         # if self.training:
         #     # can be used to infer fg/bg ratio
@@ -167,11 +170,10 @@ class Generalized_RCNN(nn.Module):
             # extra blobs that are used for RPN proposals, but not for RoI heads.
             blob_conv = blob_conv[-self.num_roi_levels:]
 
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P1').toc()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P2').tic()
         if not self.training:
             return_dict['blob_conv'] = blob_conv
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
         if not cfg.MODEL.RPN_ONLY:
             if cfg.MODEL.SHARE_RES5 and self.training:
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
@@ -181,7 +183,7 @@ class Generalized_RCNN(nn.Module):
         else:
             # TODO: complete the returns for RPN only situation
             pass
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P2').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
 
         if self.training:
             return_dict['losses'] = {}

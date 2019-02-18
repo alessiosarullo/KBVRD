@@ -26,15 +26,9 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'Sync').tic()
-    torch.cuda.synchronize()
-    Timer.get('Epoch', 'Batch', 'Detect', 'Sync').toc()
-
-    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').tic()
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
     nonnms_im_ids = nonnms_im_ids.cpu().numpy()
-    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit_np(nonnms_scores, nonnms_boxes, nonnms_im_ids)
@@ -62,15 +56,12 @@ def _im_detect_bbox(model, inputs):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync1').tic()
-    torch.cuda.synchronize()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync1').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').tic()
     return_dict = model(**inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync2').tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync').tic()
     torch.cuda.synchronize()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync2').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
@@ -82,11 +73,9 @@ def _im_detect_bbox(model, inputs):
     #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').tic()
     boxes /= im_scales.view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').toc()
 
     # Apply bounding-box regression deltas
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
