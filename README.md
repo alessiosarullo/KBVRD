@@ -45,4 +45,10 @@
     and Cython which might cause trouble in compiling the C code. 
     If GCC fails try with Python 3.6.
 
-1) 
+1) Compile NMS
+    ```
+    cd pydetectron_integration/nms
+    ./make.sh
+    ```
+
+1) Compile HighwayLSTM

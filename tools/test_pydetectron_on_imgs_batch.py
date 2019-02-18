@@ -8,8 +8,8 @@ import numpy as np
 import torch
 
 from lib.utils.data import _im_list_to_4d_tensor
-from lib.pydetectron_api.detection import im_detect_all_with_feats
-from lib.pydetectron_api.wrappers import \
+from lib.pydetectron_integration.detection import im_detect_all_with_feats
+from lib.pydetectron_integration.wrappers import \
     cfg, cfg_from_file, assert_and_infer_cfg, \
     segm_results, \
     dummy_datasets, \

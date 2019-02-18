@@ -6,7 +6,7 @@ from PIL import ImageOps
 
 from scripts.utils import Timer
 from config import Configs as cfg
-from lib.pydetectron_api.wrappers import prep_im_for_blob
+from lib.pydetectron_integration.wrappers import prep_im_for_blob
 
 
 class Splits(Enum):
