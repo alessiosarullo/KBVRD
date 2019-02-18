@@ -135,12 +135,13 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
                 j_vec = torch.full_like(boxes_ids_ij, fill_value=j)
                 box_infos_ij = torch.stack([scores_ij, boxes_ids_ij, j_vec], dim=1)
                 boxes_and_infos_per_class[j] = torch.cat([boxes_ij, box_infos_ij], dim=1)
-                print(boxes_and_infos_per_class[j].shape)
             else:
                 boxes_and_infos_per_class[j] = torch.zeros([0, 4 + 1 + 1 + 1])
 
         # Limit to max_per_image detections **over all classes**
         if cfg.TEST.DETECTIONS_PER_IM > 0 and boxes_and_infos_per_class[j].shape[0] > 0:
+            for j in range(1, num_classes):
+                print(boxes_and_infos_per_class[j].shape)
             image_scores = torch.cat([boxes_and_infos_per_class[j][:, 4] for j in range(1, num_classes)])
             if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
                 image_thresh = torch.sort(image_scores)[0][-cfg.TEST.DETECTIONS_PER_IM]
