@@ -1,12 +1,12 @@
 import logging
-import numpy as np
 
+import numpy as np
 import torch
 from torch import nn
 
+from lib.pydetectron_integration.box_utils import bbox_transform, clip_tiled_boxes
 from ..core.config import cfg
 from ..model.nms.nms_gpu import nms_gpu
-from lib.pydetectron_integration.box_utils import bbox_transform, clip_tiled_boxes
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ class GenerateProposalsOp(nn.Module):
             # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
-            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh)
+            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long()
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)
@@ -166,8 +166,8 @@ class GenerateProposalsOp(nn.Module):
 
 
 def _filter_boxes(boxes, min_size, im_info):
-    """Only keep boxes with both sides >= min_size and center within the image.
-  """
+    """Only keep boxes with both sides >= min_size and center within the image."""
+
     # Scale min_size to match image scale
     min_size *= im_info[2]
     ws = boxes[:, 2] - boxes[:, 0] + 1
