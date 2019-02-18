@@ -65,24 +65,18 @@ def _im_detect_bbox(model, inputs):
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
     # try:  # Torch
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
     boxes = return_dict['rois'][:, 1:5]
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
-    im_inds = return_dict['rois'][:, 0].long()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').tic()
+    im_inds = return_dict['rois'][:, 0]
     im_scales = return_dict['roi_scales']
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Scales').toc()
     # except AttributeError:  # Numpy
     #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').tic()
     boxes /= im_scales.view(-1, 1)  # unscale back to raw image space
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').toc()
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').toc()
 
     # Apply bounding-box regression deltas
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
