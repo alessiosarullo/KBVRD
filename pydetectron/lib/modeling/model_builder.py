@@ -155,10 +155,12 @@ class Generalized_RCNN(nn.Module):
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').tic()
         blob_conv = self.Conv_Body(im_data)
+        torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc()
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').tic()
         rpn_ret = self.RPN(blob_conv, im_info, roidb)
+        torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').toc()
 
         # if self.training:
@@ -183,6 +185,7 @@ class Generalized_RCNN(nn.Module):
         else:
             # TODO: complete the returns for RPN only situation
             pass
+        torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
 
         if self.training:
