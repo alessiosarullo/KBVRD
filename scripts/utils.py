@@ -55,7 +55,7 @@ class Timer:
         global_t = cls.get()
         if global_t.total_time == 0 and global_t.start_time is not None:
             global_t.toc()
-        print('Total time:', global_t)
+        print('Total time:', str(global_t))
 
     @staticmethod
     def _format(seconds):

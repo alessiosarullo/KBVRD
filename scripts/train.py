@@ -48,10 +48,10 @@ class Trainer:
                     'state_dict': detector.state_dict(),
                 }, save_file)
 
+        Timer.get().print()
         if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
             os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
         print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        Timer.get().print()
 
     def setup(self):
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -102,6 +102,7 @@ class Trainer:
                 print(pd.concat(tr[-print_interval:], axis=1).mean(1))
                 print('-----------', flush=True)
         Timer.get('Epoch').toc()
+        print('Time for epoch:', str(Timer.get('Epoch')))
 
     def train_batch(self, b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)
