@@ -125,7 +125,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
     # Apply threshold on detection probabilities and apply NMS. Skip j = 0, because it's the background class
     all_results = []
-    for mask_i in image_masks:
+    for i, mask_i in enumerate(image_masks):
         scores_i = all_scores[mask_i, :]
         boxes_i = all_boxes[mask_i, :]
         boxes_ids_i = all_boxes_ids[mask_i]
@@ -136,7 +136,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
             scores_ij = scores_i[class_boxes_mask, j]
             if scores_ij.shape[0] > 0:
-                print(mask_i, j, torch.nonzero(class_boxes_mask).squeeze())
+                print(i, j, torch.nonzero(class_boxes_mask).squeeze())
                 boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
                 boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
@@ -196,7 +196,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
 
     # Apply threshold on detection probabilities and apply NMS. Skip j = 0, because it's the background class
     all_results = []
-    for mask_i in image_masks:
+    for i, mask_i in enumerate(image_masks):
         scores_i = all_scores[mask_i, :]
         boxes_i = all_boxes[mask_i, :]
         boxes_ids_i = all_boxes_ids[mask_i]
@@ -205,7 +205,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
         for j in range(1, num_classes):
             class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
             if np.any(class_boxes_mask):
-                print(mask_i, j, np.flatnonzero(class_boxes_mask))
+                print(i, j, np.flatnonzero(class_boxes_mask))
             scores_ij = scores_i[class_boxes_mask, j]
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
