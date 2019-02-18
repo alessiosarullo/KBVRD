@@ -167,6 +167,8 @@ class Generalized_RCNN(nn.Module):
             # extra blobs that are used for RPN proposals, but not for RoI heads.
             blob_conv = blob_conv[-self.num_roi_levels:]
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P1').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P2').tic()
         if not self.training:
             return_dict['blob_conv'] = blob_conv
 
@@ -179,6 +181,7 @@ class Generalized_RCNN(nn.Module):
         else:
             # TODO: complete the returns for RPN only situation
             pass
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P2').toc()
 
         if self.training:
             return_dict['losses'] = {}
@@ -250,7 +253,6 @@ class Generalized_RCNN(nn.Module):
             return_dict['cls_score'] = cls_score
             return_dict['bbox_pred'] = bbox_pred
 
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'P1').toc()
         return return_dict
 
     def roi_feature_transform(self, blobs_in, rpn_ret, blob_rois='rois', method='RoIPoolF',
