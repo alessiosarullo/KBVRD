@@ -7,7 +7,8 @@ import torch.nn as nn
 
 from config import Configs as cfg
 from scripts.utils import Timer
-from lib.dataset.hicodet import HicoDetSplit, Splits, Minibatch
+from lib.dataset.hicodet import HicoDetSplit, Splits
+from lib.dataset.minibatch import Minibatch
 from lib.pydetectron_integration.detection import im_detect_all_with_feats
 from lib.pydetectron_integration.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 
@@ -56,13 +57,8 @@ class MaskRCNN(nn.Module):
         apply_head_only = kwargs.get('head_only', False)
 
         if not apply_head_only:
-            batch_tensor = x.imgs
-            orig_im_infos = x.img_infos
-
-            im_scales = orig_im_infos[:, 2]
-            im_infos = np.concatenate([np.tile(batch_tensor.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
-            inputs = {'data': batch_tensor,
-                      'im_info': torch.Tensor(im_infos), }
+            inputs = {'data': x.imgs,
+                      'im_info': x.img_infos, }
             Timer.get('Epoch', 'Batch', 'Detect').tic()
             box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
             Timer.get('Epoch', 'Batch', 'Detect').toc()

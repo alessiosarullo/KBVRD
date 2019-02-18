@@ -7,7 +7,8 @@ from torch.utils.data import Dataset
 
 from scripts.utils import Timer
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.utils.data import Splits, Minibatch, preprocess_img
+from lib.utils.data import Splits, preprocess_img
+from lib.dataset.minibatch import Minibatch
 
 
 class HicoDetSplit(Dataset):
