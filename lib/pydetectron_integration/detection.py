@@ -108,7 +108,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
     num_classes = cfg.MODEL.NUM_CLASSES
 
     image_masks = [im_ids == im_id for im_id in torch.unique(im_ids, sorted=True)]
-    all_boxes_ids = torch.arange(all_boxes.shape[0], dtype=torch.float32)
+    all_boxes_ids = torch.arange(all_boxes.shape[0], dtype=torch.float32, device=all_boxes.device)
 
     # Apply threshold on detection probabilities and apply NMS. Skip j = 0, because it's the background class
     all_results = []
