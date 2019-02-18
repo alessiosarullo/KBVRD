@@ -24,7 +24,10 @@ class Timer:
     def tic(self):
         global_t = self.get()
         if global_t.start_time is None:
-            global_t.tic()
+            global_t._tic()
+        self._tic()
+
+    def _tic(self):
         assert self.start_time is None
         self.start_time = time.time()
 
