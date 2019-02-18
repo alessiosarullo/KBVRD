@@ -88,7 +88,6 @@ class Trainer:
         tr = []
         num_batches = len(train_loader)
 
-        print('Epoch %d.' % epoch_num)
         Timer.get('Epoch').tic()
         for b, batch in enumerate(train_loader):
             Timer.get('Epoch', 'Batch').tic()
@@ -98,12 +97,12 @@ class Trainer:
 
             if b % print_interval == 0 and b >= print_interval:
                 time_per_batch = Timer.get('Epoch', 'Batch').spent(average=True)
-                print("\nIter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
+                print("Iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
                     batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
                 print(pd.concat(tr[-print_interval:], axis=1).mean(1))
-                print('-----------', flush=True)
         Timer.get('Epoch').toc()
         print('Time for epoch:', Timer.get('Epoch').str_last())
+        print('-----------', flush=True)
 
     def train_batch(self, b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)
