@@ -100,6 +100,8 @@ def main():
     batch_size = 2
     num_images = 8
 
+    cfg.parse_args()
+
     hds = HicoDetSplit(Splits.TEST, im_inds=list(range(num_images)))
     hdsl = hds.get_loader(batch_size=batch_size)
     dummy_coco = dummy_datasets.get_coco_dataset()  # this is used for class names
