@@ -64,7 +64,7 @@ class MaskRCNN(nn.Module):
             inputs = {'data': batch_tensor,
                       'im_info': torch.Tensor(im_infos), }
             Timer.get('Epoch', 'Batch', 'Detect').tic()
-            box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs, timers=None)
+            box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
             Timer.get('Epoch', 'Batch', 'Detect').toc()
 
             # pick the mask corresponding to the predicted class and binarize it
