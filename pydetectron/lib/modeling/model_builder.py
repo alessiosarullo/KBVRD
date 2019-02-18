@@ -174,18 +174,21 @@ class Generalized_RCNN(nn.Module):
         if not self.training:
             return_dict['blob_conv'] = blob_conv
 
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
         if not cfg.MODEL.RPN_ONLY:
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
             if cfg.MODEL.SHARE_RES5 and self.training:
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
             else:
                 box_feat = self.Box_Head(blob_conv, rpn_ret)
+            torch.cuda.synchronize()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').tic()
             cls_score, bbox_pred = self.Box_Outs(box_feat)
+            torch.cuda.synchronize()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').toc()
         else:
             # TODO: complete the returns for RPN only situation
             pass
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
 
         if self.training:
             return_dict['losses'] = {}
