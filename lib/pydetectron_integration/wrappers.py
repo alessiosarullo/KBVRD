@@ -22,6 +22,8 @@ from core.test import \
 
 import datasets.dummy_datasets as _pydet_dummy_datasets
 
+from model.nms.nms_gpu import nms_gpu as _pydet_nms_gpu
+
 from modeling.model_builder import Generalized_RCNN as _PydetGeneralized_RCNN
 
 import utils.misc as _pydet_misc_utils
@@ -43,6 +45,7 @@ COCO_CLASSES = dummy_datasets.get_coco_dataset().classes
 _get_blobs = _pydet_get_blobs
 _get_rois_blob = _pydet_get_rois_blob
 _add_multilevel_rois_for_test = _pydet_add_multilevel_rois_for_test
+nms_gpu = _pydet_nms_gpu
 box_utils = _pydet_box_utils
 Timer = _PydetTimer
 
