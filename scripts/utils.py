@@ -8,6 +8,7 @@ class Timer:
 
     def __init__(self):
         self.start_time = None
+        self.last = None
         self.total_time = 0
         self.num_instances = 0
         self.subtimers = {}
@@ -33,19 +34,20 @@ class Timer:
 
     def toc(self):
         assert self.start_time is not None
-        self.total_time += time.time() - self.start_time
+        self.last = time.time() - self.start_time
+        self.total_time += self.last
         self.start_time = None
         self.num_instances += 1
 
     def spent(self, average=True):
         return self.total_time / (self.num_instances if average else 1)
 
-    def __str__(self):
-        return '\n'.join(self._get_lines())
+    def str_last(self):
+        return self.format(self.last)
 
     def _get_lines(self):
         sep = ' ' * 4
-        s = [self._format(self.spent(average=self.__class__.print_average))]
+        s = [self.format(self.spent(average=self.__class__.print_average))]
         for k, v in self.subtimers.items():
             sub_s = v._get_lines()
             s.append('%s %s: %s' % (sep, k, sub_s[0]))
@@ -58,10 +60,10 @@ class Timer:
         global_t = cls.get()
         if global_t.total_time == 0 and global_t.start_time is not None:
             global_t.toc()
-        print('Total time:', str(global_t))
+        print('Total time:', '\n'.join(global_t._get_lines()))
 
     @staticmethod
-    def _format(seconds):
+    def format(seconds):
         if seconds < 0.001:
             s, unit = '%.2f' % (seconds * 1000), 'ms'
         elif seconds < 0.1:
