@@ -45,10 +45,6 @@
     and Cython which might cause trouble in compiling the C code. 
     If GCC fails try with Python 3.6.
 
-1) Compile NMS and substitute `rpn_heads.py`
-    ```
-    cd pydetectron_integration/nms
-    ./make.sh
-    ```
-
+1) Substitute `rpn_heads.py` and `model_builder.py`, add `generate_proposals_torch.py`.
+    
 1) Compile HighwayLSTM
