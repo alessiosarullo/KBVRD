@@ -71,6 +71,7 @@ def _im_detect_bbox(model, inputs, im_scales):
     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').tic()
+    boxes = torch.from_numpy(boxes)
     box_deltas = box_deltas.cpu()
     scores = scores.cpu()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').toc()
