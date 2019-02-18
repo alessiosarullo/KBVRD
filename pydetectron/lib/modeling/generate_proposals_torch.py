@@ -86,18 +86,20 @@ class GenerateProposalsOp(nn.Module):
         all_anchors = anchors + shifts.view(shifts.shape[0], 1, shifts.shape[1])
         all_anchors = all_anchors.to(bbox_deltas).view((K * A, 4))
 
-        im_inds, rois, roi_probs = [], [], []
+        roi_scales, rois, roi_probs = [], [], []
         for im_i in range(num_images):
             im_i_boxes, im_i_probs = self.proposals_for_one_image(im_info[im_i, :], all_anchors, bbox_deltas[im_i, :, :, :], scores[im_i, :, :, :])
-            im_inds.append(np.full(im_i_probs.shape[0], fill_value=im_i, dtype=np.int))
-            batch_inds = torch.full_like(im_i_probs, fill_value=im_i)
-            im_i_rois = torch.cat([batch_inds.view(-1, 1), im_i_boxes], dim=1)
+            im_roi_scales = torch.full_like(im_i_probs, fill_value=im_info[im_i, 2])
+            im_inds = torch.full_like(im_i_probs, fill_value=im_i)
+
+            im_i_rois = torch.cat([im_inds.view(-1, 1), im_i_boxes], dim=1)
+            roi_scales.append(im_roi_scales)
             rois.append(im_i_rois)
             roi_probs.append(im_i_probs)
-        im_inds = np.concatenate(im_inds)
+        roi_scales = np.concatenate(roi_scales)
         rois = torch.cat(rois, dim=0)
         roi_probs = torch.cat(roi_probs, dim=0)
-        return im_inds, rois, roi_probs
+        return roi_scales, rois, roi_probs
 
     def proposals_for_one_image(self, im_info, all_anchors, bbox_deltas, scores):
         # Get mode-dependent configuration

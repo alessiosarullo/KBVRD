@@ -110,9 +110,9 @@ class single_scale_rpn_outputs(nn.Module):
             else:
                 rpn_cls_prob = F.sigmoid(rpn_cls_logits)
 
-            im_inds, rpn_rois, rpn_rois_prob = self.RPN_GenerateProposals(rpn_cls_prob, rpn_bbox_pred, im_info)
+            roi_scales, rpn_rois, rpn_rois_prob = self.RPN_GenerateProposals(rpn_cls_prob, rpn_bbox_pred, im_info)
 
-            return_dict['rpn_im_inds'] = im_inds
+            return_dict['roi_scales'] = roi_scales
             return_dict['rpn_rois'] = rpn_rois
             return_dict['rpn_roi_probs'] = rpn_rois_prob
 
