@@ -130,7 +130,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
                 keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze()
 
                 scores_ij = scores_ij[keep]
-                print(scores_ij.shape[0])
+                print(scores_ij.shape)
 
                 boxes_ids_ij = boxes_ids_ij[keep]
                 boxes_ij = boxes_ij[keep, :]
