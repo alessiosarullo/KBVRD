@@ -70,7 +70,7 @@ def _im_detect_bbox(model, inputs, im_scales):
         im_inds = return_dict['rois'][:, 0].cpu().numpy().astype(np.int, copy=False)
         # Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
     except AttributeError:
-        boxes = torch.tensor(return_dict['rois'][:, 1:5])
+        boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
         im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     factors = im_scales[im_inds]
