@@ -62,29 +62,21 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
-    boxes = return_dict['rois'][:, 1:5]
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
+    boxes = torch.tensor(return_dict['rois'][:, 1:5], device=box_deltas.device)
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').tic()
     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'From NP').tic()
-    boxes = torch.from_numpy(boxes)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'From NP').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').tic()
-    box_deltas = box_deltas.cpu()
-    scores = scores.cpu()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').toc()
-
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Prep').tic()
     factors = im_scales[im_inds]
     boxes /= boxes.new_tensor(factors[:, None])  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Prep').toc()
 
     # Apply bounding-box regression deltas
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Transform').tic()
     pred_boxes = _bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS)
     pred_boxes = _clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Transform').toc()
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the original image size
 
