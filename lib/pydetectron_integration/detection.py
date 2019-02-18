@@ -7,7 +7,7 @@ from scripts.utils import Timer
 from .wrappers import cfg, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
 
 
-def im_detect_all_with_feats(model, inputs, box_proposals=None):
+def im_detect_all_with_feats(model, inputs):
     """
     Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
     """
@@ -18,16 +18,11 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
-    assert box_proposals is None  # FIXME did not check if this works
-
-    im_scales = inputs['im_info'][:, 2]
+    # im_scales = inputs['im_info'][:, 2]
     im_scales_np = inputs['im_info'][:, 2].cpu().numpy()
 
-    if box_proposals is not None:
-        inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
-
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales)
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
