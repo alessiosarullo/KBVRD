@@ -4,8 +4,8 @@ import torch.nn.functional as F
 
 from core.config import cfg
 from modeling.generate_anchors import generate_anchors
-# from modeling.generate_proposals import GenerateProposalsOp
-from pydetectron.lib.modeling.generate_proposals_torch import GenerateProposalsOp
+from modeling.generate_proposals import GenerateProposalsOp
+from pydetectron.lib.modeling.generate_proposals_torch import GenerateProposalsOp as GenerateProposalsOp_torch
 from modeling.generate_proposal_labels import GenerateProposalLabelsOp
 import modeling.FPN as FPN
 import utils.net as net_utils
@@ -57,6 +57,7 @@ class single_scale_rpn_outputs(nn.Module):
         self.RPN_bbox_pred = nn.Conv2d(self.dim_out, num_anchors * 4, 1, 1, 0)
 
         self.RPN_GenerateProposals = GenerateProposalsOp(anchors, spatial_scale)
+        self.RPN_GenerateProposals_torch = GenerateProposalsOp_torch(anchors, spatial_scale)
         self.RPN_GenerateProposalLabels = GenerateProposalLabelsOp()
 
         self._init_weights()
@@ -81,7 +82,7 @@ class single_scale_rpn_outputs(nn.Module):
         orphan_in_detectron = []
         return detectron_weight_mapping, orphan_in_detectron
 
-    def forward(self, x, im_info, roidb=None):
+    def forward(self, x, im_info, roidb=None, **kwargs):
         """
         x: feature maps from the backbone network. (Variable)
         im_info: (CPU Variable)
@@ -110,8 +111,10 @@ class single_scale_rpn_outputs(nn.Module):
             else:
                 rpn_cls_prob = F.sigmoid(rpn_cls_logits)
 
-            rpn_rois, rpn_rois_prob = self.RPN_GenerateProposals(
-                rpn_cls_prob, rpn_bbox_pred, im_info)
+            if kwargs.get('use_torch_proposal_generation', False):
+                rpn_rois, rpn_rois_prob = self.RPN_GenerateProposals_torch(rpn_cls_prob, rpn_bbox_pred, im_info)
+            else:
+                rpn_rois, rpn_rois_prob = self.RPN_GenerateProposals(rpn_cls_prob, rpn_bbox_pred, im_info)
 
             return_dict['rpn_rois'] = rpn_rois
             return_dict['rpn_roi_probs'] = rpn_rois_prob
