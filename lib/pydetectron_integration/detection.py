@@ -26,6 +26,11 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
+    nonnms_scores_np = nonnms_scores.cpu().numpy()
+    nonnms_boxes_np = nonnms_boxes.cpu().numpy()
+    nonnms_im_ids_np = nonnms_im_ids.cpu().numpy()
+    box_inds1, box_classes1, box_class_scores1, boxes1 = _box_results_with_nms_and_limit_np(nonnms_scores_np, nonnms_boxes_np, nonnms_im_ids_np)
+
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
@@ -43,6 +48,11 @@ def im_detect_all_with_feats(model, inputs):
     box_classes = box_classes.cpu().numpy()
     box_class_scores = box_class_scores.cpu().numpy()
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
+
+    assert np.all(box_inds == box_inds1), np.stack([box_inds, box_inds1], axis=1)
+    assert np.all(box_classes == box_classes1), np.stack([box_classes, box_classes1], axis=1)
+    assert np.all(box_class_scores == box_class_scores1), np.stack([box_class_scores, box_class_scores1], axis=1)
+    assert np.all(boxes == boxes1), np.concatenate([boxes, boxes1], axis=1)
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
