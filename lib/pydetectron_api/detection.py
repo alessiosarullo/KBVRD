@@ -31,9 +31,6 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
 
-    nonnms_scores = nonnms_scores.numpy()
-    nonnms_boxes = nonnms_boxes.numpy()
-
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
@@ -65,13 +62,13 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').tic()
     boxes = return_dict['rois'][:, 1:5]
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Tensor').toc()
     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'From NP').tic()
     boxes = torch.from_numpy(boxes)
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'From NP').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').tic()
     box_deltas = box_deltas.cpu()
     scores = scores.cpu()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'ToCPU').toc()
