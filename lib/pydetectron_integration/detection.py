@@ -28,8 +28,11 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').tic()
+    nonnms_im_ids = nonnms_im_ids.cpu().numpy()
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
+    Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
@@ -74,8 +77,10 @@ def _im_detect_bbox(model, inputs, im_scales):
     #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').tic()
     factors = im_scales[im_inds]
     boxes /= factors.to(boxes.device).view(-1, 1)  # unscale back to raw image space
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rescale').toc()
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
@@ -83,7 +88,7 @@ def _im_detect_bbox(model, inputs, im_scales):
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
-    return scores, pred_boxes, return_dict['blob_conv'], im_inds.cpu().numpy()  # NOTE: pred_boxes are scaled back to the original image size
+    return scores, pred_boxes, return_dict['blob_conv'], im_inds # NOTE: pred_boxes are scaled back to the original image size
 
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
