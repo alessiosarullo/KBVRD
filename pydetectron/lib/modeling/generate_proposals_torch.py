@@ -89,13 +89,13 @@ class GenerateProposalsOp(nn.Module):
         rois, roi_probs = [], []
         for im_i in range(num_images):
             im_i_boxes, im_i_probs = self.proposals_for_one_image(im_info[im_i, :], all_anchors, bbox_deltas[im_i, :, :, :], scores[im_i, :, :, :])
-            batch_inds = torch.full((im_i_boxes.shape[0], 1), fill_value=im_i, dtype=torch.float32)
-            im_i_rois = torch.cat([batch_inds, im_i_boxes], dim=1)
+            batch_inds = torch.full_like(im_i_probs, fill_value=im_i)
+            im_i_rois = torch.cat([batch_inds.view(-1, 1), im_i_boxes], dim=1)
             rois.append(im_i_rois)
             roi_probs.append(im_i_probs)
         rois = torch.cat(rois, dim=0)
         roi_probs = torch.cat(roi_probs, dim=0)
-        return rois, roi_probs  # Note: ndarrays
+        return rois, roi_probs
 
     def proposals_for_one_image(self, im_info, all_anchors, bbox_deltas, scores):
         # Get mode-dependent configuration
@@ -162,6 +162,7 @@ class GenerateProposalsOp(nn.Module):
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)
+        print(proposals.shape, scores.shape)
         return proposals, scores
 
 
