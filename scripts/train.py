@@ -15,8 +15,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from lib.dataset.hicodet import HicoDetSplit, Splits
 from config import Configs as cfg
+from scripts.utils import Timer
 from lib.models.base_model import BaseModel
-from lib.utils.script import print_para
+from scripts.utils import print_params
 
 
 class Trainer:
@@ -29,7 +30,7 @@ class Trainer:
         cfg.print()
 
         detector, train_loader = self.setup()
-        print_para(detector)
+        print_params(detector)
         detector.cuda()
 
         if cfg.program.save_dir is not None:
@@ -50,6 +51,7 @@ class Trainer:
         if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
             os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
         print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        Timer.get().print()
 
     def setup(self):
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -86,19 +88,20 @@ class Trainer:
         tr = []
         num_batches = len(train_loader)
 
-        start_time = time.time()
+        Timer.get('Epoch').tic()
         for b, batch in enumerate(train_loader):
+            Timer.get('Batch').tic()
             batch.iter_num = num_batches * epoch_num + b
             tr.append(self.train_batch(batch, optimizer, detector))
+            Timer.get('Batch').toc()
 
             if b % print_interval == 0 and b >= print_interval:
-                time_per_batch = (time.time() - start_time) / (b + 1)
+                time_per_batch = Timer.get('Batch').spent(average=True)
                 print("\nIter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
                     batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
                 print(pd.concat(tr[-print_interval:], axis=1).mean(1))
                 print('-----------', flush=True)
-        end_time = (time.time() - start_time)
-        print('Time for epoch %d: %.0fm. Per batch: %.1fs.' % (epoch_num, end_time / 60, end_time / num_batches))
+        Timer.get('Epoch').toc()
 
     def train_batch(self, b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)

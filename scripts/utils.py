@@ -1,7 +1,81 @@
 import numpy as np
+import time
 
 
-def print_para(model, breakdown=False):
+class Timer:
+    global_timer = None
+    print_average = True
+
+    def __init__(self):
+        self.start_time = None
+        self.total_time = 0
+        self.num_instances = 0
+        self.subtimers = {}
+
+    @classmethod
+    def get(cls, *args):
+        if cls.global_timer is None:
+            cls.global_timer = cls()
+        timer = cls.global_timer
+        for subt in args:
+            timer = timer.subtimers.setdefault(subt, Timer())
+        return timer
+
+    def tic(self):
+        global_t = self.get()
+        if global_t.start_time is None:
+            global_t.tic()
+        assert self.start_time is None
+        self.start_time = time.time()
+
+    def toc(self):
+        assert self.start_time is not None
+        self.total_time += time.time() - self.start_time
+        self.start_time = None
+        self.num_instances += 1
+
+    def spent(self, average=True):
+        return self.total_time / (self.num_instances if average else 1)
+
+    def __str__(self):
+        sep = ' ' * 4
+        s = [self._format(self.spent(average=self.__class__.print_average))]
+        for k, v in self.subtimers.items():
+            sub_s = str(v)
+            s.append('%s %s: %s' % (sep, k, sub_s[0]))
+            s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
+        return s
+
+    @classmethod
+    def print(cls, average=True):
+        cls.print_average = average
+        global_t = cls.get()
+        if global_t.total_time == 0 and global_t.start_time is not None:
+            global_t.toc()
+        print('Total time:', global_t)
+
+    @staticmethod
+    def _format(seconds):
+        if seconds < 0.001:
+            s, unit = '%.2f' % (seconds * 1000), 'ms'
+        elif seconds < 0.1:
+            s, unit = '%.0f' % (seconds * 1000), 'ms'
+        elif seconds < 1:
+            s, unit = '%.2f' % seconds, 's'
+        elif seconds < 10:
+            s, unit = '%.1f' % seconds, 's'
+        elif seconds < 60:
+            s, unit = '%.0f' % seconds, 's'
+        elif seconds < 600:
+            s, unit = '%d:%02d' % divmod(seconds, 60), 'm'
+        elif seconds < 3600:
+            s, unit = '%.0f' % (seconds / 60), 'm'
+        else:
+            s, unit = '%d:%02d' % divmod(seconds/60, 60), 'h'
+        return '%s%s' % (s, unit)
+
+
+def print_params(model, breakdown=False):
     """
     Prints parameters of a model
     """

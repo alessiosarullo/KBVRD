@@ -1,7 +1,9 @@
-import sys
 import argparse
 import os
+import sys
+
 import lib.pydetectron_api.wrappers as pydet
+
 
 class BaseConfigs:
     def parse_args(self):
