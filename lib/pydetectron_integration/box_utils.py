@@ -1,9 +1,7 @@
 import torch
 
-from lib.pydetectron_integration.wrappers import cfg
 
-
-def bbox_transform(boxes, deltas, weights):
+def bbox_transform(boxes, deltas, weights, bbox_xform_clip):
     """
     Forward transform that maps proposal boxes to predicted ground-truth boxes using bounding-box regression deltas.
     """
@@ -26,8 +24,8 @@ def bbox_transform(boxes, deltas, weights):
     dh = deltas[:, 3::4] / wh
 
     # Prevent sending too large values into exp()
-    dw.clamp_(max=cfg.BBOX_XFORM_CLIP)
-    dh.clamp_(max=cfg.BBOX_XFORM_CLIP)
+    dw.clamp_(max=bbox_xform_clip)
+    dh.clamp_(max=bbox_xform_clip)
 
     pred_center_x = dx * widths[:, None] + center_x[:, None]
     pred_center_y = dy * heights[:, None] + center_y[:, None]

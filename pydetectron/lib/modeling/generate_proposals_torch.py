@@ -4,8 +4,9 @@ import numpy as np
 import torch
 from torch import nn
 
-from .box_utils import cfg, bbox_transform, clip_tiled_boxes
-from .nms._ext import nms
+from ..core.config import cfg
+from ..model.nms.nms_gpu import nms_gpu
+from lib.pydetectron_integration.box_utils import bbox_transform, clip_tiled_boxes
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class GenerateProposalsOp(nn.Module):
         scores = scores[order]
 
         # Transform anchors into proposals via bbox transformations
-        proposals = bbox_transform(all_anchors, bbox_deltas, (1.0, 1.0, 1.0, 1.0))
+        proposals = bbox_transform(all_anchors, bbox_deltas, (1.0, 1.0, 1.0, 1.0), cfg.BBOX_XFORM_CLIP)
 
         # 2. clip proposals to image (may result in proposals with zero area
         # that will be removed in the next step)
@@ -151,9 +152,10 @@ class GenerateProposalsOp(nn.Module):
         # 7. take after_nms_topN (e.g. 300)
         # 8. return the top proposals (-> RoIs top)
         if nms_thresh > 0:
-            keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
-            num_out = nms.nms_apply(keep, proposals, nms_thresh)
-            keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
+            # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
+            # num_out = nms.nms_apply(keep, proposals, nms_thresh)
+            # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
+            keep = nms_gpu(torch.cat([proposals, scores.view(-1, 1)], dim=1), nms_thresh)
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)

@@ -70,12 +70,12 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
 
     factors = im_scales[im_inds]
-    boxes /= boxes.new_tensor(factors[:, None])  # unscale back to raw image space
+    boxes /= boxes.new_tensor(factors.view(-1, 1))  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
     # Apply bounding-box regression deltas
-    pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS)
+    pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the original image size

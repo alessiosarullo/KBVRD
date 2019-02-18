@@ -45,7 +45,7 @@
     and Cython which might cause trouble in compiling the C code. 
     If GCC fails try with Python 3.6.
 
-1) Compile NMS
+1) Compile NMS and substitute `rpn_heads.py`
     ```
     cd pydetectron_integration/nms
     ./make.sh
