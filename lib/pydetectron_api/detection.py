@@ -23,7 +23,9 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None):
         assert False  # FIXME did not check if this works
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
 
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
     nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales)
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
     nonnms_scores = nonnms_scores.cpu().numpy()
