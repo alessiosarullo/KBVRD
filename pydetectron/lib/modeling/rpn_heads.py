@@ -89,18 +89,24 @@ class single_scale_rpn_outputs(nn.Module):
         im_info: (CPU Variable)
         roidb: (list of ndarray)
         """
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').tic()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'ReLU').tic()
         rpn_conv = F.relu(self.RPN_conv(x), inplace=True)
+        torch.cuda.synchronize()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'ReLU').toc()
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Score').tic()
         rpn_cls_logits = self.RPN_cls_score(rpn_conv)
+        torch.cuda.synchronize()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Score').toc()
 
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Pred').tic()
         rpn_bbox_pred = self.RPN_bbox_pred(rpn_conv)
+        torch.cuda.synchronize()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Pred').toc()
 
         return_dict = {
             'rpn_cls_logits': rpn_cls_logits, 'rpn_bbox_pred': rpn_bbox_pred}
 
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').toc()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').tic()
 
         if not self.training or cfg.MODEL.FASTER_RCNN:
