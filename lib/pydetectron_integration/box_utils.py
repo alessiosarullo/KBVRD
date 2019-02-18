@@ -10,7 +10,7 @@ def bbox_transform(boxes, deltas, weights, bbox_xform_clip):
     if boxes.shape[0] == 0:
         assert deltas.shape[0] == 0
         return pred_boxes
-    assert boxes.dtype == deltas.dtype
+    assert boxes.dtype == deltas.dtype, (boxes.dtype, deltas.dtype)
 
     widths = boxes[:, 2] - boxes[:, 0] + 1.0
     heights = boxes[:, 3] - boxes[:, 1] + 1.0
