@@ -4,10 +4,10 @@ import numpy as np
 import torch
 from scripts.utils import Timer
 
-from .wrappers import cfg, Timer as PydetTimer, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
+from .wrappers import cfg, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
 
 
-def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
+def im_detect_all_with_feats(model, inputs, box_proposals=None):
     """
     Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
     """
@@ -18,42 +18,35 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
-    if timers is None:
-        timers = defaultdict(PydetTimer)
-
     im_scales = inputs['im_info'][:, 2].cpu().numpy()
     if box_proposals is not None:
         assert False  # FIXME did not check if this works
         inputs['rois'] = _get_rois_blob(box_proposals, [ims for ims in im_scales])
 
-    timers['im_detect_bbox'].tic()
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales, timers)
-    timers['im_detect_bbox'].toc()
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_scales)
     assert nonnms_boxes.shape[0] > 0
 
-    timers['device_transfer'].tic()
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
-    timers['device_transfer'].toc()
 
-    timers['bbox_nms'].tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds]
-    timers['bbox_nms'].toc()
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
 
-    timers['im_detect_mask'].tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
     masks = _im_detect_mask(model, im_scales, im_ids, boxes, feat_map)
-    timers['im_detect_mask'].toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
     assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == masks.shape[0] == scores.shape[0]
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, scores
 
 
-def _im_detect_bbox(model, inputs, im_scales, timers=None):
+def _im_detect_bbox(model, inputs, im_scales):
     """Prepare the bbox for testing"""
 
     assert not cfg.PYTORCH_VERSION_LESS_THAN_040
@@ -62,18 +55,14 @@ def _im_detect_bbox(model, inputs, im_scales, timers=None):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
-    if timers is None:
-        timers = defaultdict(PydetTimer)
-
-    timers['im_detect_bbox - detect'].tic()
-    Timer.get('Epoch', 'Batch', 'Detect', 'Forward').tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').tic()
     return_dict = model(**inputs)
-    Timer.get('Epoch', 'Batch', 'Detect', 'Forward').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rest').tic()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
     boxes = torch.tensor(return_dict['rois'][:, 1:5], device=box_deltas.device)
     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
-    timers['im_detect_bbox - detect'].toc()
 
     factors = im_scales[im_inds]
     boxes /= boxes.new_tensor(factors[:, None])  # unscale back to raw image space
@@ -81,10 +70,9 @@ def _im_detect_bbox(model, inputs, im_scales, timers=None):
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
     # Apply bounding-box regression deltas
-    timers['im_detect_bbox - apply_delta'].tic()
     pred_boxes = _bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS)
     pred_boxes = _clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
-    timers['im_detect_bbox - apply_delta'].toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Rest').toc()
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the original image size
 
