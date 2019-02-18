@@ -60,7 +60,6 @@ class GenerateProposalsOp(nn.Module):
         bbox_deltas = rpn_bbox_pred
         im_info = im_info.to(bbox_deltas)
         anchors = self._anchors_t
-        print(scores)
 
         # 1. Generate proposals from bbox deltas and shifted anchors
         height, width = scores.shape[-2:]
@@ -70,10 +69,11 @@ class GenerateProposalsOp(nn.Module):
         shift_x, shift_y = torch.meshgrid([shift_x, shift_y])
         # Convert to (K, 4), K=H*W, where the columns are (dx, dy, dx, dy)
         # shift pointing to each grid location
-        shifts = torch.stack([shift_x.reshape(-1),
-                              shift_y.reshape(-1),
-                              shift_x.reshape(-1),
-                              shift_y.reshape(-1)], dim=1).double()
+        shifts = torch.stack([shift_x.t().reshape(-1),
+                              shift_y.t().reshape(-1),
+                              shift_x.t().reshape(-1),
+                              shift_y.t().reshape(-1)], dim=1).double()
+        print(shifts)
 
         # Broadcast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:

@@ -61,7 +61,6 @@ class GenerateProposalsOp(nn.Module):
         # input image (height, width, scale), in which scale is the scale factor
         # applied to the original dataset image to get the network input image
         im_info = im_info.data.cpu().numpy()
-        print(scores)
 
         # 1. Generate proposals from bbox deltas and shifted anchors
         height, width = scores.shape[-2:]
@@ -73,6 +72,7 @@ class GenerateProposalsOp(nn.Module):
         # shift pointing to each grid location
         shifts = np.vstack((shift_x.ravel(), shift_y.ravel(), shift_x.ravel(),
                             shift_y.ravel())).transpose()
+        print(shifts)
 
         # Broacast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:
