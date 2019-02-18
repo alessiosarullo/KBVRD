@@ -66,6 +66,8 @@ class MaskRCNN(nn.Module):
             Timer.get('Epoch', 'Batch', 'Detect').tic()
             box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
             Timer.get('Epoch', 'Batch', 'Detect').toc()
+            if kwargs.get('return_det_results', False):
+                return box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map
 
             # pick the mask corresponding to the predicted class and binarize it
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
@@ -114,7 +116,7 @@ def main():
         print('Batch', batch_i)
         batch = batch  # type: Minibatch
 
-        scores, boxes, box_classes, im_ids, masks, feat_map = mask_rcnn(batch)
+        scores, boxes, box_classes, im_ids, masks, feat_map = mask_rcnn(batch, return_det_results=True)
 
         boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
         masks = masks.cpu().numpy()
