@@ -104,7 +104,7 @@ class GenerateProposalsOp(nn.Module):
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
         nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
         min_size = cfg[cfg_key].RPN_MIN_SIZE
-        print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
+        # print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
 
         # Transpose and reshape predicted bbox transformations to get them
         # into the same order as the anchors:
@@ -156,13 +156,11 @@ class GenerateProposalsOp(nn.Module):
         # 7. take after_nms_topN (e.g. 300)
         # 8. return the top proposals (-> RoIs top)
         if nms_thresh > 0:
-            print(proposals.shape)
             keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
             if post_nms_topN > 0:
                 keep = keep[:post_nms_topN]
             proposals = proposals[keep, :]
             scores = scores[keep]
-            print(proposals.shape)
         # print('final proposals:', proposals.shape, scores.shape)
         return proposals, scores
 
