@@ -84,7 +84,7 @@ class GenerateProposalsOp(nn.Module):
         A = self._num_anchors
         K = shifts.shape[0]
         all_anchors = anchors + shifts.view(shifts.shape[0], 1, shifts.shape[1])
-        all_anchors = all_anchors.view((K * A, 4))
+        all_anchors = all_anchors.to(bbox_deltas).view((K * A, 4))
 
         rois, roi_probs = [], []
         for im_i in range(num_images):
