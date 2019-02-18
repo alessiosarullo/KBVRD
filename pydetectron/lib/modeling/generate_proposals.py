@@ -85,7 +85,6 @@ class GenerateProposalsOp(nn.Module):
         all_anchors = self._anchors[np.newaxis, :, :] + shifts[:, np.newaxis, :]
         all_anchors = all_anchors.reshape((K * A, 4))
         # all_anchors = torch.from_numpy(all_anchors).type_as(scores)
-        print(all_anchors.shape, all_anchors)
 
         rois = np.empty((0, 5), dtype=np.float32)
         roi_probs = np.empty((0, 1), dtype=np.float32)
@@ -128,6 +127,7 @@ class GenerateProposalsOp(nn.Module):
 
         # 4. sort all (proposal, score) pairs by score from highest to lowest
         # 5. take top pre_nms_topN (e.g. 6000)
+        print(all_anchors.shape)
         if pre_nms_topN <= 0 or pre_nms_topN >= len(scores):
             order = np.argsort(-scores.squeeze())
         else:
@@ -159,14 +159,14 @@ class GenerateProposalsOp(nn.Module):
         # 7. take after_nms_topN (e.g. 300)
         # 8. return the top proposals (-> RoIs top)
         if nms_thresh > 0:
-            print(proposals.shape, proposals.astype(np.int))
+            print(proposals.shape)
             keep = box_utils.nms(np.hstack((proposals, scores)), nms_thresh)
             # print('nms keep:', keep.shape)
             if post_nms_topN > 0:
                 keep = keep[:post_nms_topN]
             proposals = proposals[keep, :]
             scores = scores[keep]
-            print(proposals.shape, proposals.astype(np.int))
+            print(proposals.shape)
         # print('final proposals:', proposals.shape, scores.shape)
         return proposals, scores
 

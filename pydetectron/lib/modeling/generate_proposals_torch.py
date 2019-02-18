@@ -105,6 +105,7 @@ class GenerateProposalsOp(nn.Module):
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
         nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
         min_size = cfg[cfg_key].RPN_MIN_SIZE
+        print(pre_nms_topN, post_nms_topN, nms_thresh, min_size)
         # print('generate_proposals:', pre_nms_topN, post_nms_topN, nms_thresh, min_size)
 
         # Transpose and reshape predicted bbox transformations to get them
@@ -125,6 +126,7 @@ class GenerateProposalsOp(nn.Module):
 
         # 4. sort all (proposal, score) pairs by score from highest to lowest
         # 5. take top pre_nms_topN (e.g. 6000)
+        print(all_anchors.shape)
         if pre_nms_topN <= 0 or pre_nms_topN >= len(scores):
             order = torch.sort(scores.squeeze(), descending=True)[1]
         else:
@@ -159,11 +161,13 @@ class GenerateProposalsOp(nn.Module):
             # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
-            print(proposals.shape, proposals.int())
+            print(proposals.shape)
             keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
+            if post_nms_topN > 0:
+                keep = keep[:post_nms_topN]
             proposals = proposals[keep, :]
             scores = scores[keep]
-            print(proposals.shape, proposals.int())
+            print(proposals.shape)
         # print('final proposals:', proposals.shape, scores.shape)
         return proposals, scores
 
