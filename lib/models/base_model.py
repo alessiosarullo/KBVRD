@@ -123,8 +123,8 @@ class BaseModel(nn.Module):
         sub_inds = torch.tensor(rel_infos[:, 1], device=union_boxes_feats.device)
         obj_inds = torch.tensor(rel_infos[:, 2], device=union_boxes_feats.device)
         im_ids = torch.unique(rel_im_ids, sorted=True)
-        rel_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(rel_unique_im_ids), (im_ids, rel_unique_im_ids)  # TODO remove
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)  # TODO remove
 
         # Spatial context
         masks = masks.view([masks.shape[0], -1])

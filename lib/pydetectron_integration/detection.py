@@ -26,36 +26,21 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
-    # nonnms_scores_np = nonnms_scores.cpu().numpy()
-    # nonnms_boxes_np = nonnms_boxes.cpu().numpy()
-    # nonnms_im_ids_np = nonnms_im_ids.cpu().numpy()
-    # box_inds1, box_classes1, box_class_scores1, boxes1 = _box_results_with_nms_and_limit_np(nonnms_scores_np, nonnms_boxes_np, nonnms_im_ids_np)
-
-    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
-    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
-    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
-    scores = nonnms_scores[box_inds, :]
-    im_ids = nonnms_im_ids[box_inds].int()
-
     Timer.get('Epoch', 'Batch', 'Detect', 'Sync').tic()
     torch.cuda.synchronize()
     Timer.get('Epoch', 'Batch', 'Detect', 'Sync').toc()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP').tic()
-    im_ids = im_ids.cpu().numpy()
-    scores = scores.cpu().numpy()
-    boxes = boxes.cpu().numpy()
-    box_classes = box_classes.cpu().numpy()
-    box_class_scores = box_class_scores.cpu().numpy()
+    nonnms_scores = nonnms_scores.cpu().numpy()
+    nonnms_boxes = nonnms_boxes.cpu().numpy()
+    nonnms_im_ids = nonnms_im_ids.cpu().numpy()
     Timer.get('Epoch', 'Batch', 'Detect', 'To NP').toc()
 
-    # box_inds2 = box_inds.cpu().numpy()
-    # print(sorted(box_inds1))
-    # print(sorted(box_inds2))
-    # assert np.all(box_inds2 == box_inds1), np.stack([box_inds2, box_inds1], axis=1)
-    # assert np.all(box_classes == box_classes1), np.stack([box_classes, box_classes1], axis=1)
-    # assert np.all(box_class_scores == box_class_scores1), np.stack([box_class_scores, box_class_scores1], axis=1)
-    # assert np.all(boxes == boxes1), np.concatenate([boxes, boxes1], axis=1)
+    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
+    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit_np(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
+    scores = nonnms_scores[box_inds, :]
+    im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
@@ -77,9 +62,15 @@ def _im_detect_bbox(model, inputs):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync1').tic()
+    torch.cuda.synchronize()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync1').toc()
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').tic()
     return_dict = model(**inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync2').tic()
+    torch.cuda.synchronize()
+    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync2').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
@@ -168,7 +159,6 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         all_results.append(im_result)
 
     all_results = torch.cat(all_results, dim=0)
-    print(all_results.shape[0])
     boxes_ids = all_results[:, 5].long()
     box_classes = all_results[:, 6].long()
     scores = all_results[:, 4]
@@ -234,7 +224,6 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
         all_results.append(im_result)
 
     all_results = np.concatenate(all_results, axis=0)
-    print(all_results.shape[0])
     boxes_ids = all_results[:, 5].astype(np.int)
     box_classes = all_results[:, 6].astype(np.int)
     scores = all_results[:, 4]
