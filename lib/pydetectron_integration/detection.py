@@ -140,7 +140,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
                 boxes_ids_ij = boxes_ids_i[class_boxes_mask]
 
                 rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
-                print(i, j, rois_ij)
+                print(i, j, scores_ij)
                 keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze(dim=1)
 
                 scores_ij = scores_ij[keep]
@@ -210,7 +210,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
 
             rois_ij = np.concatenate([boxes_ij, scores_ij[:, None]], axis=1).astype(np.float32, copy=False)
             if np.any(class_boxes_mask):
-                print(i, j, rois_ij)
+                print(i, j, scores_ij)
             keep = box_utils.nms(rois_ij, cfg.TEST.NMS)
 
             scores_ij = scores_ij[keep]
