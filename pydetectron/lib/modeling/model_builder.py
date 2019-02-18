@@ -183,7 +183,7 @@ class Generalized_RCNN(nn.Module):
             #     box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
             # else:
             #     box_feat = self.Box_Head(blob_conv, rpn_ret)
-            box_feat = self.Box_Head(blob_conv, rpn_ret)
+            box_feat = self.Box_Head.forward(blob_conv, rpn_ret)  # FIXME call to .forward()
             torch.cuda.synchronize()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').tic()

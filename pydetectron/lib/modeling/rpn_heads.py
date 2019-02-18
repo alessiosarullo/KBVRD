@@ -98,6 +98,8 @@ class single_scale_rpn_outputs(nn.Module):
 
         return_dict = {
             'rpn_cls_logits': rpn_cls_logits, 'rpn_bbox_pred': rpn_bbox_pred}
+
+        torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').toc()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').tic()
 
