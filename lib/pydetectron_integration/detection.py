@@ -70,7 +70,7 @@ def _im_detect_bbox(model, inputs, im_scales):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Inds').toc()
 
     factors = im_scales[im_inds]
-    boxes /= boxes.new_tensor(factors.view(-1, 1))  # unscale back to raw image space
+    boxes /= boxes.new_tensor(factors).view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
