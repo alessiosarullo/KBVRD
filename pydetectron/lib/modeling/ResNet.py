@@ -141,7 +141,6 @@ class ResNet_roi_conv5_head(nn.Module):
 
     def forward(self, x, rpn_ret):
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'ROI').tic()
-        torch.cuda.synchronize()
         x = self.roi_xform(
             x, rpn_ret,
             blob_rois='rois',
@@ -153,12 +152,10 @@ class ResNet_roi_conv5_head(nn.Module):
         torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'ROI').toc()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Res5').tic()
-        torch.cuda.synchronize()
         res5_feat = self.res5(x)
         torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Res5').toc()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Pool').tic()
-        torch.cuda.synchronize()
         x = self.avgpool(res5_feat)
         torch.cuda.synchronize()
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Pool').toc()

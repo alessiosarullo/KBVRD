@@ -1,6 +1,8 @@
 from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
+from scripts.utils import Timer
+import torch
 
 from core.config import cfg
 from modeling.generate_anchors import generate_anchors
@@ -87,6 +89,7 @@ class single_scale_rpn_outputs(nn.Module):
         im_info: (CPU Variable)
         roidb: (list of ndarray)
         """
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').tic()
         rpn_conv = F.relu(self.RPN_conv(x), inplace=True)
 
         rpn_cls_logits = self.RPN_cls_score(rpn_conv)
@@ -125,6 +128,8 @@ class single_scale_rpn_outputs(nn.Module):
                 # Alias rois to rpn_rois for inference
                 return_dict['rois'] = return_dict['rpn_rois']
 
+        torch.cuda.synchronize()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P1').toc()
         return return_dict
 
 
