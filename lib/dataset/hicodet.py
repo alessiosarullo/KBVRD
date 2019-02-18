@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+from scripts.utils import Timer
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.utils.data import Splits, Minibatch, preprocess_img
 
@@ -114,6 +115,8 @@ class HicoDetSplit(Dataset):
         return data_loader
 
     def __getitem__(self, index):
+        Timer.get('Epoch', 'GetBatch').tic()
+
         # Read the image
         img_fn = self.annotations[index]['file']
 
@@ -139,6 +142,7 @@ class HicoDetSplit(Dataset):
             'gt_inters': self._im_inters[index].copy(),
             'flipped': flipped,
         }
+        Timer.get('Epoch', 'GetBatch').toc()
         return entry
 
     def __len__(self):

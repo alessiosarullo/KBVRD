@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from PIL import ImageOps
 
+from scripts.utils import Timer
 from config import Configs as cfg
 from lib.pydetectron_api.wrappers import prep_im_for_blob
 
@@ -59,10 +60,12 @@ class Minibatch:
 
     @classmethod
     def collate(cls, examples, training):
+        Timer.get('Epoch', 'Collate').tic()
         minibatch = cls(training)
         for ex in examples:
             minibatch.append(ex)
         minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant
+        Timer.get('Epoch', 'Collate').toc()
         return minibatch
 
     @staticmethod
