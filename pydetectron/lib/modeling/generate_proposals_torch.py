@@ -158,7 +158,7 @@ class GenerateProposalsOp(nn.Module):
             # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
-            keep = nms_gpu(torch.cat([proposals, scores.view(-1, 1)], dim=1), nms_thresh)
+            keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh)
             proposals = proposals[keep, :]
             scores = scores[keep]
         # print('final proposals:', proposals.shape, scores.shape)
@@ -174,5 +174,5 @@ def _filter_boxes(boxes, min_size, im_info):
     hs = boxes[:, 3] - boxes[:, 1] + 1
     x_ctr = boxes[:, 0] + ws / 2.
     y_ctr = boxes[:, 1] + hs / 2.
-    keep = torch.nonzero((ws >= min_size) & (hs >= min_size) & (x_ctr < im_info[1]) & (y_ctr < im_info[0]))
+    keep = torch.nonzero((ws >= min_size) & (hs >= min_size) & (x_ctr < im_info[1]) & (y_ctr < im_info[0])).view(-1)
     return keep
