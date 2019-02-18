@@ -2,8 +2,9 @@ from collections import defaultdict
 
 import numpy as np
 import torch
+from scripts.utils import Timer
 
-from .wrappers import cfg, Timer, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
+from .wrappers import cfg, Timer as PydetTimer, _get_rois_blob, _add_multilevel_rois_for_test, box_utils
 
 
 def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
@@ -18,7 +19,7 @@ def im_detect_all_with_feats(model, inputs, box_proposals=None, timers=None):
     assert not cfg.TEST.MASK_AUG.ENABLED
 
     if timers is None:
-        timers = defaultdict(Timer)
+        timers = defaultdict(PydetTimer)
 
     im_scales = inputs['im_info'][:, 2].cpu().numpy()
     if box_proposals is not None:
@@ -62,10 +63,12 @@ def _im_detect_bbox(model, inputs, im_scales, timers=None):
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
     if timers is None:
-        timers = defaultdict(Timer)
+        timers = defaultdict(PydetTimer)
 
     timers['im_detect_bbox - detect'].tic()
+    Timer.get('Epoch', 'Batch', 'Detect', 'Forward').tic()
     return_dict = model(**inputs)
+    Timer.get('Epoch', 'Batch', 'Detect', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
     boxes = torch.tensor(return_dict['rois'][:, 1:5], device=box_deltas.device)
