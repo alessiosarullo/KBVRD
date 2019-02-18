@@ -13,7 +13,8 @@ class BaseConfigs:
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            parser.add_argument('--%s' % k, dest=k)
+            parser.add_argument('--%s' % k, dest=k, type=type(v))
+            # TODO store for boolean
         return parser
 
     def __str__(self):
@@ -78,6 +79,9 @@ class Configs:
             if isinstance(v, BaseConfigs):
                 v.parse_args()
         cls.init_detectron_cfgs()
+        # Detectron configurations override comman line arguments. This is ok, since the model's configs should not be changed. TODO Raise a warning.
+        # TODO (related to the above) when trying to set a parameter that defaults to None a useless error is printed. Say that this parameter
+        #  cannot be set through command line
 
     @classmethod
     def init_detectron_cfgs(cls):
