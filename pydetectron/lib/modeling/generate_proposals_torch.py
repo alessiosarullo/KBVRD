@@ -73,7 +73,6 @@ class GenerateProposalsOp(nn.Module):
                               shift_y.t().reshape(-1),
                               shift_x.t().reshape(-1),
                               shift_y.t().reshape(-1)], dim=1).double()
-        print(shifts)
 
         # Broadcast anchors over shifts to enumerate all anchors at all positions
         # in the (H, W) grid:
@@ -86,6 +85,7 @@ class GenerateProposalsOp(nn.Module):
         K = shifts.shape[0]
         all_anchors = anchors + shifts.view(shifts.shape[0], 1, shifts.shape[1])
         all_anchors = all_anchors.to(bbox_deltas).view((K * A, 4))
+        print(all_anchors.shape, all_anchors)
 
         rois, roi_probs = [], []
         for im_i in range(num_images):
@@ -159,9 +159,11 @@ class GenerateProposalsOp(nn.Module):
             # keep = scores.new_tensor(scores.size(0), dtype=torch.int32)
             # num_out = nms.nms_apply(keep, proposals, nms_thresh)
             # keep = keep[:min(post_nms_topN, num_out)].long().to(scores.get_device())
+            print(proposals.shape, proposals.int())
             keep = nms_gpu(torch.cat([proposals, scores], dim=1), nms_thresh).long().squeeze()
             proposals = proposals[keep, :]
             scores = scores[keep]
+            print(proposals.shape, proposals.int())
         # print('final proposals:', proposals.shape, scores.shape)
         return proposals, scores
 
