@@ -119,13 +119,13 @@ class GenerateProposalsOp(nn.Module):
         #   - transpose to (H, W, A)
         #   - reshape to (H * W * A, 1) where rows are ordered by (H, W, A)
         #     to match the order of anchors and bbox_deltas
-        scores = scores.transpose((1, 2, 0)).view((-1, 1))
+        scores = scores.permute((1, 2, 0)).view((-1, 1))
         # print('pre_nms:', bbox_deltas.shape, scores.shape)
 
         # 4. sort all (proposal, score) pairs by score from highest to lowest
         # 5. take top pre_nms_topN (e.g. 6000)
         if pre_nms_topN <= 0 or pre_nms_topN >= len(scores):
-            order = torch.sort(scores.squeeze(), descending=True)[1]
+            order = torch.sort(scores.view(-1), descending=True)[1]
         else:
             # Avoid sorting possibly large arrays; First partition to get top K unsorted and then sort just those (~20x faster for 200k scores)
             # FIXME numpy conversion
