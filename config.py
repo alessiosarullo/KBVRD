@@ -13,7 +13,7 @@ class BaseConfigs:
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            parser.add_argument('--%s' % k, dest=k, type=type(v))
+            parser.add_argument('--%s' % k, dest=k)
         return parser
 
     def __str__(self):
