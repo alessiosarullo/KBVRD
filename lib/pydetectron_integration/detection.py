@@ -168,6 +168,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         all_results.append(im_result)
 
     all_results = torch.cat(all_results, dim=0)
+    print(all_results.shape[0])
     boxes_ids = all_results[:, 5].long()
     box_classes = all_results[:, 6].long()
     scores = all_results[:, 4]
@@ -233,6 +234,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
         all_results.append(im_result)
 
     all_results = np.concatenate(all_results, axis=0)
+    print(all_results.shape[0])
     boxes_ids = all_results[:, 5].astype(np.int)
     box_classes = all_results[:, 6].astype(np.int)
     scores = all_results[:, 4]
