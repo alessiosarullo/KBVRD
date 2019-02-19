@@ -119,6 +119,10 @@ class Configs:
         print('\n'.join(s))
 
 
+# Alias
+cfg = Configs
+
+
 def main():
     print('Default configs')
     Configs.print()

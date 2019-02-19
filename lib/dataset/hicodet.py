@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import h5py
 
+from config import Configs as cfg
 from scripts.utils import Timer
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.utils.data import Splits, preprocess_img
@@ -39,6 +41,17 @@ class HicoDetSplit(Dataset):
 
         # You could add data augmentation here.
         pass
+
+        # In case of precomputed features
+        if cfg.program.load_precomputed_feats:
+            precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
+            self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
+            self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
+            self.pc_image_index = self.pc_feats_file['image_index'][:]
+            self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
+            assert all(list(self.pc_image_index) == self.image_index)  # TODO decide whether to add support when this is not true
+        else:
+            self.pc_feats_file = None
 
     @property
     def num_predicates(self):
@@ -145,6 +158,15 @@ class HicoDetSplit(Dataset):
             'gt_inters': self._im_inters[index].copy(),
             'flipped': flipped,
         }
+
+        if self.pc_feats_file is not None:
+            inds = (self.pc_box_im_ids == self.image_index[index])  # this works because of the assumption that the index is the same
+            start, end = inds[0], inds[-1] + 1
+            assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+            entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
+            entry['box_scores'] = self.pc_feats_file['box_scores'][start:end, :]
+            entry['box_feats'] = self.pc_feats_file['box_feats'][start:end, :]
+            entry['box_pred_classes'] = self.pc_box_pred_classes[start:end, :]
         Timer.get('Epoch', 'GetBatch').toc()
         return entry
 

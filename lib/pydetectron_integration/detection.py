@@ -18,9 +18,6 @@ def im_detect_all_with_feats(model, inputs):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
-    # im_scales = inputs['im_info'][:, 2]
-    im_scales_np = inputs['im_info'][:, 2].cpu().numpy()
-
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
     nonnms_scores, nonnms_boxes, feat_map, box_feats, nonnms_im_ids = _im_detect_bbox(model, inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
@@ -41,7 +38,7 @@ def im_detect_all_with_feats(model, inputs):
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
 
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-    masks = _im_detect_mask(model, im_scales_np, im_ids, boxes, feat_map)
+    masks = im_detect_mask(model, inputs['im_info'], im_ids, boxes, feat_map)
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
     assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
@@ -222,7 +219,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
     return boxes_ids, box_classes, scores, boxes
 
 
-def _im_detect_mask(model, im_scales, im_inds, boxes, blob_conv):
+def im_detect_mask(model, im_info, im_inds, boxes, blob_conv):
     """
     Arguments:
         model (DetectionModelHelper): the detection model to use
@@ -234,11 +231,13 @@ def _im_detect_mask(model, im_scales, im_inds, boxes, blob_conv):
         pred_masks (ndarray): B x K x M x M array of class specific soft masks output by the network (must be processed by segm_results to convert
             into hard masks in the original image coordinate space)
     """
+    # TODO docs
 
     assert cfg.MRCNN.CLS_SPECIFIC_MASK
     assert boxes.shape[0] > 0
     M = cfg.MRCNN.RESOLUTION
 
+    im_scales = im_info[:, 2].cpu().numpy()
     boxes = boxes * im_scales[im_inds, None]
     mask_rois = np.concatenate([im_inds[:, None], boxes], axis=1).astype(np.float32, copy=False)
 

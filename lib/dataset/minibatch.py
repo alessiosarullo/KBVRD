@@ -19,6 +19,13 @@ class Minibatch:
             self.gt_inters = []
             self.gt_inters_im_ids = []
 
+        # These will be empty if not using precomputed features
+        self.pc_box_feats = []
+        self.pc_boxes = []
+        self.pc_box_scores = []
+        self.box_im_ids = []
+        self.box_pred_classes = []
+
     def append(self, ex):
         self.imgs += [ex['img']]
         self.img_infos += [np.array([*ex['img_size'], ex['scale']], dtype=np.float32)]
@@ -31,6 +38,15 @@ class Minibatch:
 
             self.gt_box_im_ids += [np.full_like(ex['gt_box_classes'], fill_value=len(self.gt_box_im_ids))]
             self.gt_inters_im_ids += [np.full(ex['gt_inters'].shape[0], fill_value=len(self.gt_inters_im_ids), dtype=np.int)]
+
+        try:
+            self.pc_box_feats += [ex['box_feats']]
+            self.pc_boxes += [ex['boxes']]
+            self.pc_box_scores += [ex['box_scores']]
+            self.box_im_ids += [np.full(ex['boxes'].shape[0], fill_value=len(self.box_im_ids))]
+            self.box_pred_classes += [ex['box_pred_classes']]
+        except KeyError:
+            pass
 
     def vectorize(self, device):
         self.imgs = _im_list_to_4d_tensor(self._to_tensor(self.imgs, device=device))  # 4D NCHW tensor
@@ -51,6 +67,16 @@ class Minibatch:
 
             assert len(self.gt_boxes) == len(self.gt_box_classes) == len(self.gt_box_im_ids)
             assert len(self.gt_inters) == len(self.gt_inters_im_ids)
+
+        assert len(self.pc_box_feats) == len(self.pc_boxes) == len(self.pc_box_scores) == len(self.box_im_ids) == len(self.box_pred_classes)
+        if self.pc_box_feats:
+            self.box_im_ids = self._to_tensor(self.box_im_ids, device, concat=True)
+            self.pc_boxes = self._to_tensor(self.pc_boxes, device, concat=True)
+            self.pc_box_scores = self._to_tensor(self.pc_box_scores, device, concat=True)
+            self.pc_box_feats = self._to_tensor(self.pc_box_feats, device, concat=True)
+            self.box_pred_classes = self._to_tensor(self.box_pred_classes, device, concat=True)
+        else:
+            self.pc_box_feats = self.pc_boxes = self.pc_box_scores = self.box_im_ids = self.box_pred_classes = None
 
     @classmethod
     def collate(cls, examples, training):
