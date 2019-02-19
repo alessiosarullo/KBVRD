@@ -13,8 +13,12 @@ class BaseConfigs:
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            parser.add_argument('--%s' % k, dest=k, type=type(v))
-            # TODO store for boolean
+            parser_kwargs = {'dest': k}
+            if type(v) == bool:
+                parser_kwargs['action'] = 'store_%s' % str(not v).lower()
+            else:
+                parser_kwargs['type'] = type(v)
+            parser.add_argument('--%s' % k, **parser_kwargs)
         return parser
 
     def __str__(self):
@@ -30,10 +34,15 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
 
         self.save_dir = 'exp'
+        self.load_precomputed_feats = False
 
     @property
     def detectron_pretrained_file_format(self):
         return os.path.join('data', 'pretrained_model', '%s.pkl')
+
+    @property
+    def precomputed_feats_file_format(self):
+        return os.path.join('cache', 'precomputed__%s.h5')
 
 
 class DataConfig(BaseConfigs):
@@ -114,7 +123,7 @@ def main():
     print('Default configs')
     Configs.print()
 
-    # sys.argv += ['--feats', '/path/to/feats']
+    sys.argv += ['--load_precomputed_feats']
     Configs.parse_args()
     print('Updated with args:', sys.argv)
     Configs.print()

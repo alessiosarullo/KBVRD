@@ -4,6 +4,7 @@ tmp*
 *jobscript*
 CoreNLP/
 cache/
+cache
 pydetectron/
 detectron_outputs/
 exp/

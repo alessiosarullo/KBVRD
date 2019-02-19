@@ -102,14 +102,16 @@ class HicoDetSplit(Dataset):
                 im_without_visible_interactions.append(i)
         return boxes, box_classes, interactions
 
-    def get_loader(self, batch_size, num_workers=0, num_gpus=1, **kwargs):
+    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
+        if shuffle is None:
+            shuffle = True if self.is_train else False,
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
             batch_size=batch_size * num_gpus,
-            shuffle=True if self.is_train else False,
+            shuffle=shuffle,
             num_workers=num_workers,
             collate_fn=lambda x: Minibatch.collate(x, training=self.is_train),
-            drop_last=True,
+            drop_last=drop_last,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
         )
