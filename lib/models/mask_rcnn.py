@@ -62,7 +62,7 @@ class MaskRCNN(nn.Module):
                 scores = x.pc_box_scores
                 box_im_ids = x.box_im_ids
                 box_pred_classes = x.box_pred_classes
-                box_classes = box_pred_classes[:, 0].int()
+                box_classes = box_pred_classes[:, 0].astype(np.int)
                 box_class_scores = box_pred_classes[:, 1]
 
                 feat_map = self.mask_rcnn.Conv_Body(x.imgs)
