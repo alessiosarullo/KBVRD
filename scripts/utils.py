@@ -1,10 +1,12 @@
 import numpy as np
 import time
+import torch
 
 
 class Timer:
     global_timer = None
     print_average = True
+    gpu_sync = False
 
     def __init__(self):
         self.start_time = None
@@ -32,7 +34,9 @@ class Timer:
         assert self.start_time is None
         self.start_time = time.perf_counter()
 
-    def toc(self):
+    def toc(self, synchronize=False):
+        if synchronize and self.__class__.gpu_sync:
+            torch.cuda.synchronize()
         self.last = time.perf_counter() - self.start_time
         self.total_time += self.last
         self.start_time = None
@@ -61,15 +65,16 @@ class Timer:
             global_t.toc()
         print('Total time:', '\n'.join(global_t._get_lines()))
 
+    @classmethod
+    def enable_gpu_sync(cls):
+        cls.gpu_sync = True
+
     @staticmethod
     def format(seconds):
         if seconds < 0.001:
             s, unit = '%.2f' % (seconds * 1000), 'ms'
-        # elif seconds < 0.1:
-        #     s, unit = '%.0f' % (seconds * 1000), 'ms'
         elif seconds < 1:
             s, unit = '%.0f' % (seconds * 1000), 'ms'
-            # s, unit = '%.2f' % seconds, 's'
         elif seconds < 10:
             s, unit = '%.1f' % seconds, 's'
         elif seconds < 60:
@@ -81,7 +86,6 @@ class Timer:
         else:
             s, unit = '%d:%02d' % divmod(seconds/60, 60), 'h'
         return '%s%s' % (s, unit)
-
 
 def print_params(model, breakdown=False):
     """

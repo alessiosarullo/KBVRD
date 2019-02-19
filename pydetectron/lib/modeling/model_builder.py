@@ -155,13 +155,11 @@ class Generalized_RCNN(nn.Module):
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').tic()
         blob_conv = self.Conv_Body(im_data)
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc(synchronize=True)
 
         Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').tic()
         rpn_ret = self.RPN(blob_conv, im_info, roidb)
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').toc()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').toc(synchronize=True)
 
         # if self.training:
         #     # can be used to infer fg/bg ratio
@@ -181,8 +179,7 @@ class Generalized_RCNN(nn.Module):
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
             else:
                 box_feat = self.Box_Head(blob_conv, rpn_ret)
-            torch.cuda.synchronize()
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc(synchronize=True)
 
             cls_score, bbox_pred = self.Box_Outs(box_feat)
         else:
