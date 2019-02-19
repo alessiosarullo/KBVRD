@@ -56,9 +56,6 @@ class MaskRCNN(nn.Module):
         apply_head_only = kwargs.get('head_only', False)
 
         if not apply_head_only:
-            inputs = {'data': x.imgs,
-                      'im_info': x.img_infos, }
-
             if x.pc_box_feats is not None:
                 box_feats = x.pc_box_feats
                 boxes = x.pc_boxes
@@ -68,9 +65,11 @@ class MaskRCNN(nn.Module):
                 box_classes = box_pred_classes[:, 0].int()
                 box_class_scores = box_pred_classes[:, 1]
 
-                feat_map = self.mask_rcnn.Conv_Body(inputs)
-                masks = im_detect_mask(self.mask_rcnn, inputs['im_info'], box_im_ids, boxes, feat_map)
+                feat_map = self.mask_rcnn.Conv_Body(x.imgs)
+                masks = im_detect_mask(self.mask_rcnn, x.img_infos, box_im_ids, boxes, feat_map)
             else:
+                inputs = {'data': x.imgs,
+                          'im_info': x.img_infos, }
                 Timer.get('Epoch', 'Batch', 'Detect').tic()
                 det_results = im_detect_all_with_feats(self.mask_rcnn, inputs)
                 box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, box_feats, scores = det_results
