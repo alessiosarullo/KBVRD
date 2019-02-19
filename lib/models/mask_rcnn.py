@@ -162,15 +162,15 @@ def vis_masks():
 def save_feats():
     # TODO move
     batch_size = 1
-    num_images = 8
 
     sys.argv += ['--batch_size', str(batch_size)]
     cfg.parse_args()
 
-    hds = HicoDetSplit(Splits.TRAIN)
+    im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
+    hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
     hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
 
-    mask_rcnn = MaskRCNN()  # add BG class
+    mask_rcnn = MaskRCNN()
     mask_rcnn.cuda()
     mask_rcnn.eval()
 

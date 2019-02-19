@@ -29,12 +29,13 @@ class HicoDetSplit(Dataset):
             self.annotations = [self.annotations[i] for i in im_inds]
             self.image_index = im_inds
         else:
-            im_inds = list(range(len(self.annotations)))
+            self.image_index = list(range(len(self.annotations)))
         if filter_invisible:
             vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
                                                   if any([not inter['invis'] for inter in ann['interactions']])])
-            self.image_index = [im_inds[i] for i in vis_im_inds]
-            print('Some images have been discarded due to not having visible interactions. Image index has changed.')
+            print('Some images have been discarded due to not having visible interactions. '
+                  'Image index has changed (from %d images to %d).' % (len(self.image_index), len(vis_im_inds)))
+            self.image_index = [self.image_index[i] for i in vis_im_inds]
 
         self._im_boxes, self._im_box_classes, self._im_inters = self.compute_gt_data()
         assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == len(self.annotations) == len(self.image_index)

@@ -33,6 +33,8 @@ class ProgramConfig(BaseConfigs):
         self.print_interval = 2
         self.randomize = False
 
+        self.num_images = 0  # restrict the dataset to this number of images if > 0
+
         self.save_dir = 'exp'
         self.load_precomputed_feats = False
 

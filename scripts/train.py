@@ -52,7 +52,8 @@ class Trainer:
         #     os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
         print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    def setup(self):
+    @staticmethod
+    def setup():
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
         random.seed(seed)
         np.random.seed(seed)
@@ -60,7 +61,8 @@ class Trainer:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        train = HicoDetSplit(Splits.TRAIN, im_inds=list(range(16)))  # FIXME
+        im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
+        train = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
         detector = BaseModel(train)
         train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
 
