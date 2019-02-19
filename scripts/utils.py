@@ -30,11 +30,10 @@ class Timer:
 
     def _tic(self):
         assert self.start_time is None
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
 
     def toc(self):
-        assert self.start_time is not None
-        self.last = time.time() - self.start_time
+        self.last = time.perf_counter() - self.start_time
         self.total_time += self.last
         self.start_time = None
         self.num_instances += 1
@@ -47,7 +46,7 @@ class Timer:
 
     def _get_lines(self):
         sep = ' ' * 4
-        s = [self.format(self.spent(average=self.__class__.print_average))]
+        s = ['%s (x%d)' % (self.format(self.spent(average=self.__class__.print_average)), self.num_instances)]
         for k, v in self.subtimers.items():
             sub_s = v._get_lines()
             s.append('%s %s: %s' % (sep, k, sub_s[0]))

@@ -89,10 +89,7 @@ class single_scale_rpn_outputs(nn.Module):
         im_info: (CPU Variable)
         roidb: (list of ndarray)
         """
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Conv').tic()
         rpn_conv = F.relu(self.RPN_conv(x), inplace=True)
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'Conv').toc()
 
         rpn_cls_logits = self.RPN_cls_score(rpn_conv)
 
@@ -100,8 +97,6 @@ class single_scale_rpn_outputs(nn.Module):
 
         return_dict = {
             'rpn_cls_logits': rpn_cls_logits, 'rpn_bbox_pred': rpn_bbox_pred}
-
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').tic()
 
         if not self.training or cfg.MODEL.FASTER_RCNN:
             # Proposals are needed during:
@@ -132,8 +127,6 @@ class single_scale_rpn_outputs(nn.Module):
                 # Alias rois to rpn_rois for inference
                 return_dict['rois'] = return_dict['rpn_rois']
 
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN', 'P2').toc()
         return return_dict
 
 

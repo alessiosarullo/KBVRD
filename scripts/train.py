@@ -5,7 +5,6 @@ Training script for scene graph detection. Integrated with my faster rcnn setup
 import datetime
 import os
 import random
-import time
 
 import numpy as np
 import pandas as pd
@@ -49,8 +48,8 @@ class Trainer:
                 }, save_file)
 
         Timer.get().print()
-        if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
-            os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
+        # if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
+        #     os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
         print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     def setup(self):

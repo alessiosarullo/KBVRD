@@ -26,7 +26,7 @@ class BaseConfigs:
 
 class ProgramConfig(BaseConfigs):
     def __init__(self):
-        self.print_interval = 10
+        self.print_interval = 2
         self.randomize = False
 
         self.save_dir = 'exp'
@@ -57,7 +57,7 @@ class OptimizerConfig(BaseConfigs):
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
-        self.num_epochs = 10
+        self.num_epochs = 3
         self.batch_size = 4
 
 

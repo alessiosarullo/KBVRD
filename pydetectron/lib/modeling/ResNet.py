@@ -140,7 +140,6 @@ class ResNet_roi_conv5_head(nn.Module):
         return mapping_to_detectron, orphan_in_detectron
 
     def forward(self, x, rpn_ret):
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'ROI').tic()
         x = self.roi_xform(
             x, rpn_ret,
             blob_rois='rois',
@@ -149,16 +148,8 @@ class ResNet_roi_conv5_head(nn.Module):
             spatial_scale=self.spatial_scale,
             sampling_ratio=cfg.FAST_RCNN.ROI_XFORM_SAMPLING_RATIO
         )
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'ROI').toc()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Res5').tic()
         res5_feat = self.res5(x)
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Res5').toc()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Pool').tic()
         x = self.avgpool(res5_feat)
-        torch.cuda.synchronize()
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head', 'Pool').toc()
         if cfg.MODEL.SHARE_RES5 and self.training:
             return x, res5_feat
         else:

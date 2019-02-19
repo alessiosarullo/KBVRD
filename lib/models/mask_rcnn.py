@@ -60,10 +60,10 @@ class MaskRCNN(nn.Module):
             inputs = {'data': x.imgs,
                       'im_info': x.img_infos, }
             Timer.get('Epoch', 'Batch', 'Detect').tic()
-            box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
+            box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
             Timer.get('Epoch', 'Batch', 'Detect').toc()
             if kwargs.get('return_det_results', False):
-                return box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map
+                return box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, box_feats
 
             # pick the mask corresponding to the predicted class and binarize it
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
@@ -72,7 +72,6 @@ class MaskRCNN(nn.Module):
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)
                                         ], axis=1)
-            box_feats = self.get_rois_feats(feat_map, rois=boxes_ext[:, :5])  # FIXME seems like a waste to repeat it
             return boxes_ext, masks, feat_map, box_feats
         else:
             try:
@@ -92,7 +91,7 @@ class MaskRCNN(nn.Module):
         return rois_feats
 
 
-def main():
+def vis_masks():
     output_dir = 'detectron_outputs/test_ds/'
 
     batch_size = 2
@@ -112,13 +111,9 @@ def main():
         print('Batch', batch_i)
         batch = batch  # type: Minibatch
 
-        scores, boxes, box_classes, im_ids, masks, feat_map = mask_rcnn(batch, return_det_results=True)
+        scores, boxes, box_classes, im_ids, masks, feat_map, box_feats = mask_rcnn(batch, return_det_results=True)
 
         boxes_with_scores = np.concatenate([boxes, scores[:, None]], axis=1)
-        print(np.sort(boxes.astype(np.int), axis=0))
-        print(scores)
-        print()
-        continue
 
         masks = masks.cpu().numpy()
         for i in np.unique(im_ids):
@@ -147,10 +142,48 @@ def main():
                 kp_thresh=2
             )
 
-    import pickle
-    with open('cache/tmp_mask_result.pkl', 'wb') as f:
-        pickle.dump((scores, boxes, box_classes, im_ids, feat_map), f)
+
+def save_feats():
+    # TODO move
+    batch_size = 2
+    num_images = 8
+
+    cfg.parse_args()
+
+    hds = HicoDetSplit(Splits.TEST, im_inds=list(range(num_images)))
+    hdsl = hds.get_loader(batch_size=batch_size)
+
+    mask_rcnn = MaskRCNN()  # add BG class
+    mask_rcnn.cuda()
+    mask_rcnn.eval()
+
+    import h5py
+    feat_file = h5py.File('cache/box_feats.h5', 'w')
+    feat_file.create_dataset('box_feats')
+    feat_file.create_dataset('feats', shape=(0, mask_rcnn.output_feat_dim + 1), maxshape=(None, mask_rcnn.output_feat_dim + 1))
+
+    try:
+        cached_feats = []
+        for batch_i, batch in enumerate(hdsl):
+            print('Batch', batch_i)
+            batch = batch  # type: Minibatch
+
+            scores, boxes, box_classes, im_ids, masks, feat_map, box_feats = mask_rcnn(batch, return_det_results=True)
+            box_feats = box_feats.cpu().numpy()
+            cached_feats.append(np.concatenate([im_ids[:, None], boxes, box_feats], axis=1))
+            # TODO check and continue
+            if batch_i % 1000 == 0 or batch_i == len(hdsl) - 1:
+                cached_feats = np.concatenate(cached_feats, axis=0)
+                num_rois, feat_dim = cached_feats.shape
+                if num_rois > 0:
+                    feat_file['feats'].resize(feat_file['feats'].shape[0] + num_rois, axis=0)
+                    feat_file['feats'][-num_rois:, :] = cached_feats
+                cached_feats = []
+    finally:
+        feat_file.close()
+
 
 
 if __name__ == '__main__':
-    main()
+    # vis_masks()
+    save_feats()

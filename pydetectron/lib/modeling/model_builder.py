@@ -176,9 +176,6 @@ class Generalized_RCNN(nn.Module):
             return_dict['blob_conv'] = blob_conv
 
         if not cfg.MODEL.RPN_ONLY:
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Sync').tic()
-            torch.cuda.synchronize()
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Sync').toc()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
             if cfg.MODEL.SHARE_RES5 and self.training:
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
@@ -186,10 +183,8 @@ class Generalized_RCNN(nn.Module):
                 box_feat = self.Box_Head(blob_conv, rpn_ret)
             torch.cuda.synchronize()
             Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc()
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').tic()
+
             cls_score, bbox_pred = self.Box_Outs(box_feat)
-            torch.cuda.synchronize()
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Outs').toc()
         else:
             # TODO: complete the returns for RPN only situation
             pass
@@ -261,6 +256,7 @@ class Generalized_RCNN(nn.Module):
             # Testing
             return_dict['roi_scales'] = rpn_ret['roi_scales']
             return_dict['rois'] = rpn_ret['rois']
+            return_dict['roi_feats'] = box_feat
             return_dict['cls_score'] = cls_score
             return_dict['bbox_pred'] = bbox_pred
 

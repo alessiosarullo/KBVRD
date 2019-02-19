@@ -22,7 +22,7 @@ def im_detect_all_with_feats(model, inputs):
     im_scales_np = inputs['im_info'][:, 2].cpu().numpy()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs)
+    nonnms_scores, nonnms_boxes, feat_map, box_feats, nonnms_im_ids = _im_detect_bbox(model, inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
@@ -35,6 +35,7 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
+    box_feats = box_feats[box_inds, :]
 
     assert boxes.shape[0] > 0
     # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
@@ -43,8 +44,12 @@ def im_detect_all_with_feats(model, inputs):
     masks = _im_detect_mask(model, im_scales_np, im_ids, boxes, feat_map)
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
-    assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == masks.shape[0] == scores.shape[0]
-    return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, scores
+    assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
+           masks.shape[0] == scores.shape[0] == box_feats.shape[0]
+    assert all([s == 1 for s in box_feats.shape[2:]])
+    box_feats.squeeze_(dim=3)
+    box_feats.squeeze_(dim=2)
+    return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 
 def _im_detect_bbox(model, inputs):
@@ -59,9 +64,6 @@ def _im_detect_bbox(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').tic()
     return_dict = model(**inputs)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync').tic()
-    torch.cuda.synchronize()
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Sync').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
@@ -81,7 +83,7 @@ def _im_detect_bbox(model, inputs):
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
-    return scores, pred_boxes, return_dict['blob_conv'], im_inds # NOTE: pred_boxes are scaled back to the original image size
+    return scores, pred_boxes, return_dict['blob_conv'], return_dict['roi_feats'], im_inds # NOTE: pred_boxes are scaled back to the image size
 
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
