@@ -58,9 +58,7 @@ def _im_detect_bbox(model, inputs):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').tic()
     return_dict = model(**inputs)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward').toc()
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 

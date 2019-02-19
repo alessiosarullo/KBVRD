@@ -65,8 +65,12 @@ class MaskRCNN(nn.Module):
                 box_classes = box_pred_classes[:, 0].astype(np.int)
                 box_class_scores = box_pred_classes[:, 1]
 
+                Timer.get('Epoch', 'Batch', 'Conv').tic()
                 feat_map = self.mask_rcnn.Conv_Body(x.imgs)
+                Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
+                Timer.get('Epoch', 'Batch', 'Mask').tic()
                 masks = im_detect_mask(self.mask_rcnn, x.img_infos, box_im_ids, boxes, feat_map)
+                Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
             else:
                 inputs = {'data': x.imgs,
                           'im_info': x.img_infos, }

@@ -153,13 +153,13 @@ class Generalized_RCNN(nn.Module):
 
         return_dict = {}  # A dict to collect return variables
 
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').tic()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Conv').tic()
         blob_conv = self.Conv_Body(im_data)
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Conv').toc(synchronize=True)
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Conv').toc(synchronize=True)
 
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').tic()
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'RPN').tic()
         rpn_ret = self.RPN(blob_conv, im_info, roidb)
-        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'RPN').toc(synchronize=True)
+        Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'RPN').toc(synchronize=True)
 
         # if self.training:
         #     # can be used to infer fg/bg ratio
@@ -174,12 +174,12 @@ class Generalized_RCNN(nn.Module):
             return_dict['blob_conv'] = blob_conv
 
         if not cfg.MODEL.RPN_ONLY:
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').tic()
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Head').tic()
             if cfg.MODEL.SHARE_RES5 and self.training:
                 box_feat, res5_feat = self.Box_Head(blob_conv, rpn_ret)
             else:
                 box_feat = self.Box_Head(blob_conv, rpn_ret)
-            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Forward', 'Head').toc(synchronize=True)
+            Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox', 'Head').toc(synchronize=True)
 
             cls_score, bbox_pred = self.Box_Outs(box_feat)
         else:
