@@ -163,7 +163,7 @@ class HicoDetSplit(Dataset):
         }
 
         if self.pc_feats_file is not None:
-            inds = (self.pc_box_im_ids == self.image_index[index])  # this works because of the assumption that the index is the same
+            inds = np.flatnonzero(self.pc_box_im_ids == self.image_index[index])  # this works because of the assumption that the index is the same
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
             entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
