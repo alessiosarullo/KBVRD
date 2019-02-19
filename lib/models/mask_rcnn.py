@@ -110,8 +110,8 @@ def vis_masks():
     cfg.parse_args()
 
     im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
-    hds = HicoDetSplit(Splits.TEST, im_inds=im_inds)
-    hdsl = hds.get_loader(batch_size=cfg.opt.batch_size)
+    hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
+    hdsl = hds.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)
     dummy_coco = dummy_datasets.get_coco_dataset()  # this is used for class names
 
     mask_rcnn = MaskRCNN()  # add BG class
