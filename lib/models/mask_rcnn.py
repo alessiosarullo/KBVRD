@@ -105,9 +105,8 @@ class MaskRCNN(nn.Module):
 
 
 def vis_masks():
-    output_dir = 'detectron_outputs/test_ds/'
-
     cfg.parse_args()
+    output_dir = os.path.join('output', 'tmp', '%s' % ('pre' if cfg.program.load_precomputed_feats else 'e2e'))
 
     im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
     hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
