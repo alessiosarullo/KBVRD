@@ -218,7 +218,7 @@ def save_feats():
 
                     # feat_file['feat_maps'].resize(feat_file['feat_maps'].shape[0] + num_rois, axis=0)
                     # feat_file['feat_maps'][-num_rois:, :] = cached_fmaps
-                cached_feats, cached_fmaps = [], []
+                cached_feats, cached_fmaps, cached_scores = [], [], []
 
         all_boxes = np.concatenate(all_boxes, axis=0)
         box_im_ids = np.concatenate(box_im_ids)
