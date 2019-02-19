@@ -70,11 +70,11 @@ class Minibatch:
 
         assert len(self.pc_box_feats) == len(self.pc_boxes) == len(self.pc_box_scores) == len(self.box_im_ids) == len(self.box_pred_classes)
         if self.pc_box_feats:
-            self.box_im_ids = self._to_tensor(self.box_im_ids, device, concat=True)
-            self.pc_boxes = self._to_tensor(self.pc_boxes, device, concat=True)
-            self.pc_box_scores = self._to_tensor(self.pc_box_scores, device, concat=True)
+            self.box_im_ids = np.concatenate(self.box_im_ids, axis=0)
+            self.pc_boxes = np.concatenate(self.pc_boxes, axis=0)
+            self.pc_box_scores = np.concatenate(self.pc_box_scores, axis=0)
             self.pc_box_feats = self._to_tensor(self.pc_box_feats, device, concat=True)
-            self.box_pred_classes = self._to_tensor(self.box_pred_classes, device, concat=True)
+            self.box_pred_classes = np.concatenate(self.box_pred_classes, axis=0)
         else:
             self.pc_box_feats = self.pc_boxes = self.pc_box_scores = self.box_im_ids = self.box_pred_classes = None
 
