@@ -63,8 +63,8 @@ class Trainer:
 
         im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
         train = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
-        detector = BaseModel(train)
         train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
+        detector = BaseModel(train)
 
         return detector, train_loader
 
