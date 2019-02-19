@@ -52,7 +52,7 @@ class HicoDetSplit(Dataset):
             self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
             self.pc_image_index = self.pc_feats_file['image_index'][:]
             self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
-            assert all(list(self.pc_image_index) == self.image_index)  # TODO decide whether to add support when this is not true
+            assert np.all(self.pc_image_index == np.array(self.image_index, dtype=np.int))  # TODO decide whether to add support when this is not true
         else:
             self.pc_feats_file = None
 
