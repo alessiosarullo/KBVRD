@@ -25,7 +25,7 @@ class Trainer:
 
     def train(self):
         print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        Timer.gpu_sync = True
+        Timer.gpu_sync = True  # FIXME disable
         cfg.parse_args()
         cfg.print()
 

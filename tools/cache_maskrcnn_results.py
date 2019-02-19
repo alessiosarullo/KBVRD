@@ -34,7 +34,6 @@ def save_feats():
         all_boxes, box_im_ids, all_pred_classes = [], [], []
         cached_feats, cached_fmaps, cached_scores = [], [], []
         for im_i, im_data in enumerate(hdsl):
-            print('Batch', im_i)
             im_data = im_data  # type: Minibatch
 
             box_class_scores, boxes, box_classes, im_ids_in_batch, masks, feat_map, box_feats, scores = mask_rcnn(im_data, return_det_results=True)
@@ -51,6 +50,7 @@ def save_feats():
             cached_fmaps.append(feat_map)
             cached_scores.append(scores)
             if im_i % 1000 == 0 or im_i == len(hdsl) - 1:
+                print('Batch %6d/%d' % (im_i, len(hdsl)))
                 cached_feats = np.concatenate(cached_feats, axis=0)
                 cached_scores = np.concatenate(cached_scores, axis=0)
                 # cached_fmaps = np.concatenate(cached_fmaps, axis=0)
