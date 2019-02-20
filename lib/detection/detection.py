@@ -111,10 +111,11 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
         scores_i = all_scores[mask_i, :]
         boxes_i = all_boxes[mask_i, :]
         boxes_ids_i = all_boxes_ids[mask_i]
+        max_score_i = np.amax(scores_i[:, 1:])
 
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
-            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, np.amax(scores_i))
+            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, max_score_i)
             scores_ij = scores_i[class_boxes_mask, j]
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
