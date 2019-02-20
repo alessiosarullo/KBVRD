@@ -7,7 +7,7 @@ from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit
 from lib.dataset.minibatch import Minibatch
 from lib.models.mask_rcnn import MaskRCNN
-from lib.utils.data import Splits
+from lib.dataset.utils import Splits
 
 
 def save_feats():
@@ -37,6 +37,9 @@ def save_feats():
             im_data = im_data  # type: Minibatch
 
             box_class_scores, boxes, box_classes, im_ids_in_batch, masks, feat_map, box_feats, scores = mask_rcnn(im_data, return_det_results=True)
+            if boxes.shape[0] == 0:
+                print('No boxes in image', im_i)
+                raise ValueError
             assert np.all(im_ids_in_batch == 0)  # because batch size is 1
             im_ids = np.full((boxes.shape[0], 1), fill_value=im_i)
             pred_classes = np.stack([box_classes.astype(np.float, copy=False), box_class_scores], axis=1)

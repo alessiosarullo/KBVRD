@@ -1,8 +1,6 @@
 from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
-from scripts.utils import Timer
-import torch
 
 from core.config import cfg
 from modeling.generate_anchors import generate_anchors
@@ -10,7 +8,7 @@ from modeling.generate_anchors import generate_anchors
 from pydetectron.lib.modeling.generate_proposals_torch import GenerateProposalsOp
 from modeling.generate_proposal_labels import GenerateProposalLabelsOp
 import modeling.FPN as FPN
-import utils.net as net_utils
+from analysis import utils as net_utils
 
 
 # ---------------------------------------------------------------------------- #

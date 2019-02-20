@@ -9,7 +9,7 @@ import h5py
 from config import Configs as cfg
 from scripts.utils import Timer
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.utils.data import Splits, preprocess_img
+from lib.dataset.utils import Splits, preprocess_img
 from lib.dataset.minibatch import Minibatch
 
 

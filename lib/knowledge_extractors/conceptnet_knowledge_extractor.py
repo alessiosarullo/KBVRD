@@ -5,7 +5,7 @@ import random
 import numpy as np
 from drivers.conceptnet_driver import Conceptnet
 from drivers.hicodet_driver import HicoDet
-from utils.plot import plot_mat
+from analysis.utils import plot_mat
 
 from lib.dataset.word_embeddings import WordEmbeddings
 

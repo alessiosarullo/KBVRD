@@ -34,18 +34,18 @@ def im_detect_all_with_feats(model, inputs):
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
     box_feats = box_feats[box_inds, :]
 
-    assert boxes.shape[0] > 0
-    # masks = boxes.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
+    if boxes.shape[0] > 0:
+        Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
+        masks = im_detect_mask(model, inputs['im_info'], im_ids, boxes, feat_map)
+        Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-    masks = im_detect_mask(model, inputs['im_info'], im_ids, boxes, feat_map)
-    Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
-
-    assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
-           masks.shape[0] == scores.shape[0] == box_feats.shape[0]
-    assert all([s == 1 for s in box_feats.shape[2:]])
-    box_feats.squeeze_(dim=3)
-    box_feats.squeeze_(dim=2)
+        assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
+               masks.shape[0] == scores.shape[0] == box_feats.shape[0]
+        assert all([s == 1 for s in box_feats.shape[2:]])
+        box_feats.squeeze_(dim=3)
+        box_feats.squeeze_(dim=2)
+    else:
+        masks = boxes.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 

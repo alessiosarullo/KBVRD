@@ -4,11 +4,20 @@ import h5py
 import os
 
 
-def load_allowed_rels(version):
+def load_vg_sgg_dicts():
     with open(os.path.join('data', 'VG-SGG', 'VG-SGG-dicts.json'), 'r') as f:
-        _dbdict = json.load(f)
-        p2i = _dbdict['predicate_to_idx']
-        l2i = _dbdict['label_to_idx']
+        dbdict = json.load(f)
+        idx_to_pred_dict = dbdict['idx_to_predicate']
+        idx_to_label_dict = dbdict['idx_to_label']
+        pred_to_idx = dbdict['predicate_to_idx']
+        label_to_idx = dbdict['label_to_idx']
+        assert '0' not in idx_to_pred_dict and '0' not in idx_to_label_dict
+        idx_to_pred = ['__no_rel__'] + [idx_to_pred_dict[str(i + 1)] for i in range(len(idx_to_pred_dict))]
+        idx_to_label = ['__background__'] + [idx_to_label_dict[str(i + 1)] for i in range(len(idx_to_label_dict))]
+    return idx_to_pred, idx_to_label, pred_to_idx, label_to_idx
+
+def load_allowed_rels(version):
+    p2i, l2i = load_vg_sgg_dicts()[2:]
 
     print('Results version: v%d.' % version)
     with open('data/Ontology/RESULTSv%d' % version, 'r') as f:
@@ -138,16 +147,32 @@ def check_on_kb(rels, pred_class_index, box_class_index):
 
 
 def main():
-    with open(os.path.join('data', 'VG-SGG', 'VG-SGG-dicts.json'), 'r') as f:
-        _dbdict = json.load(f)
-        _idx_to_pred = _dbdict['idx_to_predicate']
-        _idx_to_label = _dbdict['idx_to_label']
-        assert '0' not in _idx_to_pred and '0' not in _idx_to_label
-        pred_class_index = ['__no_rel__'] + [_idx_to_pred[str(i + 1)] for i in range(len(_idx_to_pred))]
-        box_class_index = ['__background__'] + [_idx_to_label[str(i + 1)] for i in range(len(_idx_to_label))]
+    pred_class_index, box_class_index = load_vg_sgg_dicts()[:2]
     gt_dict = read_from_gt(split=0)
     check_on_kb(gt_dict['rel_classes'], pred_class_index, box_class_index)
 
 
+def stats():
+    version = 6
+    gt_pred_classes, gt_object_classes = load_vg_sgg_dicts()[:2]
+    ont_object_classes = set()
+    with open('data/Ontology/RESULTSv%d' % version, 'r') as f:
+        fc = f.readlines()
+        blanks = [i for i, l in enumerate(fc) if l.strip() == '']
+        assert len(blanks) == 2
+        kb_rel_lines = fc[blanks[0] + 1:blanks[1]]
+        for l in kb_rel_lines:
+            s, p_str, o, b = l.split()
+            s = s.replace('_', ' ')
+            p_str = p_str.replace('_', ' ')
+            o = o.replace('_', ' ')
+            b = (b == 'true')
+            ont_object_classes.add(s)
+            ont_object_classes.add(o)
+    missing_object_classes = sorted(set(gt_object_classes) - ont_object_classes)
+    print(len(missing_object_classes), '\n'.join(missing_object_classes))
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    stats()

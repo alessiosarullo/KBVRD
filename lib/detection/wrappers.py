@@ -26,11 +26,10 @@ from model.nms.nms_gpu import nms_gpu as _pydet_nms_gpu
 
 from modeling.model_builder import Generalized_RCNN as _PydetGeneralized_RCNN
 
-import utils.misc as _pydet_misc_utils
-import utils.vis as _pydet_vis_utils
-from utils.timer import Timer as _PydetTimer
-from utils.detectron_weight_helper import load_detectron_weight as _pydet_load_detectron_weight
-from utils.blob import \
+from analysis import utils as _pydet_misc_utils, utils as _pydet_vis_utils
+from analysis.utils import Timer as _PydetTimer
+from analysis.utils import load_detectron_weight as _pydet_load_detectron_weight
+from analysis.utils import \
     prep_im_for_blob as _pydet_prep_im_for_blob, \
     get_image_blob as _pydet_get_image_blob
 

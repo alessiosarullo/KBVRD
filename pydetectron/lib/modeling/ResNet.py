@@ -1,15 +1,11 @@
-import os
 from collections import OrderedDict
 
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from scripts.utils import Timer
 
 from core.config import cfg
 import nn as mynn
-import utils.net as net_utils
-from utils.resnet_weights_helper import convert_state_dict
+from analysis import utils as net_utils
+
 
 # ---------------------------------------------------------------------------- #
 # Bits for specific architectures (ResNet50, ResNet101, ...)

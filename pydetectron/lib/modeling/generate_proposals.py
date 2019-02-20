@@ -4,7 +4,7 @@ import numpy as np
 from torch import nn
 
 from core.config import cfg
-import utils.boxes as box_utils
+from analysis import utils as box_utils
 
 logger = logging.getLogger(__name__)
 

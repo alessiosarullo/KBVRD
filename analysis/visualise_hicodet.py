@@ -1,5 +1,5 @@
 import numpy as np
-from utils.plot import plot_mat
+from analysis.utils import plot_mat
 
 from lib.dataset.hicodet_driver import HicoDet
 

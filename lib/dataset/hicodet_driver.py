@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
 from lib.detection.wrappers import COCO_CLASSES
-from lib.utils.data import Splits
+from lib.dataset.utils import Splits
 
 
 class HicoDet:
