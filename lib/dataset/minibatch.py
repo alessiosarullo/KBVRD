@@ -10,7 +10,7 @@ class Minibatch:
 
         self.imgs = []
         self.img_infos = []
-        self.img_fns = []
+        self.other_ex_data = []
 
         if training:
             self.gt_boxes = []
@@ -29,7 +29,8 @@ class Minibatch:
     def append(self, ex):
         self.imgs += [ex['img']]
         self.img_infos += [np.array([*ex['img_size'], ex['scale']], dtype=np.float32)]
-        self.img_fns += [ex['fn']]
+
+        self.other_ex_data += [{k: ex.get(k, None) for k in ['index', 'fn', 'flipped']}]
 
         if self.training:
             self.gt_boxes += [ex['gt_boxes'] * ex['scale']]

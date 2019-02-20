@@ -14,7 +14,7 @@ from lib.dataset.minibatch import Minibatch
 
 
 class HicoDetSplit(Dataset):
-    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None):
+    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None, random_flipping=False):
         """
         """
         assert split in Splits
@@ -22,6 +22,7 @@ class HicoDetSplit(Dataset):
 
         self.split = split
         self.hicodet = hicodet_driver
+        self.random_flipping = random_flipping
 
         # Initialize
         self.annotations = hicodet_driver.split_data[split]['annotations']
@@ -144,7 +145,7 @@ class HicoDetSplit(Dataset):
         gt_boxes = self._im_boxes[index].astype(np.float, copy=False)
 
         # Optionally flip the image if we're doing training
-        flipped = self.is_train and np.random.random() > 0.5
+        flipped = self.random_flipping and self.is_train and np.random.random() > 0.5
         if flipped:
             img = img[:, :, ::-1]
             gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
