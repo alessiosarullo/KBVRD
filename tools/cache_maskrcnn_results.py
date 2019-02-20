@@ -32,7 +32,7 @@ def save_feats():
 
     try:
         all_boxes, box_im_ids, all_pred_classes = [], [], []
-        cached_feats, cached_fmaps, cached_scores = [], [], []
+        cached_feats, cached_scores = [], []
         for im_i, im_data in enumerate(hdsl):
             im_data = im_data  # type: Minibatch
 
