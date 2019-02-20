@@ -17,6 +17,7 @@ def save_feats():
     sys.argv += ['--batch_size', str(batch_size)]
     cfg.parse_args()
 
+    # im_inds = list(range(12944, 12945))
     im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
     hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds, flipping_prob=float(flipping))
     hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
