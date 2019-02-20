@@ -30,7 +30,7 @@ class Minibatch:
         self.imgs += [ex['img']]
         self.img_infos += [np.array([*ex['img_size'], ex['scale']], dtype=np.float32)]
 
-        self.other_ex_data += [{k: ex.get[k] for k in ['index', 'fn', 'flipped']}]
+        self.other_ex_data += [{k: ex[k] for k in ['index', 'fn', 'flipped']}]
 
         if self.training:
             self.gt_boxes += [ex['gt_boxes'] * ex['scale']]
