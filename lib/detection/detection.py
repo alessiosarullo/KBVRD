@@ -29,7 +29,7 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     nonnms_boxes = nonnms_boxes.cpu().numpy()
 
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
-    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit_np(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
@@ -105,77 +105,6 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
     num_classes = cfg.MODEL.NUM_CLASSES
 
-    image_masks = [im_ids == im_id for im_id in torch.unique(im_ids, sorted=True)]
-    all_boxes_ids = torch.arange(all_boxes.shape[0], dtype=torch.float32, device=all_boxes.device)
-
-    # Apply threshold on detection probabilities and apply NMS. Skip j = 0, because it's the background class
-    all_results = []
-    for i, mask_i in enumerate(image_masks):
-        scores_i = all_scores[mask_i, :]
-        boxes_i = all_boxes[mask_i, :]
-        boxes_ids_i = all_boxes_ids[mask_i]
-
-        boxes_and_infos_per_class = {}
-        for j in range(1, num_classes):
-            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, np.amax(scores_i))
-
-            scores_ij = scores_i[class_boxes_mask, j]
-            if scores_ij.shape[0] > 0:
-                boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
-                boxes_ids_ij = boxes_ids_i[class_boxes_mask]
-
-                rois_ij = torch.cat([boxes_ij, scores_ij.view(-1, 1)], dim=1).float()
-                keep = nms_gpu(rois_ij, cfg.TEST.NMS).long().squeeze(dim=1)
-                # print(i, j, len(keep))
-
-                scores_ij = scores_ij[keep]
-                boxes_ids_ij = boxes_ids_ij[keep]
-                boxes_ij = boxes_ij[keep, :]
-                j_vec = torch.full_like(boxes_ids_ij, fill_value=j)
-                box_infos_ij = torch.stack([scores_ij, boxes_ids_ij, j_vec], dim=1)
-                boxes_and_infos_per_class[j] = torch.cat([boxes_ij, box_infos_ij], dim=1)
-
-        # Limit to max_per_image detections **over all classes**
-        if cfg.TEST.DETECTIONS_PER_IM > 0:
-            image_scores = []
-            for j in range(1, num_classes):
-                if j in boxes_and_infos_per_class:
-                    image_scores.append(boxes_and_infos_per_class[j][:, 4])
-            image_scores = torch.cat(image_scores)
-            if len(image_scores) > cfg.TEST.DETECTIONS_PER_IM:
-                image_thresh = torch.sort(image_scores)[0][-cfg.TEST.DETECTIONS_PER_IM]
-                for j in range(1, num_classes):
-                    if j in boxes_and_infos_per_class:
-                        keep = boxes_and_infos_per_class[j][:, 4] >= image_thresh
-                        boxes_and_infos_per_class[j] = boxes_and_infos_per_class[j][keep, :]
-
-        im_result = torch.cat([boxes_and_infos_per_class[j] for j in range(1, num_classes) if j in boxes_and_infos_per_class], dim=0)
-        all_results.append(im_result)
-
-    all_results = torch.cat(all_results, dim=0)
-    boxes_ids = all_results[:, 5].long()
-    box_classes = all_results[:, 6].long()
-    scores = all_results[:, 4]
-    boxes = all_results[:, :4]
-    return boxes_ids, box_classes, scores, boxes
-
-
-def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
-    """
-    Returns bounding-box detection results by thresholding on scores and applying non-maximum suppression (NMS). In the following B denotes the
-    number of detections and C the number of classes
-    :param all_scores [array, B x C]: Each row represents a list of object detection confidence scores for each of the object classes in the dataset
-                (including the background class). Element (i, j) corresponds to the box at `all_boxes[i, j * 4:(j + 1) * 4]`.
-    :param all_boxes [array, B x 4C]: Each row represents a list of predicted bounding boxes for each of the object classes in  the dataset
-                (including the background class). The detections in each row originate from the same object proposal.
-    :param im_inds [array, R]: Which image the corresponding box belongs to.
-    :return:
-    """
-    assert not cfg.TEST.SOFT_NMS.ENABLED
-    assert not cfg.TEST.BBOX_VOTE.ENABLED
-
-    num_classes = cfg.MODEL.NUM_CLASSES
-
     image_masks = [im_ids == im_id for im_id in np.unique(im_ids)]
     all_boxes_ids = np.arange(all_boxes.shape[0])
 
@@ -188,7 +117,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
 
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
-            class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, np.amax(scores_i))
             scores_ij = scores_i[class_boxes_mask, j]
             boxes_ij = boxes_i[class_boxes_mask, j * 4:(j + 1) * 4]
             boxes_ids_ij = boxes_ids_i[class_boxes_mask]
@@ -221,7 +150,7 @@ def _box_results_with_nms_and_limit_np(all_scores, all_boxes, im_ids):
     boxes_ids = all_results[:, 5].astype(np.int)
     box_classes = all_results[:, 6].astype(np.int)
     scores = all_results[:, 4]
-    boxes = all_results[:, :4]
+    boxes = all_results[:, :4].astype(np.float32, copy=False)
     return boxes_ids, box_classes, scores, boxes
 
 
