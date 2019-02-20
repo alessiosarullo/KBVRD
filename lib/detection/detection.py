@@ -18,8 +18,10 @@ def im_detect_all_with_feats(model, inputs):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
+    im_info = inputs['im_info']
+
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
-    nonnms_scores, nonnms_boxes, feat_map, box_feats, nonnms_im_ids = _im_detect_bbox(model, inputs)
+    nonnms_scores, nonnms_boxes, feat_map, box_feats, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
@@ -36,7 +38,7 @@ def im_detect_all_with_feats(model, inputs):
 
     if boxes.shape[0] > 0:
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-        masks = im_detect_mask(model, inputs['im_info'], im_ids, boxes, feat_map)
+        masks = im_detect_mask(model, im_info, im_ids, boxes, feat_map)
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
         assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
@@ -49,7 +51,7 @@ def im_detect_all_with_feats(model, inputs):
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 
-def _im_detect_bbox(model, inputs):
+def _im_detect_bbox(model, inputs, im_info):
     """Prepare the bbox for testing"""
 
     assert not cfg.PYTORCH_VERSION_LESS_THAN_040
@@ -58,17 +60,13 @@ def _im_detect_bbox(model, inputs):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
+    im_scales = im_info[:, 2]
     return_dict = model(**inputs)
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
-    # try:  # Torch
-    boxes = return_dict['rois'][:, 1:5]
+    boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     im_inds = return_dict['rois'][:, 0]
-    im_scales = return_dict['roi_scales']
-    # except AttributeError:  # Numpy
-    #     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
-    #     im_inds = return_dict['rois'][:, 0].astype(np.int, copy=False)
 
     boxes /= im_scales.view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
