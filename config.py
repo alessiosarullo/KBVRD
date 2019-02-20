@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 
-import lib.pydetectron_integration.wrappers as pydet
+import lib.detection.wrappers as pydet
 
 
 class BaseConfigs:

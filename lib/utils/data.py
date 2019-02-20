@@ -4,7 +4,7 @@ import numpy as np
 from PIL import ImageOps
 
 from config import Configs as cfg
-from lib.pydetectron_integration.wrappers import prep_im_for_blob
+from lib.detection.wrappers import prep_im_for_blob
 
 
 class Splits(Enum):

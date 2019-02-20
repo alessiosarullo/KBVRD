@@ -7,7 +7,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
-from lib.pydetectron_integration.wrappers import COCO_CLASSES
+from lib.detection.wrappers import COCO_CLASSES
 from lib.utils.data import Splits
 
 

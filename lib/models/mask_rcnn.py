@@ -8,8 +8,8 @@ import torch.nn as nn
 from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit, Splits
 from lib.dataset.minibatch import Minibatch
-from lib.pydetectron_integration.detection import im_detect_all_with_feats, im_detect_mask
-from lib.pydetectron_integration.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
+from lib.detection.detection import im_detect_all_with_feats, im_detect_mask
+from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 from scripts.utils import Timer
 
 class MaskRCNN(nn.Module):

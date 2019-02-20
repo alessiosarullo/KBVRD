@@ -47,10 +47,10 @@ def save_feats():
             all_pred_classes.append(pred_classes)
 
             cached_feats.append(box_feats)
-            cached_fmaps.append(feat_map)
+            # cached_fmaps.append(feat_map)
             cached_scores.append(scores)
-            if im_i % 1000 == 0 or im_i == len(hdsl) - 1:
-                print('Batch %6d/%d' % (im_i, len(hdsl)))
+            if im_i % 100 == 0 or im_i == len(hdsl) - 1:
+                print('Image %6d/%d' % (im_i, len(hdsl)))
                 cached_feats = np.concatenate(cached_feats, axis=0)
                 cached_scores = np.concatenate(cached_scores, axis=0)
                 # cached_fmaps = np.concatenate(cached_fmaps, axis=0)
@@ -83,6 +83,7 @@ def save_feats():
         #     (feat_file['feat_maps'].shape[0], feat_file['image_index'].shape[0])
     finally:
         feat_file.close()
+        print('Feat file closed.')
 
 
 if __name__ == '__main__':

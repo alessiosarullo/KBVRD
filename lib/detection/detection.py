@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from lib.pydetectron_integration.box_utils import bbox_transform, clip_tiled_boxes
+from lib.detection.box_utils import bbox_transform, clip_tiled_boxes
 from scripts.utils import Timer
 
 from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils, nms_gpu
@@ -35,7 +35,7 @@ def im_detect_all_with_feats(model, inputs):
     box_feats = box_feats[box_inds, :]
 
     assert boxes.shape[0] > 0
-    # assert np.all(np.stack([all_boxes[i, j*4:(j+1)*4] for i, j in zip(box_inds, classes)], axis=0) == boxes)
+    # masks = boxes.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
 
     Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
     masks = im_detect_mask(model, inputs['im_info'], im_ids, boxes, feat_map)
@@ -109,7 +109,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
-            class_boxes_mask = scores_i[:, j] > cfg.TEST.SCORE_THRESH
+            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, max(scores_i))
 
             scores_ij = scores_i[class_boxes_mask, j]
             if scores_ij.shape[0] > 0:
