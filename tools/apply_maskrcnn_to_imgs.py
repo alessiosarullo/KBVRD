@@ -10,13 +10,15 @@ sys.path.insert(0, osp.abspath(osp.join('pydetectron', 'lib')))
 
 # Note: fixing these imports doesn't work if Detectron's ones stay the same, because they end up looking at different configs (for some reason).
 import nn as mynn
-from core.config import cfg, cfg_from_file, assert_and_infer_cfg
+from core.config import cfg, cfg_from_file, cfg_from_list, assert_and_infer_cfg
 from core.test import im_detect_all
 from modeling.model_builder import Generalized_RCNN
 import datasets.dummy_datasets as dummy_datasets
-from analysis import utils as misc_utils, utils as vis_utils
-from analysis.utils import load_detectron_weight
-from analysis.utils import Timer
+import utils.misc as misc_utils
+import utils.vis as vis_utils
+import utils.net as net_utils
+from utils.detectron_weight_helper import load_detectron_weight
+from utils.timer import Timer
 sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))
 
 
