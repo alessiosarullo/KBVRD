@@ -25,6 +25,9 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
+    nonnms_scores = nonnms_scores.cpu().numpy()
+    nonnms_boxes = nonnms_boxes.cpu().numpy()
+
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit_np(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
@@ -82,8 +85,6 @@ def _im_detect_bbox(model, inputs, im_info):
     # Apply bounding-box regression deltas
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
-
-    scores = scores.cpu().numpy()
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds # NOTE: pred_boxes are scaled back to the image size
 
