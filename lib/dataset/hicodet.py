@@ -48,6 +48,7 @@ class HicoDetSplit(Dataset):
 
         # In case of precomputed features
         if cfg.program.load_precomputed_feats:
+            assert not self.random_flipping  # FIXME extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
