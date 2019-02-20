@@ -45,7 +45,7 @@ def im_detect_all_with_feats(model, inputs):
         box_feats.squeeze_(dim=3)
         box_feats.squeeze_(dim=2)
     else:
-        masks = boxes.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
+        masks = feat_map.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 
