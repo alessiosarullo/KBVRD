@@ -43,9 +43,6 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
 
         assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
                masks.shape[0] == scores.shape[0] == box_feats.shape[0]
-        assert all([s == 1 for s in box_feats.shape[2:]])
-        box_feats.squeeze_(dim=3)
-        box_feats.squeeze_(dim=2)
     else:
         masks = feat_map.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
         box_feats = feat_map.new_zeros((0, feat_dim))
