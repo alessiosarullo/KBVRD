@@ -12,12 +12,13 @@ from lib.dataset.utils import Splits
 
 def save_feats():
     batch_size = 1
+    flipping = False
 
     sys.argv += ['--batch_size', str(batch_size)]
     cfg.parse_args()
 
     im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
-    hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
+    hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds, flipping_prob=float(flipping))
     hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
 
     mask_rcnn = MaskRCNN()
@@ -35,6 +36,7 @@ def save_feats():
         cached_feats, cached_scores = [], []
         for im_i, im_data in enumerate(hdsl):
             im_data = im_data  # type: Minibatch
+            assert im_data.other_ex_data[0]['flipped'] == flipping
 
             box_class_scores, boxes, box_classes, im_ids_in_batch, masks, feat_map, box_feats, scores = mask_rcnn(im_data, return_det_results=True)
             if boxes.shape[0] == 0:

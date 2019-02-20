@@ -14,7 +14,7 @@ from lib.dataset.minibatch import Minibatch
 
 
 class HicoDetSplit(Dataset):
-    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None, random_flipping=False):
+    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None, flipping_prob=0):
         """
         """
         assert split in Splits
@@ -22,7 +22,7 @@ class HicoDetSplit(Dataset):
 
         self.split = split
         self.hicodet = hicodet_driver
-        self.random_flipping = random_flipping
+        self.flipping_prob = flipping_prob
 
         # Initialize
         self.annotations = hicodet_driver.split_data[split]['annotations']
@@ -48,7 +48,7 @@ class HicoDetSplit(Dataset):
 
         # In case of precomputed features
         if cfg.program.load_precomputed_feats:
-            assert not self.random_flipping  # FIXME extract features for flipped image?
+            assert self.flipping_prob == 0  # FIXME extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
@@ -146,7 +146,7 @@ class HicoDetSplit(Dataset):
         gt_boxes = self._im_boxes[index].astype(np.float, copy=False)
 
         # Optionally flip the image if we're doing training
-        flipped = self.random_flipping and self.is_train and np.random.random() > 0.5
+        flipped = self.is_train and np.random.random() < self.flipping_prob
         if flipped:
             img = img[:, :, ::-1]
             gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
