@@ -7,7 +7,7 @@ from scripts.utils import Timer
 from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils, nms_gpu
 
 
-def im_detect_all_with_feats(model, inputs):
+def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     """
     Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
     """
@@ -21,7 +21,7 @@ def im_detect_all_with_feats(model, inputs):
     im_info = inputs['im_info']
 
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
-    nonnms_scores, nonnms_boxes, feat_map, box_feats, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)
     Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0
 
@@ -34,9 +34,10 @@ def im_detect_all_with_feats(model, inputs):
     Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
-    box_feats = box_feats[box_inds, :]
 
     if boxes.shape[0] > 0:
+        box_feats = get_rois_feats(model, feat_map, boxes)
+        assert box_feats.shape[1] == feat_dim
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
         masks = im_detect_mask(model, im_info, im_ids, boxes, feat_map)
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
@@ -48,7 +49,17 @@ def im_detect_all_with_feats(model, inputs):
         box_feats.squeeze_(dim=2)
     else:
         masks = feat_map.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
+        box_feats = feat_map.new_zeros((0, feat_dim))
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
+
+
+def get_rois_feats(model, fmap, rois):
+    # Input to Box_Head should be a dictionary with the field 'rois' as a Bx5 NumPy array, where each row is [im_id, x1, y1, x2, y2]
+    rois_feats = model.Box_Head(fmap, {'rois': rois})
+    assert all([s == 1 for s in rois_feats.shape[2:]])
+    rois_feats.squeeze_(dim=3)
+    rois_feats.squeeze_(dim=2)
+    return rois_feats
 
 
 def _im_detect_bbox(model, inputs, im_info):
@@ -76,7 +87,7 @@ def _im_detect_bbox(model, inputs, im_info):
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
-    return scores, pred_boxes, return_dict['blob_conv'], return_dict['roi_feats'], im_inds # NOTE: pred_boxes are scaled back to the image size
+    return scores, pred_boxes, return_dict['blob_conv'], im_inds # NOTE: pred_boxes are scaled back to the image size
 
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):

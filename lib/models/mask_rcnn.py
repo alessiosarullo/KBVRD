@@ -8,7 +8,7 @@ import torch.nn as nn
 from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit, Splits
 from lib.dataset.minibatch import Minibatch
-from lib.detection.detection import im_detect_all_with_feats, im_detect_mask
+from lib.detection.detection import im_detect_all_with_feats, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 from scripts.utils import Timer
 
@@ -95,16 +95,8 @@ class MaskRCNN(nn.Module):
                 rois = kwargs['rois']
             except KeyError:
                 raise
-            rois_feats = self.get_rois_feats(fmap, rois)
+            rois_feats = get_rois_feats(self.mask_rcnn, fmap, rois)
             return rois_feats
-
-    def get_rois_feats(self, fmap, rois):
-        # Input to Box_Head should be a dictionary with the field 'rois' as a Bx5 NumPy array, where each row is [im_id, x1, y1, x2, y2]
-        rois_feats = self.mask_rcnn.Box_Head(fmap, {'rois': rois})
-        assert all([s == 1 for s in rois_feats.shape[2:]])
-        rois_feats.squeeze_(dim=3)
-        rois_feats.squeeze_(dim=2)
-        return rois_feats
 
 
 def vis_masks():
