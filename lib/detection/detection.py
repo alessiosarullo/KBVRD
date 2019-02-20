@@ -109,7 +109,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
         boxes_and_infos_per_class = {}
         for j in range(1, num_classes):
-            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, max(scores_i))
+            class_boxes_mask = scores_i[:, j] >= min(cfg.TEST.SCORE_THRESH, np.max(scores_i))
 
             scores_ij = scores_i[class_boxes_mask, j]
             if scores_ij.shape[0] > 0:
