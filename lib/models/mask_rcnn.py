@@ -66,20 +66,19 @@ class MaskRCNN(nn.Module):
                 box_class_scores = box_pred_classes[:, 1]
 
                 Timer.get('Epoch', 'Batch', 'Conv').tic()
-                feat_map = self.mask_rcnn.Conv_Body(x.imgs)
+                fmap = self.mask_rcnn.Conv_Body(x.imgs)
                 Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
                 Timer.get('Epoch', 'Batch', 'Mask').tic()
-                masks = im_detect_mask(self.mask_rcnn, x.img_infos, box_im_ids, boxes, feat_map)
+                masks = im_detect_mask(self.mask_rcnn, x.img_infos, box_im_ids, boxes, fmap)
                 Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
             else:
                 inputs = {'data': x.imgs,
                           'im_info': x.img_infos, }
                 Timer.get('Epoch', 'Batch', 'Detect').tic()
-                det_results = im_detect_all_with_feats(self.mask_rcnn, inputs)
-                box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, box_feats, scores = det_results
+                box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
                 Timer.get('Epoch', 'Batch', 'Detect').toc()
             if kwargs.get('return_det_results', False):
-                return box_class_scores, boxes, box_classes, box_im_ids, masks, feat_map, box_feats, scores
+                return box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores
 
             # pick the mask corresponding to the predicted class and binarize it
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
@@ -88,7 +87,7 @@ class MaskRCNN(nn.Module):
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)
                                         ], axis=1)
-            return boxes_ext, masks, feat_map, box_feats
+            return boxes_ext, masks, fmap, box_feats
         else:
             try:
                 fmap = kwargs['fmap']

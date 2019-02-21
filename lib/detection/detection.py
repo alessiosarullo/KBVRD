@@ -75,7 +75,7 @@ def _im_detect_bbox(model, inputs, im_info):
     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
     im_inds = return_dict['rois'][:, 0]
 
-    boxes /= im_scales.view(-1, 1)  # unscale back to raw image space
+    boxes /= im_scales[torch.from_numpy(im_inds)].view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
