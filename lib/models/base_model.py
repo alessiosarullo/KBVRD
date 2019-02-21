@@ -189,7 +189,7 @@ class BaseModel(nn.Module):
 
             rel_im_ids, ho_pairs, rel_labels = \
                 rel_assignments(boxes_ext_np, batch.gt_boxes, batch.gt_box_im_ids, batch.gt_box_classes, batch.gt_inters, batch.gt_inters_im_ids)
-            assert rel_im_ids.shape[0] == rel_labels.shape[0]
+            assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
 
             assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
         else:
@@ -333,7 +333,7 @@ def rel_assignments(boxes_ext_np, gt_boxes, gt_box_im_ids, gt_box_classes, gt_in
 
         # print("GTR {} -> AR {} vs {}".format(gt_rels.shape, fg_rels.shape, bg_rels.shape))
         all_rels_i = np.concatenate((fg_rels, bg_rels), 0)
-        all_rels_i[:, 0:2] += num_box_seen
+        all_rels_i[:, :2] += num_box_seen
 
         all_rels_i = all_rels_i[np.lexsort((all_rels_i[:, 1], all_rels_i[:, 0]))]
 
@@ -345,8 +345,8 @@ def rel_assignments(boxes_ext_np, gt_boxes, gt_box_im_ids, gt_box_classes, gt_in
         num_box_seen += pred_boxes_i.shape[0]
     rel_infos = np.concatenate(rel_infos, axis=0)
     rel_im_ids = rel_infos[:, 0]
-    sub_obj_pairs = rel_infos[:, [1, 3]]  # [sub_ind, obj_ind]
-    rel_preds = rel_infos[:, 2]  # [pred]
+    sub_obj_pairs = rel_infos[:, 1:3]  # [sub_ind, obj_ind]
+    rel_preds = rel_infos[:, 3]  # [pred]
     return rel_im_ids, sub_obj_pairs, rel_preds
 
 
