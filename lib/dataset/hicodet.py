@@ -69,7 +69,6 @@ class HicoDetSplit(Dataset):
                 assert len(pc_im_idx) == 1, pc_im_idx
                 assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
-
         else:
             self.pc_feats_file = None
 
@@ -182,9 +181,9 @@ class HicoDetSplit(Dataset):
         }
 
         if self.pc_feats_file is not None:
-            pc_im_idx = self.im_id_to_pc_im_idx[idx]
-            inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
+            pc_im_idx = self.im_id_to_pc_im_idx[img_id]
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
+            inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
             entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
