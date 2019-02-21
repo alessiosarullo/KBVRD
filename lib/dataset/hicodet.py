@@ -49,13 +49,15 @@ class HicoDetSplit(Dataset):
 
         # In case of precomputed features
         if cfg.program.load_precomputed_feats:
-            assert self.flipping_prob == 0  # FIXME extract features for flipped image?
+            assert self.flipping_prob == 0  # TODO extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
             self.pc_image_index = self.pc_feats_file['image_index'][:]
             self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
-            assert np.all(self.pc_image_index == np.array(self.image_index, dtype=np.int))  # TODO decide whether to add support when this is not true
+
+            # TODO decide whether to add support when this is not true
+            assert np.all(self.pc_image_index == np.array(self.image_index, dtype=np.int)), set(self.image_index) - set(self.pc_image_index.tolist())
         else:
             self.pc_feats_file = None
 
