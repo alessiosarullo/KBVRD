@@ -148,7 +148,7 @@ class HicoDetSplit(Dataset):
         # Optionally flip the image if we're doing training
         flipped = self.is_train and np.random.random() < self.flipping_prob
         if flipped:
-            img = img[:, :, ::-1]
+            img = img[:, ::-1, :]  # NOTE: change this if the image is read through PIL
             gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
 
         preprocessed_im, img_scale_factor = preprocess_img(img)

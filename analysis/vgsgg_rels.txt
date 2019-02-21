@@ -2,7 +2,7 @@
 -across
 -against
 -along
-and
+*and
 -at
 attached to
 -behind
@@ -13,8 +13,8 @@ covered in
 covering
 eating
 flying in
-for
-from
+*for
+*from
 growing on
 hanging from
 has
@@ -24,7 +24,7 @@ holding
 laying on
 looking at
 lying on
-made of
++made of
 mounted on
 -near
 of
@@ -36,10 +36,10 @@ parked on
 part of
 playing
 riding
-says
++says
 sitting on
 standing on
-to
++to
 -under
 using
 walking in
@@ -47,4 +47,4 @@ walking on
 watching
 wearing
 wears
-with
++with

@@ -32,6 +32,7 @@ class ProgramConfig(BaseConfigs):
     def __init__(self):
         self.print_interval = 2
         self.randomize = False
+        self.sync = False
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
 

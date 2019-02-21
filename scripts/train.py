@@ -25,7 +25,7 @@ class Trainer:
 
     def train(self):
         print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        Timer.gpu_sync = True  # FIXME disable
+        Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
         cfg.print()
 
@@ -52,7 +52,6 @@ class Trainer:
         # if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
         #     os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
         print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        assert False, 'Shuffle train'
 
     @staticmethod
     def setup():
@@ -65,7 +64,7 @@ class Trainer:
 
         im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
         train = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
-        train_loader = train.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)  # FIXME shuffle me
+        train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
         detector = BaseModel(train)
 
         return detector, train_loader

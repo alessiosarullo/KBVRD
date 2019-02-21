@@ -16,6 +16,7 @@ def load_vg_sgg_dicts():
         idx_to_label = ['__background__'] + [idx_to_label_dict[str(i + 1)] for i in range(len(idx_to_label_dict))]
     return idx_to_pred, idx_to_label, pred_to_idx, label_to_idx
 
+
 def load_allowed_rels(version):
     p2i, l2i = load_vg_sgg_dicts()[2:]
 
@@ -113,8 +114,7 @@ def read_from_gt(split, image_index=None):
 
 
 def check_on_kb(rels, pred_class_index, box_class_index):
-    version = 6
-    kb_rels = load_allowed_rels(version)
+    kb_rels = load_allowed_rels(VERSION)
 
     inds = []
     for i, (s, p, o) in enumerate(rels):
@@ -142,7 +142,7 @@ def check_on_kb(rels, pred_class_index, box_class_index):
     print('\nTop %d most common:' % num_most_common)
     print('\n'.join(['%4d) [%4d] %s %s %s' % (i + 1, n, box_class_index[s], pred_class_index[pr], box_class_index[o]) for i, s, pr, o, n in tmp]))
 
-    print('\n\nResults version: v%d.' % version)
+    print('\n\nResults version: v%d.' % VERSION)
     assert np.sum(np.array(num_to_filter_per_rel)) == absurd_rels.shape[0]
 
 
@@ -153,10 +153,9 @@ def main():
 
 
 def stats():
-    version = 6
     gt_pred_classes, gt_object_classes = load_vg_sgg_dicts()[:2]
     ont_object_classes = set()
-    with open('data/Ontology/RESULTSv%d' % version, 'r') as f:
+    with open('data/Ontology/RESULTSv%d' % VERSION, 'r') as f:
         fc = f.readlines()
         blanks = [i for i, l in enumerate(fc) if l.strip() == '']
         assert len(blanks) == 2
@@ -174,5 +173,6 @@ def stats():
 
 
 if __name__ == '__main__':
-    # main()
-    stats()
+    VERSION = 5
+    main()
+    # stats()
