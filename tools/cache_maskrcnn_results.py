@@ -33,7 +33,7 @@ def save_feats():
     # feat_file.create_dataset('feat_maps', shape=(0, 1024, 7, 7), maxshape=(None, 1024, 7, 7))  # FIXME check
 
     try:
-        all_boxes, box_im_ids, all_pred_classes = [], [], []
+        all_boxes, box_im_idx, all_pred_classes = [], [], []
         cached_feats, cached_scores = [], []
         for im_i, im_data in enumerate(hdsl):
             im_data = im_data  # type: Minibatch
@@ -44,11 +44,11 @@ def save_feats():
                 print('No boxes in image', im_i)
                 raise ValueError
             assert np.all(im_ids_in_batch == 0)  # because batch size is 1
-            im_ids = np.full((boxes.shape[0], 1), fill_value=im_i)
+            im_idx = np.full((boxes.shape[0], 1), fill_value=im_i)
             pred_classes = np.stack([box_classes.astype(np.float, copy=False), box_class_scores], axis=1)
             box_feats = box_feats.cpu().numpy()
 
-            box_im_ids.append(im_ids)
+            box_im_idx.append(im_idx)
             all_boxes.append(boxes)
             all_pred_classes.append(pred_classes)
 
@@ -77,12 +77,12 @@ def save_feats():
                 cached_feats, cached_fmaps, cached_scores = [], [], []
 
         all_boxes = np.concatenate(all_boxes, axis=0)
-        box_im_ids = np.concatenate(box_im_ids)
+        box_im_idx = np.concatenate(box_im_idx)
         all_pred_classes = np.concatenate(all_pred_classes, axis=0)
         feat_file.create_dataset('boxes', data=all_boxes)
-        feat_file.create_dataset('box_im_ids', data=box_im_ids.astype(np.int, copy=False))
+        feat_file.create_dataset('box_im_inds', data=box_im_idx.astype(np.int, copy=False))
         feat_file.create_dataset('box_pred_classes', data=all_pred_classes)
-        feat_file.create_dataset('image_index', data=np.array(hds.image_index, dtype=np.int))
+        feat_file.create_dataset('image_ids', data=np.array(hds.image_ids, dtype=np.int))
         assert feat_file['box_feats'].shape[0] == all_boxes.shape[0] == all_pred_classes.shape[0], \
             (feat_file['box_feats'].shape[0], all_boxes.shape[0], all_pred_classes.shape[0])
         # assert feat_file['feat_maps'].shape[0] == feat_file['image_index'].shape[0], \

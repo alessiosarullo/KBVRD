@@ -29,20 +29,20 @@ class HicoDetSplit(Dataset):
         self.annotations = hicodet_driver.split_data[split]['annotations']
         if im_inds is not None:
             self.annotations = [self.annotations[i] for i in im_inds]
-            self.image_index = im_inds
+            self.image_ids = im_inds
         else:
-            self.image_index = list(range(len(self.annotations)))
+            self.image_ids = list(range(len(self.annotations)))
         if filter_invisible:
             vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
                                                   if any([not inter['invis'] for inter in ann['interactions']])])
-            num_old_images, num_new_images = len(self.image_index), len(vis_im_inds)
+            num_old_images, num_new_images = len(self.image_ids), len(vis_im_inds)
             if num_new_images < num_old_images:
                 print('Some images have been discarded due to not having visible interactions. '
                       'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
-                self.image_index = [self.image_index[i] for i in vis_im_inds]
+                self.image_ids = [self.image_ids[i] for i in vis_im_inds]
 
         self._im_boxes, self._im_box_classes, self._im_inters = self.compute_gt_data()
-        assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == len(self.annotations) == len(self.image_index)
+        assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == len(self.annotations) == len(self.image_ids)
 
         # You could add data augmentation here.
         pass
@@ -52,12 +52,22 @@ class HicoDetSplit(Dataset):
             assert self.flipping_prob == 0  # TODO extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
-            self.pc_box_im_ids = self.pc_feats_file['box_im_ids'][:]
-            self.pc_image_index = self.pc_feats_file['image_index'][:]
             self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
+            try:
+                self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
+                self.pc_image_ids = self.pc_feats_file['image_index'][:]
+            except KeyError:  # Old names
+                self.pc_box_im_inds = self.pc_feats_file['box_im_inds'][:]
+                self.pc_image_ids = self.pc_feats_file['image_ids'][:]
 
             # TODO decide whether to add support when this is not true
-            assert np.all(self.pc_image_index == np.array(self.image_index, dtype=np.int)), set(self.image_index) - set(self.pc_image_index.tolist())
+            assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
+            self.im_id_to_pc_im_idx = {}
+            for im_id in self.image_ids:
+                pc_im_idx = np.flatnonzero(self.pc_image_ids == im_id).tolist()
+                assert len(pc_im_idx) == 1, pc_im_idx
+                self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
+
         else:
             self.pc_feats_file = None
 
@@ -138,15 +148,15 @@ class HicoDetSplit(Dataset):
         )
         return data_loader
 
-    def __getitem__(self, index):
+    def __getitem__(self, idx):
         Timer.get('Epoch', 'GetBatch').tic()
 
         # Read the image
-        img_fn = self.annotations[index]['file']
+        img_fn = self.annotations[idx]['file']
 
         img = cv2.imread(os.path.join(self.img_dir, img_fn))
         img_h, img_w = img.shape[:2]
-        gt_boxes = self._im_boxes[index].astype(np.float, copy=False)
+        gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 
         # Optionally flip the image if we're doing training
         flipped = self.is_train and np.random.random() < self.flipping_prob
@@ -156,19 +166,22 @@ class HicoDetSplit(Dataset):
 
         preprocessed_im, img_scale_factor = preprocess_img(img)
         entry = {
-            'index': index,
+            'index': idx,
+            'id': self.image_ids[idx],
             'fn': img_fn,
+            'flipped': flipped,
             'img': preprocessed_im,
             'img_size': (img_h, img_w),
             'scale': img_scale_factor,
             'gt_boxes': gt_boxes,
-            'gt_box_classes': self._im_box_classes[index].copy(),
-            'gt_inters': self._im_inters[index].copy(),
-            'flipped': flipped,
+            'gt_box_classes': self._im_box_classes[idx].copy(),
+            'gt_inters': self._im_inters[idx].copy(),
         }
 
         if self.pc_feats_file is not None:
-            inds = np.flatnonzero(self.pc_box_im_ids == self.image_index[index])  # this works because of the assumption that the index is the same
+            pc_im_idx = self.im_id_to_pc_im_idx[idx]
+            inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
+            assert self.pc_image_ids[self.im_id_to_pc_im_idx[idx]] == self.image_ids[idx], (self.pc_image_ids[pc_im_idx], self.image_ids[idx])
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
             entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
@@ -179,7 +192,7 @@ class HicoDetSplit(Dataset):
         return entry
 
     def __len__(self):
-        return len(self.image_index)
+        return len(self.image_ids)
 
 
 def main():
