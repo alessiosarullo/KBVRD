@@ -23,6 +23,7 @@ class HicoDetSplit(Dataset):
         self.split = split
         self.hicodet = hicodet_driver
         self.flipping_prob = flipping_prob
+        print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
         # Initialize
         self.annotations = hicodet_driver.split_data[split]['annotations']

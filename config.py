@@ -54,6 +54,7 @@ class DataConfig(BaseConfigs):
         self.pixel_std = None
         self.im_scale = None
         self.im_max_size = None
+        self.flip_prob = 0.0
 
 
 class ModelConfig(BaseConfigs):
