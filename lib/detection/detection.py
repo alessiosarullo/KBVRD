@@ -9,7 +9,7 @@ from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils, nms_gpu
 
 def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     """
-    Returned `scores`, `boxes`, `box_classes`, `im_ids` are NumPy, `masks` and `feat_map` are Torch
+    Returned `masks`, `box_feats` and `feat_map` are Torch, the rest is NumPy
     """
     # TODO docs
 

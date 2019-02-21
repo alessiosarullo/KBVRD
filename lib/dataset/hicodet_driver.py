@@ -68,9 +68,11 @@ class HicoDet:
         # Derived
         self._objects = sorted(set([inter['obj'] for inter in self.interactions]))
         self._predicates = list(self.predicate_dict.keys())
-        self.obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
-        self.pred_index = {pred: i for i, pred in enumerate(self.predicates)}
+        self._obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
+        self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}
         self._coco_to_hico_mapping = self._compute_coco_to_hico_mapping()
+        assert len(self._pred_index) == len(self._predicates)
+        assert len(self._obj_class_index) == len(self._objects)
 
         # Statistics
         self.compute_stats()
@@ -128,7 +130,13 @@ class HicoDet:
 
     @property
     def person_class(self) -> int:
-        return self.obj_class_index['person']
+        return self._obj_class_index['person']
+
+    def get_predicate_index(self, interaction_id):
+        return self._pred_index[self.interactions[interaction_id]['pred']]
+
+    def get_object_index(self, interaction_id):
+        return self._obj_class_index[self.interactions[interaction_id]['obj']]
 
     def _compute_coco_to_hico_mapping(self):
         coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
@@ -141,7 +149,7 @@ class HicoDet:
             return self._coco_to_hico_mapping
         else:
             # Note: this will raise a KeyError if any of `coco_values` is the background class
-            hico_values = np.array([self.obj_class_index[COCO_CLASSES[v]] for v in coco_values])
+            hico_values = np.array([self._obj_class_index[COCO_CLASSES[v]] for v in coco_values])
             return hico_values
 
     def get_occurrences(self, interaction, split=Splits.TRAIN):

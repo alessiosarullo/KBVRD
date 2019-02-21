@@ -94,20 +94,27 @@ class HicoDetSplit(Dataset):
         boxes, box_classes, interactions = [], [], []
         for i, img_ann in enumerate(self.annotations):
             im_hum_boxes, im_obj_boxes, im_obj_box_classes, im_interactions = [], [], [], []
-            for inter in img_ann['interactions']:
-                if not inter['invis']:
-                    curr_num_hum_boxes = sum([b.shape[0] for b in im_hum_boxes])
-                    curr_num_obj_boxes = sum([b.shape[0] for b in im_obj_boxes])
-                    inters = inter['conn']
-                    pred_class = hd.pred_index[hd.interactions[inter['id']]['pred']]
-                    inters = np.stack([inters[:, 0], np.full(inters.shape[0], fill_value=pred_class, dtype=np.int), inters[:, 1]], axis=1)
-                    im_interactions.append(inters + np.array([[curr_num_hum_boxes, 0, curr_num_obj_boxes]], dtype=np.int))
+            for interaction in img_ann['interactions']:
+                if not interaction['invis']:
+                    curr_num_hum_boxes = int(sum([b.shape[0] for b in im_hum_boxes]))
+                    curr_num_obj_boxes = int(sum([b.shape[0] for b in im_obj_boxes]))
 
-                    im_hum_boxes.append(inter['hum_bbox'])
+                    # Interaction
+                    pred_class = hd.get_predicate_index(interaction['id'])
+                    new_inters = interaction['conn']
+                    new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
+                                       np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
+                                       new_inters[:, 1] + curr_num_obj_boxes
+                                       ], axis=1)
+                    im_interactions.append(new_inters)
 
-                    obj_boxes = inter['obj_bbox']
-                    obj_class = hd.obj_class_index[hd.interactions[inter['id']]['obj']]
+                    # Human
+                    im_hum_boxes.append(interaction['hum_bbox'])
+
+                    # Object
+                    obj_boxes = interaction['obj_bbox']
                     im_obj_boxes.append(obj_boxes)
+                    obj_class = hd.get_object_index(interaction['id'])
                     im_obj_box_classes.append(np.full(obj_boxes.shape[0], fill_value=obj_class, dtype=np.int))
 
             if im_hum_boxes:
