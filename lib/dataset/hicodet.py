@@ -62,10 +62,12 @@ class HicoDetSplit(Dataset):
 
             # TODO decide whether to add support when this is not true
             assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
+            assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
             self.im_id_to_pc_im_idx = {}
             for im_id in self.image_ids:
                 pc_im_idx = np.flatnonzero(self.pc_image_ids == im_id).tolist()
                 assert len(pc_im_idx) == 1, pc_im_idx
+                assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
 
         else:
@@ -153,6 +155,7 @@ class HicoDetSplit(Dataset):
 
         # Read the image
         img_fn = self.annotations[idx]['file']
+        img_id = self.image_ids[idx]
 
         img = cv2.imread(os.path.join(self.img_dir, img_fn))
         img_h, img_w = img.shape[:2]
@@ -167,7 +170,7 @@ class HicoDetSplit(Dataset):
         preprocessed_im, img_scale_factor = preprocess_img(img)
         entry = {
             'index': idx,
-            'id': self.image_ids[idx],
+            'id': img_id,
             'fn': img_fn,
             'flipped': flipped,
             'img': preprocessed_im,
@@ -181,7 +184,7 @@ class HicoDetSplit(Dataset):
         if self.pc_feats_file is not None:
             pc_im_idx = self.im_id_to_pc_im_idx[idx]
             inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
-            assert self.pc_image_ids[self.im_id_to_pc_im_idx[idx]] == self.image_ids[idx], (self.pc_image_ids[pc_im_idx], self.image_ids[idx])
+            assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
             entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
