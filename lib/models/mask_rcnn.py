@@ -127,7 +127,7 @@ def vis_masks():
             box_classes_i = box_classes[binmask_i]
             masks_i = masks[binmask_i]
 
-            im_fn = batch.img_fns[i]
+            im_fn = batch.other_ex_data[i]['fn']
             im = cv2.imread(os.path.join(hds.img_dir, im_fn))
 
             cls_boxes = [[]] + [boxes_with_scores_i[box_classes_i == j, :] for j in range(1, 81)]  # 81 = #coco classes + background
@@ -135,7 +135,7 @@ def vis_masks():
 
             vis_utils.vis_one_image(
                 im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
-                os.path.splitext(batch.img_fns[i])[0],
+                os.path.splitext(im_fn)[0],
                 output_dir,
                 cls_boxes,
                 cls_segms,
