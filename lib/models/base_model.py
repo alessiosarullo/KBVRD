@@ -253,7 +253,7 @@ class BaseModel(nn.Module):
 
         unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
         unmatched_gt_labels = batch.gt_box_classes[unmatched_gt_boxes_inds]
-        unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_predicates))
+        unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
         unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_labels] = 1
         unmatched_gt_boxes_ext = np.concatenate([gt_boxes_with_imid[unmatched_gt_boxes_inds, :], unmatched_gt_labels_onehot], axis=1)
         unmatched_gt_boxes = unmatched_gt_boxes_ext[:, 1:5]
