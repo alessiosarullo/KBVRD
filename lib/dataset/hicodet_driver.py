@@ -25,7 +25,7 @@ class HicoDet:
                 - 'ex' [str]: An example (sometimes not provided)
                 EXAMPLE: key: v00007012, entry:
                     {'id': 1, 'wname': 'blow.v.01', 'count': 6, 'syn': ['blow'], 'def': 'exhale hard', 'ex': 'blow on the soup to cool it down'}
-            - predicate_dict [dict]: The 117 possible predicates, including a null one. They are less than the entries in the WordNet dictionary
+            - predicate_dict [dict]: The 117 possible predicates, including a null one. They are fewer than the entries in the WordNet dictionary
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
                     - 'ing' [str]: -ing form of the verb ('no_interaction' for the null one).
