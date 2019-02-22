@@ -53,50 +53,45 @@ class MaskRCNN(nn.Module):
         # TODO docs
 
         assert not self.training
-        apply_head_only = kwargs.get('head_only', False)
 
-        if not apply_head_only:
-            if x.pc_box_feats is not None:
-                box_feats = x.pc_box_feats
-                boxes = x.pc_boxes
-                scores = x.pc_box_scores
-                box_im_ids = x.box_im_ids
-                box_pred_classes = x.box_pred_classes
-                box_classes = box_pred_classes[:, 0].astype(np.int)
-                box_class_scores = box_pred_classes[:, 1]
+        if x.pc_box_feats is not None:
+            box_feats = x.pc_box_feats
+            boxes = x.pc_boxes
+            scores = x.pc_box_scores
+            box_im_ids = x.box_im_ids
+            box_pred_classes = x.box_pred_classes
+            box_classes = box_pred_classes[:, 0].astype(np.int)
+            box_class_scores = box_pred_classes[:, 1]
 
-                Timer.get('Epoch', 'Batch', 'Conv').tic()
-                fmap = self.mask_rcnn.Conv_Body(x.imgs)
-                Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
-                Timer.get('Epoch', 'Batch', 'Mask').tic()
-                masks = im_detect_mask(self.mask_rcnn, x.img_infos, box_im_ids, boxes, fmap)
-                Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
-            else:
-                inputs = {'data': x.imgs,
-                          'im_info': x.img_infos, }
-                Timer.get('Epoch', 'Batch', 'Detect').tic()
-                box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
-                Timer.get('Epoch', 'Batch', 'Detect').toc()
-            if kwargs.get('return_det_results', False):
-                return box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores
-
-            # pick the mask corresponding to the predicted class and binarize it
-            masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
-
-            boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
-                                        boxes.astype(np.float32, copy=False),
-                                        scores.astype(np.float32, copy=False)
-                                        ], axis=1)
-            return boxes_ext, masks, fmap, box_feats
+            Timer.get('Epoch', 'Batch', 'Conv').tic()
+            fmap = self.mask_rcnn.Conv_Body(x.imgs)
+            Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
+            Timer.get('Epoch', 'Batch', 'Mask').tic()
+            masks = self.get_masks(fmap, boxes, box_im_ids, x.img_infos)
+            Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
         else:
-            try:
-                fmap = kwargs['fmap']
-                rois = kwargs['rois']
-            except KeyError:
-                raise
-            rois_feats = get_rois_feats(self.mask_rcnn, fmap, rois)
-            return rois_feats
+            inputs = {'data': x.imgs,
+                      'im_info': x.img_infos, }
+            Timer.get('Epoch', 'Batch', 'Detect').tic()
+            box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
+            Timer.get('Epoch', 'Batch', 'Detect').toc()
+        if kwargs.get('return_det_results', False):
+            return box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores
 
+        # pick the mask corresponding to the predicted class and binarize it
+        masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
+
+        boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
+                                    boxes.astype(np.float32, copy=False),
+                                    scores.astype(np.float32, copy=False)
+                                    ], axis=1)
+        return boxes_ext, masks, fmap, box_feats
+
+    def get_rois_feats(self, fmap, rois):
+        return get_rois_feats(self.mask_rcnn, fmap, rois)
+
+    def get_masks(self, fmap, boxes, box_im_ids, img_infos):
+        return im_detect_mask(self.mask_rcnn, img_infos, box_im_ids, boxes, fmap)
 
 def vis_masks():
     cfg.parse_args()

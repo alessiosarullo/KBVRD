@@ -160,7 +160,7 @@ class BaseModel(nn.Module):
         assert context_feats.shape[0] == len(im_ids)
         return context_feats
 
-    def first_step(self, batch: Minibatch, **kwargs):  # FIXME change name
+    def first_step(self, batch: Minibatch):  # FIXME change name
         """
         :param batch:
         :param kwargs:
@@ -178,19 +178,8 @@ class BaseModel(nn.Module):
         boxes_ext_np, masks, box_feats = self.filter_and_map_to_hico(boxes_ext_np, masks, box_feats)
 
         if self.training:
-            gt_boxes_ext = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
-            gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext_np[:, :5], gt_boxes_ext)
-            box_labels = batch.gt_box_classes[gt_idx_per_pred_box]
-            gt_match = np.flatnonzero(pred_gt_box_ious >= 0.5)  # FIXME magic constant
-            boxes_ext_np = boxes_ext_np[gt_match, :]
-            box_labels = box_labels[gt_match]
-            box_feats = box_feats[gt_match, :]
-            masks = masks[gt_match, :]
-
-            rel_im_ids, ho_pairs, rel_labels = self.rel_assignments(boxes_ext_np, batch)
-
-            # TODO add gt boxes to predicted boxes, maybe? If done here does not influence relationship detection, but adds examples for object
-
+            boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
+            rel_im_ids, ho_pairs, rel_labels = self.rel_gt_assignments(batch, boxes_ext_np)
             assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
             assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
@@ -199,7 +188,7 @@ class BaseModel(nn.Module):
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
         rel_union_boxes = self.get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
-        union_boxes_feats = self.mask_rcnn(None, head_only=True, fmap=feat_map, rois=rel_union_boxes)  # FIXME is this ugly? Maybe don't use forward?
+        union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=rel_union_boxes)
         union_boxes_feats = union_boxes_feats.detach()
         assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
 
@@ -251,7 +240,35 @@ class BaseModel(nn.Module):
         ], axis=1)
         return union_rois
 
-    def rel_assignments(self, boxes_ext_np, batch: Minibatch, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
+    def box_gt_assignment(self, batch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
+        gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
+
+        gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
+        box_labels = batch.gt_box_classes[gt_idx_per_pred_box]
+        gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= gt_iou_thr, axis=1))
+        boxes_ext = boxes_ext[gt_match, :]
+        box_labels = box_labels[gt_match]
+        box_feats = box_feats[gt_match, :]
+        masks = masks[gt_match, :]
+
+        unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
+        unmatched_gt_labels = batch.gt_box_classes[unmatched_gt_boxes_inds]
+        unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_predicates))
+        unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_labels] = 1
+        unmatched_gt_boxes_ext = np.concatenate([gt_boxes_with_imid[unmatched_gt_boxes_inds, :], unmatched_gt_labels_onehot], axis=1)
+        unmatched_gt_boxes = unmatched_gt_boxes_ext[:, 1:5]
+        unmatched_gt_box_im_inds = unmatched_gt_boxes_ext[:, 0]
+
+        unmatched_gt_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=unmatched_gt_boxes)
+        unmatched_gt_boxes_masks = self.mask_rcnn.get_masks(feat_map, unmatched_gt_boxes, unmatched_gt_box_im_inds, batch.img_infos)
+
+        boxes_ext = np.concatenate([boxes_ext, unmatched_gt_boxes_ext], axis=0)
+        box_labels = np.concatenate([box_labels, unmatched_gt_labels], axis=0)
+        box_feats = torch.cat([box_feats, unmatched_gt_boxes_feats], dim=0)
+        masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
+        return boxes_ext, box_labels, box_feats, masks
+
+    def rel_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_box_classes
         gt_inters, gt_inters_im_ids = batch.gt_inters, batch.gt_inters_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
@@ -263,8 +280,7 @@ class BaseModel(nn.Module):
         for im_id in np.unique(gt_box_im_ids):
             predict_box_im_ids_i = (predict_box_im_ids == im_id)
             gt_box_im_ids_i = (gt_box_im_ids == im_id)
-            if not np.any(predict_box_im_ids_i):
-                continue
+            assert np.any(predict_box_im_ids_i)
 
             gt_boxes_i = gt_boxes[gt_box_im_ids_i]
             gt_classes_i = gt_box_classes[gt_box_im_ids_i]
