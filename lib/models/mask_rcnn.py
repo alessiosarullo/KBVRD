@@ -88,10 +88,10 @@ class MaskRCNN(nn.Module):
         return boxes_ext, masks, fmap, box_feats
 
     def get_rois_feats(self, fmap, rois):
-        return get_rois_feats(self.mask_rcnn, fmap, rois)
+        return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False))
 
     def get_masks(self, fmap, boxes, box_im_ids, img_infos):
-        return im_detect_mask(self.mask_rcnn, img_infos, box_im_ids, boxes, fmap)
+        return im_detect_mask(self.mask_rcnn, img_infos, box_im_ids, boxes.astype(np.float32, copy=False), fmap)
 
 def vis_masks():
     cfg.parse_args()
