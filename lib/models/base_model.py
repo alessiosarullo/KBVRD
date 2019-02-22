@@ -193,7 +193,7 @@ class BaseModel(nn.Module):
         assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
 
         rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1)
-        boxes_ext = torch.tensor(boxes_ext_np, device=masks.device)
+        boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
         if self.training:
             box_labels = torch.tensor(box_labels, device=masks.device)
             rel_labels = torch.tensor(rel_labels, device=masks.device)
