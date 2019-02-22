@@ -295,12 +295,13 @@ class BaseModel(nn.Module):
 
             human_subject_possibilities = np.zeros((predict_boxes_i.shape[0], predict_boxes_i.shape[0]), dtype=bool)
             human_subject_possibilities[predict_human_boxes_i, :] = True
-            rel_possibilities = human_subject_possibilities - np.eye(predict_boxes_i.shape[0], dtype=bool)
+            human_subject_possibilities[np.arange(predict_boxes_i.shape[0]), np.arange(predict_boxes_i.shape[0])] = False
+            rel_possibilities = human_subject_possibilities
             if filter_non_overlap:
                 # Limit to IOUs that overlap, but are not the exact same box
                 iou_predict_boxes_i = bbox_overlaps(predict_boxes_i, predict_boxes_i)
-                rels_intersect = (iou_predict_boxes_i < 1) & (iou_predict_boxes_i > 0)
-                rel_possibilities = rels_intersect & rel_possibilities
+                predict_boxes_intersect = (0 < iou_predict_boxes_i) & (iou_predict_boxes_i < 1)
+                rel_possibilities = rel_possibilities & predict_boxes_intersect
 
             # Sample the GT relationships.
             fg_rels = []
