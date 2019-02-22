@@ -252,18 +252,22 @@ class BaseModel(nn.Module):
         masks = masks[gt_match, :]
 
         unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
-        unmatched_gt_labels = batch.gt_box_classes[unmatched_gt_boxes_inds]
+        unmatched_gt_box_labels = batch.gt_box_classes[unmatched_gt_boxes_inds]
         unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
-        unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_labels] = 1
+        unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_box_labels] = 1
         unmatched_gt_boxes_ext = np.concatenate([gt_boxes_with_imid[unmatched_gt_boxes_inds, :], unmatched_gt_labels_onehot], axis=1)
         unmatched_gt_boxes = unmatched_gt_boxes_ext[:, 1:5]
         unmatched_gt_box_im_inds = unmatched_gt_boxes_ext[:, 0]
 
         unmatched_gt_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=unmatched_gt_boxes)
-        unmatched_gt_boxes_masks = self.mask_rcnn.get_masks(feat_map, unmatched_gt_boxes, unmatched_gt_box_im_inds, batch.img_infos)
+        unmatched_gt_boxes_masks = self.mask_rcnn.get_masks(img_infos=batch.img_infos,
+                                                            fmap=feat_map,
+                                                            boxes=unmatched_gt_boxes,
+                                                            box_im_ids=unmatched_gt_box_im_inds,
+                                                            box_classes=unmatched_gt_box_labels)
 
         boxes_ext = np.concatenate([boxes_ext, unmatched_gt_boxes_ext], axis=0)
-        box_labels = np.concatenate([box_labels, unmatched_gt_labels], axis=0)
+        box_labels = np.concatenate([box_labels, unmatched_gt_box_labels], axis=0)
         box_feats = torch.cat([box_feats, unmatched_gt_boxes_feats], dim=0)
         masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
         return boxes_ext, box_labels, box_feats, masks

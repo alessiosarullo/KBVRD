@@ -67,7 +67,7 @@ class MaskRCNN(nn.Module):
             fmap = self.mask_rcnn.Conv_Body(x.imgs)
             Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
             Timer.get('Epoch', 'Batch', 'Mask').tic()
-            masks = self.get_masks(fmap, boxes, box_im_ids, x.img_infos)
+            masks = self.get_masks(x.img_infos, fmap, boxes, box_im_ids)
             Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
         else:
             inputs = {'data': x.imgs,
@@ -90,8 +90,11 @@ class MaskRCNN(nn.Module):
     def get_rois_feats(self, fmap, rois):
         return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False))
 
-    def get_masks(self, fmap, boxes, box_im_ids, img_infos):
-        return im_detect_mask(self.mask_rcnn, img_infos, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
+    def get_masks(self, img_infos, fmap, boxes, box_im_ids, box_classes=None):
+        masks = im_detect_mask(self.mask_rcnn, img_infos, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
+        if box_classes is not None:
+            masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
+        return masks
 
 def vis_masks():
     cfg.parse_args()
