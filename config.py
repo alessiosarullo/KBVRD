@@ -34,6 +34,7 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
         self.sync = False
 
+        self.eval_only = False
         self.num_images = 0  # restrict the dataset to this number of images if > 0
 
         self.save_dir = 'exp'
@@ -46,6 +47,14 @@ class ProgramConfig(BaseConfigs):
     @property
     def precomputed_feats_file_format(self):
         return os.path.join('cache', 'precomputed__%s.h5')
+
+    @property
+    def checkpoint_file(self):
+        return os.path.join(self.save_dir, 'ckpt.tar')
+
+    @property
+    def im_inds(self):
+        return list(range(self.num_images)) if self.num_images > 0 else None
 
 
 class DataConfig(BaseConfigs):

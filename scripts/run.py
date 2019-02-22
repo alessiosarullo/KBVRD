@@ -1,10 +1,7 @@
-"""
-Training script for scene graph detection. Integrated with my faster rcnn setup
-"""
-
 import datetime
 import os
 import random
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -12,46 +9,72 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from lib.dataset.hicodet import HicoDetSplit, Splits
 from config import Configs as cfg
-from scripts.utils import Timer
+from lib.dataset.hicodet import HicoDetSplit, Splits
 from lib.models.base_model import BaseModel
+from lib.evaluator import Evaluator
+from scripts.utils import Timer
 from scripts.utils import print_params
 
 
-class Trainer:
+class Launcher:
     def __init__(self):
-        pass
-
-    def train(self):
-        print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
         cfg.print()
 
-        detector, train_loader = self.setup()
-        print_params(detector)
-        detector.cuda()
+    def run(self):
+        detector, train_split = self.setup()
+        if not cfg.program.eval_only:
+            print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            self.train(detector, train_split)
+            print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        self.test(detector)
+        print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-        if cfg.program.save_dir is not None:
-            os.makedirs(cfg.program.save_dir, exist_ok=True)
+    def train(self, detector, train_split):
+        train_loader = train_split.get_loader(batch_size=cfg.opt.batch_size)
 
-        print("Training starts now!")
         optimizer, scheduler = self.get_optim(detector)
         for epoch in range(cfg.opt.num_epochs):
             detector.train()
             self.train_epoch(epoch, train_loader, optimizer, detector)
             if cfg.program.save_dir is not None:
-                save_file = os.path.join(cfg.program.save_dir, 'ckpt.tar')
                 torch.save({
                     'epoch': epoch,
                     'state_dict': detector.state_dict(),
-                }, save_file)
+                }, cfg.program.checkpoint_file)
 
         Timer.get().print()
-        # if cfg.program.save_dir is not None and cfg.opt.num_epochs > 0:
-        #     os.symlink(os.path.abspath(save_file), os.path.join(cfg.program.save_dir, 'final.tar'))
-        print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        if cfg.opt.num_epochs > 0:
+            link = os.path.join(cfg.program.save_dir, 'final.tar')
+            os.remove(link)
+            os.symlink(os.path.abspath(cfg.program.checkpoint_file), link)
+
+    def test(self, detector: BaseModel):
+        test_split = HicoDetSplit(Splits.TEST, im_inds=cfg.program.im_inds)
+        test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
+
+        # TODO remove if not useful.
+        # In GPNN code:
+        # if sequence_ids[0] is 'HICO_test2015_00000396':
+            #break
+
+        all_pred_entries = []
+        evaluator = Evaluator()
+        detector.set_eval_mode()
+        for batch in test_loader:
+            prediction = detector(batch)
+            all_pred_entries.append(prediction)
+            assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
+            evaluator.evaluate_scene_graph_entry(batch, prediction)
+        evaluator.print_stats()
+
+        res_file = os.path.join(cfg.program.save_dir, 'result_test.pkl')
+        with open(res_file, 'wb') as f:
+            pickle.dump(all_pred_entries, f)
+        print('Wrote results to %s. Terminating.' % res_file)
 
     @staticmethod
     def setup():
@@ -62,12 +85,13 @@ class Trainer:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
-        train = HicoDetSplit(Splits.TRAIN, im_inds=im_inds, flipping_prob=cfg.data.flip_prob)
-        train_loader = train.get_loader(batch_size=cfg.opt.batch_size)
-        detector = BaseModel(train)
+        train_split = HicoDetSplit(Splits.TRAIN, im_inds=cfg.program.im_inds, flipping_prob=cfg.data.flip_prob)
 
-        return detector, train_loader
+        detector = BaseModel(train_split)
+        detector.cuda()
+        print_params(detector)
+
+        return detector, train_split
 
     def get_optim(self, detector):
         conf = cfg.opt
@@ -107,7 +131,8 @@ class Trainer:
         print('Time for epoch:', Timer.get('Epoch').str_last())
         print('-' * 100, flush=True)
 
-    def train_batch(self, b, optimizer, detector: BaseModel):
+    @staticmethod
+    def train_batch(b, optimizer, detector: BaseModel):
         losses = detector.get_losses(b)
         optimizer.zero_grad()
 
@@ -123,8 +148,7 @@ class Trainer:
 
 
 def main():
-    trainer = Trainer()
-    trainer.train()
+    Launcher().run()
 
 
 if __name__ == '__main__':

@@ -10,7 +10,7 @@ from config import Configs as cfg
 from scripts.utils import Timer
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img
-from lib.dataset.minibatch import Minibatch
+from lib.containers import Minibatch, Example
 
 
 class HicoDetSplit(Dataset):
@@ -32,7 +32,7 @@ class HicoDetSplit(Dataset):
             self.image_ids = im_inds
         else:
             self.image_ids = list(range(len(self.annotations)))
-        if filter_invisible:
+        if self.is_train and filter_invisible:
             vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
                                                   if any([not inter['invis'] for inter in ann['interactions']])])
             num_old_images, num_new_images = len(self.image_ids), len(vis_im_inds)
@@ -103,9 +103,9 @@ class HicoDetSplit(Dataset):
                     pred_class = hd.get_predicate_index(interaction['id'])
                     new_inters = interaction['conn']
                     new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
-                                       np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
-                                       new_inters[:, 1] + curr_num_obj_boxes
-                                       ], axis=1)
+                                           np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
+                                           new_inters[:, 1] + curr_num_obj_boxes
+                                           ], axis=1)
                     im_interactions.append(new_inters)
 
                     # Human
@@ -149,7 +149,7 @@ class HicoDetSplit(Dataset):
             batch_size=batch_size * num_gpus,
             shuffle=shuffle,
             num_workers=num_workers,
-            collate_fn=lambda x: Minibatch.collate(x, training=self.is_train),
+            collate_fn=lambda x: Minibatch.collate(x),
             drop_last=drop_last,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
@@ -170,22 +170,13 @@ class HicoDetSplit(Dataset):
         # Optionally flip the image if we're doing training
         flipped = self.is_train and np.random.random() < self.flipping_prob
         if flipped:
-            img = img[:, ::-1, :]  # NOTE: change this if the image is read through PIL
+            img = img[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
             gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
 
         preprocessed_im, img_scale_factor = preprocess_img(img)
-        entry = {
-            'index': idx,
-            'id': img_id,
-            'fn': img_fn,
-            'flipped': flipped,
-            'img': preprocessed_im,
-            'img_size': (img_h, img_w),
-            'scale': img_scale_factor,
-            'gt_boxes': gt_boxes,
-            'gt_box_classes': self._im_box_classes[idx].copy(),
-            'gt_inters': self._im_inters[idx].copy(),
-        }
+        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn,
+                        image=preprocessed_im, img_size=(img_h, img_w), img_scale_factor=img_scale_factor, flipped=flipped,
+                        gt_boxes=gt_boxes, gt_obj_classes=self._im_box_classes[idx].copy(), gt_hois=self._im_inters[idx].copy())
 
         if self.pc_feats_file is not None:
             pc_im_idx = self.im_id_to_pc_im_idx[img_id]
@@ -193,10 +184,10 @@ class HicoDetSplit(Dataset):
             inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-            entry['boxes'] = self.pc_feats_file['boxes'][start:end, :]
-            entry['box_scores'] = self.pc_feats_file['box_scores'][start:end, :]
-            entry['box_feats'] = self.pc_feats_file['box_feats'][start:end, :]
-            entry['box_pred_classes'] = self.pc_box_pred_classes[start:end, :]
+            entry.precomputed_boxes = self.pc_feats_file['boxes'][start:end, :]
+            entry.precomputed_obj_scores = self.pc_feats_file['box_scores'][start:end, :]
+            entry.precomputed_box_feats = self.pc_feats_file['box_feats'][start:end, :]
+            entry.precomputed_obj_classes = self.pc_box_pred_classes[start:end, :]
         Timer.get('Epoch', 'GetBatch').toc()
         return entry
 

@@ -5,7 +5,7 @@ import numpy as np
 
 from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit
-from lib.dataset.minibatch import Minibatch
+from lib.containers import Minibatch
 from lib.models.mask_rcnn import MaskRCNN
 from lib.dataset.utils import Splits
 

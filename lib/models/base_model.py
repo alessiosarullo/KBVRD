@@ -1,13 +1,11 @@
-import argparse
-
 import numpy as np
 import numpy.random as npr
 import torch
 import torch.nn as nn
 
+from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
 from lib.dataset.hicodet import HicoDetSplit
-from lib.dataset.minibatch import Minibatch
-from config import Configs as cfg
+from lib.containers import Minibatch, Prediction
 from .mask_rcnn import MaskRCNN
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
 
@@ -101,16 +99,22 @@ class BaseModel(nn.Module):
         with torch.set_grad_enabled(self.training):
             # `rel_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
 
-            y = self.first_step(x)
-            boxes_ext, box_feats, masks, union_boxes_feats, rel_infos = y[:5]
+            tmp_output = self.first_step(x)
+            boxes_ext, box_feats, masks, union_boxes_feats, rel_infos = tmp_output[:5]
             obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, rel_infos)
             if self.training:
-                box_labels, rel_labels = y[5:]
+                box_labels, rel_labels = tmp_output[5:]
                 return obj_output, rel_output, box_labels, rel_labels
             else:
                 obj_prob = nn.functional.softmax(obj_output, axis=1)
                 rel_prob = nn.functional.softmax(rel_output, axis=1)
-                return obj_prob, rel_prob
+                result = Prediction(obj_im_inds=boxes_ext[:, 0],
+                                    obj_boxes=boxes_ext[:, 1:5],
+                                    obj_probs=obj_prob,
+                                    hoi_img_inds=rel_infos[:, 0],
+                                    ho_pairs=rel_infos[:, 1:],
+                                    hoi_probs=rel_prob)
+                return result
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, rel_infos):
         # TODO docs
@@ -187,7 +191,7 @@ class BaseModel(nn.Module):
             rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
-        rel_union_boxes = self.get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
+        rel_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=rel_union_boxes)
         union_boxes_feats = union_boxes_feats.detach()
         assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
@@ -232,14 +236,6 @@ class BaseModel(nn.Module):
         sub_obj_pairs = np.stack([subjs, objs], axis=1)  # this is over the original boxes, not person ones
         return rel_im_ids, sub_obj_pairs
 
-    def get_union_boxes(self, boxes, union_inds):
-        assert union_inds.shape[1] == 2
-        union_rois = np.concatenate([
-            np.minimum(boxes[:, :2][union_inds[:, 0]], boxes[:, :2][union_inds[:, 1]]),
-            np.maximum(boxes[:, 2:][union_inds[:, 0]], boxes[:, 2:][union_inds[:, 1]]),
-        ], axis=1)
-        return union_rois
-
     def box_gt_assignment(self, batch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
@@ -273,8 +269,8 @@ class BaseModel(nn.Module):
         return boxes_ext, box_labels, box_feats, masks
 
     def rel_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
-        gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_box_classes
-        gt_inters, gt_inters_im_ids = batch.gt_inters, batch.gt_inters_im_ids
+        gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
+        gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
         predict_boxes = boxes_ext_np[:, 1:5]
         predict_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
@@ -294,7 +290,7 @@ class BaseModel(nn.Module):
             predict_box_labels_i = predict_box_classes[predict_box_im_ids_i]
             predict_human_boxes_i = (predict_box_labels_i == self.dataset.hicodet.person_class)
 
-            iou_predict_to_gt_i = bbox_overlaps(predict_boxes_i, gt_boxes_i)
+            iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
             predict_gt_match = (predict_box_labels_i[:, None] == gt_classes_i[None, :]) & (iou_predict_to_gt_i >= 0.5)  # FIXME magic constant
 
             human_subject_possibilities = np.zeros((predict_boxes_i.shape[0], predict_boxes_i.shape[0]), dtype=bool)
@@ -303,7 +299,7 @@ class BaseModel(nn.Module):
             rel_possibilities = human_subject_possibilities
             if filter_non_overlap:
                 # Limit to IOUs that overlap, but are not the exact same box
-                iou_predict_boxes_i = bbox_overlaps(predict_boxes_i, predict_boxes_i)
+                iou_predict_boxes_i = compute_ious(predict_boxes_i, predict_boxes_i)
                 predict_boxes_intersect = (0 < iou_predict_boxes_i) & (iou_predict_boxes_i < 1)
                 rel_possibilities = rel_possibilities & predict_boxes_intersect
 
@@ -363,59 +359,6 @@ class BaseModel(nn.Module):
         sub_obj_pairs = rel_infos[:, 1:3]  # [sub_ind, obj_ind]
         rel_preds = rel_infos[:, 3]  # [pred]
         return rel_im_ids, sub_obj_pairs, rel_preds
-
-
-def iou_match_in_img(boxes1, boxes2):
-    box_im_ids1 = boxes1[:, 0]
-    box_im_ids2 = boxes2[:, 0]
-    ious = bbox_overlaps(boxes1[:, 1:5], boxes2[:, 1:5])
-    ious[box_im_ids1[:, None] != box_im_ids2[None, :]] = 0.0
-    argmax_ious = np.argmax(ious, axis=1)
-    return argmax_ious, ious
-
-
-# TODO check and possibly update
-def bbox_overlaps(boxes_a, boxes_b):
-    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
-    is simply the intersection over union of two boxes.  Here we operate on
-    ground truth boxes and default boxes.
-    E.g.:
-        A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
-    Args:
-        boxes_a: (tensor) Ground truth bounding boxes, Shape: [num_objects,4]
-        boxes_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]
-    Return:
-        jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
-    """
-    # FIXME a lot of duplication. Also docs
-    if isinstance(boxes_a, np.ndarray):
-        assert isinstance(boxes_b, np.ndarray)
-        max_xy = np.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
-        min_xy = np.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
-        intersection_dims = np.maximum(0, max_xy - min_xy + 1.0)  # A x B x 2, where last dim is [width, height]
-        intersections_areas = intersection_dims[:, :, 0] * intersection_dims[:, :, 1]
-
-        areas_a = ((boxes_a[:, 2] - boxes_a[:, 0] + 1.0) *
-                   (boxes_a[:, 3] - boxes_a[:, 1] + 1.0))[:, None]  # Ax1
-        areas_b = ((boxes_b[:, 2] - boxes_b[:, 0] + 1.0) *
-                   (boxes_b[:, 3] - boxes_b[:, 1] + 1.0))[None, :]  # 1xB
-        union_areas = areas_a + areas_b - intersections_areas
-        return intersections_areas / union_areas
-    else:
-        A = boxes_a.size(0)
-        B = boxes_b.size(0)
-        max_xy = torch.min(boxes_a[:, 2:].unsqueeze(1).expand(A, B, 2),
-                           boxes_b[:, 2:].unsqueeze(0).expand(A, B, 2))
-        min_xy = torch.max(boxes_a[:, :2].unsqueeze(1).expand(A, B, 2),
-                           boxes_b[:, :2].unsqueeze(0).expand(A, B, 2))
-        inter = torch.clamp((max_xy - min_xy + 1.0), min=0)
-        inter = inter[:, :, 0] * inter[:, :, 1]
-        area_a = ((boxes_a[:, 2] - boxes_a[:, 0] + 1.0) *
-                  (boxes_a[:, 3] - boxes_a[:, 1] + 1.0)).unsqueeze(1).expand_as(inter)  # [A,B]
-        area_b = ((boxes_b[:, 2] - boxes_b[:, 0] + 1.0) *
-                  (boxes_b[:, 3] - boxes_b[:, 1] + 1.0)).unsqueeze(0).expand_as(inter)  # [A,B]
-        union = area_a + area_b - inter
-        return inter / union  # [A,B]
 
 
 def main():

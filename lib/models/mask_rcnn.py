@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from config import Configs as cfg
 from lib.dataset.hicodet import HicoDetSplit, Splits
-from lib.dataset.minibatch import Minibatch
+from lib.containers import Minibatch
 from lib.detection.detection import im_detect_all_with_feats, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 from scripts.utils import Timer
@@ -95,6 +95,7 @@ class MaskRCNN(nn.Module):
         if box_classes is not None:
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
         return masks
+
 
 def vis_masks():
     cfg.parse_args()
