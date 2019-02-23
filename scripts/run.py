@@ -50,7 +50,7 @@ class Launcher:
         print_params(self.detector)
 
         if cfg.program.eval_only:
-            ckpt = torch.load(cfg.program.checkpoint_file)
+            ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
         # # TODO
         # if cfg.program.resume:
@@ -84,9 +84,8 @@ class Launcher:
 
         Timer.get().print()
         if cfg.opt.num_epochs > 0:
-            link = os.path.join(cfg.program.save_dir, 'final.tar')
-            os.remove(link)
-            os.symlink(os.path.abspath(cfg.program.checkpoint_file), link)
+            os.remove(cfg.program.saved_model_file)
+            os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
 
     def train_epoch(self, epoch_num, train_loader, optimizer):
         print_interval = cfg.program.print_interval

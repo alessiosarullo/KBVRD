@@ -53,6 +53,10 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.save_dir, 'ckpt.tar')
 
     @property
+    def saved_model_file(self):
+        return os.path.join(self.save_dir, 'final.tar')
+
+    @property
     def result_file(self):
         return os.path.join(self.save_dir, 'result_test.pkl')
 
