@@ -23,9 +23,7 @@ LOG="$EXP_DIR/log.txt"
 mkdir -p ${EXP_DIR}
 echo Logging to "$LOG"
 
-python -u scripts/run.py --save_dir ${EXP_DIR} "${@:4}" >${LOG} 2>&1
-
-#./scripts/eval.sh ${EXP_DIR} ${GPU_ID} 0 "${@:4}"
+python -u scripts/run.py --save_dir ${EXP_DIR} "${@:3}" >${LOG} 2>&1
 
 
 
