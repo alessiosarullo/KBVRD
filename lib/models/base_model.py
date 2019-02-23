@@ -4,9 +4,11 @@ import torch
 import torch.nn as nn
 
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
-from lib.dataset.hicodet import HicoDetSplit
 from lib.containers import Minibatch, Prediction
+from lib.dataset.hicodet import HicoDetSplit
 from .mask_rcnn import MaskRCNN
+
+
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
 
 
@@ -76,15 +78,15 @@ class BaseModel(nn.Module):
         self.rel_obj_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_union_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_output_fc = nn.Sequential(*(
-                ([nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim)] if self.use_bn else [])  # 2 = biLSTM
-                +
-                [nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),
-                 nn.ReLU(inplace=True),
-                 nn.Dropout(self.spatial_dropout)]
-                +
-                ([nn.BatchNorm1d(self.rel_hidden_dim)] if self.use_bn else [])
-                +
-                [nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates)]
+            ([nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim)] if self.use_bn else [])  # 2 = biLSTM
+            +
+            [nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),
+             nn.ReLU(inplace=True),
+             nn.Dropout(self.spatial_dropout)]
+            +
+            ([nn.BatchNorm1d(self.rel_hidden_dim)] if self.use_bn else [])
+            +
+            [nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates)]
         ))
 
     def get_losses(self, x, **kwargs):
@@ -97,24 +99,31 @@ class BaseModel(nn.Module):
         # TODO docs
 
         with torch.set_grad_enabled(self.training):
-            # `rel_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-
             tmp_output = self.first_step(x)
-            boxes_ext, box_feats, masks, union_boxes_feats, rel_infos = tmp_output[:5]
-            obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, rel_infos)
+            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos = tmp_output[:5]
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+
             if self.training:
+                assert hoi_infos is not None
+                obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
                 box_labels, rel_labels = tmp_output[5:]
                 return obj_output, rel_output, box_labels, rel_labels
             else:
-                obj_prob = nn.functional.softmax(obj_output, axis=1)
-                rel_prob = nn.functional.softmax(rel_output, axis=1)
-                result = Prediction(obj_im_inds=boxes_ext[:, 0],
-                                    obj_boxes=boxes_ext[:, 1:5],
-                                    obj_probs=obj_prob,
-                                    hoi_img_inds=rel_infos[:, 0],
-                                    ho_pairs=rel_infos[:, 1:],
-                                    hoi_probs=rel_prob)
-                return result
+                if hoi_infos is not None:
+                    obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
+                    obj_prob = nn.functional.softmax(obj_output, dim=1)
+                    hoi_probs = nn.functional.softmax(rel_output, dim=1)
+                    hoi_img_inds = hoi_infos[:, 0]
+                    ho_pairs = hoi_infos[:, 1:]
+                else:
+                    obj_prob = boxes_ext[:, 5:]
+                    hoi_probs = ho_pairs = hoi_img_inds = None
+                return Prediction(obj_im_inds=boxes_ext[:, 0],
+                                  obj_boxes=boxes_ext[:, 1:5],
+                                  obj_scores=obj_prob,
+                                  hoi_img_inds=hoi_img_inds,
+                                  ho_pairs=ho_pairs,
+                                  hoi_scores=hoi_probs)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, rel_infos):
         # TODO docs
@@ -185,15 +194,19 @@ class BaseModel(nn.Module):
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
         else:
             rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
-        assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
+        boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
+
+        if rel_im_ids.size == 0:
+            assert not self.training
+            return boxes_ext, box_feats, masks, None, None
+        assert ho_pairs.shape[0] > 0
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
         rel_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=rel_union_boxes)
         assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
 
-        rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1)
-        boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
+        rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1).astype(np.int, copy=False)
         if self.training:
             box_labels = torch.tensor(box_labels, device=masks.device)
             rel_labels = torch.tensor(rel_labels, device=masks.device)
@@ -208,21 +221,23 @@ class BaseModel(nn.Module):
         fg_inds = (classes > 0)
         assert fg_inds.shape[0] == boxes_ext.shape[0] == masks.shape[0]
         fg_inds = np.flatnonzero(fg_inds)  # this is needed for torch tensors
-        boxes_ext, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
+        boxes_ext_fg, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
 
         # Map from COCO classes to HICO ones
         coco_to_hico_mapping = np.array(self.dataset.hicodet.map_coco_classes_to_hico(), dtype=np.int)
-        boxes_ext_hico = boxes_ext[:, np.concatenate([np.arange(5), 5 + coco_to_hico_mapping])]  # convert to Hico classes by swapping columns
+        boxes_ext_hico = boxes_ext_fg[:, np.concatenate([np.arange(5), 5 + coco_to_hico_mapping])]  # convert to Hico classes by swapping columns
+
         return boxes_ext_hico, masks, box_feats
 
     def get_all_pairs(self, boxes_ext, box_classes=None):
+        # FIXME there is a significant overlap between this method and rel_gt_assignment. Merge.
         box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)
         person_box_inds = (box_classes == self.dataset.hicodet.person_class)
-        person_boxes_ext = boxes_ext[person_box_inds, :]
 
+        person_boxes_ext = boxes_ext[person_box_inds, :]
         if self.filter_rels_of_non_overlapping_boxes:
             _, pred_box_ious = iou_match_in_img(person_boxes_ext[:, :5], boxes_ext[:, :5])
-            possible_rels_mat = 0 < pred_box_ious < 1
+            possible_rels_mat = (0 < pred_box_ious) & (pred_box_ious < 1)
             subjs, objs = np.where(possible_rels_mat)
             subjs = np.flatnonzero(person_box_inds)[subjs]
         else:

@@ -32,7 +32,7 @@ class HicoDetSplit(Dataset):
             self.image_ids = im_inds
         else:
             self.image_ids = list(range(len(self.annotations)))
-        if self.is_train and filter_invisible:
+        if filter_invisible:  # FIXME add is_train? But then during detection images without boxes are fed
             vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
                                                   if any([not inter['invis'] for inter in ann['interactions']])])
             num_old_images, num_new_images = len(self.image_ids), len(vis_im_inds)

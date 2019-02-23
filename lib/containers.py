@@ -133,13 +133,13 @@ class Minibatch:
 
 
 class Prediction:
-    def __init__(self, obj_im_inds, obj_boxes, obj_probs, hoi_img_inds, ho_pairs, hoi_probs):
+    def __init__(self, obj_im_inds, obj_boxes, obj_scores, hoi_img_inds, ho_pairs, hoi_scores):
         self.obj_im_inds = obj_im_inds  # type: torch.Tensor
         self.obj_boxes = obj_boxes  # type: torch.Tensor
-        self.obj_scores = obj_probs  # type: torch.Tensor
+        self.obj_scores = obj_scores  # type: torch.Tensor
         self.hoi_img_inds = hoi_img_inds  # type: np.ndarray
         self.ho_pairs = ho_pairs  # type: np.ndarray
-        self.hoi_scores = hoi_probs  # type: torch.Tensor
+        self.hoi_scores = hoi_scores  # type: torch.Tensor
 
 
 def _im_list_to_4d_tensor(ims, use_fpn=False):
