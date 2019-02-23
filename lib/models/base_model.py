@@ -173,11 +173,8 @@ class BaseModel(nn.Module):
         # TODO docs
 
         boxes_ext_np, masks, feat_map, box_feats = self.mask_rcnn(batch)
-        # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
-        feat_map = feat_map.detach()
-        box_feats = box_feats.detach()
-        masks = masks.detach()
         assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
+        # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
 
         boxes_ext_np, masks, box_feats = self.filter_and_map_to_hico(boxes_ext_np, masks, box_feats)
 
@@ -186,14 +183,13 @@ class BaseModel(nn.Module):
             rel_im_ids, ho_pairs, rel_labels = self.rel_gt_assignments(batch, boxes_ext_np)
             assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
-            assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
         else:
             rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
+        assert ho_pairs.shape[0] > 0  # FIXME this is just a reminder to deal with that case, it's not actually true
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
         rel_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=rel_union_boxes)
-        union_boxes_feats = union_boxes_feats.detach()
         assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
 
         rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1)
@@ -206,14 +202,18 @@ class BaseModel(nn.Module):
             return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos
 
     def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor, box_feats: torch.Tensor):
+        # Keep foreground object only
         class_scores = boxes_ext[:, 5:]
         classes = np.argmax(class_scores, axis=1)
         fg_inds = (classes > 0)
         assert fg_inds.shape[0] == boxes_ext.shape[0] == masks.shape[0]
         fg_inds = np.flatnonzero(fg_inds)  # this is needed for torch tensors
         boxes_ext, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
-        boxes_ext = boxes_ext[:, list(range(5)) + self.dataset.hicodet.map_coco_classes_to_hico()]  # convert to Hico classes by swapping columns
-        return boxes_ext, masks, box_feats
+
+        # Map from COCO classes to HICO ones
+        coco_to_hico_mapping = np.array(self.dataset.hicodet.map_coco_classes_to_hico(), dtype=np.int)
+        boxes_ext_hico = boxes_ext[:, np.concatenate([np.arange(5), 5 + coco_to_hico_mapping])]  # convert to Hico classes by swapping columns
+        return boxes_ext_hico, masks, box_feats
 
     def get_all_pairs(self, boxes_ext, box_classes=None):
         box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)

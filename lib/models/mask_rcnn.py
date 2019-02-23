@@ -24,14 +24,15 @@ class MaskRCNN(nn.Module):
         if not torch.cuda.is_available():
             raise ValueError("Need a CUDA device to run the code.")
 
-        mask_rcnn = Generalized_RCNN()
-        weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
-        print("Loading Mask-RCNN's weights from {}.".format(weight_file))
-        load_detectron_weight(mask_rcnn, weight_file)
-
-        self.mask_rcnn = mask_rcnn
         self.mask_resolution = cfg.model.mask_resolution
         self.output_feat_dim = 2048  # this is hardcoded in `ResNet_roi_conv5_head_for_masks()`, so I can't actually read it from configs
+        self.mask_rcnn = Generalized_RCNN()
+        self._load_weights()
+
+    def _load_weights(self):
+        weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
+        print("Loading Mask-RCNN's weights from {}.".format(weight_file))
+        load_detectron_weight(self.mask_rcnn, weight_file)
 
     def train(self, mode=True):
         super().train(mode=False)  # FIXME freeze weights as well
@@ -86,16 +87,19 @@ class MaskRCNN(nn.Module):
                                     boxes.astype(np.float32, copy=False),
                                     scores.astype(np.float32, copy=False)
                                     ], axis=1)
+        fmap = fmap.detach()
+        box_feats = box_feats.detach()
+        masks = masks.detach()
         return boxes_ext, masks, fmap, box_feats
 
     def get_rois_feats(self, fmap, rois):
-        return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False))
+        return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False)).detach()
 
     def get_masks(self, img_infos, fmap, boxes, box_im_ids, box_classes=None):
         masks = im_detect_mask(self.mask_rcnn, img_infos, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
         if box_classes is not None:
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
-        return masks
+        return masks.detach()
 
 
 def vis_masks():
@@ -103,8 +107,10 @@ def vis_masks():
     output_dir = os.path.join('output', 'tmp', '%s' % ('pre' if cfg.program.load_precomputed_feats else 'e2e'))
 
     im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
-    hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
-    hdsl = hds.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)
+    # hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
+    # hdsl = hds.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)
+    hds = HicoDetSplit(Splits.TEST, im_inds=[0])
+    hdsl = hds.get_loader(batch_size=1, shuffle=False)
     dummy_coco = dummy_datasets.get_coco_dataset()  # this is used for class names
 
     mask_rcnn = MaskRCNN()  # add BG class
@@ -143,7 +149,8 @@ def vis_masks():
                 box_alpha=0.3,
                 show_class=True,
                 thresh=0.7,
-                kp_thresh=2
+                kp_thresh=2,
+                ext='png'
             )
 
 

@@ -1,11 +1,6 @@
-"""
-Adapted from Danfei Xu. In particular, slow code was removed
-"""
 import numpy as np
 from lib.containers import Minibatch, Prediction
 from lib.bbox_utils import compute_ious
-import torch
-
 
 # TODO rename
 

@@ -35,7 +35,7 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
     u_im_ids = np.unique(im_ids)
-    assert np.all(u_nonnms_im_ids, u_im_ids), (u_nonnms_im_ids, u_im_ids)
+    assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
 
     if boxes.shape[0] > 0:
         box_feats = get_rois_feats(model, feat_map, boxes)

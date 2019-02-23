@@ -7,7 +7,8 @@ cache/
 cache
 pydetectron/
 detectron_outputs/
-exp/
+output/
+!output/tmp/
 
 # Data and models
 data/
@@ -52,11 +53,6 @@ data
 
 # PyCharm
 *.idea
-
-
-# Python
-*__pycache__*
-
 
 ## General
 

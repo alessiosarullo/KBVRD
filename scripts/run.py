@@ -52,6 +52,7 @@ class Launcher:
         if cfg.program.eval_only:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
+            self.detector.mask_rcnn._load_weights()  # FIXME this is only needed because BoxHead is trained by mistake. Remove after fix
         # # TODO
         # if cfg.program.resume:
         # start_epoch = ckpt['epoch']

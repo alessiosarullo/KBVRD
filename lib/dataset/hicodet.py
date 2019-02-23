@@ -143,7 +143,7 @@ class HicoDetSplit(Dataset):
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
-            shuffle = True if self.is_train else False,
+            shuffle = True if self.is_train else False
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
             batch_size=batch_size * num_gpus,
