@@ -30,7 +30,7 @@ class BaseConfigs:
 
 class ProgramConfig(BaseConfigs):
     def __init__(self):
-        self.print_interval = 10
+        self.print_interval = 50
         self.randomize = False
         self.sync = False
 
