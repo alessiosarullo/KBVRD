@@ -23,11 +23,9 @@ class Evaluator:
 
     @staticmethod
     def evaluate_from_dict(example: Minibatch, prediction: Prediction, **kwargs):
-        if prediction.hoi_scores is None:
+        if not prediction.is_complete():
             return [[]]
-        assert prediction.hoi_scores is not None and \
-               prediction.hoi_img_inds is not None and \
-               prediction.ho_pairs is not None
+        assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
 
         gt_hois = example.gt_hois[:, [0, 2, 1]]
         gt_boxes = example.gt_boxes.astype(np.float, copy=False)

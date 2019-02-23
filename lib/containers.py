@@ -141,6 +141,12 @@ class Prediction:
         self.ho_pairs = ho_pairs  # type: np.ndarray
         self.hoi_scores = hoi_scores  # type: torch.Tensor
 
+    def is_complete(self):
+        complete = True
+        for v in vars(self).values():
+            complete = complete and v is not None
+        return complete
+
 
 def _im_list_to_4d_tensor(ims, use_fpn=False):
     """

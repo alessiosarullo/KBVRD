@@ -89,7 +89,6 @@ class Launcher:
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
 
     def train_epoch(self, epoch_num, train_loader, optimizer):
-        print_interval = cfg.program.print_interval
         tr = []
         num_batches = len(train_loader)
 
@@ -100,11 +99,11 @@ class Launcher:
             tr.append(self.train_batch(batch, optimizer))
             Timer.get('Epoch', 'Batch').toc()
 
-            if b % print_interval == 0 and b >= print_interval:
+            if b % cfg.program.print_interval == 0 and b >= cfg.program.print_interval:
                 time_per_batch = Timer.get('Epoch', 'Batch').spent(average=True)
                 print("Iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
                     batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
-                print(pd.concat(tr[-print_interval:], axis=1).mean(1))
+                print(pd.concat(tr[-cfg.program.print_interval:], axis=1).mean(1))
                 print('-' * 10, flush=True)
         Timer.get('Epoch').toc()
         print('Time for epoch:', Timer.get('Epoch').str_last())
@@ -136,13 +135,19 @@ class Launcher:
         all_pred_entries = []
         evaluator = Evaluator()
         self.detector.eval()
-        for batch in test_loader:
+        for b_idx, batch in enumerate(test_loader):
+            Timer.get('Img').tic()
             prediction = self.detector(batch)
-            all_pred_entries.append(prediction)
-            assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
-            evaluator.evaluate_scene_graph_entry(batch, prediction)
-        evaluator.print_stats()
+            Timer.get('Img').toc()
 
+            all_pred_entries.append(prediction)
+            evaluator.evaluate_scene_graph_entry(batch, prediction)
+
+            if b_idx % cfg.program.print_interval == 0 and b_idx >= cfg.program.print_interval:
+                time_per_batch = Timer.get('Img').spent(average=True)
+                print("Img {:5d}/{:5d}. Avg: {:.3f}s/img".format(b_idx, len(test_loader), time_per_batch))
+
+        evaluator.print_stats()
         with open(cfg.program.result_file, 'wb') as f:
             pickle.dump(all_pred_entries, f)
         print('Wrote results to %s. Terminating.' % cfg.program.result_file)

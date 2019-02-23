@@ -113,13 +113,20 @@ class BaseModel(nn.Module):
                     obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
                     obj_prob = nn.functional.softmax(obj_output, dim=1)
                     hoi_probs = nn.functional.softmax(rel_output, dim=1)
+                    obj_im_inds = boxes_ext[:, 0]
+                    obj_boxes = boxes_ext[:, 1:5]
                     hoi_img_inds = hoi_infos[:, 0]
                     ho_pairs = hoi_infos[:, 1:]
                 else:
-                    obj_prob = boxes_ext[:, 5:]
                     hoi_probs = ho_pairs = hoi_img_inds = None
-                return Prediction(obj_im_inds=boxes_ext[:, 0],
-                                  obj_boxes=boxes_ext[:, 1:5],
+                    if boxes_ext is None:
+                        obj_im_inds = obj_boxes = obj_prob = None
+                    else:
+                        obj_im_inds = boxes_ext[:, 0]
+                        obj_boxes = boxes_ext[:, 1:5]
+                        obj_prob = boxes_ext[:, 5:]
+                return Prediction(obj_im_inds=obj_im_inds,
+                                  obj_boxes=obj_boxes,
                                   obj_scores=obj_prob,
                                   hoi_img_inds=hoi_img_inds,
                                   ho_pairs=ho_pairs,
@@ -193,6 +200,8 @@ class BaseModel(nn.Module):
             assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
         else:
+            if boxes_ext_np.shape[0] == 0:
+                return None, None, None, None, None
             rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
 
@@ -235,6 +244,9 @@ class BaseModel(nn.Module):
         person_box_inds = (box_classes == self.dataset.hicodet.person_class)
 
         person_boxes_ext = boxes_ext[person_box_inds, :]
+        if person_boxes_ext.shape[0] == 0:
+            return np.empty([0, ]), np.empty([0, 2])
+
         if self.filter_rels_of_non_overlapping_boxes:
             _, pred_box_ious = iou_match_in_img(person_boxes_ext[:, :5], boxes_ext[:, :5])
             possible_rels_mat = (0 < pred_box_ious) & (pred_box_ious < 1)
@@ -251,11 +263,11 @@ class BaseModel(nn.Module):
         sub_obj_pairs = np.stack([subjs, objs], axis=1)  # this is over the original boxes, not person ones
         return rel_im_ids, sub_obj_pairs
 
-    def box_gt_assignment(self, batch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
+    def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
         gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
-        box_labels = batch.gt_box_classes[gt_idx_per_pred_box]
+        box_labels = batch.gt_obj_classes[gt_idx_per_pred_box]
         gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= gt_iou_thr, axis=1))
         boxes_ext = boxes_ext[gt_match, :]
         box_labels = box_labels[gt_match]
@@ -263,7 +275,7 @@ class BaseModel(nn.Module):
         masks = masks[gt_match, :]
 
         unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
-        unmatched_gt_box_labels = batch.gt_box_classes[unmatched_gt_boxes_inds]
+        unmatched_gt_box_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
         unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
         unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_box_labels] = 1
         unmatched_gt_boxes_ext = np.concatenate([gt_boxes_with_imid[unmatched_gt_boxes_inds, :], unmatched_gt_labels_onehot], axis=1)
@@ -284,7 +296,7 @@ class BaseModel(nn.Module):
         return boxes_ext, box_labels, box_feats, masks
 
     def rel_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
-        gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
+        gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
         predict_boxes = boxes_ext_np[:, 1:5]
@@ -298,7 +310,7 @@ class BaseModel(nn.Module):
             assert np.any(predict_box_im_ids_i)
 
             gt_boxes_i = gt_boxes[gt_box_im_ids_i]
-            gt_classes_i = gt_box_classes[gt_box_im_ids_i]
+            gt_obj_classes_i = gt_obj_classes[gt_box_im_ids_i]
             gt_rels_i = gt_inters[gt_inters_im_ids == im_id]
 
             predict_boxes_i = predict_boxes[predict_box_im_ids_i]
@@ -306,7 +318,7 @@ class BaseModel(nn.Module):
             predict_human_boxes_i = (predict_box_labels_i == self.dataset.hicodet.person_class)
 
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
-            predict_gt_match = (predict_box_labels_i[:, None] == gt_classes_i[None, :]) & (iou_predict_to_gt_i >= 0.5)  # FIXME magic constant
+            predict_gt_match = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= 0.5)  # FIXME magic constant
 
             human_subject_possibilities = np.zeros((predict_boxes_i.shape[0], predict_boxes_i.shape[0]), dtype=bool)
             human_subject_possibilities[predict_human_boxes_i, :] = True
