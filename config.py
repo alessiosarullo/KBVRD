@@ -37,7 +37,7 @@ class ProgramConfig(BaseConfigs):
         self.eval_only = False
         self.num_images = 0  # restrict the dataset to this number of images if > 0
 
-        self.save_dir = 'exp'
+        self.save_dir = 'output'
         self.load_precomputed_feats = False
 
     @property
@@ -51,6 +51,10 @@ class ProgramConfig(BaseConfigs):
     @property
     def checkpoint_file(self):
         return os.path.join(self.save_dir, 'ckpt.tar')
+
+    @property
+    def result_file(self):
+        return os.path.join(self.save_dir, 'result_test.pkl')
 
     @property
     def im_inds(self):

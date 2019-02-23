@@ -22,28 +22,64 @@ class Launcher:
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
         cfg.print()
+        self.detector = None  # type: BaseModel
+        self.train_split = None  # type: HicoDetSplit
 
     def run(self):
-        detector, train_split = self.setup()
+        self.setup()
         if not cfg.program.eval_only:
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            self.train(detector, train_split)
+            self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        self.test(detector)
+        self.test()
         print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
-    def train(self, detector, train_split):
-        train_loader = train_split.get_loader(batch_size=cfg.opt.batch_size)
+    def setup(self):
+        seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        print('RNG seed:', seed)
 
-        optimizer, scheduler = self.get_optim(detector)
+        self.train_split = HicoDetSplit(Splits.TRAIN, im_inds=cfg.program.im_inds, flipping_prob=cfg.data.flip_prob)
+
+        self.detector = BaseModel(self.train_split)
+        self.detector.cuda()
+        print_params(self.detector)
+
+        if cfg.program.eval_only:
+            ckpt = torch.load(cfg.program.checkpoint_file)
+            self.detector.load_state_dict(ckpt['state_dict'])
+        # # TODO
+        # if cfg.program.resume:
+        # start_epoch = ckpt['epoch']
+        # print("Continuing from epoch %d." % (start_epoch + 1))
+
+    def get_optim(self):
+        # TODO tip. Erase if unnecessary
+        # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps stabilize the models.
+        params = self.detector.parameters()
+        if cfg.opt.use_adam:
+            optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
+        else:
+            optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, momentum=0.9)
+        scheduler = ReduceLROnPlateau(optimizer, 'max', patience=3, factor=0.1, verbose=True, threshold=0.0001, threshold_mode='abs', cooldown=1)
+        return optimizer, scheduler
+
+    def train(self):
+        train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
+
+        optimizer, scheduler = self.get_optim()
+        # TODO scheduler is unused so far
         for epoch in range(cfg.opt.num_epochs):
-            detector.train()
-            self.train_epoch(epoch, train_loader, optimizer, detector)
+            self.detector.train()
+            self.train_epoch(epoch, train_loader, optimizer)
             if cfg.program.save_dir is not None:
                 torch.save({
                     'epoch': epoch,
-                    'state_dict': detector.state_dict(),
+                    'state_dict': self.detector.state_dict(),
                 }, cfg.program.checkpoint_file)
 
         Timer.get().print()
@@ -52,64 +88,7 @@ class Launcher:
             os.remove(link)
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), link)
 
-    def test(self, detector: BaseModel):
-        test_split = HicoDetSplit(Splits.TEST, im_inds=cfg.program.im_inds)
-        test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
-
-        # TODO remove if not useful.
-        # In GPNN code:
-        # if sequence_ids[0] is 'HICO_test2015_00000396':
-            #break
-
-        all_pred_entries = []
-        evaluator = Evaluator()
-        detector.set_eval_mode()
-        for batch in test_loader:
-            prediction = detector(batch)
-            all_pred_entries.append(prediction)
-            assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
-            evaluator.evaluate_scene_graph_entry(batch, prediction)
-        evaluator.print_stats()
-
-        res_file = os.path.join(cfg.program.save_dir, 'result_test.pkl')
-        with open(res_file, 'wb') as f:
-            pickle.dump(all_pred_entries, f)
-        print('Wrote results to %s. Terminating.' % res_file)
-
-    @staticmethod
-    def setup():
-        seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        print('RNG seed:', seed)
-
-        train_split = HicoDetSplit(Splits.TRAIN, im_inds=cfg.program.im_inds, flipping_prob=cfg.data.flip_prob)
-
-        detector = BaseModel(train_split)
-        detector.cuda()
-        print_params(detector)
-
-        return detector, train_split
-
-    def get_optim(self, detector):
-        conf = cfg.opt
-        lr = conf.learning_rate
-
-        # TODO tip. Erase if unnecessary
-        # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps stabilize the models.
-
-        params = detector.parameters()
-        if conf.use_adam:
-            optimizer = torch.optim.Adam(params, weight_decay=conf.l2_coeff, lr=lr, eps=1e-3)
-        else:
-            optimizer = torch.optim.SGD(params, weight_decay=conf.l2_coeff, lr=lr, momentum=0.9)
-
-        scheduler = ReduceLROnPlateau(optimizer, 'max', patience=3, factor=0.1, verbose=True, threshold=0.0001, threshold_mode='abs', cooldown=1)
-        return optimizer, scheduler
-
-    def train_epoch(self, epoch_num, train_loader, optimizer, detector):
+    def train_epoch(self, epoch_num, train_loader, optimizer):
         print_interval = cfg.program.print_interval
         tr = []
         num_batches = len(train_loader)
@@ -118,7 +97,7 @@ class Launcher:
         for b, batch in enumerate(train_loader):
             Timer.get('Epoch', 'Batch').tic()
             batch.iter_num = num_batches * epoch_num + b
-            tr.append(self.train_batch(batch, optimizer, detector))
+            tr.append(self.train_batch(batch, optimizer))
             Timer.get('Epoch', 'Batch').toc()
 
             if b % print_interval == 0 and b >= print_interval:
@@ -131,9 +110,8 @@ class Launcher:
         print('Time for epoch:', Timer.get('Epoch').str_last())
         print('-' * 100, flush=True)
 
-    @staticmethod
-    def train_batch(b, optimizer, detector: BaseModel):
-        losses = detector.get_losses(b)
+    def train_batch(self, batch, optimizer):
+        losses = self.detector.get_losses(batch)
         optimizer.zero_grad()
 
         assert losses is not None
@@ -142,9 +120,32 @@ class Launcher:
         losses['total'] = loss
         res = pd.Series({x: y.item() for x, y in losses.items()})
 
-        nn.utils.clip_grad_norm_([p for p in detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
+        nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
         optimizer.step()
         return res
+
+    def test(self):
+        test_split = HicoDetSplit(Splits.TEST, im_inds=cfg.program.im_inds)
+        test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
+
+        # TODO remove if not useful.
+        # In GPNN code:
+        # if sequence_ids[0] is 'HICO_test2015_00000396':
+            #break
+
+        all_pred_entries = []
+        evaluator = Evaluator()
+        self.detector.eval()
+        for batch in test_loader:
+            prediction = self.detector(batch)
+            all_pred_entries.append(prediction)
+            assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
+            evaluator.evaluate_scene_graph_entry(batch, prediction)
+        evaluator.print_stats()
+
+        with open(cfg.program.result_file, 'wb') as f:
+            pickle.dump(all_pred_entries, f)
+        print('Wrote results to %s. Terminating.' % cfg.program.result_file)
 
 
 def main():
