@@ -21,9 +21,10 @@ EXP_DIR=${CHECKPOINT_DIR}/${EXP_FULL_NAME}
 LOG="$EXP_DIR/log.txt"
 
 mkdir -p ${EXP_DIR}
-echo Logging to "$LOG"
+exec &> >(tee -a "$LOG")
+echo Logging ${EXP_DIR} to "$LOG"
 
-python -u scripts/run.py --save_dir ${EXP_DIR} "${@:3}" >${LOG} 2>&1
+python -u scripts/run.py --save_dir ${EXP_DIR} "${@:3}"
 
 
 

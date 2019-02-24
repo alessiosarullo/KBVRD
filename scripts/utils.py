@@ -1,11 +1,11 @@
 import numpy as np
 import time
 import torch
+from typing import Dict
 
 
 class Timer:
     global_timer = None
-    print_average = True
     gpu_sync = False
 
     def __init__(self):
@@ -13,15 +13,18 @@ class Timer:
         self.last = None
         self.total_time = 0
         self.num_instances = 0
-        self.subtimers = {}
+        self.sub_timers = {}  # type:Dict[str, Timer]
 
     @classmethod
-    def get(cls, *args):
+    def get(cls, *args, get_only=False):
         if cls.global_timer is None:
             cls.global_timer = cls()
         timer = cls.global_timer
         for subt in args:
-            timer = timer.subtimers.setdefault(subt, Timer())
+            if get_only:
+                timer = timer.sub_timers[subt]
+            else:
+                timer = timer.sub_timers.setdefault(subt, Timer())
         return timer
 
     def tic(self):
@@ -45,29 +48,21 @@ class Timer:
     def spent(self, average=True):
         return self.total_time / (self.num_instances if average else 1)
 
-    def str_last(self):
-        return self.format(self.last)
-
-    def _get_lines(self):
+    def _get_lines(self, average):
         sep = ' ' * 4
-        s = ['%s (x%d)' % (self.format(self.spent(average=self.__class__.print_average)), self.num_instances)]
-        for k, v in self.subtimers.items():
-            sub_s = v._get_lines()
+        s = ['%s (x%d)' % (self.format(self.spent(average=average)), self.num_instances)]
+        for k, v in self.sub_timers.items():
+            sub_s = v._get_lines(average)
             s.append('%s %s: %s' % (sep, k, sub_s[0]))
             s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
         return s
 
     @classmethod
     def print(cls, average=True):
-        cls.print_average = average
         global_t = cls.get()
         if global_t.total_time == 0 and global_t.start_time is not None:
             global_t.toc()
-        print('Total time:', '\n'.join(global_t._get_lines()))
-
-    @classmethod
-    def enable_gpu_sync(cls):
-        cls.gpu_sync = True
+        print('Total time:', '\n'.join(global_t._get_lines(average=average)))
 
     @staticmethod
     def format(seconds):
@@ -86,6 +81,7 @@ class Timer:
         else:
             s, unit = '%d:%02d' % divmod(seconds/60, 60), 'h'
         return '%s%s' % (s, unit)
+
 
 def print_params(model, breakdown=False):
     """

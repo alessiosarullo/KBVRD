@@ -53,10 +53,10 @@ class Launcher:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
             self.detector.mask_rcnn._load_weights()  # FIXME this is only needed because BoxHead is trained by mistake. Remove after fix
-        # # TODO
-        # if cfg.program.resume:
-        # start_epoch = ckpt['epoch']
-        # print("Continuing from epoch %d." % (start_epoch + 1))
+            # # TODO
+            # if cfg.program.resume:
+            # start_epoch = ckpt['epoch']
+            # print("Continuing from epoch %d." % (start_epoch + 1))
 
     def get_optim(self):
         # TODO tip. Erase if unnecessary
@@ -93,20 +93,27 @@ class Launcher:
         num_batches = len(train_loader)
 
         Timer.get('Epoch').tic()
-        for b, batch in enumerate(train_loader):
+        for bidx, batch in enumerate(train_loader):
             Timer.get('Epoch', 'Batch').tic()
-            batch.iter_num = num_batches * epoch_num + b
             tr.append(self.train_batch(batch, optimizer))
             Timer.get('Epoch', 'Batch').toc()
 
-            if b % cfg.program.print_interval == 0 and b >= cfg.program.print_interval:
-                time_per_batch = Timer.get('Epoch', 'Batch').spent(average=True)
-                print("Iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}). {:.3f}s/batch, {:.1f}m/epoch".format(
-                    batch.iter_num, epoch_num, b, num_batches, time_per_batch, num_batches * time_per_batch / 60))
+            if bidx % cfg.program.print_interval == 0:
+                iter_num = num_batches * epoch_num + bidx
+                time_per_batch = Timer.get('Epoch', 'Batch', get_only=True).spent(average=True)
+                time_to_load = Timer.get('Epoch', 'GetBatch', get_only=True).spent(average=True)
+                time_to_collate = Timer.get('Epoch', 'Collate', get_only=True).spent(average=True)
+                est_time_per_epoch = num_batches * (time_per_batch + time_to_load * train_loader.batch_size + time_to_collate)
+
+                print('Iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(iter_num, epoch_num, bidx, num_batches),
+                      'Avg: {:s}/batch, {:s}/load, {:s}/collate.'.format(Timer.format(time_per_batch),
+                                                                         Timer.format(time_to_load),
+                                                                         Timer.format(time_to_collate)),
+                      'Estimated {:s}/epoch'.format(Timer.format(est_time_per_epoch)))
                 print(pd.concat(tr[-cfg.program.print_interval:], axis=1).mean(1))
                 print('-' * 10, flush=True)
         Timer.get('Epoch').toc()
-        print('Time for epoch:', Timer.get('Epoch').str_last())
+        print('Time for epoch:', Timer.format(Timer.get('Epoch').last))
         print('-' * 100, flush=True)
 
     def train_batch(self, batch, optimizer):
@@ -130,7 +137,7 @@ class Launcher:
         # TODO remove if not useful.
         # In GPNN code:
         # if sequence_ids[0] is 'HICO_test2015_00000396':
-            #break
+        # break
 
         all_pred_entries = []
         evaluator = Evaluator()
