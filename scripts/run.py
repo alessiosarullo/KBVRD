@@ -150,7 +150,7 @@ class Launcher:
             prediction = self.detector(batch)
             Timer.get('Img').toc()
 
-            all_pred_entries.append(prediction)
+            all_pred_entries.append(prediction)  # FIXME appending a prediction object is bad. Tensors are even loaded in GPU
             evaluator.evaluate_scene_graph_entry(batch, prediction)
 
             if b_idx % cfg.program.print_interval == 0 and b_idx >= cfg.program.print_interval:

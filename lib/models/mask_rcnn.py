@@ -135,8 +135,9 @@ def vis_masks():
             im_fn = batch.other_ex_data[i]['fn']
             im = cv2.imread(os.path.join(hds.img_dir, im_fn))
 
-            cls_boxes = [[]] + [boxes_with_scores_i[box_classes_i == j, :] for j in range(1, 81)]  # 81 = #coco classes + background
+            cls_boxes = [[]] + [boxes_with_scores_i[box_classes_i == j, :] for j in range(1, len(dummy_coco.classes))]  # background is included
             cls_segms = segm_results(cls_boxes, masks_i, boxes_with_scores_i[:, :-1], im.shape[0], im.shape[1])
+            # cls_segms = None
 
             vis_utils.vis_one_image(
                 im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
@@ -148,7 +149,7 @@ def vis_masks():
                 dataset=dummy_coco,
                 box_alpha=0.3,
                 show_class=True,
-                thresh=0.7,
+                thresh=0.7,  # Lower this to see all the predictions (was 0.7 in the original code)
                 kp_thresh=2,
                 ext='png'
             )
