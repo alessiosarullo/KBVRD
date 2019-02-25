@@ -34,7 +34,7 @@ class BaseModel(nn.Module):
         # Rel
         self.rel_vis_hidden_dim = 1024
         self.rel_hidden_dim = 1024
-        self.filter_rels_of_non_overlapping_boxes = True
+        self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         # Derived
