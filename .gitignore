@@ -9,6 +9,7 @@ pydetectron/
 detectron_outputs/
 ./output/
 ./output
+output
 
 # Data and models
 data/
