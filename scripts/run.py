@@ -85,7 +85,10 @@ class Launcher:
 
         Timer.get().print()
         if cfg.opt.num_epochs > 0:
-            os.remove(cfg.program.saved_model_file)
+            try:
+                os.remove(cfg.program.saved_model_file)
+            except FileNotFoundError:
+                pass
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
 
     def train_epoch(self, epoch_num, train_loader, optimizer):
