@@ -134,12 +134,12 @@ class Minibatch:
 
 class Prediction:
     def __init__(self, obj_im_inds, obj_boxes, obj_scores, hoi_img_inds, ho_pairs, hoi_scores):
-        self.obj_im_inds = obj_im_inds  # type: torch.Tensor
-        self.obj_boxes = obj_boxes  # type: torch.Tensor
-        self.obj_scores = obj_scores  # type: torch.Tensor
+        self.obj_im_inds = obj_im_inds  # type: np.ndarray
+        self.obj_boxes = obj_boxes  # type: np.ndarray
+        self.obj_scores = obj_scores  # type: np.ndarray
         self.hoi_img_inds = hoi_img_inds  # type: np.ndarray
         self.ho_pairs = ho_pairs  # type: np.ndarray
-        self.hoi_scores = hoi_scores  # type: torch.Tensor
+        self.hoi_scores = hoi_scores  # type: np.ndarray
 
     def is_complete(self):
         complete = True

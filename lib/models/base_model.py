@@ -126,12 +126,12 @@ class BaseModel(nn.Module):
                         obj_im_inds = boxes_ext[:, 0]
                         obj_boxes = boxes_ext[:, 1:5]
                         obj_prob = boxes_ext[:, 5:]
-                return Prediction(obj_im_inds=obj_im_inds,
-                                  obj_boxes=obj_boxes,
-                                  obj_scores=obj_prob,
+                return Prediction(obj_im_inds=obj_im_inds.cpu().numpy(),
+                                  obj_boxes=obj_boxes.cpu().numpy(),
+                                  obj_scores=obj_prob.cpu().numpy(),
                                   hoi_img_inds=hoi_img_inds,
                                   ho_pairs=ho_pairs,
-                                  hoi_scores=hoi_probs)
+                                  hoi_scores=hoi_probs.cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, rel_infos):
         # TODO docs

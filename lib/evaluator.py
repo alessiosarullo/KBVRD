@@ -25,7 +25,7 @@ class Evaluator:
     def evaluate_from_dict(self, example: Minibatch, prediction: Prediction, **kwargs):
         if not prediction.is_complete():
             return [[]]
-        assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
+        assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
         gt_hois = example.gt_hois[:, [0, 2, 1]]
         gt_boxes = example.gt_boxes.astype(np.float, copy=False)
@@ -36,13 +36,13 @@ class Evaluator:
             predict_obj_classes = gt_obj_classes
             predict_obj_scores = np.ones(predict_obj_classes.shape[0])
         else:
-            predict_boxes = prediction.obj_boxes.cpu().numpy()
-            predict_obj_score_dists = prediction.obj_scores.cpu().numpy()
+            predict_boxes = prediction.obj_boxes
+            predict_obj_score_dists = prediction.obj_scores
             predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
             predict_obj_scores = predict_obj_score_dists.max(axis=1)
 
         predict_ho_pairs = prediction.ho_pairs
-        predict_hoi_score_dists = prediction.hoi_scores.cpu().numpy()
+        predict_hoi_score_dists = prediction.hoi_scores
         predict_hois = np.concatenate([predict_ho_pairs, predict_hoi_score_dists.argmax(axis=1)[:, None]], axis=1)
         predict_hoi_scores = predict_hoi_score_dists.max(axis=1)
 
