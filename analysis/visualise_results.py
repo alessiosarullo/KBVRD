@@ -13,7 +13,7 @@ from lib.detection.wrappers import vis_utils
 
 def vis_masks():
     cfg.parse_args()
-    output_dir = os.path.join('output', 'tmp', 'vis')
+    output_dir = os.path.join('analysis', 'output', 'vis')
     with open(cfg.program.result_file, 'rb') as f:
         d = pickle.load(f)
 
