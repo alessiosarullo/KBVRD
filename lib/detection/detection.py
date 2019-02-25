@@ -38,10 +38,13 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
 
     if boxes.shape[0] > 0:
+        im_scales = im_info[:, 2].cpu().numpy()
+        boxes = boxes * im_scales[im_ids, None]
+
         box_feats = get_rois_feats(model, feat_map, boxes)
         assert box_feats.shape[1] == feat_dim
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
-        masks = im_detect_mask(model, im_info, im_ids, boxes, feat_map)
+        masks = im_detect_mask(model, im_ids, boxes, feat_map)
         Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
         assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
@@ -86,7 +89,7 @@ def _im_detect_bbox(model, inputs, im_info):
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
 
-    return scores, pred_boxes, return_dict['blob_conv'], im_inds # NOTE: pred_boxes are scaled back to the image size
+    return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the image size
 
 
 def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
@@ -155,7 +158,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
     return boxes_ids, box_classes, scores, boxes
 
 
-def im_detect_mask(model, im_info, im_inds, boxes, blob_conv):
+def im_detect_mask(model, im_ids, boxes, blob_conv):
     """
     Arguments:
         model (DetectionModelHelper): the detection model to use
@@ -173,9 +176,7 @@ def im_detect_mask(model, im_info, im_inds, boxes, blob_conv):
     assert boxes.shape[0] > 0
     M = cfg.MRCNN.RESOLUTION
 
-    im_scales = im_info[:, 2].cpu().numpy()
-    boxes = boxes * im_scales[im_inds, None]
-    mask_rois = np.concatenate([im_inds[:, None], boxes], axis=1).astype(np.float32, copy=False)
+    mask_rois = np.concatenate([im_ids[:, None], boxes], axis=1).astype(np.float32, copy=False)
 
     inputs = {'mask_rois': mask_rois}
     if cfg.FPN.MULTILEVEL_ROIS:

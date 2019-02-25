@@ -73,11 +73,14 @@ class MaskRCNN(nn.Module):
             Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
         else:
             inputs = {'data': x.imgs,
-                      'im_info': x.img_infos, }
+                      'im_info': x.img_infos
+                      }
             Timer.get('Epoch', 'Batch', 'Detect').tic()
             box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
             Timer.get('Epoch', 'Batch', 'Detect').toc()
         if kwargs.get('return_det_results', False):
+            im_scales = x.img_infos[:, 2].cpu().numpy()
+            boxes /= im_scales[box_im_ids, None]
             return box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores
 
         # pick the mask corresponding to the predicted class and binarize it
@@ -96,7 +99,9 @@ class MaskRCNN(nn.Module):
         return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False)).detach()
 
     def get_masks(self, img_infos, fmap, boxes, box_im_ids, box_classes=None):
-        masks = im_detect_mask(self.mask_rcnn, img_infos, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
+        im_scales = img_infos[:, 2].cpu().numpy()
+        boxes = boxes * im_scales[box_im_ids, None]
+        masks = im_detect_mask(self.mask_rcnn, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
         if box_classes is not None:
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
         return masks.detach()
