@@ -99,9 +99,10 @@ class MaskRCNN(nn.Module):
         return get_rois_feats(self.mask_rcnn, fmap, rois.astype(np.float32, copy=False)).detach()
 
     def get_masks(self, img_infos, fmap, boxes, box_im_ids, box_classes=None):
+        box_im_ids = box_im_ids.astype(np.int, copy=False)
         im_scales = img_infos[:, 2].cpu().numpy()
         boxes = boxes * im_scales[box_im_ids, None]
-        masks = im_detect_mask(self.mask_rcnn, box_im_ids.astype(np.int, copy=False), boxes.astype(np.float32, copy=False), fmap)
+        masks = im_detect_mask(self.mask_rcnn, box_im_ids, boxes.astype(np.float32, copy=False), fmap)
         if box_classes is not None:
             masks = torch.stack([masks[i, c, :, :].round() for i, c in enumerate(box_classes)], dim=0)
         return masks.detach()

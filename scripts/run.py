@@ -137,11 +137,6 @@ class Launcher:
         test_split = HicoDetSplit(Splits.TEST, im_inds=cfg.program.im_inds)
         test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
 
-        # TODO remove if not useful.
-        # In GPNN code:
-        # if sequence_ids[0] is 'HICO_test2015_00000396':
-        # break
-
         all_pred_entries = []
         evaluator = Evaluator(use_gt_boxes=cfg.program.predcls)
         self.detector.eval()
