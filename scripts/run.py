@@ -153,6 +153,8 @@ class Launcher:
                 time_per_batch = Timer.get('Img').spent(average=True)
                 print("Img {:5d}/{:5d}. Avg: {:.3f}s/img".format(b_idx, len(test_loader), time_per_batch))
 
+                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+
         evaluator.print_stats()
         with open(cfg.program.result_file, 'wb') as f:
             pickle.dump(all_pred_entries, f)

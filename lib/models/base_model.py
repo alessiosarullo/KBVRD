@@ -112,8 +112,9 @@ class BaseModel(nn.Module):
             else:
                 if hoi_infos is not None:
                     obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
-                    obj_prob = nn.functional.softmax(obj_output, dim=1)
-                    hoi_probs = nn.functional.softmax(rel_output, dim=1)
+                    obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+                    hoi_probs = nn.functional.softmax(rel_output, dim=1).cpu().numpy()
+                    boxes_ext = boxes_ext.cpu().numpy()
                     obj_im_inds = boxes_ext[:, 0]
                     obj_boxes = boxes_ext[:, 1:5]
                     hoi_img_inds = hoi_infos[:, 0]
@@ -123,15 +124,16 @@ class BaseModel(nn.Module):
                     if boxes_ext is None:
                         obj_im_inds = obj_boxes = obj_prob = None
                     else:
+                        boxes_ext = boxes_ext.cpu().numpy()
                         obj_im_inds = boxes_ext[:, 0]
                         obj_boxes = boxes_ext[:, 1:5]
                         obj_prob = boxes_ext[:, 5:]
-                return Prediction(obj_im_inds=obj_im_inds.cpu().numpy(),
-                                  obj_boxes=obj_boxes.cpu().numpy(),
-                                  obj_scores=obj_prob.cpu().numpy(),
+                return Prediction(obj_im_inds=obj_im_inds,
+                                  obj_boxes=obj_boxes,
+                                  obj_scores=obj_prob,
                                   hoi_img_inds=hoi_img_inds,
                                   ho_pairs=ho_pairs,
-                                  hoi_scores=hoi_probs.cpu().numpy())
+                                  hoi_scores=hoi_probs)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, rel_infos):
         # TODO docs
