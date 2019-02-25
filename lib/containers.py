@@ -147,6 +147,9 @@ class Prediction:
             complete = complete and v is not None
         return complete
 
+    def to_dict(self):
+        return {k: v if isinstance(v, np.ndarray) else v.cpu().numpy() for k, v in vars(self).items()}
+
 
 def _im_list_to_4d_tensor(ims, use_fpn=False):
     """

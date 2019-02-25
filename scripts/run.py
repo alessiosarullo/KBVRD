@@ -143,14 +143,14 @@ class Launcher:
         # break
 
         all_pred_entries = []
-        evaluator = Evaluator()
+        evaluator = Evaluator(use_gt_boxes=cfg.program.use_gt_boxes_in_eval)
         self.detector.eval()
         for b_idx, batch in enumerate(test_loader):
             Timer.get('Img').tic()
             prediction = self.detector(batch)
             Timer.get('Img').toc()
 
-            all_pred_entries.append(prediction)  # FIXME appending a prediction object is bad. Tensors are even loaded in GPU
+            all_pred_entries.append(prediction.to_dict())
             evaluator.evaluate_scene_graph_entry(batch, prediction)
 
             if b_idx % cfg.program.print_interval == 0 and b_idx >= cfg.program.print_interval:

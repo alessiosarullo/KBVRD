@@ -5,8 +5,9 @@ from lib.bbox_utils import compute_ious
 # TODO rename
 
 class Evaluator:
-    def __init__(self):
+    def __init__(self, use_gt_boxes):
         self.result_dict = {'recall': {20: [], 50: [], 100: []}}
+        self.use_gt_boxes = use_gt_boxes
         np.set_printoptions(precision=3)
 
     def evaluate_scene_graph_entry(self, example, prediction, iou_thresh=0.5):
@@ -21,8 +22,7 @@ class Evaluator:
         for k, v in self.result_dict['recall'].items():
             print('R@%i: %f' % (k, np.mean(v)))
 
-    @staticmethod
-    def evaluate_from_dict(example: Minibatch, prediction: Prediction, **kwargs):
+    def evaluate_from_dict(self, example: Minibatch, prediction: Prediction, **kwargs):
         if not prediction.is_complete():
             return [[]]
         assert len(prediction.obj_im_inds.unique()) == len(np.unique(prediction.hoi_img_inds)) == 1
@@ -31,10 +31,15 @@ class Evaluator:
         gt_boxes = example.gt_boxes.astype(np.float, copy=False)
         gt_obj_classes = example.gt_obj_classes
 
-        predict_boxes = prediction.obj_boxes.cpu().numpy()
-        predict_obj_score_dists = prediction.obj_scores.cpu().numpy()
-        predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
-        predict_obj_scores = predict_obj_score_dists.max(axis=1)
+        if self.use_gt_boxes:
+            predict_boxes = gt_boxes
+            predict_obj_classes = gt_obj_classes
+            predict_obj_scores = np.ones(predict_obj_classes.shape[0])
+        else:
+            predict_boxes = prediction.obj_boxes.cpu().numpy()
+            predict_obj_score_dists = prediction.obj_scores.cpu().numpy()
+            predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
+            predict_obj_scores = predict_obj_score_dists.max(axis=1)
 
         predict_ho_pairs = prediction.ho_pairs
         predict_hoi_score_dists = prediction.hoi_scores.cpu().numpy()
