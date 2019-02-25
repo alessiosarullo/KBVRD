@@ -10,6 +10,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import Configs as cfg
+from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetSplit, Splits
 from lib.models.base_model import BaseModel
 from lib.evaluator import Evaluator
@@ -142,12 +143,11 @@ class Launcher:
         self.detector.eval()
         for b_idx, batch in enumerate(test_loader):
             Timer.get('Img').tic()
-            prediction = self.detector(batch)
+            prediction = self.detector(batch)  # type: Prediction
             Timer.get('Img').toc()
 
             evaluator.evaluate_scene_graph_entry(batch, prediction)
-            prediction = prediction.to_dict()
-            all_pred_entries.append(prediction)
+            all_pred_entries.append(vars(prediction))
 
             if b_idx % cfg.program.print_interval == 0:
                 time_per_batch = Timer.get('Img').spent(average=True)
