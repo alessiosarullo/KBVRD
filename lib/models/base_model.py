@@ -204,18 +204,16 @@ class BaseModel(nn.Module):
             if cfg.program.predcls:
                 # This is inefficient because Mask-RCNN has already been called at this point/features have been loaded, but on irrelevant boxes.
 
-                boxes = batch.gt_boxes
-                boxes_with_im_id = np.concatenate([batch.gt_box_im_ids[:, None], boxes], axis=1)
-                box_classes = batch.gt_obj_classes
+                boxes_with_im_id = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
                 box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_with_im_id)
                 masks = self.mask_rcnn.get_masks(img_infos=batch.img_infos,
                                                  fmap=feat_map,
-                                                 boxes=boxes,
+                                                 boxes=batch.gt_boxes,
                                                  box_im_ids=batch.gt_box_im_ids,
-                                                 box_classes=box_classes)
-                labels_onehot = np.zeros((boxes.shape[0], self.dataset.num_object_classes))
-                labels_onehot[np.arange(boxes.shape[0]), box_classes] = 1
+                                                 box_classes=batch.gt_obj_classes)
+                labels_onehot = np.zeros((boxes_with_im_id.shape[0], self.dataset.num_object_classes))
+                labels_onehot[np.arange(boxes_with_im_id.shape[0]), batch.gt_obj_classes] = 1
                 boxes_ext_np = np.concatenate([boxes_with_im_id, labels_onehot], axis=1)
             else:
                 if boxes_ext_np.shape[0] == 0:
