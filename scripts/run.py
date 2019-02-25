@@ -145,8 +145,9 @@ class Launcher:
             prediction = self.detector(batch)
             Timer.get('Img').toc()
 
-            all_pred_entries.append(prediction.to_dict())
             evaluator.evaluate_scene_graph_entry(batch, prediction)
+            prediction = prediction.to_dict()
+            all_pred_entries.append(prediction)
 
             if b_idx % cfg.program.print_interval == 0:
                 time_per_batch = Timer.get('Img').spent(average=True)
