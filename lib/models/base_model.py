@@ -3,6 +3,7 @@ import numpy.random as npr
 import torch
 import torch.nn as nn
 
+from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
 from lib.containers import Minibatch, Prediction
 from lib.dataset.hicodet import HicoDetSplit
@@ -41,12 +42,12 @@ class BaseModel(nn.Module):
 
         # Spatial pipeline
         self.spatial_rels_fc = nn.Sequential(*(
-            ([nn.BatchNorm1d(2 * (self.mask_rcnn.mask_resolution ** 2))] if self.use_bn else [])
-            +
-            [nn.Linear(2 * (self.mask_rcnn.mask_resolution ** 2), self.spatial_emb_dim),
-             nn.ReLU(inplace=True),
-             nn.Dropout(self.spatial_dropout)
-             ]
+                ([nn.BatchNorm1d(2 * (self.mask_rcnn.mask_resolution ** 2))] if self.use_bn else [])
+                +
+                [nn.Linear(2 * (self.mask_rcnn.mask_resolution ** 2), self.spatial_emb_dim),
+                 nn.ReLU(inplace=True),
+                 nn.Dropout(self.spatial_dropout)
+                 ]
         ))
         # self.spatial_rels_bilstm = AlternatingHighwayLSTM(
         #     input_size=self.spatial_emb_dim,
@@ -78,15 +79,15 @@ class BaseModel(nn.Module):
         self.rel_obj_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_union_fc = nn.Linear(self.mask_rcnn_vis_feat_dim, self.rel_vis_hidden_dim)
         self.rel_output_fc = nn.Sequential(*(
-            ([nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim)] if self.use_bn else [])  # 2 = biLSTM
-            +
-            [nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),
-             nn.ReLU(inplace=True),
-             nn.Dropout(self.spatial_dropout)]
-            +
-            ([nn.BatchNorm1d(self.rel_hidden_dim)] if self.use_bn else [])
-            +
-            [nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates)]
+                ([nn.BatchNorm1d(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + self.spatial_emb_dim)] if self.use_bn else [])  # 2 = biLSTM
+                +
+                [nn.Linear(self.rel_vis_hidden_dim + 2 * self.obj_rnn_emb_dim + 2 * self.spatial_emb_dim, self.rel_hidden_dim),
+                 nn.ReLU(inplace=True),
+                 nn.Dropout(self.spatial_dropout)]
+                +
+                ([nn.BatchNorm1d(self.rel_hidden_dim)] if self.use_bn else [])
+                +
+                [nn.Linear(self.rel_hidden_dim, self.dataset.num_predicates)]
         ))
 
     def get_losses(self, x, **kwargs):
@@ -200,13 +201,30 @@ class BaseModel(nn.Module):
             assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
         else:
-            if boxes_ext_np.shape[0] == 0:
-                return None, None, None, None, None
+            if cfg.program.predcls:
+                # This is inefficient because Mask-RCNN has already been called at this point/features have been loaded, but on irrelevant boxes.
+
+                boxes = batch.gt_boxes
+                boxes_with_im_id = np.concatenate([batch.gt_box_im_ids[:, None], boxes], axis=1)
+                box_classes = batch.gt_obj_classes
+
+                box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_with_im_id)
+                masks = self.mask_rcnn.get_masks(img_infos=batch.img_infos,
+                                                 fmap=feat_map,
+                                                 boxes=boxes,
+                                                 box_im_ids=batch.gt_box_im_ids,
+                                                 box_classes=box_classes)
+                labels_onehot = np.zeros((boxes.shape[0], self.dataset.num_object_classes))
+                labels_onehot[np.arange(boxes.shape[0]), box_classes] = 1
+                boxes_ext_np = np.concatenate([boxes_with_im_id, labels_onehot], axis=1)
+            else:
+                if boxes_ext_np.shape[0] == 0:
+                    return None, None, None, None, None
             rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
 
         if rel_im_ids.size == 0:
-            assert not self.training
+            assert not self.training and not cfg.program.predcls
             return boxes_ext, box_feats, masks, None, None
         assert ho_pairs.shape[0] > 0
 
@@ -267,17 +285,17 @@ class BaseModel(nn.Module):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
         gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
-        box_labels = batch.gt_obj_classes[gt_idx_per_pred_box]
+        obj_labels = batch.gt_obj_classes[gt_idx_per_pred_box]
         gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= gt_iou_thr, axis=1))
         boxes_ext = boxes_ext[gt_match, :]
-        box_labels = box_labels[gt_match]
+        obj_labels = obj_labels[gt_match]
         box_feats = box_feats[gt_match, :]
         masks = masks[gt_match, :]
 
         unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
-        unmatched_gt_box_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
+        unmatched_gt_obj_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
         unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
-        unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_box_labels] = 1
+        unmatched_gt_labels_onehot[np.arange(unmatched_gt_boxes_inds.size), unmatched_gt_obj_labels] = 1
         unmatched_gt_boxes_ext = np.concatenate([gt_boxes_with_imid[unmatched_gt_boxes_inds, :], unmatched_gt_labels_onehot], axis=1)
         unmatched_gt_boxes = unmatched_gt_boxes_ext[:, 1:5]
         unmatched_gt_box_im_inds = unmatched_gt_boxes_ext[:, 0]
@@ -287,13 +305,13 @@ class BaseModel(nn.Module):
                                                             fmap=feat_map,
                                                             boxes=unmatched_gt_boxes,
                                                             box_im_ids=unmatched_gt_box_im_inds,
-                                                            box_classes=unmatched_gt_box_labels)
+                                                            box_classes=unmatched_gt_obj_labels)
 
         boxes_ext = np.concatenate([boxes_ext, unmatched_gt_boxes_ext], axis=0)
-        box_labels = np.concatenate([box_labels, unmatched_gt_box_labels], axis=0)
+        obj_labels = np.concatenate([obj_labels, unmatched_gt_obj_labels], axis=0)
         box_feats = torch.cat([box_feats, unmatched_gt_boxes_feats], dim=0)
         masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
-        return boxes_ext, box_labels, box_feats, masks
+        return boxes_ext, obj_labels, box_feats, masks
 
     def rel_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes

@@ -143,7 +143,7 @@ class Launcher:
         # break
 
         all_pred_entries = []
-        evaluator = Evaluator(use_gt_boxes=cfg.program.use_gt_boxes_in_eval)
+        evaluator = Evaluator(use_gt_boxes=cfg.program.predcls)
         self.detector.eval()
         for b_idx, batch in enumerate(test_loader):
             Timer.get('Img').tic()

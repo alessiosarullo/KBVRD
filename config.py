@@ -35,7 +35,7 @@ class ProgramConfig(BaseConfigs):
         self.sync = False
 
         self.eval_only = False
-        self.use_gt_boxes_in_eval = False
+        self.predcls = False
         self.num_images = 0  # restrict the dataset to this number of images if > 0
 
         self.save_dir = 'output'
