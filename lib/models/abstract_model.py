@@ -93,9 +93,9 @@ class AbstractModel(nn.Module):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        spatial_ctx = self.spatial_context_branch([masks, im_ids, hoi_im_ids, sub_inds, obj_inds])
+        spatial_ctx = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_embs = self.hoi_branch([union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds])
+        hoi_embs = self.hoi_branch(union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
 
         obj_output = self.obj_output_fc(objs_embs)
         hoi_output = self.hoi_output_fc(hoi_embs)
@@ -328,9 +328,8 @@ class AbstractHOIModule(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-    def forward(self, x, **kwargs):
+    def forward(self, union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds, **kwargs):
         # TODO docs
-        union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds = x
         with torch.set_grad_enabled(self.training):
             rel_emb = self._forward(union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
             return rel_emb
