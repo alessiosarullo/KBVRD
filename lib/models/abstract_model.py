@@ -340,4 +340,4 @@ class AbstractHOIModule(nn.Module):
 
     @property
     def output_dim(self):
-        return self.rel_emb_dim
+        raise NotImplementedError()
