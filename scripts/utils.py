@@ -96,7 +96,7 @@ def print_params(model, breakdown=False):
         else:
             return '%.1fM' % (_n / 10 ** 6)
 
-    modules = {'RCNN': {}, 'Object stream': {}, 'Spatial stream': {}, 'Relationship stream': {}, 'Other': {}}
+    modules = {'RCNN': {}, 'Object branch': {}, 'Spatial branch': {}, 'Relationship branch': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
         if not ('bias' in p_name.split('.')[-1] or 'bn' in p_name.split('.')[-1]):
 
@@ -104,11 +104,11 @@ def print_params(model, breakdown=False):
             if 'rcnn' in p_name_root:
                 module = 'RCNN'
             elif p_name_root.startswith('obj'):
-                module = 'Object stream'
+                module = 'Object branch'
             elif 'spatial' in p_name_root:
-                module = 'Spatial stream'
-            elif p_name_root.startswith('rel'):
-                module = 'Relationship stream'
+                module = 'Spatial branch'
+            elif p_name_root.startswith('hoi'):
+                module = 'Human-Object-Interaction branch'
             else:
                 module = 'Other'
             modules[module][p_name] = ([str(x) for x in p.size()], np.prod(p.size()), p.requires_grad)

@@ -48,7 +48,7 @@ class HicoDet:
                             - 'conn' [array]: Cx2 with a pair of human-object indices for each interaction
                 Other entries might be added to this dictionary for caching reasons.
         """
-        # FIXME what are the 'id' and 'count' field for?
+        # TODO what are the 'id' and 'count' field for?
 
         self.data_dir = os.path.join('data', 'HICO-DET')
         self.split_data = {Splits.TRAIN: {'img_dir': os.path.join(self.data_dir, 'images', 'train2015')
@@ -346,10 +346,8 @@ class HicoDet:
         return interaction_list, wpred_dict, pred_dict
 
 
-def main():
+def save_lists():
     hd = HicoDet()
-
-    # Save lists
     path_objects_file = os.path.join(hd.data_dir, 'objects.txt')
     with open(path_objects_file, 'w') as f:
         f.write('\n'.join(hd.objects))
@@ -362,4 +360,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    save_lists()
