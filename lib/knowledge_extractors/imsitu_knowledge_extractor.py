@@ -3,7 +3,7 @@ import pickle
 
 import numpy as np
 import requests
-from drivers.imsitu_driver import ImSitu
+from lib.dataset.imsitu_driver import ImSitu
 from nltk.parse.corenlp import CoreNLPServer, CoreNLPServerError, CoreNLPDependencyParser
 from analysis.utils import plot_mat
 
@@ -16,7 +16,7 @@ class ImSituKnowledgeExtractor:
         self.hd = HicoDet()
         self.imsitu = ImSitu()
 
-        # FIXME direct objects only? Doesn't work for example in "jump over an obstacle"
+        # FIXME direct objects only? Doesn't work for example in "jump over an obstacle", though
         dobj_tokens_in_verb_abstracts = self.get_dobj_tokens_in_verb_abstracts()
         # for i, (verb, dobjs) in enumerate(dobj_tokens_in_verb_abstracts.items()):
         #     print('%3d %-15s > %-120s %s' % (i, verb, self.imsitu.verbs[verb]['abstract'], dobjs))

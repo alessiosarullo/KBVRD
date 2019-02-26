@@ -8,7 +8,6 @@ class Evaluator:
     def __init__(self, use_gt_boxes):
         self.result_dict = {'recall': {20: [], 50: [], 100: []}}
         self.use_gt_boxes = use_gt_boxes
-        np.set_printoptions(precision=3)
 
     def evaluate_scene_graph_entry(self, example, prediction, iou_thresh=0.5):
         predicted_hoi_to_gt = self.evaluate_from_dict(example, prediction, iou_thresh=iou_thresh)
@@ -20,7 +19,7 @@ class Evaluator:
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
         for k, v in self.result_dict['recall'].items():
-            print('R@%i: %f' % (k, np.mean(v)))
+            print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
 
     def evaluate_from_dict(self, example: Minibatch, prediction: Prediction, **kwargs):
         if not prediction.is_complete():
