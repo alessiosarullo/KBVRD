@@ -110,10 +110,10 @@ class Launcher:
                 est_time_per_epoch = num_batches * (time_per_batch + time_to_load * train_loader.batch_size + time_to_collate)
 
                 print('Iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(iter_num, epoch_num, bidx, num_batches),
-                      'Avg: {:5s}/batch, {:5s}/load, {:5s}/collate.'.format(Timer.format(time_per_batch),
-                                                                            Timer.format(time_to_load),
-                                                                            Timer.format(time_to_collate)),
-                      'Estimated {:s}/epoch'.format(Timer.format(est_time_per_epoch)))
+                      'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
+                                                                               Timer.format(time_to_load),
+                                                                               Timer.format(time_to_collate)),
+                      'Estimated {:>7s}/epoch'.format(Timer.format(est_time_per_epoch)))
                 print(pd.concat(tr[-cfg.program.print_interval:], axis=1).mean(1))
                 print('-' * 10, flush=True)
         Timer.get('Epoch').toc()
@@ -157,17 +157,18 @@ class Launcher:
                 est_time_per_epoch = num_batches * (time_per_batch + time_to_load * 1 + time_to_collate)
 
                 print('Img {:5d}/{:5d}.'.format(b_idx, num_batches),
-                      'Avg: {:5s}/batch, {:5s}/load, {:5s}/collate.'.format(Timer.format(time_per_batch),
-                                                                            Timer.format(time_to_load),
-                                                                            Timer.format(time_to_collate)),
+                      'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
+                                                                               Timer.format(time_to_load),
+                                                                               Timer.format(time_to_collate)),
                       'Estimated {:s}.'.format(Timer.format(est_time_per_epoch)))
 
                 torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
 
         evaluator.print_stats()
-        with open(cfg.program.result_file, 'wb') as f:
+        result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
+        with open(result_file, 'wb') as f:
             pickle.dump(all_pred_entries, f)
-        print('Wrote results to %s. Terminating.' % cfg.program.result_file)
+        print('Wrote results to %s. Terminating.' % result_file)
 
 
 def main():

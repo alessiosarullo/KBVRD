@@ -48,7 +48,7 @@ class HicoDetSplit(Dataset):
         pass
 
         # In case of precomputed features
-        if cfg.program.load_precomputed_feats:
+        if self.is_train and cfg.program.load_precomputed_feats:
             assert self.flipping_prob == 0  # TODO extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')

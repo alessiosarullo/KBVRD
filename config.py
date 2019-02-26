@@ -58,8 +58,8 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.save_dir, 'final.tar')
 
     @property
-    def result_file(self):
-        return os.path.join(self.save_dir, 'result_test.pkl')
+    def result_file_format(self):
+        return os.path.join(self.save_dir, 'result_test_%s.pkl')
 
     @property
     def im_inds(self):
