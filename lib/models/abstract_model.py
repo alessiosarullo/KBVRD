@@ -94,11 +94,11 @@ class AbstractModel(nn.Module):
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
         spatial_ctx = self.spatial_context_branch([masks, im_ids, hoi_im_ids, sub_inds, obj_inds])
-        obj_ctx, objs_feats = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_feats = self.hoi_branch([union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds])
+        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        hoi_embs = self.hoi_branch([union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds])
 
-        obj_output = self.obj_output_fc(objs_feats)
-        hoi_output = self.hoi_output_fc(hoi_feats)
+        obj_output = self.obj_output_fc(objs_embs)
+        hoi_output = self.hoi_output_fc(hoi_embs)
         return obj_output, hoi_output
 
     def first_step(self, batch: Minibatch):  # FIXME change name

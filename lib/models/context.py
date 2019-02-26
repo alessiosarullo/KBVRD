@@ -79,16 +79,16 @@ class ObjectContext(nn.Module):
         # TODO docs
         boxes_ext, box_feats, spatial_ctx, unique_im_ids, box_im_ids = x
         with torch.set_grad_enabled(self.training):
-            object_context, object_feats = self._forward(boxes_ext, box_feats, spatial_ctx, unique_im_ids, box_im_ids)
-            return object_context, object_feats
+            object_context, object_embeddings = self._forward(boxes_ext, box_feats, spatial_ctx, unique_im_ids, box_im_ids)
+            return object_context, object_embeddings
 
     def _forward(self, boxes_ext, box_feats, spatial_ctx, unique_im_ids, box_im_ids):
         # TODO docs
         # Every input is a Tensor
         spatial_ctx_rep = torch.cat([spatial_ctx[i, :].expand((box_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
-        obj_feats = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1))
-        obj_ctx = compute_context(self.obj_ctx_bilstm, obj_feats, unique_im_ids, box_im_ids)
-        return obj_ctx, obj_feats
+        obj_embs = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1))
+        obj_ctx = compute_context(self.obj_ctx_bilstm, obj_embs, unique_im_ids, box_im_ids)
+        return obj_ctx, obj_embs
 
     @property
     def output_ctx_dim(self):
