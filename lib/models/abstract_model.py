@@ -322,3 +322,22 @@ class AbstractModel(nn.Module):
         sub_obj_pairs = rel_infos[:, 1:3]  # [sub_ind, obj_ind]
         rel_preds = rel_infos[:, 3]  # [pred]
         return rel_im_ids, sub_obj_pairs, rel_preds
+
+
+class AbstractHOIModule(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x, **kwargs):
+        # TODO docs
+        union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds = x
+        with torch.set_grad_enabled(self.training):
+            rel_emb = self._forward(union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
+            return rel_emb
+
+    def _forward(self, union_boxes_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
+        raise NotImplementedError()
+
+    @property
+    def output_dim(self):
+        return self.rel_emb_dim
