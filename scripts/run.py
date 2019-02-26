@@ -140,6 +140,7 @@ class Launcher:
         try:
             with open(result_file, 'rb') as f:
                 loaded_predictions = pickle.load(f)
+            print('Loaded predictions from %s.' % result_file)
         except FileNotFoundError:
             loaded_predictions = None
 
