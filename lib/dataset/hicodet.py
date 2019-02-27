@@ -52,8 +52,9 @@ class HicoDetInstance(Dataset):
                     new_im_inds.append(i)
                     new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
             annotations = new_annotations
-            print('Images have been discarded due to not having feasible predicates or objects. '
-                  'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
+            if len(new_im_inds) < len(image_ids):
+                print('Images have been discarded due to not having feasible predicates or objects. '
+                      'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
             image_ids = [image_ids[i] for i in new_im_inds]
 
             # Now we can add the person class: there won't be interactions with persons as an object if not in the initial indices, but the dataset

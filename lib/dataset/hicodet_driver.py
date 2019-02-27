@@ -380,5 +380,5 @@ def print_num_objs():
 
 if __name__ == '__main__':
     # save_lists()
-    # print_num_preds()
-    print_num_objs()
+    print_num_preds()
+    # print_num_objs()
