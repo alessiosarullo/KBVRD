@@ -71,8 +71,8 @@ class DataConfig(BaseConfigs):
         self.flip_prob = 0.0
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
-        self._pred_inds = ''  # restrict the dataset to these predicates if not empty
-        self._obj_inds = ''  # restrict the dataset to these objects if not empty
+        self.prinds = ''  # restrict the dataset to these predicates if not empty
+        self.obinds = ''  # restrict the dataset to these objects if not empty
 
     @property
     def im_inds(self):
@@ -80,24 +80,24 @@ class DataConfig(BaseConfigs):
 
     @property
     def pred_inds(self):
-        if not self._pred_inds:  # use all predicates
+        if not self.prinds:  # use all predicates
             return None
         try:  # case in which a single number is specified
-            num_preds = int(self._pred_inds)
+            num_preds = int(self.prinds)
             pred_inds = list(range(num_preds))
         except ValueError:  # cannot cast to int: a list has been specified
-            pred_inds = sorted([int(pred_ind) for pred_ind in self._pred_inds.split(',')])
+            pred_inds = sorted([int(pred_ind) for pred_ind in self.prinds.split(',')])
         return pred_inds
 
     @property
     def obj_inds(self):
-        if not self._obj_inds:  # use all objects
+        if not self.obinds:  # use all objects
             return None
         try:  # case in which a single number is specified
-            num_objs = int(self._obj_inds)
+            num_objs = int(self.obinds)
             obj_inds = list(range(num_objs))
         except ValueError:  # cannot cast to int: a list has been specified
-            obj_inds = sorted([int(obj_ind) for obj_ind in self._obj_inds.split(',')])
+            obj_inds = sorted([int(obj_ind) for obj_ind in self.obinds.split(',')])
         return obj_inds
 
 
