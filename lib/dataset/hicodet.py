@@ -153,8 +153,8 @@ class HicoDetInstance(Dataset):
         return self._coco_to_hico_mapping
 
     def compute_gt_data(self, annotations):
-        predicate_index = {p: i for i, p in self.predicates}
-        object_index = {o: i for i, o in self.objects}
+        predicate_index = {p: i for i, p in enumerate(self.predicates)}
+        object_index = {o: i for i, o in enumerate(self.objects)}
         im_without_visible_interactions = []
         boxes, box_classes, interactions = [], [], []
         im_filenames = []
