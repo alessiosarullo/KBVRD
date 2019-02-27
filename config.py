@@ -36,7 +36,6 @@ class ProgramConfig(BaseConfigs):
 
         self.eval_only = False
         self.predcls = False
-        self.num_images = 0  # restrict the dataset to this number of images if > 0
 
         self.save_dir = 'output'
         self.load_precomputed_feats = False
@@ -61,10 +60,6 @@ class ProgramConfig(BaseConfigs):
     def result_file_format(self):
         return os.path.join(self.save_dir, 'result_test_%s.pkl')
 
-    @property
-    def im_inds(self):
-        return list(range(self.num_images)) if self.num_images > 0 else None
-
 
 class DataConfig(BaseConfigs):
     def __init__(self):
@@ -72,7 +67,38 @@ class DataConfig(BaseConfigs):
         self.pixel_std = None
         self.im_scale = None
         self.im_max_size = None
+
         self.flip_prob = 0.0
+
+        self.num_images = 0  # restrict the dataset to this number of images if > 0
+        self._pred_inds = ''  # restrict the dataset to these predicates if not empty
+        self._obj_inds = ''  # restrict the dataset to these objects if not empty
+
+    @property
+    def im_inds(self):
+        return list(range(self.num_images)) if self.num_images > 0 else None
+
+    @property
+    def pred_inds(self):
+        if not self._pred_inds:  # use all predicates
+            return None
+        try:  # case in which a single number is specified
+            num_preds = int(self._pred_inds)
+            pred_inds = list(range(num_preds))
+        except ValueError:  # cannot cast to int: a list has been specified
+            pred_inds = sorted([int(pred_ind) for pred_ind in self._pred_inds.split(',')])
+        return pred_inds
+
+    @property
+    def obj_inds(self):
+        if not self._obj_inds:  # use all objects
+            return None
+        try:  # case in which a single number is specified
+            num_objs = int(self._obj_inds)
+            obj_inds = list(range(num_objs))
+        except ValueError:  # cannot cast to int: a list has been specified
+            obj_inds = sorted([int(obj_ind) for obj_ind in self._obj_inds.split(',')])
+        return obj_inds
 
 
 class ModelConfig(BaseConfigs):
