@@ -1,53 +1,92 @@
 import os
+from typing import List
 
 import cv2
+import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-import h5py
 
 from config import Configs as cfg
-from scripts.utils import Timer
+from lib.containers import Minibatch, Example
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img
-from lib.containers import Minibatch, Example
+from lib.detection.wrappers import COCO_CLASSES
+from scripts.utils import Timer
 
 
-class HicoDetSplit(Dataset):
-    def __init__(self, split, im_inds=None, filter_invisible=True, hicodet_driver=None, flipping_prob=0):
+class HicoDetInstance(Dataset):
+    def __init__(self, split, im_inds=None, pred_inds=None, obj_inds=None, filter_invisible=True, hicodet_driver=None, flipping_prob=0):
         """
         """
+        # TODO docs
         assert split in Splits
         hicodet_driver = hicodet_driver or HicoDetDriver()
 
         self.split = split
-        self.hicodet = hicodet_driver
+        self._hicodet = hicodet_driver
         self.flipping_prob = flipping_prob
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
-        # Initialize
-        self.annotations = hicodet_driver.split_data[split]['annotations']
+        ################# Initialize
+        # Set annotations and image index
+        annotations = hicodet_driver.split_data[split]['annotations']
+        image_ids = im_inds or list(range(len(annotations)))
         if im_inds is not None:
-            self.annotations = [self.annotations[i] for i in im_inds]
-            self.image_ids = im_inds
-        else:
-            self.image_ids = list(range(len(self.annotations)))
+            annotations = [annotations[i] for i in im_inds]
+
+        # Filter images with invisible annotations
         if filter_invisible:  # FIXME add is_train? But then during detection images without boxes are fed
-            vis_im_inds, self.annotations = zip(*[(i, ann) for i, ann in enumerate(self.annotations)
-                                                  if any([not inter['invis'] for inter in ann['interactions']])])
-            num_old_images, num_new_images = len(self.image_ids), len(vis_im_inds)
+            vis_im_inds, annotations = zip(*[(i, ann) for i, ann in enumerate(annotations)
+                                             if any([not inter['invis'] for inter in ann['interactions']])])
+            num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
             if num_new_images < num_old_images:
                 print('Some images have been discarded due to not having visible interactions. '
                       'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
-                self.image_ids = [self.image_ids[i] for i in vis_im_inds]
+                image_ids = [image_ids[i] for i in vis_im_inds]
+        assert len(annotations) == len(image_ids)
 
-        self._im_boxes, self._im_box_classes, self._im_inters = self.compute_gt_data()
-        assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == len(self.annotations) == len(self.image_ids)
+        # Filter out unwanted predicates/object classes
+        if obj_inds is None and pred_inds is None:
+            self._objects = list(hicodet_driver.objects)
+            self._predicates = list(hicodet_driver.predicates)
+        else:
+            obj_inds = set(obj_inds or range(len(hicodet_driver.objects)))
+            pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
+            self._objects = [hicodet_driver.objects[i] for i in sorted(obj_inds)]
+            self._predicates = [hicodet_driver.predicates[i] for i in sorted(pred_inds)]
+            new_im_inds, new_annotations = [], []
+            for i, im_ann in enumerate(annotations):
+                new_im_inters = []
+                for inter in im_ann['interactions']:
+                    if hicodet_driver.get_object_index(inter['id']) in obj_inds and hicodet_driver.get_predicate_index(inter['id']) in pred_inds:
+                        new_im_inters.append(inter)
+                if new_im_inters:
+                    new_im_inds.append(i)
+                    new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
+            annotations = new_annotations
+            print('Some images have been discarded due to not having feasible predicates or objects. '
+                  'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
+            image_ids = [image_ids[i] for i in new_im_inds]
+        self._person_class_index = self._predicates.index('person')
 
-        # You could add data augmentation here.
-        pass
+        # Compute COCO mapping
+        coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
+        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(self._hicodet.objects)
+        self._coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
 
-        # In case of precomputed features
+        # Extract the data from Hico-DET annotations
+        self.image_ids = image_ids
+        self._im_boxes, self._im_box_classes, self._im_inters, self._im_without_visible_interactions, self._im_filenames = \
+            self.compute_gt_data(annotations)
+        assert not (filter_invisible and len(self._im_without_visible_interactions) > 0)
+        assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == \
+               len(annotations) == len(self.image_ids) == len(self._im_filenames)
+
+        ################# Data augmentation pipeline
+        pass  # You could add a data augmentation pipeline here, but we don't.
+
+        ################# In case of precomputed features
         if self.is_train and cfg.program.load_precomputed_feats:
             assert self.flipping_prob == 0  # TODO extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
@@ -65,7 +104,7 @@ class HicoDetSplit(Dataset):
             assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
             self.im_id_to_pc_im_idx = {}
             for im_id in self.image_ids:
-                pc_im_idx = np.flatnonzero(self.pc_image_ids == im_id).tolist()
+                pc_im_idx = np.flatnonzero(self.pc_image_ids == im_id).tolist()  # type: List
                 assert len(pc_im_idx) == 1, pc_im_idx
                 assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
@@ -73,26 +112,44 @@ class HicoDetSplit(Dataset):
             self.pc_feats_file = None
 
     @property
-    def num_predicates(self):
-        return len(self.hicodet.predicates)
+    def objects(self):
+        return self._objects
+
+    @property
+    def predicates(self):
+        return self._predicates
+
+    @property
+    def person_class(self):
+        return self._person_class_index
 
     @property
     def num_object_classes(self):
-        return len(self.hicodet.objects)
+        return len(self.objects)
+
+    @property
+    def num_predicates(self):
+        return len(self.predicates)
 
     @property
     def img_dir(self):
-        return self.hicodet.get_img_dir(self.split)
+        return self._hicodet.get_img_dir(self.split)
 
     @property
     def is_train(self):
         return self.split == Splits.TRAIN
 
-    def compute_gt_data(self):
-        hd = self.hicodet
+    @property
+    def coco_to_hico_mapping(self):
+        return self._coco_to_hico_mapping
+
+    def compute_gt_data(self, annotations):
+        hd = self._hicodet
         im_without_visible_interactions = []
         boxes, box_classes, interactions = [], [], []
-        for i, img_ann in enumerate(self.annotations):
+        im_filenames = []
+        for i, img_ann in enumerate(annotations):
+            im_filenames.append(img_ann['file'])
             im_hum_boxes, im_obj_boxes, im_obj_box_classes, im_interactions = [], [], [], []
             for interaction in img_ann['interactions']:
                 if not interaction['invis']:
@@ -132,14 +189,14 @@ class HicoDetSplit(Dataset):
                 im_interactions[:, 2] += num_hum_boxes
 
                 boxes.append(np.concatenate([im_hum_boxes, im_obj_boxes], axis=0))
-                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self.hicodet.person_class, dtype=np.int), im_obj_box_classes]))
+                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self._hicodet.person_class, dtype=np.int), im_obj_box_classes]))
                 interactions.append(im_interactions)
             else:
                 boxes.append([])
                 box_classes.append([])
                 interactions.append([])
                 im_without_visible_interactions.append(i)
-        return boxes, box_classes, interactions
+        return boxes, box_classes, interactions, im_without_visible_interactions, im_filenames
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
@@ -160,7 +217,7 @@ class HicoDetSplit(Dataset):
         Timer.get('Epoch', 'GetBatch').tic()
 
         # Read the image
-        img_fn = self.annotations[idx]['file']
+        img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
 
         img = cv2.imread(os.path.join(self.img_dir, img_fn))
@@ -196,7 +253,7 @@ class HicoDetSplit(Dataset):
 
 
 def main():
-    hds = HicoDetSplit(Splits.TRAIN, im_inds=[12, 13, 14])
+    hds = HicoDetInstance(Splits.TRAIN, im_inds=[12, 13, 14])
 
 
 if __name__ == '__main__':

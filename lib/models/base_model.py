@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from lib.dataset.hicodet import HicoDetSplit
+from lib.dataset.hicodet import HicoDetInstance
 from .abstract_model import AbstractModel, AbstractHOIModule
 
 
@@ -9,7 +9,7 @@ from .abstract_model import AbstractModel, AbstractHOIModule
 
 
 class BaseModel(AbstractModel):
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstance, **kwargs):
         super().__init__(dataset, **kwargs)
 
     def _get_hoi_branch(self):

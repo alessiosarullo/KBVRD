@@ -7,8 +7,12 @@ import numpy as np
 from config import Configs as cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
-from lib.dataset.hicodet import HicoDetSplit, Splits
+from lib.dataset.hicodet import HicoDetInstance, Splits
 from lib.detection.wrappers import vis_utils
+
+class DummyDataset:
+    def __init__(self, classes):
+        self.classes = classes
 
 
 def vis_masks():
@@ -18,10 +22,9 @@ def vis_masks():
         d = pickle.load(f)
 
     im_inds = [0]
-    hds = HicoDetSplit(Splits.TEST, im_inds=im_inds)
+    hds = HicoDetInstance(Splits.TEST, im_inds=im_inds)
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
-    hds.hicodet.classes = hds.hicodet.objects
-    dataset = hds.hicodet
+    dataset = DummyDataset(hds.objects)
 
     for example in hdsl:
         example = example  # type: Minibatch

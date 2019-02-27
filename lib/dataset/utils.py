@@ -13,7 +13,7 @@ class Splits(Enum):
     TEST = 'test'
 
 
-class SquarePad(object):
+class SquarePad:
     def __call__(self, img):
         w, h = img.size
         pixel_mean = cfg.data.pixel_mean

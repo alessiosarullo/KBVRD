@@ -7,7 +7,6 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
-from lib.detection.wrappers import COCO_CLASSES
 from lib.dataset.utils import Splits
 
 
@@ -70,7 +69,6 @@ class HicoDet:
         self._predicates = list(self.predicate_dict.keys())
         self._obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
         self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}
-        self._coco_to_hico_mapping = self._compute_coco_to_hico_mapping()
         assert len(self._pred_index) == len(self._predicates)
         assert len(self._obj_class_index) == len(self._objects)
 
@@ -137,20 +135,6 @@ class HicoDet:
 
     def get_object_index(self, interaction_id):
         return self._obj_class_index[self.interactions[interaction_id]['obj']]
-
-    def _compute_coco_to_hico_mapping(self):
-        coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
-        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(self.objects)
-        coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
-        return coco_to_hico_mapping
-
-    def map_coco_classes_to_hico(self, coco_values=None):
-        if coco_values is None:  # give an index mapping
-            return self._coco_to_hico_mapping
-        else:
-            # Note: this will raise a KeyError if any of `coco_values` is the background class
-            hico_values = np.array([self._obj_class_index[COCO_CLASSES[v]] for v in coco_values])
-            return hico_values
 
     def get_occurrences(self, interaction, split=Splits.TRAIN):
         """

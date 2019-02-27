@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import Configs as cfg
 from lib.containers import Prediction
-from lib.dataset.hicodet import HicoDetSplit, Splits
+from lib.dataset.hicodet import HicoDetInstance, Splits
 from lib.evaluator import Evaluator
 from lib.models.base_model import BaseModel
 from scripts.utils import Timer
@@ -24,7 +24,7 @@ class Launcher:
         cfg.parse_args()
         cfg.print()
         self.detector = None  # type: BaseModel
-        self.train_split = None  # type: HicoDetSplit
+        self.train_split = None  # type: HicoDetInstance
 
     def run(self):
         self.setup()
@@ -44,7 +44,7 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        self.train_split = HicoDetSplit(Splits.TRAIN, im_inds=cfg.program.im_inds, flipping_prob=cfg.data.flip_prob)
+        self.train_split = HicoDetInstance(Splits.TRAIN, im_inds=cfg.program.im_inds, flipping_prob=cfg.data.flip_prob)
 
         self.detector = BaseModel(self.train_split)
         self.detector.cuda()
@@ -144,7 +144,7 @@ class Launcher:
         except FileNotFoundError:
             loaded_predictions = None
 
-        test_split = HicoDetSplit(Splits.TEST, im_inds=cfg.program.im_inds)
+        test_split = HicoDetInstance(Splits.TEST, im_inds=cfg.program.im_inds)
         test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
         all_pred_entries = []
         self.detector.eval()

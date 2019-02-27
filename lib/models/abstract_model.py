@@ -6,13 +6,13 @@ import torch.nn as nn
 from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
 from lib.containers import Minibatch, Prediction
-from lib.dataset.hicodet import HicoDetSplit
+from lib.dataset.hicodet import HicoDetInstance
 from .context import SpatialContext, ObjectContext
 from .mask_rcnn import MaskRCNN
 
 
 class AbstractModel(nn.Module):
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstance, **kwargs):
         super().__init__()
 
         self.dataset = dataset
@@ -35,10 +35,10 @@ class AbstractModel(nn.Module):
         raise NotImplementedError()
 
     def get_losses(self, x, **kwargs):
-        obj_output, rel_output, box_labels, rel_labels = self(x)
-        class_loss = nn.functional.cross_entropy(obj_output, box_labels)
-        rel_loss = nn.functional.cross_entropy(rel_output, rel_labels)
-        return {'class_loss': class_loss, 'rel_loss': rel_loss}
+        obj_output, hoi_output, box_labels, hoi_labels = self(x)
+        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        hoi_loss = nn.functional.cross_entropy(hoi_output, hoi_labels)
+        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
     def forward(self, x, **kwargs):
         # TODO docs
@@ -50,15 +50,15 @@ class AbstractModel(nn.Module):
 
             if self.training:
                 assert hoi_infos is not None
-                obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
-                box_labels, rel_labels = tmp_output[5:]
-                return obj_output, rel_output, box_labels, rel_labels
+                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
+                box_labels, hoi_labels = tmp_output[5:]
+                return obj_output, hoi_output, box_labels, hoi_labels
             else:
                 if hoi_infos is not None:
                     assert boxes_ext is not None
-                    obj_output, rel_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
+                    obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
                     obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    hoi_probs = nn.functional.softmax(rel_output, dim=1).cpu().numpy()
+                    hoi_probs = nn.functional.softmax(hoi_output, dim=1).cpu().numpy()
                     boxes_ext = boxes_ext.cpu().numpy()
                     obj_im_inds = boxes_ext[:, 0]
                     obj_boxes = boxes_ext[:, 1:5]
@@ -117,8 +117,8 @@ class AbstractModel(nn.Module):
 
         if self.training:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            rel_im_ids, ho_pairs, rel_labels = self.rel_gt_assignments(batch, boxes_ext_np)
-            assert rel_im_ids.shape[0] == rel_labels.shape[0] == ho_pairs.shape[0]
+            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)
+            assert hoi_im_ids.shape[0] == hoi_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
         else:
             if cfg.program.predcls:
@@ -138,26 +138,26 @@ class AbstractModel(nn.Module):
             else:
                 if boxes_ext_np.shape[0] == 0:
                     return None, None, None, None, None
-            rel_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
+            hoi_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
 
-        if rel_im_ids.size == 0:
+        if hoi_im_ids.size == 0:
             assert not self.training and not cfg.program.predcls
             return boxes_ext, box_feats, masks, None, None
         assert ho_pairs.shape[0] > 0
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
-        rel_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
-        union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=rel_union_boxes)
-        assert rel_im_ids.shape[0] == union_boxes_feats.shape[0]
+        hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
+        union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=hoi_union_boxes)
+        assert hoi_im_ids.shape[0] == union_boxes_feats.shape[0]
 
-        rel_infos = np.concatenate([rel_im_ids[:, None], ho_pairs], axis=1).astype(np.int, copy=False)
+        hoi_infos = np.concatenate([hoi_im_ids[:, None], ho_pairs], axis=1).astype(np.int, copy=False)
         if self.training:
             box_labels = torch.tensor(box_labels, device=masks.device)
-            rel_labels = torch.tensor(rel_labels, device=masks.device)
-            return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos, box_labels, rel_labels
+            hoi_labels = torch.tensor(hoi_labels, device=masks.device)
+            return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels
         else:
-            return boxes_ext, box_feats, masks, union_boxes_feats, rel_infos
+            return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos
 
     def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor, box_feats: torch.Tensor):
         # Keep foreground object only
@@ -169,7 +169,7 @@ class AbstractModel(nn.Module):
         boxes_ext_fg, masks, box_feats = boxes_ext[fg_inds, :], masks[fg_inds, :], box_feats[fg_inds, :]
 
         # Map from COCO classes to HICO ones
-        coco_to_hico_mapping = np.array(self.dataset.hicodet.map_coco_classes_to_hico(), dtype=np.int)
+        coco_to_hico_mapping = np.array(self.dataset.coco_to_hico_mapping, dtype=np.int)
         boxes_ext_hico = boxes_ext_fg[:, np.concatenate([np.arange(5), 5 + coco_to_hico_mapping])]  # convert to Hico classes by swapping columns
 
         return boxes_ext_hico, masks, box_feats
@@ -177,7 +177,7 @@ class AbstractModel(nn.Module):
     def get_all_pairs(self, boxes_ext, box_classes=None):
         # FIXME there is a significant overlap between this method and rel_gt_assignment. Merge.
         box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)
-        person_box_inds = (box_classes == self.dataset.hicodet.person_class)
+        person_box_inds = (box_classes == self.dataset.person_class)
 
         person_boxes_ext = boxes_ext[person_box_inds, :]
         if person_boxes_ext.shape[0] == 0:
@@ -231,7 +231,7 @@ class AbstractModel(nn.Module):
         masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
         return boxes_ext, obj_labels, box_feats, masks
 
-    def rel_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
@@ -251,7 +251,7 @@ class AbstractModel(nn.Module):
 
             predict_boxes_i = predict_boxes[predict_box_im_ids_i]
             predict_box_labels_i = predict_box_classes[predict_box_im_ids_i]
-            predict_human_boxes_i = (predict_box_labels_i == self.dataset.hicodet.person_class)
+            predict_human_boxes_i = (predict_box_labels_i == self.dataset.person_class)
 
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
             predict_gt_match = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= 0.5)  # FIXME magic constant
