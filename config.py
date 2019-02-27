@@ -60,6 +60,10 @@ class ProgramConfig(BaseConfigs):
     def result_file_format(self):
         return os.path.join(self.save_dir, 'result_test_%s.pkl')
 
+    @property
+    def config_file(self):
+        return os.path.join(self.save_dir, 'config.json')
+
 
 class DataConfig(BaseConfigs):
     def __init__(self):
@@ -136,7 +140,7 @@ class Configs:
             if isinstance(v, BaseConfigs):
                 v.parse_args()
         cls.init_detectron_cfgs()
-        # Detectron configurations override comman line arguments. This is ok, since the model's configs should not be changed. TODO Raise a warning.
+        # Detectron configurations override command line arguments. This is ok, since the model's configs should not be changed. TODO Raise a warning.
         # TODO (related to the above) when trying to set a parameter that defaults to None a useless error is printed. Say that this parameter
         #  cannot be set through command line
 
@@ -166,18 +170,26 @@ class Configs:
                     s += [str_cfg, '']
         print('\n'.join(s))
 
+    @classmethod
+    def to_dict(cls):
+        d = {}
+        for k, v in vars(cls).items():
+            if isinstance(v, BaseConfigs):
+                d[k] = vars(v)
+        return d
+
 
 # Alias
 cfg = Configs
 
 
 def main():
-    print('Default configs')
-    Configs.print()
+    # print('Default configs')
+    # Configs.print()
 
     sys.argv += ['--load_precomputed_feats']
     Configs.parse_args()
-    print('Updated with args:', sys.argv)
+    # print('Updated with args:', sys.argv)
     Configs.print()
 
 
