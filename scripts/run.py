@@ -23,7 +23,10 @@ class Launcher:
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
         if cfg.program.eval_only:
+            save_dir = cfg.program.save_dir
             cfg.load()
+            cfg.program.eval_only = True
+            assert cfg.program.save_dir == save_dir
         cfg.print()
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstance
