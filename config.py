@@ -2,6 +2,8 @@ import argparse
 import os
 import sys
 
+import pickle
+
 import lib.detection.wrappers as pydet
 
 
@@ -177,6 +179,26 @@ class Configs:
             if isinstance(v, BaseConfigs):
                 d[k] = vars(v)
         return d
+
+    @classmethod
+    def save(cls, file_path=None):
+        file_path = file_path or cls.program.config_file
+        with open(file_path, 'wb') as f:
+            pickle.dump(cls.to_dict(), f)
+
+    @classmethod
+    def load(cls, file_path=None, program=True, data=True, model=True, opt=True):
+        file_path = file_path or cls.program.config_file
+        with open(file_path, 'rb') as f:
+            d = pickle.load(f)
+        if program:
+            cls.program.__dict__.update(d['program'])
+        if data:
+            cls.data.__dict__.update(d['data'])
+        if model:
+            cls.model.__dict__.update(d['model'])
+        if opt:
+            cls.opt.__dict__.update(d['opt'])
 
 
 # Alias

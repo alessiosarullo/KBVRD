@@ -22,6 +22,8 @@ class Launcher:
     def __init__(self):
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
+        if cfg.program.eval_only:
+            cfg.load()
         cfg.print()
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstance
@@ -89,8 +91,7 @@ class Launcher:
                 }, cfg.program.checkpoint_file)
 
         Timer.get().print()
-        with open(cfg.program.config_file, 'wb') as f:
-            pickle.dump(cfg.to_dict(), f)
+        cfg.save()
         if cfg.opt.num_epochs > 0:
             try:
                 os.remove(cfg.program.saved_model_file)
