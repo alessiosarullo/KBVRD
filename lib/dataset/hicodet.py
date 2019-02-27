@@ -153,7 +153,8 @@ class HicoDetInstance(Dataset):
         return self._coco_to_hico_mapping
 
     def compute_gt_data(self, annotations):
-        hd = self._hicodet
+        predicate_index = {p: i for i, p in self.predicates}
+        object_index = {o: i for i, o in self.objects}
         im_without_visible_interactions = []
         boxes, box_classes, interactions = [], [], []
         im_filenames = []
@@ -166,7 +167,7 @@ class HicoDetInstance(Dataset):
                     curr_num_obj_boxes = int(sum([b.shape[0] for b in im_obj_boxes]))
 
                     # Interaction
-                    pred_class = hd.get_predicate_index(interaction['id'])
+                    pred_class = predicate_index[self._hicodet.interactions[interaction['id']]['pred']]
                     new_inters = interaction['conn']
                     new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
                                            np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
@@ -180,7 +181,7 @@ class HicoDetInstance(Dataset):
                     # Object
                     obj_boxes = interaction['obj_bbox']
                     im_obj_boxes.append(obj_boxes)
-                    obj_class = hd.get_object_index(interaction['id'])
+                    obj_class = object_index[self._hicodet.interactions[interaction['id']]['obj']]
                     im_obj_box_classes.append(np.full(obj_boxes.shape[0], fill_value=obj_class, dtype=np.int))
 
             if im_hum_boxes:
@@ -198,7 +199,7 @@ class HicoDetInstance(Dataset):
                 im_interactions[:, 2] += num_hum_boxes
 
                 boxes.append(np.concatenate([im_hum_boxes, im_obj_boxes], axis=0))
-                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self._hicodet.person_class, dtype=np.int), im_obj_box_classes]))
+                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self.person_class, dtype=np.int), im_obj_box_classes]))
                 interactions.append(im_interactions)
             else:
                 boxes.append([])
