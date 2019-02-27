@@ -14,9 +14,11 @@ from .mask_rcnn import MaskRCNN
 class AbstractModel(nn.Module):
     def __init__(self, dataset: HicoDetInstance, **kwargs):
         super().__init__()
+        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.dataset = dataset
         self.mask_rcnn = MaskRCNN()
+        self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
 
         # Derived
         self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
@@ -327,6 +329,7 @@ class AbstractModel(nn.Module):
 class AbstractHOIModule(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
+        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
     def forward(self, union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds, **kwargs):
         # TODO docs

@@ -25,8 +25,6 @@ class ImSituHOIModule(AbstractHOIModule):
         self.rel_vis_hidden_dim = 1024
         self.rel_emb_dim = 1024
         self.rel_dropout = 0.1
-        self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
-        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.rel_sub_fc = nn.Linear(vis_feats_dim, self.rel_vis_hidden_dim)
         self.rel_obj_fc = nn.Linear(vis_feats_dim, self.rel_vis_hidden_dim)
