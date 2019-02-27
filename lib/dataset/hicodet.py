@@ -272,11 +272,11 @@ def preprocess_img(im):
 
 
 def main():
-    # hds = HicoDetInstance(Splits.TRAIN, im_inds=[12, 13, 14])
-    hds = HicoDetInstance(Splits.TRAIN, pred_inds=[22, 33, 44])
-    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)))
-    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=[42, 12, 79])  # This doesn't contain the person class. Should raise a ValueError
-    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)), pred_inds=[22, 33, 44])
+    cfg.parse_args()
+    cfg.print()
+
+    hd = HicoDetInstance(Splits.TRAIN, im_inds=cfg.data.im_inds, pred_inds=cfg.data.pred_inds, obj_inds=cfg.data.obj_inds,
+                         flipping_prob=cfg.data.flip_prob)
 
 
 if __name__ == '__main__':
