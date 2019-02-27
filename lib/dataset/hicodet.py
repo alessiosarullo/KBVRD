@@ -53,7 +53,7 @@ class HicoDetInstance(Dataset):
                     new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
             diff_num_inters = sum([len(ann['interactions']) for ann in annotations]) - sum([len(ann['interactions']) for ann in new_annotations])
             if diff_num_inters > 0:
-                print('%d interactions have been filtered out.' % diff_num_inters)
+                print('%d interaction%s been filtered out.' % (diff_num_inters, ' has' if diff_num_inters == 1 else 's have'))
             if len(new_im_inds) < len(image_ids):
                 print('Images have been discarded due to not having feasible predicates or objects. '
                       'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
