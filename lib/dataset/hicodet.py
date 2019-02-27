@@ -253,7 +253,11 @@ class HicoDetInstance(Dataset):
 
 
 def main():
-    hds = HicoDetInstance(Splits.TRAIN, im_inds=[12, 13, 14])
+    # hds = HicoDetInstance(Splits.TRAIN, im_inds=[12, 13, 14])
+    hds = HicoDetInstance(Splits.TRAIN, pred_inds=[22, 33, 44])
+    hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)))
+    hds = HicoDetInstance(Splits.TRAIN, obj_inds=[42, 12, 79])  # This doesn't contain the person class. Should raise a ValueError
+    hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)), pred_inds=[22, 33, 44])
 
 
 if __name__ == '__main__':
