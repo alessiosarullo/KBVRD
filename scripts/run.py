@@ -2,7 +2,6 @@ import datetime
 import os
 import pickle
 import random
-import json
 
 import numpy as np
 import pandas as pd
@@ -90,8 +89,8 @@ class Launcher:
                 }, cfg.program.checkpoint_file)
 
         Timer.get().print()
-        with open(cfg.program.config_file, 'w') as f:
-            json.dump(cfg.to_dict(), f)
+        with open(cfg.program.config_file, 'wb') as f:
+            pickle.dump(cfg.to_dict(), f)
         if cfg.opt.num_epochs > 0:
             try:
                 os.remove(cfg.program.saved_model_file)

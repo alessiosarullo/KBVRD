@@ -62,7 +62,7 @@ class ProgramConfig(BaseConfigs):
 
     @property
     def config_file(self):
-        return os.path.join(self.save_dir, 'config.json')
+        return os.path.join(self.save_dir, 'config.pkl')
 
 
 class DataConfig(BaseConfigs):
