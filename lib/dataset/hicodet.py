@@ -10,8 +10,8 @@ from torch.utils.data import Dataset
 from config import Configs as cfg
 from lib.containers import Minibatch, Example
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.dataset.utils import Splits, preprocess_img
-from lib.detection.wrappers import COCO_CLASSES
+from lib.dataset.utils import Splits
+from lib.detection.wrappers import COCO_CLASSES, prep_im_for_blob
 from scripts.utils import Timer
 
 
@@ -35,17 +35,6 @@ class HicoDetInstance(Dataset):
         if im_inds is not None:
             annotations = [annotations[i] for i in im_inds]
 
-        # Filter images with invisible annotations
-        if filter_invisible:  # FIXME add is_train? But then during detection images without boxes are fed
-            vis_im_inds, annotations = zip(*[(i, ann) for i, ann in enumerate(annotations)
-                                             if any([not inter['invis'] for inter in ann['interactions']])])
-            num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
-            if num_new_images < num_old_images:
-                print('Some images have been discarded due to not having visible interactions. '
-                      'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
-                image_ids = [image_ids[i] for i in vis_im_inds]
-        assert len(annotations) == len(image_ids)
-
         # Filter out unwanted predicates/object classes
         if obj_inds is None and pred_inds is None:
             self._objects = list(hicodet_driver.objects)
@@ -65,10 +54,21 @@ class HicoDetInstance(Dataset):
                     new_im_inds.append(i)
                     new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
             annotations = new_annotations
-            print('Some images have been discarded due to not having feasible predicates or objects. '
+            print('Images have been discarded due to not having feasible predicates or objects. '
                   'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
             image_ids = [image_ids[i] for i in new_im_inds]
         self._person_class_index = self._objects.index('person')
+
+        # Filter images with invisible annotations
+        if filter_invisible:  # FIXME add is_train? But then during detection images without boxes are fed
+            vis_im_inds, annotations = zip(*[(i, ann) for i, ann in enumerate(annotations)
+                                             if any([not inter['invis'] for inter in ann['interactions']])])
+            num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
+            if num_new_images < num_old_images:
+                print('Images have been discarded due to not having visible interactions. '
+                      'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
+                image_ids = [image_ids[i] for i in vis_im_inds]
+        assert len(annotations) == len(image_ids)
 
         # Compute COCO mapping
         coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
@@ -250,6 +250,21 @@ class HicoDetInstance(Dataset):
 
     def __len__(self):
         return len(self.image_ids)
+
+
+def preprocess_img(im):
+    """
+    Preprocess an image to be used as an input by normalising, converting to float and rescaling to all scales specified in the configurations (
+    rescaling is capped). NOTE: so far only one scale can be specified.
+    :param im [image]: A BGR image in HWC format. Images read with OpenCV's `imread` satisfy these conditions.
+    :return: - processed_im [image]: The transformed image, in CHW format with BGR channels.
+             - im_scale [scalar]: The scale factor that was used.
+    """
+    ims, im_scale = prep_im_for_blob(im, cfg.data.pixel_mean, [cfg.data.im_scale], cfg.data.im_max_size)
+    assert len(ims) == 1
+    processed_im = np.transpose(ims[0], axes=(2, 0, 1))  # to CHW
+    im_scale = np.squeeze(im_scale)
+    return processed_im, im_scale
 
 
 def main():

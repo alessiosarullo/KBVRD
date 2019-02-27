@@ -178,7 +178,6 @@ class HicoDet:
                             assert 0 <= bbox[0] < bbox[2] < im_w and 0 <= bbox[1] < bbox[3] < im_h, \
                                 (ann['file'], bbox, im_w, im_h)
 
-        pass
         # # Trying to understand what `count` is
         # inds, counts = np.unique([iid for ann in self.test_annotations for iid in np.unique([inter['id'] for inter in ann['interactions']])],
         #                          return_counts=True)
@@ -195,6 +194,18 @@ class HicoDet:
             inds, split_counts = np.unique([inter['id'] for ann in split_data['annotations'] for inter in ann['interactions']], return_counts=True)
             assert np.all(inds == np.arange(600)), inds
             split_data['inter_occurrences'] = split_counts
+
+            inds, split_counts = np.unique([self.get_predicate_index(inter['id']) for ann in split_data['annotations']
+                                            for inter in ann['interactions']],
+                                           return_counts=True)
+            assert np.all(inds == np.arange(117)), inds
+            split_data['pred_occurrences'] = split_counts
+
+            inds, split_counts = np.unique([self.get_object_index(inter['id']) for ann in split_data['annotations']
+                                            for inter in ann['interactions']],
+                                           return_counts=True)
+            assert np.all(inds == np.arange(80)), inds
+            split_data['obj_occurrences'] = split_counts
 
             # print('#' * 50, split)
             # img_sizes = sorted(set([ann['img_size'][2] for ann in split_data['annotations']]))
@@ -343,5 +354,31 @@ def save_lists():
         f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', ['no_interaction'])]) for predicate in hd.wn_predicate_dict.values()]))
 
 
+def print_num_preds():
+    hd = HicoDet()
+    split = Splits.TRAIN
+    occs = hd.split_data[split]['pred_occurrences']
+    inds = np.argsort(occs)[::-1]
+    sorted_occs = [occs[i] for i in inds]
+    print('\n'.join(['%3d %15s: %5d' % (i, hd.predicates[i], n) for i, n in zip(inds, sorted_occs)]))
+    print('%-19s %6d' % ('Total', sum(occs)))
+    num_interactions = sum([len(ann['interactions']) for ann in hd.get_annotations(split)])  # takes into account invisible ones as well
+    assert sum(occs) == num_interactions, num_interactions
+
+
+def print_num_objs():
+    hd = HicoDet()
+    split = Splits.TRAIN
+    occs = hd.split_data[split]['obj_occurrences']
+    inds = np.argsort(occs)[::-1]
+    sorted_occs = [occs[i] for i in inds]
+    print('\n'.join(['%3d %15s: %5d' % (i, hd.objects[i], n) for i, n in zip(inds, sorted_occs)]))
+    print('%-19s %6d' % ('Total', sum(occs)))
+    num_interactions = sum([len(ann['interactions']) for ann in hd.get_annotations(split)])  # takes into account invisible ones as well
+    assert sum(occs) == num_interactions, num_interactions
+
+
 if __name__ == '__main__':
-    save_lists()
+    # save_lists()
+    # print_num_preds()
+    print_num_objs()
