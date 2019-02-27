@@ -26,7 +26,7 @@ class Launcher:
             save_dir = cfg.program.save_dir
             cfg.load()
             cfg.program.eval_only = True
-            assert cfg.program.save_dir == save_dir
+            assert cfg.program.save_dir.strip('/') == save_dir.strip('/'), (cfg.program.save_dir, save_dir)
         cfg.print()
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstance
