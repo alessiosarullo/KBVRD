@@ -68,7 +68,7 @@ class HicoDetInstance(Dataset):
             print('Some images have been discarded due to not having feasible predicates or objects. '
                   'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
             image_ids = [image_ids[i] for i in new_im_inds]
-        self._person_class_index = self._predicates.index('person')
+        self._person_class_index = self._objects.index('person')
 
         # Compute COCO mapping
         coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
@@ -255,9 +255,9 @@ class HicoDetInstance(Dataset):
 def main():
     # hds = HicoDetInstance(Splits.TRAIN, im_inds=[12, 13, 14])
     hds = HicoDetInstance(Splits.TRAIN, pred_inds=[22, 33, 44])
-    hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)))
-    hds = HicoDetInstance(Splits.TRAIN, obj_inds=[42, 12, 79])  # This doesn't contain the person class. Should raise a ValueError
-    hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)), pred_inds=[22, 33, 44])
+    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)))
+    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=[42, 12, 79])  # This doesn't contain the person class. Should raise a ValueError
+    # hds = HicoDetInstance(Splits.TRAIN, obj_inds=list(range(44, 50)), pred_inds=[22, 33, 44])
 
 
 if __name__ == '__main__':
