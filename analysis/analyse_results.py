@@ -9,7 +9,7 @@ from config import Configs as cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
-from .utils import vis_one_image
+from analysis.utils import vis_one_image
 
 
 def vis_masks(rescale=False):
