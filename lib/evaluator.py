@@ -49,9 +49,10 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
         return [[]]
     assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
-    if isinstance(gt_entry, (Minibatch, Example)):
+    if isinstance(gt_entry, Minibatch):
+        im_scales = gt_entry.img_infos[:, 2].cpu().numpy()
         gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
-        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False) / im_scales[gt_entry.gt_box_im_ids, None]
         gt_obj_classes = gt_entry.gt_obj_classes
     elif isinstance(gt_entry, Example):
         gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]

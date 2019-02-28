@@ -33,10 +33,6 @@ def count():
 
 
 def vis_masks():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rescale', action='store_true')
-    rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
-
     results, hds = _setup_and_load()
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
 
@@ -49,8 +45,6 @@ def vis_masks():
         prediction = Prediction(**prediction_dict)  # type: Prediction
 
         boxes = prediction.obj_boxes
-        if rescale:
-            boxes /= example.img_infos[:, 2][prediction.obj_im_inds, None]
         obj_scores = prediction.obj_scores
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]
