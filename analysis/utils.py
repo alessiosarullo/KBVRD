@@ -1,6 +1,12 @@
-import numpy as np
-from matplotlib import pyplot as plt
 import os
+
+import cv2
+import numpy as np
+# # Use a non-interactive backend
+# import matplotlib
+# matplotlib.use('Agg')
+from matplotlib import pyplot as plt
+from matplotlib.patches import Polygon
 
 
 def plot_mat(conf_mat, xticklabels, yticklabels):
@@ -43,24 +49,14 @@ def plot_mat(conf_mat, xticklabels, yticklabels):
     plt.show()
 
 
-# TODO
-def vis_one_image(
-        im, im_name, output_dir, boxes, segms=None, keypoints=None, thresh=0.9,
-        kp_thresh=2, dpi=200, box_alpha=0.0, dataset=None, show_class=False,
-        ext='png'):
-    raise NotImplementedError
+def vis_one_image(im, boxes, box_classes, class_names, masks=None, thresh=0.9,
+                  output_file_path=None, show_class=False, dpi=200, box_alpha=0.0, ext='png'):
     """Visual debugging of detections."""
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
 
     if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
         return
 
-    dataset_keypoints, _ = keypoint_utils.get_keypoints()
-    kp_lines = kp_connections(dataset_keypoints)
-    cmap = plt.get_cmap('rainbow')
-    colors = [cmap(i) for i in np.linspace(0, 1, len(kp_lines) + 2)]
-
+    color_list = colormap(rgb=True) / 255
     fig = plt.figure(frameon=False)
     fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -79,8 +75,7 @@ def vis_one_image(
         if score < thresh:
             continue
 
-        print(dataset.classes[classes[i]], score)
-        # show box (off by default, box_alpha=0.0)
+        print(class_names[box_classes[i]], score)
         ax.add_patch(
             plt.Rectangle((bbox[0], bbox[1]),
                           bbox[2] - bbox[0],
@@ -91,7 +86,7 @@ def vis_one_image(
         if show_class:
             ax.text(
                 bbox[0], bbox[1] - 2,
-                get_class_string(classes[i], score, dataset),
+                class_names[box_classes[i]] + ' {:0.2f}'.format(score).lstrip('0'),
                 fontsize=3,
                 family='serif',
                 bbox=dict(
@@ -99,7 +94,7 @@ def vis_one_image(
                 color='white')
 
         # show mask
-        if segms is not None and len(segms) > i:
+        if masks is not None:
             img = np.ones(im.shape)
             color_mask = color_list[mask_color_id % len(color_list), 0:3]
             mask_color_id += 1
@@ -109,10 +104,9 @@ def vis_one_image(
                 color_mask[c] = color_mask[c] * (1 - w_ratio) + w_ratio
             for c in range(3):
                 img[:, :, c] = color_mask[c]
-            e = masks[:, :, i]
+            e = masks[i, :, :]
 
-            _, contour, hier = cv2.findContours(
-                e.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+            _, contour, hier = cv2.findContours(e.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
 
             for c in contour:
                 polygon = Polygon(
@@ -122,55 +116,98 @@ def vis_one_image(
                     alpha=0.5)
                 ax.add_patch(polygon)
 
-        # show keypoints
-        if keypoints is not None and len(keypoints) > i:
-            kps = keypoints[i]
-            plt.autoscale(False)
-            for l in range(len(kp_lines)):
-                i1 = kp_lines[l][0]
-                i2 = kp_lines[l][1]
-                if kps[2, i1] > kp_thresh and kps[2, i2] > kp_thresh:
-                    x = [kps[0, i1], kps[0, i2]]
-                    y = [kps[1, i1], kps[1, i2]]
-                    line = ax.plot(x, y)
-                    plt.setp(line, color=colors[l], linewidth=1.0, alpha=0.7)
-                if kps[2, i1] > kp_thresh:
-                    ax.plot(
-                        kps[0, i1], kps[1, i1], '.', color=colors[l],
-                        markersize=3.0, alpha=0.7)
-                if kps[2, i2] > kp_thresh:
-                    ax.plot(
-                        kps[0, i2], kps[1, i2], '.', color=colors[l],
-                        markersize=3.0, alpha=0.7)
+        if output_file_path is None:
+            plt.show()
+        else:
+            fig.savefig(output_file_path + '.' + ext, dpi=dpi)
+            plt.close('all')
 
-            # add mid shoulder / mid hip for better visualization
-            mid_shoulder = (
-                kps[:2, dataset_keypoints.index('right_shoulder')] +
-                kps[:2, dataset_keypoints.index('left_shoulder')]) / 2.0
-            sc_mid_shoulder = np.minimum(
-                kps[2, dataset_keypoints.index('right_shoulder')],
-                kps[2, dataset_keypoints.index('left_shoulder')])
-            mid_hip = (
-                kps[:2, dataset_keypoints.index('right_hip')] +
-                kps[:2, dataset_keypoints.index('left_hip')]) / 2.0
-            sc_mid_hip = np.minimum(
-                kps[2, dataset_keypoints.index('right_hip')],
-                kps[2, dataset_keypoints.index('left_hip')])
-            if (sc_mid_shoulder > kp_thresh and
-                    kps[2, dataset_keypoints.index('nose')] > kp_thresh):
-                x = [mid_shoulder[0], kps[0, dataset_keypoints.index('nose')]]
-                y = [mid_shoulder[1], kps[1, dataset_keypoints.index('nose')]]
-                line = ax.plot(x, y)
-                plt.setp(
-                    line, color=colors[len(kp_lines)], linewidth=1.0, alpha=0.7)
-            if sc_mid_shoulder > kp_thresh and sc_mid_hip > kp_thresh:
-                x = [mid_shoulder[0], mid_hip[0]]
-                y = [mid_shoulder[1], mid_hip[1]]
-                line = ax.plot(x, y)
-                plt.setp(
-                    line, color=colors[len(kp_lines) + 1], linewidth=1.0,
-                    alpha=0.7)
 
-        output_name = os.path.basename(im_name) + '.' + ext
-        fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
-        plt.close('all')
+def colormap(rgb=False):
+    color_list = np.array(
+        [
+            0.000, 0.447, 0.741,
+            0.850, 0.325, 0.098,
+            0.929, 0.694, 0.125,
+            0.494, 0.184, 0.556,
+            0.466, 0.674, 0.188,
+            0.301, 0.745, 0.933,
+            0.635, 0.078, 0.184,
+            0.300, 0.300, 0.300,
+            0.600, 0.600, 0.600,
+            1.000, 0.000, 0.000,
+            1.000, 0.500, 0.000,
+            0.749, 0.749, 0.000,
+            0.000, 1.000, 0.000,
+            0.000, 0.000, 1.000,
+            0.667, 0.000, 1.000,
+            0.333, 0.333, 0.000,
+            0.333, 0.667, 0.000,
+            0.333, 1.000, 0.000,
+            0.667, 0.333, 0.000,
+            0.667, 0.667, 0.000,
+            0.667, 1.000, 0.000,
+            1.000, 0.333, 0.000,
+            1.000, 0.667, 0.000,
+            1.000, 1.000, 0.000,
+            0.000, 0.333, 0.500,
+            0.000, 0.667, 0.500,
+            0.000, 1.000, 0.500,
+            0.333, 0.000, 0.500,
+            0.333, 0.333, 0.500,
+            0.333, 0.667, 0.500,
+            0.333, 1.000, 0.500,
+            0.667, 0.000, 0.500,
+            0.667, 0.333, 0.500,
+            0.667, 0.667, 0.500,
+            0.667, 1.000, 0.500,
+            1.000, 0.000, 0.500,
+            1.000, 0.333, 0.500,
+            1.000, 0.667, 0.500,
+            1.000, 1.000, 0.500,
+            0.000, 0.333, 1.000,
+            0.000, 0.667, 1.000,
+            0.000, 1.000, 1.000,
+            0.333, 0.000, 1.000,
+            0.333, 0.333, 1.000,
+            0.333, 0.667, 1.000,
+            0.333, 1.000, 1.000,
+            0.667, 0.000, 1.000,
+            0.667, 0.333, 1.000,
+            0.667, 0.667, 1.000,
+            0.667, 1.000, 1.000,
+            1.000, 0.000, 1.000,
+            1.000, 0.333, 1.000,
+            1.000, 0.667, 1.000,
+            0.167, 0.000, 0.000,
+            0.333, 0.000, 0.000,
+            0.500, 0.000, 0.000,
+            0.667, 0.000, 0.000,
+            0.833, 0.000, 0.000,
+            1.000, 0.000, 0.000,
+            0.000, 0.167, 0.000,
+            0.000, 0.333, 0.000,
+            0.000, 0.500, 0.000,
+            0.000, 0.667, 0.000,
+            0.000, 0.833, 0.000,
+            0.000, 1.000, 0.000,
+            0.000, 0.000, 0.167,
+            0.000, 0.000, 0.333,
+            0.000, 0.000, 0.500,
+            0.000, 0.000, 0.667,
+            0.000, 0.000, 0.833,
+            0.000, 0.000, 1.000,
+            0.000, 0.000, 0.000,
+            0.143, 0.143, 0.143,
+            0.286, 0.286, 0.286,
+            0.429, 0.429, 0.429,
+            0.571, 0.571, 0.571,
+            0.714, 0.714, 0.714,
+            0.857, 0.857, 0.857,
+            1.000, 1.000, 1.000
+        ]
+    ).astype(np.float32)
+    color_list = color_list.reshape((-1, 3)) * 255
+    if not rgb:
+        color_list = color_list[:, ::-1]
+    return color_list

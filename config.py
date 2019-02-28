@@ -4,8 +4,6 @@ import sys
 
 import pickle
 
-import lib.detection.wrappers as pydet
-
 
 class BaseConfigs:
     def parse_args(self):
@@ -148,13 +146,17 @@ class Configs:
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
                 v.parse_args()
-        cls.init_detectron_cfgs()
+        try:
+            cls.init_detectron_cfgs()
+        except ModuleNotFoundError:
+            print('Detectron module not found')
         # Detectron configurations override command line arguments. This is ok, since the model's configs should not be changed. TODO Raise a warning.
         # TODO (related to the above) when trying to set a parameter that defaults to None a useless error is printed. Say that this parameter
         #  cannot be set through command line
 
     @classmethod
     def init_detectron_cfgs(cls):
+        import lib.detection.wrappers as pydet
         cfg_file = 'pydetectron/configs/baselines/%s.yaml' % cls.model.rcnn_arch
 
         print("Loading Detectron's configs from {}.".format(cfg_file))

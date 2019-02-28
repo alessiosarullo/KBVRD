@@ -10,8 +10,8 @@ from torch.utils.data import Dataset
 from config import Configs as cfg
 from lib.containers import Minibatch, Example
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.dataset.utils import Splits
-from lib.detection.wrappers import COCO_CLASSES, prep_im_for_blob
+from lib.dataset.utils import Splits, preprocess_img
+from lib.detection.wrappers import COCO_CLASSES
 from scripts.utils import Timer
 
 
@@ -269,21 +269,6 @@ class HicoDetInstance(Dataset):
 
     def __len__(self):
         return len(self.image_ids)
-
-
-def preprocess_img(im):
-    """
-    Preprocess an image to be used as an input by normalising, converting to float and rescaling to all scales specified in the configurations (
-    rescaling is capped). NOTE: so far only one scale can be specified.
-    :param im [image]: A BGR image in HWC format. Images read with OpenCV's `imread` satisfy these conditions.
-    :return: - processed_im [image]: The transformed image, in CHW format with BGR channels.
-             - im_scale [scalar]: The scale factor that was used.
-    """
-    ims, im_scale = prep_im_for_blob(im, cfg.data.pixel_mean, [cfg.data.im_scale], cfg.data.im_max_size)
-    assert len(ims) == 1
-    processed_im = np.transpose(ims[0], axes=(2, 0, 1))  # to CHW
-    im_scale = np.squeeze(im_scale)
-    return processed_im, im_scale
 
 
 def main():
