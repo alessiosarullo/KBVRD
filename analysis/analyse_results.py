@@ -59,7 +59,7 @@ def vis_masks(rescale=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rescale', action='store_true')
-    args = vars(parser.parse_known_args())
+    args = vars(parser.parse_known_args()[0])
     vis_masks(**args)
 
 
