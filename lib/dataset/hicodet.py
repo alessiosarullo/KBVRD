@@ -216,9 +216,13 @@ class HicoDetInstance(Dataset):
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
             shuffle = True if self.is_train else False
+        batch_size = batch_size * num_gpus
+        if not self.is_train and batch_size > 1:
+            print('Only single-image batches are supported during evaluation. Batch size changed from %d to 1.' % batch_size)
+            batch_size = 1
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
-            batch_size=batch_size * num_gpus,
+            batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
             collate_fn=lambda x: Minibatch.collate(x),

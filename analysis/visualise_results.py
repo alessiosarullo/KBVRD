@@ -27,12 +27,13 @@ def vis_masks():
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
     dataset = DummyDataset(hds.objects)
 
-    for example in hdsl:
+    for b_idx, example in enumerate(hdsl):
         example = example  # type: Minibatch
-        prediction = results[example.other_ex_data[0]['index']]  # type: Prediction
+        prediction_dict = results[b_idx]
+        prediction = Prediction(**prediction_dict)  # type: Prediction
 
-        boxes = prediction.obj_boxes.cpu().numpy()
-        obj_scores = prediction.obj_scores.cpu().numpy()
+        boxes = prediction.obj_boxes
+        obj_scores = prediction.obj_scores
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]
         print(boxes)

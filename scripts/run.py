@@ -150,14 +150,15 @@ class Launcher:
             loaded_predictions = None
 
         test_split = HicoDetInstance(Splits.TEST)
-        test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
+        test_loader = test_split.get_loader(batch_size=1)
         all_pred_entries = []
         self.detector.eval()
         num_batches = len(test_loader)
         for b_idx, batch in enumerate(test_loader):
             Timer.get('Img').tic()
             if loaded_predictions is not None:
-                prediction = loaded_predictions[b_idx]
+                prediction_dict = loaded_predictions[b_idx]
+                prediction = Prediction(**prediction_dict)
             else:
                 prediction = self.detector(batch)  # type: Prediction
             Timer.get('Img').toc()
