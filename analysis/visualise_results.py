@@ -16,7 +16,7 @@ class DummyDataset:
         self.classes = classes
 
 
-def vis_masks():
+def vis_masks(rescale=False):
     cfg.parse_args()
     output_dir = os.path.join('analysis', 'output', 'vis')
     with open(cfg.program.result_file_format % 'sgdet', 'rb') as f:
@@ -32,7 +32,7 @@ def vis_masks():
         prediction_dict = results[b_idx]
         prediction = Prediction(**prediction_dict)  # type: Prediction
 
-        boxes = prediction.obj_boxes
+        boxes = prediction.obj_boxes / example.img_infos[:, 2][prediction.obj_im_inds, None]
         obj_scores = prediction.obj_scores
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]

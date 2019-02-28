@@ -61,20 +61,21 @@ class AbstractModel(nn.Module):
                     obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
                     obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
                     hoi_probs = nn.functional.softmax(hoi_output, dim=1).cpu().numpy()
-                    boxes_ext = boxes_ext.cpu().numpy()
-                    obj_im_inds = boxes_ext[:, 0]
-                    obj_boxes = boxes_ext[:, 1:5]
                     hoi_img_inds = hoi_infos[:, 0]
                     ho_pairs = hoi_infos[:, 1:]
                 else:
                     hoi_probs = ho_pairs = hoi_img_inds = None
-                    if boxes_ext is None:
-                        obj_im_inds = obj_boxes = obj_prob = None
-                    else:
-                        boxes_ext = boxes_ext.cpu().numpy()
-                        obj_im_inds = boxes_ext[:, 0]
-                        obj_boxes = boxes_ext[:, 1:5]
-                        obj_prob = boxes_ext[:, 5:]
+                    obj_prob = None
+
+                if boxes_ext is not None:
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    boxes_ext = boxes_ext.cpu().numpy()
+                    obj_im_inds = boxes_ext[:, 0]
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    if obj_prob is None:
+                        obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
+                else:
+                    obj_im_inds = obj_boxes = None
                 return Prediction(obj_im_inds=obj_im_inds,
                                   obj_boxes=obj_boxes,
                                   obj_scores=obj_prob,
