@@ -10,17 +10,42 @@ from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
 from analysis.utils import vis_one_image
+from lib.evaluator import find_pred_to_gt_matches
 
 
-def vis_masks(rescale=False):
+def _setup_and_load():
     cfg.parse_args()
     with open(cfg.program.result_file_format % 'sgdet', 'rb') as f:
         results = pickle.load(f)
     cfg.load()
-    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.save_dir.split('/')[1:]))
-
     hds = HicoDetInstance(Splits.TEST)
+    return results, hds
+
+
+def count():
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('--rescale', action='store_true')
+    # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
+
+    results, hds = _setup_and_load()
+    assert len(results) == len(hds), (len(results), len(hds))
+
+    for res, ex in zip(results, hds):
+        prediction = Prediction(**res)  # type: Prediction
+        mb = Minibatch.collate([ex])
+
+        pred_to_gt = find_pred_to_gt_matches(mb, prediction)
+
+
+def vis_masks():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--rescale', action='store_true')
+    rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
+
+    results, hds = _setup_and_load()
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
+
+    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.save_dir.split('/')[1:]))
     dataset_classes = hds.objects
 
     for b_idx, example in enumerate(hdsl):
@@ -58,9 +83,14 @@ def vis_masks(rescale=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rescale', action='store_true')
-    args = vars(parser.parse_known_args()[0])
-    vis_masks(**args)
+    parser.add_argument('func', type=str, choices=['vis', 'count'])
+    func = vars(parser.parse_known_args()[0])['func']
+    if func == 'vis':
+        vis_masks()
+    elif func == 'count':
+        pass
+    else:
+        raise ValueError('Unknown function %s.' % func)
 
 
 if __name__ == '__main__':

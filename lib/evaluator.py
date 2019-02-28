@@ -1,16 +1,17 @@
 import numpy as np
-from lib.containers import Minibatch, Prediction
+
 from lib.bbox_utils import compute_ious
+from lib.containers import Minibatch, Prediction
+
 
 # TODO rename
-
 class Evaluator:
     def __init__(self, use_gt_boxes):
         self.result_dict = {'recall': {20: [], 50: [], 100: []}}
         self.use_gt_boxes = use_gt_boxes
 
     def evaluate_scene_graph_entry(self, example, prediction, iou_thresh=0.5):
-        predicted_hoi_to_gt = self.evaluate_from_dict(example, prediction, iou_thresh=iou_thresh)
+        predicted_hoi_to_gt = find_pred_to_gt_matches(example, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=iou_thresh)
         for k in self.result_dict['recall']:
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
             recall_i = len(matched_gt_inds) / example.gt_hois.shape[0]
@@ -21,41 +22,43 @@ class Evaluator:
         for k, v in self.result_dict['recall'].items():
             print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
 
-    def evaluate_from_dict(self, example: Minibatch, prediction: Prediction, **kwargs):
-        if not prediction.is_complete():
-            return [[]]
-        assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
-        gt_hois = example.gt_hois[:, [0, 2, 1]]
-        gt_boxes = example.gt_boxes.astype(np.float, copy=False)
-        gt_obj_classes = example.gt_obj_classes
+def find_pred_to_gt_matches(gt_entry: Minibatch, prediction: Prediction, use_gt_boxes=False, **kwargs):
+    # TODO docs
 
-        if self.use_gt_boxes:
-            predict_boxes = gt_boxes
-            predict_obj_classes = gt_obj_classes
-            predict_obj_scores = np.ones(predict_obj_classes.shape[0])
-        else:
-            predict_boxes = prediction.obj_boxes
-            predict_obj_score_dists = prediction.obj_scores
-            predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
-            predict_obj_scores = predict_obj_score_dists.max(axis=1)
+    if not prediction.is_complete():
+        return [[]]
+    assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
-        predict_ho_pairs = prediction.ho_pairs
-        predict_hoi_score_dists = prediction.hoi_scores
-        predict_hois = np.concatenate([predict_ho_pairs, predict_hoi_score_dists.argmax(axis=1)[:, None]], axis=1)
-        predict_hoi_scores = predict_hoi_score_dists.max(axis=1)
+    gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+    gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+    gt_obj_classes = gt_entry.gt_obj_classes
 
-        pred_to_gt = evaluate_recall(gt_hois, gt_boxes, gt_obj_classes,
-                                     predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
-                                     **kwargs)
+    if use_gt_boxes:
+        predict_boxes = gt_boxes
+        predict_obj_classes = gt_obj_classes
+        predict_obj_scores = np.ones(predict_obj_classes.shape[0])
+    else:
+        predict_boxes = prediction.obj_boxes
+        predict_obj_score_dists = prediction.obj_scores
+        predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
+        predict_obj_scores = predict_obj_score_dists.max(axis=1)
 
-        return pred_to_gt
+    predict_ho_pairs = prediction.ho_pairs
+    predict_hoi_score_dists = prediction.hoi_scores
+    predict_hois = np.concatenate([predict_ho_pairs, predict_hoi_score_dists.argmax(axis=1)[:, None]], axis=1)
+    predict_hoi_scores = predict_hoi_score_dists.max(axis=1)
+
+    pred_to_gt = find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
+                                                   predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
+                                                   **kwargs)
+
+    return pred_to_gt
 
 
-def evaluate_recall(gt_hois, gt_boxes, gt_obj_classes,
-                    predict_hois, predict_boxes, predict_box_classes, hoi_scores, predict_box_scores,
-                    iou_thresh=0.5):
-
+def find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
+                                      predict_hois, predict_boxes, predict_box_classes, hoi_scores, predict_box_scores,
+                                      iou_thresh=0.5):
     num_gt_relations = gt_hois.shape[0]
     assert num_gt_relations > 0
 
