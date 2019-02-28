@@ -140,7 +140,7 @@ class Launcher:
         return res
 
     def test(self):
-        evaluator = Evaluator(use_gt_boxes=cfg.program.predcls)
+        evaluator = Evaluator()
         result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
         try:
             with open(result_file, 'rb') as f:
@@ -151,8 +151,9 @@ class Launcher:
 
         test_split = HicoDetInstance(Splits.TEST)
         test_loader = test_split.get_loader(batch_size=1)
-        all_pred_entries = []
         self.detector.eval()
+
+        all_pred_entries = []
         num_batches = len(test_loader)
         for b_idx, batch in enumerate(test_loader):
             Timer.get('Img').tic()

@@ -1,5 +1,6 @@
 import numpy as np
 
+from config import cfg
 from lib.bbox_utils import compute_ious
 from lib.containers import Minibatch, Prediction, Example
 from lib.dataset.hicodet import HicoDetInstance
@@ -9,7 +10,9 @@ from typing import List, Dict, Union
 
 # TODO rename
 class Evaluator:
-    def __init__(self, use_gt_boxes, iou_thresh=0.5):
+    def __init__(self, use_gt_boxes=None, iou_thresh=0.5):
+        if use_gt_boxes is None:
+            use_gt_boxes = cfg.program.predcls
         self.result_dict = {'recall': {20: [], 50: [], 100: []}}
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
@@ -27,9 +30,9 @@ class Evaluator:
             print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
 
     @classmethod
-    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], use_gt_boxes, **kwargs):
+    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
         assert len(predictions) == len(dataset), (len(predictions), len(dataset))
-        evaluator = cls(use_gt_boxes=use_gt_boxes, **kwargs)
+        evaluator = cls(**kwargs)
         for i, res in enumerate(predictions):
             ex = dataset.get_entry(i, read_img=False)
             prediction = Prediction(**res)
