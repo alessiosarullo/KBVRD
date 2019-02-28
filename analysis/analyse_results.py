@@ -28,7 +28,7 @@ def count():
     # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
 
     results, hds = _setup_and_load()
-    evaluator = Evaluator.evaluate_predictions(hds, results)
+    evaluator = Evaluator.evaluate_predictions(hds, results, use_gt_boxes=cfg.program.predcls)
     evaluator.print_stats()
 
 

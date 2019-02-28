@@ -27,9 +27,9 @@ class Evaluator:
             print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
 
     @classmethod
-    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
+    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], use_gt_boxes, **kwargs):
         assert len(predictions) == len(dataset), (len(predictions), len(dataset))
-        evaluator = cls(**kwargs)
+        evaluator = cls(use_gt_boxes=use_gt_boxes, **kwargs)
         for res, ex in zip(predictions, dataset):
             prediction = Prediction(**res)
             mb = Minibatch.collate([ex])
