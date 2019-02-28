@@ -83,7 +83,7 @@ def main():
     if func == 'vis':
         vis_masks()
     elif func == 'count':
-        pass
+        count()
     else:
         raise ValueError('Unknown function %s.' % func)
 
