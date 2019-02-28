@@ -195,14 +195,18 @@ class HicoDet:
             assert np.all(inds == np.arange(600)), inds
             split_data['inter_occurrences'] = split_counts
 
-            inds, split_counts = np.unique([self.get_predicate_index(inter['id']) for ann in split_data['annotations']
-                                            for inter in ann['interactions']],
+            inds, split_counts = np.unique([pidx
+                                            for ann in split_data['annotations']
+                                            for inter in ann['interactions']
+                                            for pidx in ([self.get_predicate_index(inter['id'])] * len(inter.get('conn', [])))],
                                            return_counts=True)
             assert np.all(inds == np.arange(117)), inds
             split_data['pred_occurrences'] = split_counts
 
-            inds, split_counts = np.unique([self.get_object_index(inter['id']) for ann in split_data['annotations']
-                                            for inter in ann['interactions']],
+            inds, split_counts = np.unique([oidx
+                                            for ann in split_data['annotations']
+                                            for inter in ann['interactions']
+                                            for oidx in ([self.get_object_index(inter['id'])] * len(inter.get('obj_bbox', [])))],
                                            return_counts=True)
             assert np.all(inds == np.arange(80)), inds
             split_data['obj_occurrences'] = split_counts
@@ -362,7 +366,7 @@ def print_num_preds():
     sorted_occs = [occs[i] for i in inds]
     print('\n'.join(['%3d %15s: %5d' % (i, hd.predicates[i], n) for i, n in zip(inds, sorted_occs)]))
     print('%-19s %6d' % ('Total', sum(occs)))
-    num_interactions = sum([len(ann['interactions']) for ann in hd.get_annotations(split)])  # takes into account invisible ones as well
+    num_interactions = sum([len(inter.get('conn', [])) for ann in hd.get_annotations(split) for inter in ann['interactions']])
     assert sum(occs) == num_interactions, num_interactions
 
 
@@ -374,7 +378,7 @@ def print_num_objs():
     sorted_occs = [occs[i] for i in inds]
     print('\n'.join(['%3d %15s: %5d' % (i, hd.objects[i], n) for i, n in zip(inds, sorted_occs)]))
     print('%-19s %6d' % ('Total', sum(occs)))
-    num_interactions = sum([len(ann['interactions']) for ann in hd.get_annotations(split)])  # takes into account invisible ones as well
+    num_interactions = sum([len(inter.get('obj_bbox', [])) for ann in hd.get_annotations(split) for inter in ann['interactions']])
     assert sum(occs) == num_interactions, num_interactions
 
 

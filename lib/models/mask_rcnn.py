@@ -112,7 +112,6 @@ def vis_masks():
     cfg.parse_args()
     output_dir = os.path.join('output', 'tmp', '%s' % ('pre' if cfg.program.load_precomputed_feats else 'e2e'))
 
-    im_inds = list(range(cfg.program.num_images)) if cfg.program.num_images > 0 else None
     # hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
     # hdsl = hds.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)
     hds = HicoDetInstance(Splits.TEST, im_inds=[0])

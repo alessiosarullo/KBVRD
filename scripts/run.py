@@ -23,10 +23,8 @@ class Launcher:
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
         if cfg.program.eval_only:
-            save_dir = cfg.program.save_dir
             cfg.load()
             cfg.program.eval_only = True
-            assert cfg.program.save_dir.strip('/') == save_dir.strip('/'), (cfg.program.save_dir, save_dir)
         cfg.print()
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstance
@@ -49,11 +47,7 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        self.train_split = HicoDetInstance(Splits.TRAIN,
-                                           im_inds=cfg.data.im_inds,
-                                           pred_inds=cfg.data.pred_inds,
-                                           obj_inds=cfg.data.obj_inds,
-                                           flipping_prob=cfg.data.flip_prob)
+        self.train_split = HicoDetInstance(Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
         self.detector = BaseModel(self.train_split)
         self.detector.cuda()
@@ -155,7 +149,7 @@ class Launcher:
         except FileNotFoundError:
             loaded_predictions = None
 
-        test_split = HicoDetInstance(Splits.TEST, im_inds=cfg.data.im_inds, pred_inds=cfg.data.pred_inds, obj_inds=cfg.data.obj_inds)
+        test_split = HicoDetInstance(Splits.TEST)
         test_loader = test_split.get_loader(batch_size=1)  # TODO? Support larger batches
         all_pred_entries = []
         self.detector.eval()

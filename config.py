@@ -11,6 +11,10 @@ class BaseConfigs:
     def parse_args(self):
         args = self._get_arg_parser().parse_known_args()
         self.__dict__.update({k: v for k, v in vars(args[0]).items() if v is not None})
+        self._postprocess_args()
+
+    def _postprocess_args(self):
+        pass
 
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
@@ -65,6 +69,9 @@ class ProgramConfig(BaseConfigs):
     @property
     def config_file(self):
         return os.path.join(self.save_dir, 'config.pkl')
+
+    def _postprocess_args(self):
+        self.save_dir = self.save_dir.rstrip('/')
 
 
 class DataConfig(BaseConfigs):
@@ -192,7 +199,9 @@ class Configs:
         with open(file_path, 'rb') as f:
             d = pickle.load(f)
         if program:
+            save_dir = cls.program.save_dir
             cls.program.__dict__.update(d['program'])
+            assert cls.program.save_dir.rstrip('/') == save_dir.rstrip('/'), (cls.program.save_dir, save_dir)
         if data:
             cls.data.__dict__.update(d['data'])
         if model:

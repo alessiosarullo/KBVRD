@@ -23,6 +23,11 @@ class HicoDetInstance(Dataset):
         assert split in Splits
         hicodet_driver = hicodet_driver or HicoDetDriver()
 
+        # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
+        im_inds = im_inds or cfg.data.im_inds
+        pred_inds = pred_inds or cfg.data.pred_inds
+        obj_inds = obj_inds or cfg.data.obj_inds
+
         self.split = split
         self._hicodet = hicodet_driver
         self.flipping_prob = flipping_prob
@@ -281,8 +286,7 @@ def main():
     cfg.parse_args()
     cfg.print()
 
-    hd = HicoDetInstance(Splits.TRAIN, im_inds=cfg.data.im_inds, pred_inds=cfg.data.pred_inds, obj_inds=cfg.data.obj_inds,
-                         flipping_prob=cfg.data.flip_prob)
+    hd = HicoDetInstance(Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
 
 if __name__ == '__main__':
