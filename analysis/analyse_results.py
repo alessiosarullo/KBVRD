@@ -10,7 +10,7 @@ from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
 from analysis.utils import vis_one_image
-from lib.evaluator import find_pred_to_gt_matches
+from lib.evaluator import Evaluator
 
 
 def _setup_and_load():
@@ -28,13 +28,8 @@ def count():
     # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
 
     results, hds = _setup_and_load()
-    assert len(results) == len(hds), (len(results), len(hds))
-
-    for res, ex in zip(results, hds):
-        prediction = Prediction(**res)  # type: Prediction
-        mb = Minibatch.collate([ex])
-
-        pred_to_gt = find_pred_to_gt_matches(mb, prediction)
+    evaluator = Evaluator.evaluate_predictions(hds, results)
+    evaluator.print_stats()
 
 
 def vis_masks():

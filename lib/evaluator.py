@@ -2,16 +2,20 @@ import numpy as np
 
 from lib.bbox_utils import compute_ious
 from lib.containers import Minibatch, Prediction
+from lib.dataset.hicodet import HicoDetInstance
+
+from typing import List, Dict
 
 
 # TODO rename
 class Evaluator:
-    def __init__(self, use_gt_boxes):
+    def __init__(self, use_gt_boxes, iou_thresh=0.5):
         self.result_dict = {'recall': {20: [], 50: [], 100: []}}
         self.use_gt_boxes = use_gt_boxes
+        self.iou_thresh = iou_thresh
 
-    def evaluate_scene_graph_entry(self, example, prediction, iou_thresh=0.5):
-        predicted_hoi_to_gt = find_pred_to_gt_matches(example, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=iou_thresh)
+    def evaluate_prediction(self, example, prediction):
+        predicted_hoi_to_gt = find_pred_to_gt_matches(example, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
         for k in self.result_dict['recall']:
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
             recall_i = len(matched_gt_inds) / example.gt_hois.shape[0]
@@ -21,6 +25,16 @@ class Evaluator:
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
         for k, v in self.result_dict['recall'].items():
             print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
+
+    @classmethod
+    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
+        assert len(predictions) == len(dataset), (len(predictions), len(dataset))
+        evaluator = cls(**kwargs)
+        for res, ex in zip(predictions, dataset):
+            prediction = Prediction(**res)
+            mb = Minibatch.collate([ex])
+            evaluator.evaluate_prediction(mb, prediction)
+        return evaluator
 
 
 def find_pred_to_gt_matches(gt_entry: Minibatch, prediction: Prediction, use_gt_boxes=False, **kwargs):

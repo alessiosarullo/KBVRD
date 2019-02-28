@@ -161,11 +161,11 @@ class Launcher:
                 prediction = Prediction(**prediction_dict)
             else:
                 prediction = self.detector(batch)  # type: Prediction
+                all_pred_entries.append(vars(prediction))
             Timer.get('Img').toc()
 
             Timer.get('Eval').tic()
-            evaluator.evaluate_scene_graph_entry(batch, prediction)
-            all_pred_entries.append(vars(prediction))
+            evaluator.evaluate_prediction(batch, prediction)
             Timer.get('Eval').toc()
 
             if b_idx % cfg.program.print_interval == 0:
