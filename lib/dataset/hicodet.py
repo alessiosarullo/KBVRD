@@ -232,27 +232,27 @@ class HicoDetInstance(Dataset):
         )
         return data_loader
 
-    def __getitem__(self, idx):
-        Timer.get('Epoch', 'GetBatch').tic()
-
+    def get_entry(self, idx, read_img=True):
         # Read the image
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
-
-        img = cv2.imread(os.path.join(self.img_dir, img_fn))
-        img_h, img_w = img.shape[:2]
         gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 
-        # Optionally flip the image if we're doing training
-        flipped = self.is_train and np.random.random() < self.flipping_prob
-        if flipped:
-            img = img[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
-            gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
+        if read_img:
+            raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
+            img_h, img_w = raw_image.shape[:2]
+            flipped = self.is_train and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
+            if flipped:
+                raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
+                gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
+            image, img_scale_factor = preprocess_img(raw_image)
+            img_size = (img_h, img_w)
+        else:
+            image = img_size = img_scale_factor = flipped = None
 
-        preprocessed_im, img_scale_factor = preprocess_img(img)
         entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn,
-                        image=preprocessed_im, img_size=(img_h, img_w), img_scale_factor=img_scale_factor, flipped=flipped,
-                        gt_boxes=gt_boxes, gt_obj_classes=self._im_box_classes[idx].copy(), gt_hois=self._im_inters[idx].copy())
+                        gt_boxes=gt_boxes, gt_obj_classes=self._im_box_classes[idx].copy(), gt_hois=self._im_inters[idx].copy(),
+                        image=image, img_size=img_size, img_scale_factor=img_scale_factor, flipped=flipped)
 
         if self.pc_feats_file is not None:
             pc_im_idx = self.im_id_to_pc_im_idx[img_id]
@@ -264,6 +264,11 @@ class HicoDetInstance(Dataset):
             entry.precomputed_obj_scores = self.pc_feats_file['box_scores'][start:end, :]
             entry.precomputed_box_feats = self.pc_feats_file['box_feats'][start:end, :]
             entry.precomputed_obj_classes = self.pc_box_pred_classes[start:end, :]
+        return entry
+
+    def __getitem__(self, idx):
+        Timer.get('Epoch', 'GetBatch').tic()
+        entry = self.get_entry(idx)
         Timer.get('Epoch', 'GetBatch').toc()
         return entry
 

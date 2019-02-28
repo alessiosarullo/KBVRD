@@ -5,17 +5,17 @@ from scripts.utils import Timer
 
 
 class Example:
-    def __init__(self, idx_in_split, img_id, img_fn, flipped,
-                 image, img_size, img_scale_factor,
-                 gt_boxes, gt_obj_classes, gt_hois):
+    def __init__(self, idx_in_split, img_id, img_fn,
+                 gt_boxes, gt_obj_classes, gt_hois,
+                 image, img_size, img_scale_factor, flipped,):
         self.index = idx_in_split
         self.id = img_id
         self.fn = img_fn
-        self.flipped = flipped
 
         self.image = image
         self.img_size = img_size
         self.scale = img_scale_factor
+        self.flipped = flipped
 
         self.gt_boxes = gt_boxes
         self.gt_obj_classes = gt_obj_classes
@@ -25,10 +25,6 @@ class Example:
         self.precomputed_box_feats = None
         self.precomputed_obj_scores = None
         self.precomputed_obj_classes = None
-
-    @property
-    def gt_data(self):
-        return self.gt_boxes, self.gt_obj_classes, self.gt_hois
 
     @property
     def has_precomputed(self):

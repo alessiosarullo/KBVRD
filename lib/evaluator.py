@@ -1,10 +1,10 @@
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.containers import Minibatch, Prediction
+from lib.containers import Minibatch, Prediction, Example
 from lib.dataset.hicodet import HicoDetInstance
 
-from typing import List, Dict
+from typing import List, Dict, Union
 
 
 # TODO rename
@@ -30,23 +30,32 @@ class Evaluator:
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], use_gt_boxes, **kwargs):
         assert len(predictions) == len(dataset), (len(predictions), len(dataset))
         evaluator = cls(use_gt_boxes=use_gt_boxes, **kwargs)
-        for res, ex in zip(predictions, dataset):
+        for i, res in enumerate(predictions):
+            ex = dataset.get_entry(i, read_img=False)
             prediction = Prediction(**res)
-            mb = Minibatch.collate([ex])
-            evaluator.evaluate_prediction(mb, prediction)
+            evaluator.evaluate_prediction(ex, prediction)
+            if i % 100 == 0:
+                print(i)
         return evaluator
 
 
-def find_pred_to_gt_matches(gt_entry: Minibatch, prediction: Prediction, use_gt_boxes=False, **kwargs):
+def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Prediction, use_gt_boxes=False, **kwargs):
     # TODO docs
 
     if not prediction.is_complete():
         return [[]]
     assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
-    gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
-    gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
-    gt_obj_classes = gt_entry.gt_obj_classes
+    if isinstance(gt_entry, (Minibatch, Example)):
+        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+        gt_obj_classes = gt_entry.gt_obj_classes
+    elif isinstance(gt_entry, Example):
+        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+        gt_obj_classes = gt_entry.gt_obj_classes
+    else:
+        raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
     if use_gt_boxes:
         predict_boxes = gt_boxes
