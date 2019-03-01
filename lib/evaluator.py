@@ -45,7 +45,6 @@ class Evaluator:
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
         measures = set(self.result_per_img[0].keys())
         assert all([set(rpi.keys()) == measures for rpi in self.result_per_img])
-        measures = sorted(measures)
 
         results = {m: [] for m in measures}
         for im_results in self.result_per_img:
