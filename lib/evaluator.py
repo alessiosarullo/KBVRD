@@ -43,8 +43,9 @@ class Evaluator:
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
-        measures = set(self.result_per_img[0].keys())
-        assert all([set(rpi.keys()) == measures for rpi in self.result_per_img])
+        measures = self.result_per_img[0].keys()
+        mset = set(measures)
+        assert all([set(rpi.keys()) == mset for rpi in self.result_per_img])
 
         results = {m: [] for m in measures}
         for im_results in self.result_per_img:
