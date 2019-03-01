@@ -47,10 +47,13 @@ class Evaluator:
         assert all([set(rpi.keys()) == measures for rpi in self.result_per_img])
         measures = sorted(measures)
 
-        for results in self.result_per_img:
-            for measure in measures:
-                value = results[measure]
-                print('%-10s: %.3f%%' % (measure, 100 * np.mean(value)))
+        results = {m: [] for m in measures}
+        for im_results in self.result_per_img:
+            for ms in measures:
+                results[ms].append(im_results[ms])
+
+        for measure, values in results.items():
+            print('%-10s: %.3f%%' % (measure, 100 * np.mean(values)))
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
