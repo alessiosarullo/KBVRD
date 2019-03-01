@@ -34,7 +34,7 @@ class Evaluator:
             assert num_pred > 0, num_pred
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt for gt_ind in p2g])
             map_i = len(matched_gt_inds) / num_pred
-        self.result_dict['map'].append(map_i)
+        self.result_dict['mAP'].append(map_i)
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
