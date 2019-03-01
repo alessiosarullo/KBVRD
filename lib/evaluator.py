@@ -13,7 +13,7 @@ class Evaluator:
     def __init__(self, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
-        self.result_dict = {'recall': {20: [], 50: [], 100: []},
+        self.result_dict = {'Recall': {20: [], 50: [], 100: []},
                             'mAP': []}
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
@@ -23,10 +23,10 @@ class Evaluator:
                                                                         use_gt_boxes=self.use_gt_boxes,
                                                                         iou_thresh=self.iou_thresh)
         assert num_gt > 0, num_gt
-        for k in self.result_dict['recall']:
+        for k in self.result_dict['Recall']:
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
             recall_i = len(matched_gt_inds) / num_gt
-            self.result_dict['recall'][k].append(recall_i)
+            self.result_dict['Recall'][k].append(recall_i)
 
         if num_pred is None:
             map_i = 0
@@ -38,8 +38,12 @@ class Evaluator:
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
-        for k, v in self.result_dict['recall'].items():
-            print('R@%3d: %.3f%%' % (k, 100 * np.mean(v)))
+        for measure, results in self.result_dict:
+            if isinstance(results, dict):
+                for k, v in results.items():
+                    print('%s@%3d: %.3f%%' % (measure[:3], k, 100 * np.mean(v)))
+            else:
+                print('%s: %.3f%%' % (measure[:3], 100 * np.mean(results)))
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
