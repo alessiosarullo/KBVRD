@@ -13,16 +13,28 @@ class Evaluator:
     def __init__(self, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
-        self.result_dict = {'recall': {20: [], 50: [], 100: []}}
+        self.result_dict = {'recall': {20: [], 50: [], 100: []},
+                            'mAP': []}
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
 
-    def evaluate_prediction(self, example, prediction):
-        predicted_hoi_to_gt = find_pred_to_gt_matches(example, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
+    def evaluate_prediction(self, gt_entry: Union[Minibatch, Example], prediction: Prediction):
+        predicted_hoi_to_gt, num_gt, num_pred = find_pred_to_gt_matches(gt_entry, prediction,
+                                                                        use_gt_boxes=self.use_gt_boxes,
+                                                                        iou_thresh=self.iou_thresh)
+        assert num_gt > 0, num_gt
         for k in self.result_dict['recall']:
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
-            recall_i = len(matched_gt_inds) / example.gt_hois.shape[0]
+            recall_i = len(matched_gt_inds) / num_gt
             self.result_dict['recall'][k].append(recall_i)
+
+        if num_pred is None:
+            map_i = 0
+        else:
+            assert num_pred > 0, num_pred
+            matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt for gt_ind in p2g])
+            map_i = len(matched_gt_inds) / num_pred
+        self.result_dict['map'].append(map_i)
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
@@ -45,10 +57,6 @@ class Evaluator:
 def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Prediction, use_gt_boxes=False, **kwargs):
     # TODO docs
 
-    if not prediction.is_complete():
-        return [[]]
-    assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
-
     if isinstance(gt_entry, Minibatch):
         im_scales = gt_entry.img_infos[:, 2].cpu().numpy()
         gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
@@ -60,6 +68,11 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
         gt_obj_classes = gt_entry.gt_obj_classes
     else:
         raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
+
+    num_gt = gt_hois.shape[0]
+    if not prediction.is_complete():
+        return [[]], num_gt, None
+    assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
     if use_gt_boxes:
         predict_boxes = gt_boxes
@@ -79,8 +92,8 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
     pred_to_gt = find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
                                                    predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
                                                    **kwargs)
-
-    return pred_to_gt
+    num_pred = predict_hois.shape[0]
+    return pred_to_gt, num_gt, num_pred
 
 
 def find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
