@@ -13,8 +13,9 @@ class Evaluator:
     def __init__(self, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
-        self.result_dict = {'Recall': {20: [], 50: [], 100: []},
-                            'mAP': []}
+        self.recall_at = [20, 50, 100]
+        self.result_per_img = []
+        self.result_per_class = {}
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
 
@@ -23,10 +24,12 @@ class Evaluator:
                                                                         use_gt_boxes=self.use_gt_boxes,
                                                                         iou_thresh=self.iou_thresh)
         assert num_gt > 0, num_gt
-        for k in self.result_dict['Recall']:
+        img_result = {}
+
+        for k in self.recall_at:
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
             recall_i = len(matched_gt_inds) / num_gt
-            self.result_dict['Recall'][k].append(recall_i)
+            img_result['Recall@%d' % k] = recall_i
 
         if num_pred is None:
             map_i = 0
@@ -34,16 +37,20 @@ class Evaluator:
             assert num_pred > 0, num_pred
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt for gt_ind in p2g])
             map_i = len(matched_gt_inds) / num_pred
-        self.result_dict['mAP'].append(map_i)
+        img_result['mAP'] = map_i
+
+        self.result_per_img.append(img_result)
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
-        for measure, results in self.result_dict.items():
-            if isinstance(results, dict):
-                for k, v in results.items():
-                    print('%s@%3d: %.3f%%' % (measure[:3], k, 100 * np.mean(v)))
-            else:
-                print('%s: %.3f%%' % (measure[:3], 100 * np.mean(results)))
+        measures = set(self.result_per_img[0].keys())
+        assert all([set(rpi.keys()) == measures for rpi in self.result_per_img])
+        measures = sorted(measures)
+
+        for results in self.result_per_img:
+            for measure in measures:
+                value = results[measure]
+                print('%-10s: %.3f%%' % (measure, 100 * np.mean(value)))
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):

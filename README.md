@@ -25,7 +25,7 @@
         
     ```
     conda install pytorch=0.4.1 torchvision cuda90 -c pytorch
-    conda install cython matplotlib numpy scipy opencv pyyaml packaging pandas h5py
+    conda install cython matplotlib numpy scipy opencv pyyaml packaging pandas h5py tensorboard
     pip install pycocotools
     ```
         
