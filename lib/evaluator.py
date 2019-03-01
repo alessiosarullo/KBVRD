@@ -38,7 +38,7 @@ class Evaluator:
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
-        for measure, results in self.result_dict:
+        for measure, results in self.result_dict.items():
             if isinstance(results, dict):
                 for k, v in results.items():
                     print('%s@%3d: %.3f%%' % (measure[:3], k, 100 * np.mean(v)))
