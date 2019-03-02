@@ -1,16 +1,16 @@
+import argparse
 import os
 import pickle
 
-import argparse
 import cv2
 import numpy as np
 
+from analysis.utils import vis_one_image
 from config import Configs as cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
-from analysis.utils import vis_one_image
-from lib.evaluator import Evaluator
+from lib.evaluator import ResultStatistics
 
 
 def _setup_and_load():
@@ -28,8 +28,8 @@ def count():
     # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
 
     results, hds = _setup_and_load()
-    evaluator = Evaluator.evaluate_predictions(hds, results)
-    evaluator.print_stats()
+    result_stats = ResultStatistics.evaluate_predictions(hds, results)
+    result_stats.print()
 
 
 def vis_masks():

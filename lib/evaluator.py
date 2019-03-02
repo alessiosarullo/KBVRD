@@ -1,3 +1,5 @@
+from typing import List, Dict
+
 import numpy as np
 
 from config import cfg
@@ -5,84 +7,89 @@ from lib.bbox_utils import compute_ious
 from lib.containers import Minibatch, Prediction, Example
 from lib.dataset.hicodet import HicoDetInstance
 
-from typing import List, Dict, Union
 
-
-# TODO rename
-class Evaluator:
+class ResultStatistics:
     def __init__(self, dataset: HicoDetInstance, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
-        self.recall_at = [20, 50, 100]
-        self.measures = ['Recall@%d' % r for r in self.recall_at] + ['mAP']
-        self.results = np.full((dataset.num_images, dataset.num_predicates, len(self.measures)), fill_value=np.NaN)
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
 
-    def evaluate_prediction(self, gt_entry: Union[Minibatch, Example], prediction: Prediction):
-        predicted_hoi_to_gt = find_pred_to_gt_matches(gt_entry, prediction,
-                                                                        use_gt_boxes=self.use_gt_boxes,
-                                                                        iou_thresh=self.iou_thresh)
-        num_preds = len(predicted_hoi_to_gt)
-        assert num_preds == prediction.ho_pairs.shape[0]
-        img_result = np.full(self.results[0], fill_value=np.NaN)
+        self.nums_top_predictions = [20, 50, 100]
 
-        # TODO per class one
-        for i, k in enumerate(self.recall_at):
-            for j, p2g in enumerate(predicted_hoi_to_gt[:k]):
-                matched_gt_inds = set([gt_ind for gt_ind in p2g])
-                gt_classes = set([gt_entry.gt_hois[gt_ind, 1] for gt_ind in matched_gt_inds])
-                assert len(gt_classes) == 1
-                hoi_class = gt_classes.pop()
+        # The reason why I need to count GT matches and prediction hits separately is that a GT entry can be matched by more than one prediction and
+        # one prediction can match more than one GT entry. Note that, for evaluation purposes, a prediction can only hit once, even if multiple GT
+        # entries match.
+        self.num_gt_matches = np.zeros([dataset.num_images, dataset.num_predicates, len(self.nums_top_predictions) + 1])
+        self.num_gt = np.zeros_like(self.num_gt_matches[:, :, 0])
+        self.num_prediction_hits = np.zeros_like(self.num_gt_matches)
+        self.num_predictions = np.zeros_like(self.num_gt_matches)
 
-                # TODO
-                recall_i = len(matched_gt_inds) / num_gt
-                img_result['Recall@%d' % k] = recall_i
+    def _record_prediction(self, img_idx, gt_entry: Example, prediction: Prediction):
+        predicted_hoi_to_gt = find_pred_to_gt_matches(gt_entry, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
+        self.num_gt[img_idx, :] = np.array([np.sum(gt_entry.gt_hois[:, 1] == i) for i in range(self.num_gt.shape[1])])
+        assert np.sum(self.num_gt[img_idx, :]) == gt_entry.gt_hois.shape[0]
 
-        if num_preds is None:
-            map_i = 0
-        else:
-            assert num_preds > 0, num_preds
-            matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt for gt_ind in p2g])
-            map_i = len(matched_gt_inds) / num_preds
-        img_result['mAP'] = map_i
+        if not predicted_hoi_to_gt:
+            return
 
+        num_predictions = len(predicted_hoi_to_gt)
+        assert num_predictions == prediction.ho_pairs.shape[0]
+        predicted_hoi_classes = prediction.hoi_classes
 
-    def print_stats(self):
+        for k, num_top_preds in enumerate(self.nums_top_predictions + [num_predictions]):
+            matched_gt_inds_per_class = {}
+            for pred_idx, curr_prediction_gt_matches in enumerate(predicted_hoi_to_gt[:num_top_preds]):
+                pred_hoi_class = predicted_hoi_classes[pred_idx]
+                assert all([gt_entry.gt_hois[gt_ind, 1] == pred_hoi_class for gt_ind in curr_prediction_gt_matches])
+                matched_gt_inds_per_class.setdefault(pred_hoi_class, set()).update(curr_prediction_gt_matches)
+                self.num_predictions[img_idx, pred_hoi_class, k] += 1
+                self.num_prediction_hits[img_idx, pred_hoi_class, k] += 1 if curr_prediction_gt_matches else 0
+
+            self.num_gt_matches[img_idx, :, k] = np.array([len(matched_gt_inds_per_class.get(hoi, [])) for hoi in range(self.num_gt.shape[1])])
+            assert np.all(self.num_gt_matches[img_idx, :, k] <= self.num_gt[img_idx, :])
+
+    # noinspection PyStringFormat
+    def print(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
-        measures = self.result_per_img[0].keys()
-        mset = set(measures)
-        assert all([set(rpi.keys()) == mset for rpi in self.result_per_img])
-
-        results = {m: [] for m in measures}
-        for im_results in self.result_per_img:
-            for ms in measures:
-                results[ms].append(im_results[ms])
-
-        for measure, values in results.items():
-            print('%-10s: %.3f%%' % (measure, 100 * np.mean(values)))
+        for k, num_top in enumerate(self.nums_top_predictions + [0]):
+            # Global
+            num_gt_matches_per_image = np.sum(self.num_gt_matches[:, :, k], axis=1)
+            num_gt_per_image = np.sum(self.num_gt, axis=1)
+            num_hits_per_image = np.sum(self.num_prediction_hits[:, :, k], axis=1)
+            num_predictions_per_image = np.sum(self.num_predictions[:, :, k], axis=1)
+            ap_per_image = np.divide(num_hits_per_image, num_predictions_per_image,
+                                     out=np.zeros_like(num_hits_per_image),
+                                     where=num_predictions_per_image > 0)
+            print(('Top %d:' % num_top) if num_top > 0 else 'All:')
+            print('    %10s: %.3f%%' % ('mAR', 100 * np.mean(num_gt_matches_per_image / num_gt_per_image)))
+            print('    %10s: %.3f%%' % ('mAP', 100 * np.mean(ap_per_image)))
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
-        assert len(predictions) == len(dataset), (len(predictions), len(dataset))
-        evaluator = cls(**kwargs)
+        assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
+        evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
             ex = dataset.get_entry(i, read_img=False)
             prediction = Prediction(**res)
-            evaluator.evaluate_prediction(ex, prediction)
+            evaluator._record_prediction(i, ex, prediction)
             if i % 100 == 0:
                 print(i)
+        assert np.all(evaluator.num_prediction_hits <= evaluator.num_predictions)
+        assert np.all(evaluator.num_gt_matches <= evaluator.num_gt[:, :, None])
+        assert np.all(np.sum(evaluator.num_gt, axis=0)) and np.all(np.sum(evaluator.num_gt, axis=1))
         return evaluator
 
 
-def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Prediction, use_gt_boxes=False, **kwargs):
+def find_pred_to_gt_matches(gt_entry: Example, prediction: Prediction, use_gt_boxes=False, **kwargs):
     # TODO docs
 
     if isinstance(gt_entry, Minibatch):
-        im_scales = gt_entry.img_infos[:, 2].cpu().numpy()
-        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
-        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False) / im_scales[gt_entry.gt_box_im_ids, None]
-        gt_obj_classes = gt_entry.gt_obj_classes
+        assert False
+        # im_scales = gt_entry.img_infos[:, 2].cpu().numpy()
+        # gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
+        # gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False) / im_scales[gt_entry.gt_box_im_ids, None]
+        # gt_obj_classes = gt_entry.gt_obj_classes
     elif isinstance(gt_entry, Example):
         gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
         gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
@@ -91,7 +98,7 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
         raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
     if not prediction.is_complete():
-        return [[]]
+        return []
     assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
     if use_gt_boxes:
@@ -105,9 +112,8 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
         predict_obj_scores = predict_obj_score_dists.max(axis=1)
 
     predict_ho_pairs = prediction.ho_pairs
-    predict_hoi_score_dists = prediction.hoi_scores
-    predict_hois = np.concatenate([predict_ho_pairs, predict_hoi_score_dists.argmax(axis=1)[:, None]], axis=1)
-    predict_hoi_scores = predict_hoi_score_dists.max(axis=1)
+    predict_hois = np.concatenate([predict_ho_pairs, prediction.hoi_classes[:, None]], axis=1)
+    predict_hoi_scores = prediction.hoi_score_distributions.max(axis=1)
 
     pred_to_gt = find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
                                                    predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,

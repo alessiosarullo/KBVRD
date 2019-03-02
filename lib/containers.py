@@ -39,6 +39,7 @@ class Example:
 
 
 class Minibatch:
+    # TODO refactor in list[Example], then merged when called vectorize()
     def __init__(self):
 
         self.imgs = []
@@ -135,7 +136,11 @@ class Prediction:
         self.obj_scores = obj_scores  # type: np.ndarray
         self.hoi_img_inds = hoi_img_inds  # type: np.ndarray
         self.ho_pairs = ho_pairs  # type: np.ndarray
-        self.hoi_scores = hoi_scores  # type: np.ndarray
+        self.hoi_score_distributions = hoi_scores  # type: np.ndarray
+
+    @property
+    def hoi_classes(self):
+        return self.hoi_score_distributions.argmax(axis=1)
 
     def is_complete(self):
         complete = True

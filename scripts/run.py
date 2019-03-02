@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from config import Configs as cfg
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
-from lib.evaluator import Evaluator
+from lib.evaluator import ResultStatistics
 from lib.models.base_model import BaseModel
 from scripts.utils import Timer
 from scripts.utils import print_params
@@ -140,57 +140,40 @@ class Launcher:
         return res
 
     def test(self):
-        evaluator = Evaluator()
+        test_split = HicoDetInstance(Splits.TEST)
         result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
         try:
             with open(result_file, 'rb') as f:
-                loaded_predictions = pickle.load(f)
+                all_predictions = pickle.load(f)
             print('Loaded predictions from %s.' % result_file)
         except FileNotFoundError:
-            loaded_predictions = None
-
-        test_split = HicoDetInstance(Splits.TEST)
-        test_loader = test_split.get_loader(batch_size=1)
-        self.detector.eval()
-
-        all_pred_entries = []
-        num_batches = len(test_loader)
-        for b_idx, batch in enumerate(test_loader):
-            Timer.get('Img').tic()
-            if loaded_predictions is not None:
-                prediction_dict = loaded_predictions[b_idx]
-                prediction = Prediction(**prediction_dict)
-            else:
+            self.detector.eval()
+            test_loader = test_split.get_loader(batch_size=1)
+            all_predictions = []
+            for b_idx, batch in enumerate(test_loader):
+                Timer.get('Img').tic()
                 prediction = self.detector(batch)  # type: Prediction
-                all_pred_entries.append(vars(prediction))
-            Timer.get('Img').toc()
-
-            Timer.get('Eval').tic()
-            evaluator.evaluate_prediction(batch, prediction)
-            Timer.get('Eval').toc()
-
-            if b_idx % cfg.program.print_interval == 0:
-                time_per_batch = Timer.get('Img').spent(average=True)
-                time_to_eval = Timer.get('Eval', get_only=True).spent(average=True)
-                time_to_load = Timer.get('Epoch', 'GetBatch', get_only=True).spent(average=True)
-                time_to_collate = Timer.get('Epoch', 'Collate', get_only=True).spent(average=True)
-                est_time_per_epoch = num_batches * (time_per_batch + time_to_eval + time_to_load * 1 + time_to_collate)
-
-                print('Img {:5d}/{:5d}.'.format(b_idx, num_batches),
-                      'Avg: {:>5s}/detection, {:>5s}/eval, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
-                                                                                                Timer.format(time_to_eval),
-                                                                                                Timer.format(time_to_load),
-                                                                                                Timer.format(time_to_collate)),
-                      'Estimated {:s}.'.format(Timer.format(est_time_per_epoch)))
-
-                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
-
-        if loaded_predictions is None:
+                all_predictions.append(vars(prediction))
+                Timer.get('Img').toc()
+                if b_idx % cfg.program.print_interval == 0:
+                    time_per_batch = Timer.get('Img').spent(average=True)
+                    time_to_load = Timer.get('Epoch', 'GetBatch', get_only=True).spent(average=True)
+                    time_to_collate = Timer.get('Epoch', 'Collate', get_only=True).spent(average=True)
+                    est_time_per_epoch = len(test_loader) * (time_per_batch + time_to_load * 1 + time_to_collate)
+                    print('Img {:5d}/{:5d}.'.format(b_idx, len(test_loader)),
+                          'Avg: {:>5s}/detection, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
+                                                                                       Timer.format(time_to_load),
+                                                                                       Timer.format(time_to_collate)),
+                          'Estimated {:s}.'.format(Timer.format(est_time_per_epoch)))
+                    torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
             with open(result_file, 'wb') as f:
-                pickle.dump(all_pred_entries, f)
+                pickle.dump(all_predictions, f)
             print('Wrote results to %s.' % result_file)
 
-        evaluator.print_stats()
+        Timer.get('Eval').tic()
+        result_stats = ResultStatistics.evaluate_predictions(test_split, all_predictions)
+        Timer.get('Eval').toc()
+        result_stats.print()
 
 
 def main():

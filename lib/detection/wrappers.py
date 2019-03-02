@@ -5,12 +5,12 @@ Hides this ugliness and avoids IDE's "unresolved import" errors
 import os.path as osp
 import sys
 
-
 sys.path.insert(0, osp.abspath(osp.join('pydetectron', 'lib')))
 
 # These are the "safe" ones (they don't depend on having CUDA or compiled code)
 try:
     import datasets.dummy_datasets as dummy_datasets
+
     COCO_CLASSES = dummy_datasets.get_coco_dataset().classes
 except ImportError:
     raise
@@ -33,6 +33,15 @@ try:
     from utils.training_stats import TrainingStats
 
 except ImportError:
-    pass
+    cfg = cfg_from_file = assert_and_infer_cfg = None
+    _get_blobs = _get_rois_blob = _add_multilevel_rois_for_test = box_utils = segm_results = None
+    nms_gpu = None
+    Generalized_RCNN = None
+    misc_utils = None
+    vis_utils = None
+    Timer = None
+    load_detectron_weight = None
+    prep_im_for_blob = get_image_blob = None
+    TrainingStats = None
 finally:
     sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))
