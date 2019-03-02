@@ -10,36 +10,43 @@ from typing import List, Dict, Union
 
 # TODO rename
 class Evaluator:
-    def __init__(self, use_gt_boxes=None, iou_thresh=0.5):
+    def __init__(self, dataset: HicoDetInstance, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
         self.recall_at = [20, 50, 100]
-        self.result_per_img = []
-        self.result_per_class = {}
+        self.measures = ['Recall@%d' % r for r in self.recall_at] + ['mAP']
+        self.results = np.full((dataset.num_images, dataset.num_predicates, len(self.measures)), fill_value=np.NaN)
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
 
     def evaluate_prediction(self, gt_entry: Union[Minibatch, Example], prediction: Prediction):
-        predicted_hoi_to_gt, num_gt, num_pred = find_pred_to_gt_matches(gt_entry, prediction,
+        predicted_hoi_to_gt = find_pred_to_gt_matches(gt_entry, prediction,
                                                                         use_gt_boxes=self.use_gt_boxes,
                                                                         iou_thresh=self.iou_thresh)
-        assert num_gt > 0, num_gt
-        img_result = {}
+        num_preds = len(predicted_hoi_to_gt)
+        assert num_preds == prediction.ho_pairs.shape[0]
+        img_result = np.full(self.results[0], fill_value=np.NaN)
 
-        for k in self.recall_at:
-            matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt[:k] for gt_ind in p2g])
-            recall_i = len(matched_gt_inds) / num_gt
-            img_result['Recall@%d' % k] = recall_i
+        # TODO per class one
+        for i, k in enumerate(self.recall_at):
+            for j, p2g in enumerate(predicted_hoi_to_gt[:k]):
+                matched_gt_inds = set([gt_ind for gt_ind in p2g])
+                gt_classes = set([gt_entry.gt_hois[gt_ind, 1] for gt_ind in matched_gt_inds])
+                assert len(gt_classes) == 1
+                hoi_class = gt_classes.pop()
 
-        if num_pred is None:
+                # TODO
+                recall_i = len(matched_gt_inds) / num_gt
+                img_result['Recall@%d' % k] = recall_i
+
+        if num_preds is None:
             map_i = 0
         else:
-            assert num_pred > 0, num_pred
+            assert num_preds > 0, num_preds
             matched_gt_inds = set([gt_ind for p2g in predicted_hoi_to_gt for gt_ind in p2g])
-            map_i = len(matched_gt_inds) / num_pred
+            map_i = len(matched_gt_inds) / num_preds
         img_result['mAP'] = map_i
 
-        self.result_per_img.append(img_result)
 
     def print_stats(self):
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
@@ -73,19 +80,18 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
 
     if isinstance(gt_entry, Minibatch):
         im_scales = gt_entry.img_infos[:, 2].cpu().numpy()
-        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
         gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False) / im_scales[gt_entry.gt_box_im_ids, None]
         gt_obj_classes = gt_entry.gt_obj_classes
     elif isinstance(gt_entry, Example):
-        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+        gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
         gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
         gt_obj_classes = gt_entry.gt_obj_classes
     else:
         raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-    num_gt = gt_hois.shape[0]
     if not prediction.is_complete():
-        return [[]], num_gt, None
+        return [[]]
     assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
     if use_gt_boxes:
@@ -106,8 +112,7 @@ def find_pred_to_gt_matches(gt_entry: Union[Minibatch, Example], prediction: Pre
     pred_to_gt = find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
                                                    predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
                                                    **kwargs)
-    num_pred = predict_hois.shape[0]
-    return pred_to_gt, num_gt, num_pred
+    return pred_to_gt
 
 
 def find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,

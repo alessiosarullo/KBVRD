@@ -146,6 +146,10 @@ class HicoDetInstance(Dataset):
         return len(self.predicates)
 
     @property
+    def num_images(self):
+        return len(self.image_ids)
+
+    @property
     def img_dir(self):
         return self._hicodet.get_img_dir(self.split)
 
@@ -273,7 +277,7 @@ class HicoDetInstance(Dataset):
         return entry
 
     def __len__(self):
-        return len(self.image_ids)
+        return self.num_images
 
 
 def main():
