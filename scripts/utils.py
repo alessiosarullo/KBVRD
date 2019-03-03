@@ -45,6 +45,9 @@ class Timer:
         self.start_time = None
         self.num_instances += 1
 
+    def progress(self):
+        return time.perf_counter() - self.start_time
+
     def spent(self, average=True):
         return self.total_time / (self.num_instances if average else 1)
 

@@ -13,7 +13,8 @@ from lib.dataset.utils import Splits
 class HicoDet:
     def __init__(self):
         """
-        Class attributes:
+        Relevant class attributes:
+            - null_interaction: the name of the null interaction
             - wn_predicate_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
                 - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
@@ -27,12 +28,12 @@ class HicoDet:
             - predicate_dict [dict]: The 117 possible predicates, including a null one. They are fewer than the entries in the WordNet dictionary
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
-                    - 'ing' [str]: -ing form of the verb ('no_interaction' for the null one).
+                    - 'ing' [str]: -ing form of the verb (unchanged for the null one).
                     - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_predicate_dict`) corresponding to this verb (empty for the null one).
             - interaction_list [list(dict)]: The 600 interactions in HICO-DET. Each element consists of:
                 - 'obj' [str]: The name of the object of the action (i.e., the target).
                 - 'pred' [str]: The verb describing the action (key in `predicate_dict`).
-                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`).
+                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`), or None for the null interaction.
             - split_data [dict(dict)]: One entry per split, with keys in `Splits`. Each entry is a dictionary with the following items:
                 - 'img_dir' [str]: Path to the folder containing the images
                 - 'annotations' [list(dict)]: Annotations for each image, thus structured:
@@ -56,6 +57,7 @@ class HicoDet:
                                          },
                            }
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')
+        self.null_interaction = '__no_interaction__'
 
         train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict = self.load_annotations(use_hico_det=True)
         self.split_data[Splits.TRAIN]['annotations'] = train_annotations
@@ -71,6 +73,7 @@ class HicoDet:
         self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}
         assert len(self._pred_index) == len(self._predicates)
         assert len(self._obj_class_index) == len(self._objects)
+        assert self._pred_index[self.null_interaction] == 0
 
         # Statistics
         self.compute_stats()
@@ -167,7 +170,7 @@ class HicoDet:
         assert len(self.predicate_dict) == 117
         assert len([name for name in os.listdir(train_dir) if os.path.isfile(os.path.join(train_dir, name))]) == 38118
         assert len([name for name in os.listdir(test_dir) if os.path.isfile(os.path.join(test_dir, name))]) == 9658
-        assert all([y['ing'].endswith('ing') or 'ing_' in y['ing'] or x == 'no_interaction' for x, y in self.predicate_dict.items()])
+        assert all([y['ing'].endswith('ing') or 'ing_' in y['ing'] or x == self.null_interaction for x, y in self.predicate_dict.items()])
 
         for ann in self.split_data[Splits.TRAIN]['annotations']:
             im_w, im_h = ann['img_size'][:2]
@@ -283,6 +286,14 @@ class HicoDet:
                              'pred_dict': pred_dict,
                              }, f)
 
+        # Substitute 'no_interaction' with the specified null interaction string, if needed.
+        pred_dict[self.null_interaction] = pred_dict.get('no_interaction', self.null_interaction)
+        del pred_dict['no_interaction']
+        pred_dict = {k: pred_dict[k] for k in sorted(pred_dict.keys())}
+        for inter in interaction_list:
+            if inter['pred'] == 'no_interaction':
+                inter['pred'] = self.null_interaction
+
         return train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict
 
     @staticmethod
@@ -355,7 +366,7 @@ def save_lists():
         f.write('\n'.join(hd.predicates))
     path_action_synsets_file = os.path.join(hd.data_dir, 'action_synsets.txt')
     with open(path_action_synsets_file, 'w') as f:
-        f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', ['no_interaction'])]) for predicate in hd.wn_predicate_dict.values()]))
+        f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', [hd.null_interaction])]) for predicate in hd.wn_predicate_dict.values()]))
 
 
 def print_num_preds():
@@ -364,8 +375,8 @@ def print_num_preds():
     occs = hd.split_data[split]['pred_occurrences']
     inds = np.argsort(occs)[::-1]
     sorted_occs = [occs[i] for i in inds]
-    print('\n'.join(['%3d %15s: %5d' % (i, hd.predicates[i], n) for i, n in zip(inds, sorted_occs)]))
-    print('%-19s %6d' % ('Total', sum(occs)))
+    print('\n'.join(['%3d %20s: %5d' % (i, hd.predicates[i], n) for i, n in zip(inds, sorted_occs)]))
+    print('%-24s %6d' % ('Total', sum(occs)))
     num_interactions = sum([len(inter.get('conn', [])) for ann in hd.get_annotations(split) for inter in ann['interactions']])
     assert sum(occs) == num_interactions, num_interactions
 

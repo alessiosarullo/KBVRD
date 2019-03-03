@@ -44,7 +44,7 @@ class SpatialContext(nn.Module):
             ho_pair_masks = torch.cat([masks[sub_inds, :], masks[obj_inds, :]], dim=1)
             spatial_rels_feats = self.spatial_rels_fc(ho_pair_masks)
             spatial_context = compute_context(self.spatial_rel_ctx_bilstm, spatial_rels_feats, unique_im_ids, hoi_im_ids)
-            return spatial_context
+            return spatial_context, spatial_rels_feats
 
 
 class ObjectContext(nn.Module):

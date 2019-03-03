@@ -47,6 +47,7 @@ class HicoDetInstance(Dataset):
         else:
             obj_inds = set(obj_inds or range(len(hicodet_driver.objects)))
             pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
+            assert 0 in pred_inds
             new_im_inds, new_annotations = [], []
             for i, im_ann in enumerate(annotations):
                 new_im_inters = []
@@ -160,6 +161,11 @@ class HicoDetInstance(Dataset):
     @property
     def coco_to_hico_mapping(self):
         return self._coco_to_hico_mapping
+
+    @property
+    def hois(self):
+        # Each is (human, interaction, object)
+        return np.concatenate(self._im_inters, axis=0)
 
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}

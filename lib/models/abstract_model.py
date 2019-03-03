@@ -37,7 +37,7 @@ class AbstractModel(nn.Module):
         raise NotImplementedError()
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, box_labels, hoi_labels = self(x)
+        obj_output, hoi_output, box_labels, hoi_labels = self(x, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
         hoi_loss = nn.functional.cross_entropy(hoi_output, hoi_labels)
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
@@ -70,7 +70,7 @@ class AbstractModel(nn.Module):
                 if boxes_ext is not None:
                     im_scales = x.img_infos[:, 2].cpu().numpy()
                     boxes_ext = boxes_ext.cpu().numpy()
-                    obj_im_inds = boxes_ext[:, 0]
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
                     if obj_prob is None:
                         obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
@@ -86,7 +86,6 @@ class AbstractModel(nn.Module):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos):
         # TODO docs
 
-        # Compute quantities used later
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
         hoi_im_ids = hoi_infos[:, 0]
@@ -96,9 +95,9 @@ class AbstractModel(nn.Module):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        spatial_ctx = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_embs = self.hoi_branch(union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
 
         obj_output = self.obj_output_fc(objs_embs)
         hoi_output = self.hoi_output_fc(hoi_embs)
@@ -120,7 +119,7 @@ class AbstractModel(nn.Module):
 
         if self.training:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)
+            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np, max_num_bg_rels_per_img=0)  # FIXME magic constant
             assert hoi_im_ids.shape[0] == hoi_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
         else:
@@ -234,7 +233,9 @@ class AbstractModel(nn.Module):
         masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
         return boxes_ext, obj_labels, box_feats, masks
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np, num_sample_per_gt=4, filter_non_overlap=False, fg_rels_per_image=16):
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np,
+                           num_sample_per_gt=4, filter_non_overlap=False, gt_match_iou_thr=0.5,
+                           max_num_fg_rels_per_img=None, max_num_bg_rels_per_img=64):  # FIXME move some/all default values to cfg
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
@@ -257,7 +258,7 @@ class AbstractModel(nn.Module):
             predict_human_boxes_i = (predict_box_labels_i == self.dataset.person_class)
 
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
-            predict_gt_match = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= 0.5)  # FIXME magic constant
+            predict_gt_match = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= gt_match_iou_thr)
 
             human_subject_possibilities = np.zeros((predict_boxes_i.shape[0], predict_boxes_i.shape[0]), dtype=bool)
             human_subject_possibilities[predict_human_boxes_i, :] = True
@@ -272,7 +273,7 @@ class AbstractModel(nn.Module):
             # Sample the GT relationships.
             fg_rels = []
             p_size = []
-            for i, (from_gt_ind, rel_id, to_gt_ind) in enumerate(gt_rels_i):
+            for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
                 fg_rels_i = []
                 fg_scores_i = []
 
@@ -292,28 +293,25 @@ class AbstractModel(nn.Module):
                     fg_rels.append(fg_rels_i[rel_to_add])
 
             fg_rels = np.array(fg_rels, dtype=np.int64)
-            if fg_rels.size > 0 and fg_rels.shape[0] > fg_rels_per_image:
-                fg_rels = fg_rels[npr.choice(fg_rels.shape[0], size=fg_rels_per_image, replace=False)]
+            if fg_rels.size > 0 and max_num_fg_rels_per_img is not None and fg_rels.shape[0] > max_num_fg_rels_per_img:
+                fg_rels = fg_rels[npr.choice(fg_rels.shape[0], size=max_num_fg_rels_per_img, replace=False)]
             elif fg_rels.size == 0:
                 fg_rels = np.zeros((0, 3), dtype=np.int64)
 
-            bg_rels = np.column_stack(np.where(rel_possibilities))
-            bg_rels = np.column_stack((bg_rels, np.zeros(bg_rels.shape[0], dtype=np.int64)))
+            bg_rels = np.zeros((0, 3), dtype=np.int64)
+            if max_num_bg_rels_per_img > 0:
+                bg_candidate_ho_pairs = np.stack(np.where(rel_possibilities), axis=1)
+                num_bg_candidate_ho_pairs = bg_candidate_ho_pairs.shape[0]
+                if num_bg_candidate_ho_pairs > 0:
+                    num_bg_rel_to_sample = min(max_num_bg_rels_per_img - fg_rels.shape[0], num_bg_candidate_ho_pairs)
+                    bg_ho_pairs = bg_candidate_ho_pairs[np.random.choice(num_bg_candidate_ho_pairs, size=num_bg_rel_to_sample, replace=False), :]
+                    bg_rels = np.stack([bg_ho_pairs, np.zeros(bg_ho_pairs.shape[0], dtype=np.int64)], axis=1)
 
-            num_bg_rel = min(64 - fg_rels.shape[0], bg_rels.shape[0])  # FIXME magic constant
-            if bg_rels.size > 0:
-                bg_rels = bg_rels[np.random.choice(bg_rels.shape[0], size=num_bg_rel, replace=False)]
-            else:
-                bg_rels = np.zeros((0, 3), dtype=np.int64)
-
-            if fg_rels.size == 0 and bg_rels.size == 0:
-                # Just put something here
-                bg_rels = np.array([[0, 0, 0]], dtype=np.int64)
-
-            # print("GTR {} -> AR {} vs {}".format(gt_rels.shape, fg_rels.shape, bg_rels.shape))
             all_rels_i = np.concatenate((fg_rels, bg_rels), axis=0)
+            if all_rels_i.size == 0:
+                # Just put something here
+                all_rels_i = np.array([[0, 0, 0]], dtype=np.int64)
             all_rels_i[:, :2] += num_box_seen
-
             all_rels_i = all_rels_i[np.lexsort((all_rels_i[:, 1], all_rels_i[:, 0]))]
 
             rel_infos.append(np.column_stack([np.full(all_rels_i.shape[0], fill_value=im_id, dtype=np.int64),
@@ -332,13 +330,13 @@ class AbstractHOIModule(nn.Module):
         super().__init__()
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
-    def forward(self, union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds, **kwargs):
+    def forward(self, *args, **kwargs):
         # TODO docs
         with torch.set_grad_enabled(self.training):
-            rel_emb = self._forward(union_boxes_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
+            rel_emb = self._forward(*args, **kwargs)
             return rel_emb
 
-    def _forward(self, union_boxes_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
+    def _forward(self, *args, **kwargs):
         raise NotImplementedError()
 
     @property

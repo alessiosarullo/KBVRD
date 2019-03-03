@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+from collections import Counter
 
 import cv2
 import numpy as np
@@ -10,7 +11,7 @@ from config import Configs as cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
-from lib.evaluator import ResultStatistics
+from lib.stats.eval_stats import EvalStats
 
 
 def _setup_and_load():
@@ -28,8 +29,18 @@ def count():
     # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
 
     results, hds = _setup_and_load()
-    result_stats = ResultStatistics.evaluate_predictions(hds, results)
-    result_stats.print()
+    stats = EvalStats.evaluate_predictions(hds, results)
+    stats.print()
+
+    gt_hois = hds.hois
+    gt_hoi_hist = Counter(gt_hois[:, 1])
+    num_gt_hois = sum(gt_hoi_hist.values())
+    assert num_gt_hois == gt_hois.shape[0]
+    num_pred_hois = np.sum(stats.num_predictions[:, :, -1], axis=0)
+
+    print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' '), 100 * gt_hoi_hist[i] / num_gt_hois) for i, c in enumerate(hds.predicates)]))
+    print('Pred HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' '), 100 * num_pred_hois[i] / np.sum(num_pred_hois))
+                                         for i, c in enumerate(hds.predicates)]))
 
 
 def vis_masks():
@@ -42,7 +53,7 @@ def vis_masks():
     for b_idx, example in enumerate(hdsl):
         example = example  # type: Minibatch
         prediction_dict = results[b_idx]
-        prediction = Prediction(**prediction_dict)  # type: Prediction
+        prediction = Prediction.from_dict(prediction_dict)
 
         boxes = prediction.obj_boxes
         obj_scores = prediction.obj_scores

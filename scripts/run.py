@@ -4,7 +4,6 @@ import pickle
 import random
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -12,8 +11,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from config import Configs as cfg
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstance, Splits
-from lib.evaluator import ResultStatistics
 from lib.models.base_model import BaseModel
+from lib.stats.eval_stats import EvalStats
+from lib.stats.training_stats import TrainingStats
 from scripts.utils import Timer
 from scripts.utils import print_params
 
@@ -56,17 +56,21 @@ class Launcher:
         if cfg.program.eval_only:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
-            self.detector.mask_rcnn._load_weights()  # FIXME this is only needed because BoxHead is trained by mistake. Remove after fix
+            # self.detector.mask_rcnn._load_weights()  # FIXME this is only needed because BoxHead is trained by mistake. Remove after fix
             # # TODO
             # if cfg.program.resume:
             # start_epoch = ckpt['epoch']
             # print("Continuing from epoch %d." % (start_epoch + 1))
 
     def get_optim(self):
-        # TODO tip. Erase if unnecessary
-        # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps stabilize the models.
+        # # Lower the learning rate of some layers. It's a hack, but it helps stabilize the models.
+        # red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
+        # other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
+        # params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate * 10.0}, {'params': other_params}]
+        # print('Reduced LR of %d parameters.' % len(params[0]['params']))
         params = self.detector.parameters()
-        if cfg.opt.use_adam:
+
+        if cfg.opt.adam:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, momentum=0.9)
@@ -74,21 +78,26 @@ class Launcher:
         return optimizer, scheduler
 
     def train(self):
+        os.makedirs(cfg.program.save_dir, exist_ok=True)
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
 
         optimizer, scheduler = self.get_optim()
         # TODO scheduler is unused so far
-        for epoch in range(cfg.opt.num_epochs):
-            self.detector.train()
-            self.train_epoch(epoch, train_loader, optimizer)
-            if cfg.program.save_dir is not None:
-                torch.save({
-                    'epoch': epoch,
-                    'state_dict': self.detector.state_dict(),
-                }, cfg.program.checkpoint_file)
 
-        Timer.get().print()
-        cfg.save()
+        training_stats = TrainingStats(num_batches=len(train_loader))
+        try:
+            for epoch in range(cfg.opt.num_epochs):
+                self.detector.train()
+                self.train_epoch(epoch, train_loader, optimizer, training_stats)
+                if cfg.program.save_dir is not None:
+                    torch.save({'epoch': epoch,
+                                'state_dict': self.detector.state_dict()},
+                               cfg.program.checkpoint_file)
+            Timer.get().print()
+            cfg.save()
+        finally:
+            training_stats.close_tensorboard_logger()
+
         if cfg.opt.num_epochs > 0:
             try:
                 os.remove(cfg.program.saved_model_file)
@@ -97,14 +106,13 @@ class Launcher:
 
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
 
-    def train_epoch(self, epoch_num, train_loader, optimizer):
-        tr = []
+    def train_epoch(self, epoch_num, train_loader, optimizer, training_stats):
         num_batches = len(train_loader)
 
         Timer.get('Epoch').tic()
         for bidx, batch in enumerate(train_loader):
             Timer.get('Epoch', 'Batch').tic()
-            tr.append(self.train_batch(batch, optimizer))
+            self.train_batch(batch, optimizer, training_stats)
             Timer.get('Epoch', 'Batch').toc()
 
             if bidx % cfg.program.print_interval == 0:
@@ -118,26 +126,30 @@ class Launcher:
                       'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
                                                                                Timer.format(time_to_collate)),
-                      'Estimated {:>7s}/epoch'.format(Timer.format(est_time_per_epoch)))
-                print(pd.concat(tr[-cfg.program.print_interval:], axis=1).mean(1))
+                      'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Epoch', get_only=True).progress()),
+                                                                                  Timer.format(est_time_per_epoch)))
+                training_stats.log_stats(curr_iter=iter_num, lr=optimizer.param_groups[0]['lr'])
                 print('-' * 10, flush=True)
         Timer.get('Epoch').toc()
         print('Time for epoch:', Timer.format(Timer.get('Epoch').last))
         print('-' * 100, flush=True)
 
-    def train_batch(self, batch, optimizer):
+    def train_batch(self, batch, optimizer, training_stats):
         losses = self.detector.get_losses(batch)
         optimizer.zero_grad()
 
         assert losses is not None
         loss = sum(losses.values())  # type: torch.Tensor
         loss.backward()
-        losses['total'] = loss
-        res = pd.Series({x: y.item() for x, y in losses.items()})
+
+        losses['total_loss'] = loss
+        rfh = torch.cat(self.detector.hoi_branch.rel_feats_history, dim=0)  # type: np.ndarray
+        self.detector.hoi_branch.rel_feats_history = []
+        # rf_dist = torch.distributions.normal.Normal(loc=rfh.mean(dim=0), scale=rfh.std(dim=0))
+        training_stats.update_stats({'losses': losses, 'watch': {'rel_input_feats': rfh}})
 
         nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
         optimizer.step()
-        return res
 
     def test(self):
         test_split = HicoDetInstance(Splits.TEST)
@@ -150,13 +162,14 @@ class Launcher:
             self.detector.eval()
             test_loader = test_split.get_loader(batch_size=1)
             all_predictions = []
+            Timer.get('Epoch').tic()
             for b_idx, batch in enumerate(test_loader):
-                Timer.get('Img').tic()
+                Timer.get('Epoch', 'Img').tic()
                 prediction = self.detector(batch)  # type: Prediction
                 all_predictions.append(vars(prediction))
-                Timer.get('Img').toc()
+                Timer.get('Epoch', 'Img').toc()
                 if b_idx % cfg.program.print_interval == 0:
-                    time_per_batch = Timer.get('Img').spent(average=True)
+                    time_per_batch = Timer.get('Epoch', 'Img', get_only=True).spent(average=True)
                     time_to_load = Timer.get('Epoch', 'GetBatch', get_only=True).spent(average=True)
                     time_to_collate = Timer.get('Epoch', 'Collate', get_only=True).spent(average=True)
                     est_time_per_epoch = len(test_loader) * (time_per_batch + time_to_load * 1 + time_to_collate)
@@ -164,14 +177,18 @@ class Launcher:
                           'Avg: {:>5s}/detection, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                        Timer.format(time_to_load),
                                                                                        Timer.format(time_to_collate)),
-                          'Estimated {:s}.'.format(Timer.format(est_time_per_epoch)))
+                          'Progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Epoch', get_only=True).progress()),
+                                                                        Timer.format(est_time_per_epoch)))
+
                     torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+            Timer.get('Epoch').toc()
+
             with open(result_file, 'wb') as f:
                 pickle.dump(all_predictions, f)
             print('Wrote results to %s.' % result_file)
 
         Timer.get('Eval').tic()
-        result_stats = ResultStatistics.evaluate_predictions(test_split, all_predictions)
+        result_stats = EvalStats.evaluate_predictions(test_split, all_predictions)
         Timer.get('Eval').toc()
         result_stats.print()
 

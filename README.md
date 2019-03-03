@@ -25,8 +25,8 @@
         
     ```
     conda install pytorch=0.4.1 torchvision cuda90 -c pytorch
-    conda install cython matplotlib numpy scipy opencv pyyaml packaging pandas h5py tensorboard
-    pip install pycocotools
+    conda install cython matplotlib numpy scipy opencv pyyaml packaging h5py
+    pip install pycocotools tensorboardx
     ```
         
     Note: you need GCC for pycocotools and you might need to change 

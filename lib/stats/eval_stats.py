@@ -8,13 +8,14 @@ from lib.containers import Minibatch, Prediction, Example
 from lib.dataset.hicodet import HicoDetInstance
 
 
-class ResultStatistics:
+class EvalStats:
     def __init__(self, dataset: HicoDetInstance, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
         self.use_gt_boxes = use_gt_boxes
         self.iou_thresh = iou_thresh
 
+        self.dataset = dataset
         self.nums_top_predictions = [20, 50, 100]
 
         # The reason why I need to count GT matches and prediction hits separately is that a GT entry can be matched by more than one prediction and
@@ -27,7 +28,7 @@ class ResultStatistics:
 
     def _record_prediction(self, img_idx, gt_entry: Example, prediction: Prediction):
         predicted_hoi_to_gt = find_pred_to_gt_matches(gt_entry, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
-        self.num_gt[img_idx, :] = np.array([np.sum(gt_entry.gt_hois[:, 1] == i) for i in range(self.num_gt.shape[1])])
+        self.num_gt[img_idx, :] = np.array([np.sum(gt_entry.gt_hois[:, 1] == i) for i in range(self.dataset.num_predicates)])
         assert np.sum(self.num_gt[img_idx, :]) == gt_entry.gt_hois.shape[0]
 
         if not predicted_hoi_to_gt:
@@ -43,16 +44,28 @@ class ResultStatistics:
                 pred_hoi_class = predicted_hoi_classes[pred_idx]
                 assert all([gt_entry.gt_hois[gt_ind, 1] == pred_hoi_class for gt_ind in curr_prediction_gt_matches])
                 matched_gt_inds_per_class.setdefault(pred_hoi_class, set()).update(curr_prediction_gt_matches)
-                self.num_predictions[img_idx, pred_hoi_class, k] += 1
                 self.num_prediction_hits[img_idx, pred_hoi_class, k] += 1 if curr_prediction_gt_matches else 0
+                self.num_predictions[img_idx, pred_hoi_class, k] += 1
 
-            self.num_gt_matches[img_idx, :, k] = np.array([len(matched_gt_inds_per_class.get(hoi, [])) for hoi in range(self.num_gt.shape[1])])
+            self.num_gt_matches[img_idx, :, k] = np.array([len(matched_gt_inds_per_class.get(hoi, [])) for hoi in range(self.dataset.num_predicates)])
             assert np.all(self.num_gt_matches[img_idx, :, k] <= self.num_gt[img_idx, :])
+            assert np.sum(self.num_predictions[img_idx, :, k]) == min(num_top_preds, num_predictions)
 
     # noinspection PyStringFormat
     def print(self):
+        def _f(_x, _p):
+            if _x < 1:
+                if _x > 0:
+                    return ('%{}.{}f%%'.format(_p + 3, _p)) % (_x * 100)
+                else:
+                    return ('%{}.{}f%%'.format(_p + 3, 0)) % (_x * 100)
+            else:
+                return '100%'
+
         print('{0} {1} {0}'.format('=' * 30, 'Evaluation results'))
         for k, num_top in enumerate(self.nums_top_predictions + [0]):
+            print(('Top %d:' % num_top) if num_top > 0 else 'All:')
+
             # Global
             num_gt_matches_per_image = np.sum(self.num_gt_matches[:, :, k], axis=1)
             num_gt_per_image = np.sum(self.num_gt, axis=1)
@@ -61,24 +74,32 @@ class ResultStatistics:
             ap_per_image = np.divide(num_hits_per_image, num_predictions_per_image,
                                      out=np.zeros_like(num_hits_per_image),
                                      where=num_predictions_per_image > 0)
-            print(('Top %d:' % num_top) if num_top > 0 else 'All:')
-            print('    %10s: %.3f%%' % ('mAR', 100 * np.mean(num_gt_matches_per_image / num_gt_per_image)))
-            print('    %10s: %.3f%%' % ('mAP', 100 * np.mean(ap_per_image)))
+            print('    %10s: %s' % ('mAR', _f(np.mean(num_gt_matches_per_image / num_gt_per_image), _p=3)))
+            print('    %10s: %s' % ('mAP', _f(np.mean(ap_per_image), _p=3)))
+
+            # Per class
+            num_gt_matches_per_class = np.sum(self.num_gt_matches[:, :, k], axis=0)
+            num_gt_per_class = np.sum(self.num_gt, axis=0)
+            num_hits_per_class = np.sum(self.num_prediction_hits[:, :, k], axis=0)
+            num_predictions_per_class = np.sum(self.num_predictions[:, :, k], axis=0)
+            ap_per_class = np.divide(num_hits_per_class, num_predictions_per_class,
+                                     out=np.zeros_like(num_hits_per_class),
+                                     where=num_predictions_per_class > 0)
+            print('    %10s: [%s]' % ('pcAR', ' '.join([_f(arpc, _p=2) for arpc in (num_gt_matches_per_class / num_gt_per_class)])))
+            print('    %10s: [%s]' % ('pcAP', ' '.join([_f(appc, _p=2) for appc in ap_per_class])))
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
         assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
-        evaluator = cls(dataset, **kwargs)
+        eval_stats = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
             ex = dataset.get_entry(i, read_img=False)
-            prediction = Prediction(**res)
-            evaluator._record_prediction(i, ex, prediction)
-            if i % 100 == 0:
-                print(i)
-        assert np.all(evaluator.num_prediction_hits <= evaluator.num_predictions)
-        assert np.all(evaluator.num_gt_matches <= evaluator.num_gt[:, :, None])
-        assert np.all(np.sum(evaluator.num_gt, axis=0)) and np.all(np.sum(evaluator.num_gt, axis=1))
-        return evaluator
+            prediction = Prediction.from_dict(res)
+            eval_stats._record_prediction(i, ex, prediction)
+        assert np.all(eval_stats.num_prediction_hits <= eval_stats.num_predictions)
+        assert np.all(eval_stats.num_gt_matches <= eval_stats.num_gt[:, :, None])
+        assert np.all(np.sum(eval_stats.num_gt, axis=0)) and np.all(np.sum(eval_stats.num_gt, axis=1))
+        return eval_stats
 
 
 def find_pred_to_gt_matches(gt_entry: Example, prediction: Prediction, use_gt_boxes=False, **kwargs):

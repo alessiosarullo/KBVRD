@@ -30,7 +30,6 @@ try:
     from utils.timer import Timer
     from utils.detectron_weight_helper import load_detectron_weight
     from utils.blob import prep_im_for_blob, get_image_blob
-    from utils.training_stats import TrainingStats
 
 except ImportError:
     cfg = cfg_from_file = assert_and_infer_cfg = None
@@ -42,6 +41,5 @@ except ImportError:
     Timer = None
     load_detectron_weight = None
     prep_im_for_blob = get_image_blob = None
-    TrainingStats = None
 finally:
     sys.path.remove(osp.abspath(osp.join('pydetectron', 'lib')))

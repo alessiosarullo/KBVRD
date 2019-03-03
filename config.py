@@ -68,6 +68,10 @@ class ProgramConfig(BaseConfigs):
     def config_file(self):
         return os.path.join(self.save_dir, 'config.pkl')
 
+    @property
+    def tensorboard_dir(self):
+        return os.path.join(self.save_dir, 'tboard')
+
     def _postprocess_args(self):
         self.save_dir = self.save_dir.rstrip('/')
 
@@ -98,6 +102,8 @@ class DataConfig(BaseConfigs):
             pred_inds = list(range(num_preds))
         except ValueError:  # cannot cast to int: a list has been specified
             pred_inds = sorted([int(pred_ind) for pred_ind in self.prinds.split(',')])
+            if pred_inds[0] != 0:
+                pred_inds = [0] + pred_inds
         return pred_inds
 
     @property
@@ -117,10 +123,12 @@ class ModelConfig(BaseConfigs):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
+        self.hoi_bn = False
+
 
 class OptimizerConfig(BaseConfigs):
     def __init__(self):
-        self.use_adam = False
+        self.adam = False
         self.learning_rate = 1e-3
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
