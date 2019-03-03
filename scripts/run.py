@@ -28,6 +28,7 @@ class Launcher:
         cfg.print()
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstance
+        self.eval_result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
 
     def run(self):
         self.setup()
@@ -63,12 +64,12 @@ class Launcher:
             # print("Continuing from epoch %d." % (start_epoch + 1))
 
     def get_optim(self):
-        # # Lower the learning rate of some layers. It's a hack, but it helps stabilize the models.
-        # red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
-        # other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
-        # params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate * 10.0}, {'params': other_params}]
-        # print('Reduced LR of %d parameters.' % len(params[0]['params']))
-        params = self.detector.parameters()
+        # Lower the learning rate of some layers. It's a hack, but it helps stabilize the models.
+        red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
+        other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
+        params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate * 10.0}, {'params': other_params}]
+        print('Reduced LR of %d parameters.' % len(params[0]['params']))
+        # params = self.detector.parameters()
 
         if cfg.opt.adam:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
@@ -105,6 +106,10 @@ class Launcher:
                 pass
 
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
+        try:
+            os.remove(self.eval_result_file)
+        except FileNotFoundError:
+            pass
 
     def train_epoch(self, epoch_num, train_loader, optimizer, training_stats):
         num_batches = len(train_loader)
@@ -143,17 +148,14 @@ class Launcher:
         loss.backward()
 
         losses['total_loss'] = loss
-        rfh = torch.cat(self.detector.hoi_branch.rel_feats_history, dim=0)  # type: np.ndarray
-        self.detector.hoi_branch.rel_feats_history = []
-        # rf_dist = torch.distributions.normal.Normal(loc=rfh.mean(dim=0), scale=rfh.std(dim=0))
-        training_stats.update_stats({'losses': losses, 'watch': {'rel_input_feats': rfh}})
+        training_stats.update_stats({'losses': losses, 'watch': self.detector.hoi_branch.last_feats})
 
         nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
         optimizer.step()
 
     def test(self):
         test_split = HicoDetInstance(Splits.TEST)
-        result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
+        result_file = self.eval_result_file
         try:
             with open(result_file, 'rb') as f:
                 all_predictions = pickle.load(f)

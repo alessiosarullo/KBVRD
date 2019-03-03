@@ -1,25 +1,24 @@
 import torch
 import torch.nn as nn
 
+from config import cfg
+
 
 class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):
         super().__init__()
 
         # FIXME params
-        self.use_bn = False  # Since the batches are small due to memory constraint, BN is not suitable. TODO Maybe switch to GN?
-        self.spatial_dropout = 0.1
+        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        self.use_bn = True  # FIXME
         self.spatial_emb_dim = 64
         self.spatial_rnn_emb_dim = 64
-        self.spatial_rnn_dropout = 0.1
 
         self.spatial_rels_fc = nn.Sequential(*(
-                ([nn.BatchNorm1d(input_dim)] if self.use_bn else [])
-                +
-                [nn.Linear(input_dim, self.spatial_emb_dim),
-                 nn.ReLU(inplace=True),
-                 nn.Dropout(self.spatial_dropout)
-                 ]
+            [nn.Linear(input_dim, self.spatial_emb_dim),
+             nn.ReLU(inplace=True)]
+            +
+            ([nn.BatchNorm1d(self.spatial_emb_dim)] if self.use_bn else [])
         ))
         # self.spatial_rels_bilstm = AlternatingHighwayLSTM(
         #     input_size=self.spatial_emb_dim,
@@ -29,8 +28,7 @@ class SpatialContext(nn.Module):
         self.spatial_rel_ctx_bilstm = nn.LSTM(
             input_size=self.spatial_emb_dim,
             hidden_size=self.spatial_rnn_emb_dim,
-            num_layers=1,
-            # dropout=self.spatial_rnn_dropout,  # dropout requires a number of layers greater than 1, since it's not added after the last one
+            num_layers=1,  # if you want to use dropout the number of layers has to be greater than 1, since it's not added after the last one
             bidirectional=True)
 
     @property
@@ -55,7 +53,6 @@ class ObjectContext(nn.Module):
         self.use_bn = False  # Since the batches are small due to memory constraint, BN is not suitable. TODO Maybe switch to GN?
         self.obj_fc_dim = 1024
         self.obj_rnn_emb_dim = 1024
-        self.obj_rnn_dropout = 0.1
 
         self.obj_emb_fc = nn.Sequential(*[
             nn.Linear(input_dim, self.obj_fc_dim),
@@ -64,8 +61,7 @@ class ObjectContext(nn.Module):
         self.obj_ctx_bilstm = nn.LSTM(
             input_size=self.obj_fc_dim,
             hidden_size=self.obj_rnn_emb_dim,
-            num_layers=1,
-            # dropout=self.obj_rnn_dropout,  # dropout requires a number of layers greater than 1, since it's not added after the last one
+            num_layers=1,  # if you want to use dropout the number of layers has to be greater than 1, since it's not added after the last one
             bidirectional=True)
 
     def forward(self, boxes_ext, box_feats, spatial_ctx, unique_im_ids, box_im_ids, **kwargs):

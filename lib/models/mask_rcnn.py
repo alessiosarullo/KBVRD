@@ -29,13 +29,16 @@ class MaskRCNN(nn.Module):
         self.mask_rcnn = Generalized_RCNN()
         self._load_weights()
 
+        for param in self.parameters():
+            param.requires_grad = False
+
     def _load_weights(self):
         weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
         print("Loading Mask-RCNN's weights from {}.".format(weight_file))
         load_detectron_weight(self.mask_rcnn, weight_file)
 
     def train(self, mode=True):
-        super().train(mode=False)  # FIXME freeze weights as well
+        super().train(mode=False)
 
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):

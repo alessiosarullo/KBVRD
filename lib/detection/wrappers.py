@@ -10,7 +10,7 @@ sys.path.insert(0, osp.abspath(osp.join('pydetectron', 'lib')))
 # These are the "safe" ones (they don't depend on having CUDA or compiled code)
 try:
     import datasets.dummy_datasets as dummy_datasets
-
+    dummy_datasets = dummy_datasets  # This fixes an "unresolved import" error
     COCO_CLASSES = dummy_datasets.get_coco_dataset().classes
 except ImportError:
     raise

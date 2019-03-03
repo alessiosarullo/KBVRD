@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import math
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstance
@@ -24,38 +25,73 @@ class SimpleHOIModule(AbstractHOIModule):
     def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim):
         super().__init__()
 
+        def _vis_fc_layer():
+            return nn.Sequential(*([nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim),
+                                    nn.ReLU(inplace=True),
+                                    nn.Linear(self.hoi_visual_hidden_dim, self.hoi_visual_hidden_dim)]
+                                   +
+                                   ([nn.BatchNorm1d(self.hoi_visual_hidden_dim)] if self.use_bn else [])
+                                   ))
+
         # FIXME params
-        self.use_bn = cfg.model.hoi_bn  # Since the batches are farily small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.hoi_visual_hidden_dim = 1024
         self.hoi_emb_dim = 1024
-        self.hoi_dropout = 0.1
 
-        self.rel_sub_fc = nn.Sequential(nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim), nn.ReLU(inplace=True))
-        self.rel_obj_fc = nn.Sequential(nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim), nn.ReLU(inplace=True))
-        self.rel_union_fc = nn.Sequential(nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim), nn.ReLU(inplace=True))
-        hoi_input_feat_dim = self.hoi_visual_hidden_dim + spatial_emb_dim + obj_ctx_dim + spatial_ctx_dim
+        # TODO? Maybe use BN with no momentum instead of setting the standard deviation manually?
+        self.input_vis_feats_fc = nn.Linear(visual_feats_dim, visual_feats_dim)
+        torch.nn.init.normal_(self.input_vis_feats_fc.weight, mean=0, std=math.sqrt(1.0 / visual_feats_dim))
+
+        self.input_sp_feats_fc = nn.Linear(spatial_emb_dim, spatial_emb_dim)
+        torch.nn.init.normal_(self.input_sp_feats_fc.weight, mean=0, std=math.sqrt(1.0 / spatial_emb_dim))
+
+        self.input_sp_ctx_fc = nn.Linear(spatial_ctx_dim, spatial_ctx_dim)
+        torch.nn.init.normal_(self.input_sp_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / spatial_ctx_dim))
+
+        self.input_obj_ctx_fc = nn.Linear(obj_ctx_dim, obj_ctx_dim)
+        torch.nn.init.normal_(self.input_obj_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / obj_ctx_dim))
+
+        self.rel_sub_fc = _vis_fc_layer()
+        self.rel_obj_fc = _vis_fc_layer()
+        self.rel_union_fc = _vis_fc_layer()
+
+        hoi_input_feat_dim = self.hoi_visual_hidden_dim + spatial_emb_dim + spatial_ctx_dim + obj_ctx_dim
         self.rel_output_emb_fc = nn.Sequential(*(
-            ([nn.BatchNorm1d(hoi_input_feat_dim)] if self.use_bn else [])  # 2 = biLSTM
-            +
             [nn.Linear(hoi_input_feat_dim, self.hoi_emb_dim),
              nn.ReLU(inplace=True),
-             nn.Dropout(self.hoi_dropout)]
+             nn.Linear(self.hoi_emb_dim, self.hoi_emb_dim)]
+            +
+            ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
         ))
 
-        self.rel_feats_history = []
+        self.last_feats = {}
 
     def _forward(self, union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
         # TODO docs
         # Every input is a Tensor
-        objs_ctx_rep = torch.cat([obj_ctx[i, :].expand((hoi_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
-        spatial_ctx_rep = torch.cat([spatial_ctx[i, :].expand((hoi_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
-        subj_feats = self.rel_sub_fc(box_feats[sub_inds, :])
-        obj_feats = self.rel_obj_fc(box_feats[obj_inds, :])
-        union_feats = self.rel_union_fc(union_boxes_feats)
+        in_union_boxes_feats = self.input_vis_feats_fc(union_boxes_feats)
+        in_box_feats = self.input_vis_feats_fc(box_feats)
+        in_spatial_rels_feats = self.input_sp_feats_fc(spatial_rels_feats)
+        in_spatial_ctx = self.input_sp_ctx_fc(spatial_ctx)
+        in_obj_ctx = self.input_obj_ctx_fc(obj_ctx)
+
+        objs_ctx_rep = torch.cat([in_obj_ctx[i, :].expand((hoi_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
+        spatial_ctx_rep = torch.cat([in_spatial_ctx[i, :].expand((hoi_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
+        subj_feats = self.rel_sub_fc(in_box_feats[sub_inds, :])
+        obj_feats = self.rel_obj_fc(in_box_feats[obj_inds, :])
+        union_feats = self.rel_union_fc(in_union_boxes_feats)
         rel_vis_feats = subj_feats * obj_feats * union_feats
-        rel_feats = torch.cat([rel_vis_feats, spatial_rels_feats, objs_ctx_rep, spatial_ctx_rep], dim=1)
-        self.rel_feats_history.append(rel_feats.detach().cpu())
+        rel_feats = torch.cat([rel_vis_feats, in_spatial_rels_feats, spatial_ctx_rep, objs_ctx_rep], dim=1)
         rel_emb = self.rel_output_emb_fc(rel_feats)
+
+        self.last_feats['visual-boxes'] = in_box_feats.detach().cpu()
+        self.last_feats['visual-union_boxes_feats'] = in_union_boxes_feats.detach().cpu()
+        self.last_feats['spatial'] = in_spatial_rels_feats.detach().cpu()
+        self.last_feats['obj_ctx_rep'] = objs_ctx_rep.detach().cpu()
+        self.last_feats['sp_ctx_rep'] = spatial_ctx_rep.detach().cpu()
+        self.last_feats['concat'] = rel_feats.detach().cpu()
+        self.last_feats['final_emb'] = rel_emb.detach().cpu()
+
         return rel_emb
 
     @property

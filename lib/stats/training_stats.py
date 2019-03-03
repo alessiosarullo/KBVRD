@@ -35,8 +35,14 @@ class SmoothedValue:
 
 class TrainingStats:
     def __init__(self, num_batches, smoothing_window=20):
-        # Output logging period in SGD iterations
+
         os.makedirs(cfg.program.tensorboard_dir)
+        # try:
+        # except FileExistsError:  # delete the content
+        #     for the_file in os.listdir(cfg.program.tensorboard_dir):
+        #         file_path = os.path.join(cfg.program.tensorboard_dir, the_file)
+        #         os.remove(file_path)
+
         self.num_batches = num_batches
         self.history_window = smoothing_window
 
@@ -57,7 +63,7 @@ class TrainingStats:
         for metric_name, metric in output_dict.get('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
         for name, value in output_dict.get('watch', {}).items():
-            self.values_to_watch.setdefault(name, deque(maxlen=100)).append(value)  # FIXME magic constant
+            self.values_to_watch.setdefault(name, deque(maxlen=self.history_window)).append(value)  # FIXME magic constant
 
     def log_stats(self, curr_iter, lr):
         """Log the tracked statistics."""
@@ -71,6 +77,9 @@ class TrainingStats:
             stats[loss_name] = v.get_average()
             print('%-20s %f' % (loss_name, stats[loss_name]))
         print('%-20s %f' % ('Total loss', stats['Total loss']))
+        if cfg.program.verbose:
+            for k, v in stats['Watch'].items():
+                print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
 
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)
@@ -83,7 +92,8 @@ class TrainingStats:
                 if isinstance(v, dict):
                     self._tb_log_stats(v, curr_iter)
                 elif isinstance(v, (torch.Tensor, np.ndarray)):
-                    self.tblogger.add_histogram(k, v, global_step=curr_iter)
+                    if curr_iter > 0:
+                        self.tblogger.add_histogram(k, v, global_step=curr_iter, bins='auto')
                 else:
                     self.tblogger.add_scalar(k, v, global_step=curr_iter)
 

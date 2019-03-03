@@ -35,14 +35,15 @@ class BaseConfigs:
 class ProgramConfig(BaseConfigs):
     def __init__(self):
         self.print_interval = 50
-        self.randomize = False
         self.sync = False
+        self.verbose = False
 
+        self.randomize = False
         self.eval_only = False
         self.predcls = False
 
-        self.save_dir = 'output'
         self.load_precomputed_feats = False
+        self.save_dir = 'output'
 
     @property
     def detectron_pretrained_file_format(self):
@@ -123,7 +124,7 @@ class ModelConfig(BaseConfigs):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
-        self.hoi_bn = False
+        self.bn = False
 
 
 class OptimizerConfig(BaseConfigs):

@@ -27,7 +27,9 @@ class EvalStats:
         self.num_predictions = np.zeros_like(self.num_gt_matches)
 
     def _record_prediction(self, img_idx, gt_entry: Example, prediction: Prediction):
-        predicted_hoi_to_gt = find_pred_to_gt_matches(gt_entry, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
+        predicted_hoi_to_gt, inds = find_pred_to_gt_matches(gt_entry, prediction, use_gt_boxes=self.use_gt_boxes, iou_thresh=self.iou_thresh)
+        # Predicates are sorted by score now. To match apply `inds` to every HOI field of prediction.
+
         self.num_gt[img_idx, :] = np.array([np.sum(gt_entry.gt_hois[:, 1] == i) for i in range(self.dataset.num_predicates)])
         assert np.sum(self.num_gt[img_idx, :]) == gt_entry.gt_hois.shape[0]
 
@@ -36,7 +38,7 @@ class EvalStats:
 
         num_predictions = len(predicted_hoi_to_gt)
         assert num_predictions == prediction.ho_pairs.shape[0]
-        predicted_hoi_classes = prediction.hoi_classes
+        predicted_hoi_classes = prediction.hoi_classes[inds]
 
         for k, num_top_preds in enumerate(self.nums_top_predictions + [num_predictions]):
             matched_gt_inds_per_class = {}
@@ -119,7 +121,7 @@ def find_pred_to_gt_matches(gt_entry: Example, prediction: Prediction, use_gt_bo
         raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
     if not prediction.is_complete():
-        return []
+        return None, None
     assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
     if use_gt_boxes:
@@ -136,10 +138,9 @@ def find_pred_to_gt_matches(gt_entry: Example, prediction: Prediction, use_gt_bo
     predict_hois = np.concatenate([predict_ho_pairs, prediction.hoi_classes[:, None]], axis=1)
     predict_hoi_scores = prediction.hoi_score_distributions.max(axis=1)
 
-    pred_to_gt = find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
-                                                   predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
-                                                   **kwargs)
-    return pred_to_gt
+    return find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
+                                             predict_hois, predict_boxes, predict_obj_classes, predict_hoi_scores, predict_obj_scores,
+                                             **kwargs)
 
 
 def find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
@@ -149,15 +150,15 @@ def find_pred_to_gt_match_on_triplets(gt_hois, gt_boxes, gt_obj_classes,
     assert num_gt_relations > 0
 
     gt_triplets, gt_triplet_boxes = to_triples(gt_hois, gt_obj_classes, gt_boxes)
-    pred_triplets, pred_triplet_boxes, scores_overall = to_triples(predict_hois, predict_box_classes, predict_boxes, hoi_scores, predict_box_scores)
+    pred_triplets, pred_triplet_boxes, scores, inds = to_triples(predict_hois, predict_box_classes, predict_boxes, hoi_scores, predict_box_scores)
 
-    if not np.all(scores_overall[1:] <= scores_overall[:-1]):
+    if not np.all(scores[1:] <= scores[:-1]):
         raise ValueError("Somehow the relations werent sorted properly")
 
     # Compute recall. It's most efficient to match once and then do recall after
     pred_to_gt = _compute_pred_matches(gt_triplets, pred_triplets, gt_triplet_boxes, pred_triplet_boxes, iou_thresh)
 
-    return pred_to_gt
+    return pred_to_gt, inds
 
 
 def to_triples(hois, obj_classes, boxes, hoi_scores=None, obj_scores=None):
@@ -174,7 +175,7 @@ def to_triples(hois, obj_classes, boxes, hoi_scores=None, obj_scores=None):
         hois = hois[inds]
         ho_boxes = ho_boxes[inds]
         hoi_scores = hoi_scores[inds]
-        return hois, ho_boxes, hoi_scores
+        return hois, ho_boxes, hoi_scores, inds
     else:
         return hois, ho_boxes
 
