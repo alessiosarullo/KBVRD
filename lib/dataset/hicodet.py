@@ -62,8 +62,12 @@ class HicoDetInstanceSplit(Dataset):
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
-            self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
-            self.pc_image_ids = self.pc_feats_file['image_index'][:]
+            try:
+                self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
+                self.pc_image_ids = self.pc_feats_file['image_index'][:]
+            except KeyError:  # Old names, but the file hasn't been re-generated since the change.
+                self.pc_box_im_inds = self.pc_feats_file['box_im_inds'][:]
+                self.pc_image_ids = self.pc_feats_file['image_ids'][:]
 
             assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
             assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
