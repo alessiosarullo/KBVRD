@@ -14,17 +14,17 @@ GPU_ID=$2
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 
 # log
-CHECKPOINT_DIR="output/${NET}"
+OUTPUT_DIR="output/${NET}"
 DATETIME=`date +'%Y-%m-%d_%H-%M-%S'`
 EXP_FULL_NAME="${DATETIME}_${EXP_NAME}"
-EXP_DIR=${CHECKPOINT_DIR}/${EXP_FULL_NAME}
+EXP_DIR=${OUTPUT_DIR}/${EXP_FULL_NAME}
 LOG="$EXP_DIR/log.txt"
+LAST_EXP_SYMLINK="last_exp"
 
 mkdir -p ${EXP_DIR}
+rm -f -- ${LAST_EXP_SYMLINK}
+ln -rs ${EXP_DIR} "output/${LAST_EXP_SYMLINK}"
 exec &> >(tee -a "$LOG")
 echo Logging ${EXP_DIR} to "$LOG"
 
 python -u scripts/run.py --save_dir ${EXP_DIR} "${@:3}"
-
-
-

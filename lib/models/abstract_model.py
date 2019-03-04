@@ -37,23 +37,21 @@ class AbstractModel(nn.Module):
         raise NotImplementedError()
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, box_labels, hoi_labels = self(x, **kwargs)
+        obj_output, hoi_output, box_labels, hoi_labels = self(x, predict=False, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
         hoi_loss = nn.functional.cross_entropy(hoi_output, hoi_labels)
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
-    def forward(self, x, **kwargs):
+    def forward(self, x, predict=True, **kwargs):
         # TODO docs
 
         with torch.set_grad_enabled(self.training):
-            tmp_output = self.first_step(x)
-            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos = tmp_output[:5]
+            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.first_step(x)
             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
 
-            if self.training:
-                assert hoi_infos is not None
+            if not predict:
+                assert None not in (hoi_infos, box_labels, hoi_labels)
                 obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
-                box_labels, hoi_labels = tmp_output[5:]
                 return obj_output, hoi_output, box_labels, hoi_labels
             else:
                 if hoi_infos is not None:
@@ -103,7 +101,7 @@ class AbstractModel(nn.Module):
         hoi_output = self.hoi_output_fc(hoi_embs)
         return obj_output, hoi_output
 
-    def first_step(self, batch: Minibatch):  # FIXME change name
+    def first_step(self, batch: Minibatch, predict):  # FIXME change name
         """
         :param batch:
         :param kwargs:
@@ -117,11 +115,13 @@ class AbstractModel(nn.Module):
 
         boxes_ext_np, masks, box_feats = self.filter_and_map_to_hico(boxes_ext_np, masks, box_feats)
 
-        if self.training:
+        if not predict:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
             hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np, max_num_bg_rels_per_img=0)  # FIXME magic constant
             assert hoi_im_ids.shape[0] == hoi_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
+            box_labels = torch.tensor(box_labels, device=masks.device)
+            hoi_labels = torch.tensor(hoi_labels, device=masks.device)
         else:
             if cfg.program.predcls:
                 # This is inefficient because Mask-RCNN has already been called at this point/features have been loaded, but on irrelevant boxes.
@@ -139,27 +139,22 @@ class AbstractModel(nn.Module):
                 boxes_ext_np = np.concatenate([boxes_with_im_id, labels_onehot], axis=1)
             else:
                 if boxes_ext_np.shape[0] == 0:
-                    return None, None, None, None, None
+                    return None, None, None, None, None, None, None
             hoi_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
+            box_labels = hoi_labels = None
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
 
         if hoi_im_ids.size == 0:
-            assert not self.training and not cfg.program.predcls
-            return boxes_ext, box_feats, masks, None, None
+            assert predict and not cfg.program.predcls
+            return boxes_ext, box_feats, masks, None, None, None, None
         assert ho_pairs.shape[0] > 0
 
         # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
         hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=hoi_union_boxes)
         assert hoi_im_ids.shape[0] == union_boxes_feats.shape[0]
-
         hoi_infos = np.concatenate([hoi_im_ids[:, None], ho_pairs], axis=1).astype(np.int, copy=False)
-        if self.training:
-            box_labels = torch.tensor(box_labels, device=masks.device)
-            hoi_labels = torch.tensor(hoi_labels, device=masks.device)
-            return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels
-        else:
-            return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos
+        return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels
 
     def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor, box_feats: torch.Tensor):
         # Keep foreground object only

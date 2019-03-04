@@ -28,9 +28,10 @@ class MaskRCNN(nn.Module):
         self.output_feat_dim = 2048  # this is hardcoded in `ResNet_roi_conv5_head_for_masks()`, so I can't actually read it from configs
         self.mask_rcnn = Generalized_RCNN()
         self._load_weights()
+        self.allow_train = False
 
         for param in self.parameters():
-            param.requires_grad = False
+            param.requires_grad = self.allow_train
 
     def _load_weights(self):
         weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
@@ -38,7 +39,7 @@ class MaskRCNN(nn.Module):
         load_detectron_weight(self.mask_rcnn, weight_file)
 
     def train(self, mode=True):
-        super().train(mode=False)
+        super().train(mode=self.allow_train and mode)
 
     def forward(self, x, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -57,7 +58,7 @@ class MaskRCNN(nn.Module):
         """
         # TODO docs
 
-        assert not self.training
+        assert self.allow_train or not self.training
 
         if x.pc_box_feats is not None:
             box_feats = x.pc_box_feats
