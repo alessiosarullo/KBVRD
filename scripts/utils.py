@@ -6,7 +6,7 @@ from typing import Dict
 
 class Timer:
     global_timer = None
-    gpu_sync = False
+    gpu_sync = False  # This is useful to time GPU operations, which is otherwise inaccurate due to asynchronous computations.
 
     def __init__(self):
         self.start_time = None

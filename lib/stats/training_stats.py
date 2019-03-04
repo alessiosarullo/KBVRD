@@ -80,7 +80,7 @@ class TrainingStats:
 
     def log_stats(self, curr_iter, epoch, batch=None, **kwargs):
         """Log the tracked statistics."""
-        self._print_times(curr_iter, epoch, batch)
+        self._print_times(epoch, batch=batch, curr_iter=curr_iter)
         stats = {'Total loss': self.smoothed_total_loss.get_average(),
                  'Metrics': {k: v.get_median() for k, v in self.smoothed_metrics.items()},
                  'Watch': {k: torch.cat(tuple(v), dim=0) for k, v in self.values_to_watch.items()},
@@ -103,7 +103,6 @@ class TrainingStats:
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)
 
-
     def epoch_tic(self):
         Timer.get(self.epoch_str).tic()
 
@@ -119,15 +118,22 @@ class TrainingStats:
     def batch_toc(self):
         Timer.get(self.epoch_str, 'Batch').toc()
 
-    def _print_times(self, curr_iter, epoch, batch):
+    def _print_times(self, epoch, **kwargs):
         num_batches = len(self.data_loader)
         time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
-        header = '{:s} iter {:6d} (epoch {:2d}{:s}).'.format(self.split_str, curr_iter, epoch,
-                                                             '' if batch is None else ', batch {:5d}/{:5d}'.format(batch + 1, num_batches))
+        if self.split == Splits.VAL:
+            header = ' epoch {:2d}.'.format(self.split_str, epoch)
+        else:
+            try:
+                batch = kwargs['batch']
+                curr_iter = kwargs['curr_iter']
+            except KeyError:
+                raise
+            header = 'Train iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch + 1, num_batches)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
