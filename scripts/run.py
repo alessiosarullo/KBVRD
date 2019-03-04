@@ -29,6 +29,7 @@ class Launcher:
         self.detector = None  # type: BaseModel
         self.train_split = None  # type: HicoDetInstanceSplit
         self.eval_result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
+        self.curr_train_iter = 0
 
     def run(self):
         self.setup()
@@ -57,8 +58,7 @@ class Launcher:
         if cfg.program.eval_only:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
-            # self.detector.mask_rcnn._load_weights()  # FIXME this is only needed because BoxHead is trained by mistake. Remove after fix
-            # # TODO
+            # # TODO resume from checkpoint
             # if cfg.program.resume:
             # start_epoch = ckpt['epoch']
             # print("Continuing from epoch %d." % (start_epoch + 1))
@@ -75,7 +75,7 @@ class Launcher:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, momentum=0.9)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=1, factor=0.1, verbose=True, threshold_mode='abs')
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs')
         return optimizer, scheduler
 
     def train(self):
@@ -86,8 +86,8 @@ class Launcher:
 
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
         val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size)
-        training_stats = TrainingStats(split=Splits.TRAIN.value, data_loader=train_loader)
-        val_stats = TrainingStats(split=Splits.VAL.value, data_loader=val_loader)
+        training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
+        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader)
         try:
             for epoch in range(cfg.opt.num_epochs):
                 self.detector.train()
@@ -99,10 +99,10 @@ class Launcher:
 
                 self.detector.eval()
                 val_loss = self.train_epoch(epoch, val_loader, val_stats)
-                # scheduler.step(val_loss)
-                # if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
-                #     print('Exiting training early.', flush=True)
-                #     break
+                scheduler.step(val_loss)
+                if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
+                    print('Exiting training early.', flush=True)
+                    break
             Timer.get().print()
             cfg.save()
         finally:
@@ -127,12 +127,12 @@ class Launcher:
             stats.batch_tic()
             epoch_loss += self.train_batch(batch, stats, optimizer)
             stats.batch_toc()
-            if optimizer is not None:  # train
-                if batch_idx % cfg.program.print_interval == 0:
-                    stats.log_stats(epoch=epoch_idx, batch=batch_idx, lr=optimizer.param_groups[0]['lr'])
-            else:  # val
-                if batch_idx % cfg.program.print_interval == 0 or batch_idx == (len(data_loader) - 1):
-                    stats.log_stats(epoch=epoch_idx, batch=batch_idx)
+
+            self.curr_train_iter += 0 if optimizer is None else 1
+            if optimizer is not None and batch_idx % cfg.program.print_interval == 0:
+                stats.log_stats(self.curr_train_iter, epoch_idx, batch_idx, lr=optimizer.param_groups[0]['lr'])  # TODO lr for each parameter group
+        if optimizer is None:
+            stats.log_stats(self.curr_train_iter, epoch_idx)
         epoch_loss /= len(data_loader)
         stats.epoch_toc()
         return epoch_loss

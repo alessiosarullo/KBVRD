@@ -6,10 +6,11 @@ import pickle
 
 
 class BaseConfigs:
-    def parse_args(self):
-        args = self._get_arg_parser().parse_known_args()
-        self.__dict__.update({k: v for k, v in vars(args[0]).items() if v is not None})
+    def parse_args(self, args):
+        namespace = self._get_arg_parser().parse_known_args(args)
+        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
         self._postprocess_args()
+        return namespace[1]
 
     def _postprocess_args(self):
         pass
@@ -17,12 +18,13 @@ class BaseConfigs:
     def _get_arg_parser(self):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            parser_kwargs = {'dest': k}
-            if type(v) == bool:
-                parser_kwargs['action'] = 'store_%s' % str(not v).lower()
-            else:
-                parser_kwargs['type'] = type(v)
-            parser.add_argument('--%s' % k, **parser_kwargs)
+            if v is not None:
+                parser_kwargs = {'dest': k}
+                if type(v) == bool:
+                    parser_kwargs['action'] = 'store_%s' % str(not v).lower()
+                else:
+                    parser_kwargs['type'] = type(v)
+                parser.add_argument('--%s' % k, **parser_kwargs)
         return parser
 
     def __str__(self):
@@ -153,16 +155,19 @@ class Configs:
 
     @classmethod
     def parse_args(cls):
+        args = sys.argv
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
-                v.parse_args()
+                args = v.parse_args(args)
+        if args[1:]:
+            # Detectron configurations should not be changed.
+            raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))
+        sys.argv = sys.argv[:1]
+
         try:
             cls.init_detectron_cfgs()
         except ModuleNotFoundError:
             print('Detectron module not found')
-        # Detectron configurations override command line arguments. This is ok, since the model's configs should not be changed. TODO Raise a warning.
-        # TODO (related to the above) when trying to set a parameter that defaults to None a useless error is printed. Say that this parameter
-        #  cannot be set through command line
 
     @classmethod
     def init_detectron_cfgs(cls):
@@ -236,7 +241,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--load_precomputed_feats']
+    sys.argv += ['--sync', '--load_precomputed_feats', '--adam', '--bn', '--grad_clip', '1.5', '--pixel_mean', '[0, 1, 3]']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()

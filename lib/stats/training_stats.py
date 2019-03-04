@@ -6,6 +6,8 @@ import torch
 from collections import deque
 from typing import Dict
 from tensorboardX import SummaryWriter
+
+from lib.dataset.utils import Splits
 from scripts.utils import Timer
 from torch.utils.data import DataLoader
 
@@ -36,7 +38,7 @@ class SmoothedValue:
 
 
 class TrainingStats:
-    def __init__(self, split: str, data_loader: DataLoader, smoothing_window=20):
+    def __init__(self, split, data_loader: DataLoader, smoothing_window=20):
 
         tboard_dir = os.path.join(cfg.program.tensorboard_dir, split)
         os.makedirs(tboard_dir)
@@ -46,7 +48,7 @@ class TrainingStats:
         #         file_path = os.path.join(tboard_dir, the_file)
         #         os.remove(file_path)
 
-        self.split = split.capitalize()
+        self.split = split
         self.data_loader = data_loader
         self.history_window = smoothing_window
 
@@ -56,6 +58,10 @@ class TrainingStats:
         self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_total_loss = SmoothedValue(self.history_window)
         self.values_to_watch = {}
+
+    @property
+    def split_str(self):
+        return self.split.value.capitalize()
 
     def update_stats(self, output_dict):
         assert sum([int('total' in k.lower()) for k in output_dict['losses'].keys()]) == 1
@@ -69,58 +75,59 @@ class TrainingStats:
         for name, value in output_dict.get('watch', {}).items():
             self.values_to_watch.setdefault(name, deque(maxlen=self.history_window)).append(value)  # FIXME magic constant
 
-    def log_stats(self, epoch, batch, lr=None):
+    def log_stats(self, curr_iter, epoch, batch=None, **kwargs):
         """Log the tracked statistics."""
-        self._print_times(epoch, batch)
+        self._print_times(curr_iter, epoch, batch)
         stats = {'Total loss': self.smoothed_total_loss.get_average(),
                  'Metrics': {k: v.get_median() for k, v in self.smoothed_metrics.items()},
                  'Watch': {k: torch.cat(tuple(v), dim=0) for k, v in self.values_to_watch.items()},
                  }
-        if lr is not None:
-            stats['LR'] = lr
         for k, v in self.smoothed_losses.items():
             loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
             stats[loss_name] = v.get_average()
             print('%-20s %f' % (loss_name, stats[loss_name]))
         print('%-20s %f' % ('Total loss', stats['Total loss']))
+
+        for k, v in kwargs.items():
+            stats[k] = v
+
         if cfg.program.verbose:
             for k, v in stats['Watch'].items():
                 print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
 
         if self.tblogger is not None:
-            self._tb_log_stats(stats, self._get_iter(epoch, batch))
+            self._tb_log_stats(stats, curr_iter)
 
     def epoch_tic(self):
-        Timer.get(self.split, 'Epoch').tic()
+        Timer.get(self.split_str, 'Epoch').tic()
 
     def epoch_toc(self):
-        epoch_timer = Timer.get(self.split, 'Epoch')
+        epoch_timer = Timer.get(self.split_str, 'Epoch', get_only=True)
         epoch_timer.toc()
         print('Time for epoch:', Timer.format(epoch_timer.last))
         print('-' * 100, flush=True)
 
     def batch_tic(self):
-        Timer.get(self.split, 'Epoch', 'Batch').tic()
+        Timer.get(self.split_str, 'Epoch', 'Batch').tic()
 
     def batch_toc(self):
-        Timer.get(self.split, 'Epoch', 'Batch').toc()
+        Timer.get(self.split_str, 'Epoch', 'Batch').toc()
 
-    def _print_times(self, epoch, batch):
+    def _print_times(self, curr_iter, epoch, batch):
         num_batches = len(self.data_loader)
-        time_per_batch = Timer.get(self.split, 'Epoch', 'Batch', get_only=True).spent(average=True)
+        time_per_batch = Timer.get(self.split_str, 'Epoch', 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
-        print('{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split, self._get_iter(epoch, batch), epoch, batch + 1, num_batches),
-              'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
-                                                                       Timer.format(time_to_load),
-                                                                       Timer.format(time_to_collate)),
-              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split, 'Epoch', get_only=True).progress()),
-                                                                          Timer.format(est_time_per_epoch)))
+        header = '{:s} iter {:6d} (epoch {:2d}{:s}).'.format(self.split_str, curr_iter, epoch,
+                                                             '' if batch is None else ', batch {:5d}/{:5d}'.format(batch + 1, num_batches))
 
-    def _get_iter(self, epoch, batch):
-        return len(self.data_loader) * epoch + batch + 1
+        print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
+                                                                               Timer.format(time_to_load),
+                                                                               Timer.format(time_to_collate)),
+              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split_str, 'Epoch', get_only=True).progress()),
+                                                                          Timer.format(est_time_per_epoch)))
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""

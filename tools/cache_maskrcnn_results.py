@@ -28,8 +28,7 @@ def save_feats():
     precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
     feat_file = h5py.File(precomputed_feats_fn, 'w')
     feat_file.create_dataset('box_feats', shape=(0, mask_rcnn.output_feat_dim), maxshape=(None, mask_rcnn.output_feat_dim))
-    feat_file.create_dataset('box_scores', shape=(0, hds.num_object_classes + 1), maxshape=(None, hds.num_object_classes + 1))  # FIXME magic const
-    # feat_file.create_dataset('feat_maps', shape=(0, 1024, 7, 7), maxshape=(None, 1024, 7, 7))  # FIXME check
+    feat_file.create_dataset('box_scores', shape=(0, hds.num_object_classes + 1), maxshape=(None, hds.num_object_classes + 1))
 
     try:
         all_boxes, box_im_idx, all_pred_classes = [], [], []
