@@ -46,7 +46,7 @@ class AbstractModel(nn.Module):
         # TODO docs
 
         with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.first_step(x)
+            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.first_step(x, predict)
             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
 
             if not predict:
