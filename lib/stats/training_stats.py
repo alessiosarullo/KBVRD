@@ -62,6 +62,10 @@ class TrainingStats:
     def split_str(self):
         return self.split.value.capitalize()
 
+    @property
+    def epoch_str(self):
+        return '%s epoch' % self.split_str
+
     def update_stats(self, output_dict):
         assert sum([int('total' in k.lower()) for k in output_dict['losses'].keys()]) == 1
         for loss_name, loss in output_dict['losses'].items():
@@ -99,24 +103,25 @@ class TrainingStats:
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)
 
+
     def epoch_tic(self):
-        Timer.get(self.split_str, 'Epoch').tic()
+        Timer.get(self.epoch_str).tic()
 
     def epoch_toc(self):
-        epoch_timer = Timer.get(self.split_str, 'Epoch', get_only=True)
+        epoch_timer = Timer.get(self.epoch_str, get_only=True)
         epoch_timer.toc()
         print('Time for epoch:', Timer.format(epoch_timer.last))
         print('-' * 100, flush=True)
 
     def batch_tic(self):
-        Timer.get(self.split_str, 'Epoch', 'Batch').tic()
+        Timer.get(self.epoch_str, 'Batch').tic()
 
     def batch_toc(self):
-        Timer.get(self.split_str, 'Epoch', 'Batch').toc()
+        Timer.get(self.epoch_str, 'Batch').toc()
 
     def _print_times(self, curr_iter, epoch, batch):
         num_batches = len(self.data_loader)
-        time_per_batch = Timer.get(self.split_str, 'Epoch', 'Batch', get_only=True).spent(average=True)
+        time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
@@ -127,7 +132,7 @@ class TrainingStats:
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
                                                                                Timer.format(time_to_collate)),
-              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split_str, 'Epoch', get_only=True).progress()),
+              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
                                                                           Timer.format(est_time_per_epoch)))
 
     def _tb_log_stats(self, stats, curr_iter):
