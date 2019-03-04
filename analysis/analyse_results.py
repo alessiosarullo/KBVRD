@@ -10,7 +10,7 @@ from analysis.utils import vis_one_image
 from config import Configs as cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
-from lib.dataset.hicodet import HicoDetInstance, Splits
+from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.stats.eval_stats import EvalStats
 
 
@@ -19,7 +19,7 @@ def _setup_and_load():
     with open(cfg.program.result_file_format % 'sgdet', 'rb') as f:
         results = pickle.load(f)
     cfg.load()
-    hds = HicoDetInstance(Splits.TEST)
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     return results, hds
 
 

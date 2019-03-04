@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import Configs as cfg
 from lib.containers import Prediction
-from lib.dataset.hicodet import HicoDetInstance, Splits
+from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.models.base_model import BaseModel
 from lib.stats.eval_stats import EvalStats
 from lib.stats.training_stats import TrainingStats
@@ -27,7 +27,7 @@ class Launcher:
             cfg.program.eval_only = True
         cfg.print()
         self.detector = None  # type: BaseModel
-        self.train_split = None  # type: HicoDetInstance
+        self.train_split = None  # type: HicoDetInstanceSplit
         self.eval_result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
 
     def run(self):
@@ -48,7 +48,7 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        self.train_split = HicoDetInstance(Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
+        self.train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
         self.detector = BaseModel(self.train_split)
         self.detector.cuda()
@@ -80,7 +80,7 @@ class Launcher:
 
     def train(self):
         os.makedirs(cfg.program.save_dir, exist_ok=True)
-        val_split = HicoDetInstance(Splits.TEST)  # FIXME using test for now because there is no random split
+        val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
 
         optimizer, scheduler = self.get_optim()
 
@@ -119,7 +119,6 @@ class Launcher:
             os.remove(self.eval_result_file)
         except FileNotFoundError:
             pass
-        assert False  # reminder to fix the validation split above
 
     def train_epoch(self, epoch_idx, data_loader, stats: TrainingStats, optimizer=None):
         stats.epoch_tic()
@@ -155,7 +154,7 @@ class Launcher:
         return loss
 
     def test(self):
-        test_split = HicoDetInstance(Splits.TEST)
+        test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
         result_file = self.eval_result_file
         try:
             with open(result_file, 'rb') as f:

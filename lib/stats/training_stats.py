@@ -64,9 +64,9 @@ class TrainingStats:
                 self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
             else:
                 self.smoothed_total_loss.append(output_dict['losses'][loss_name].item())
-        for metric_name, metric in output_dict.get('metrics', {}).items():
+        for metric_name, metric in output_dict.get_split('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
-        for name, value in output_dict.get('watch', {}).items():
+        for name, value in output_dict.get_split('watch', {}).items():
             self.values_to_watch.setdefault(name, deque(maxlen=self.history_window)).append(value)  # FIXME magic constant
 
     def log_stats(self, epoch, batch, lr=None):

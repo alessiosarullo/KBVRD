@@ -62,7 +62,7 @@ def tailor_to(cnet, len_max_path, dataset='HICO-DET',):
                 print_lines += ['%-20s > #occurrences: %2d. Similarity: %s' % (obj, occurrences[obj],
                                                                                ' '.join(['%6.3f' % x for x in hico_we_sim_mat[oi, pi, :]]),
                                                                                )]
-                for path in pred_paths.get(obj, []):
+                for path in pred_paths.get_split(obj, []):
                     print_lines += [' '.join([('%-20s' if i % 2 == 0 and i > 0 else '%20s') % str(x)
                                               for i, x in enumerate(path.split(cnet.PATH_SEP))])]
         with open(os.path.join('cache', 'paths%d.txt' % len_max_path), 'w', encoding='utf-8') as f:

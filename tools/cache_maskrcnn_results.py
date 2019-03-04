@@ -4,7 +4,7 @@ import h5py
 import numpy as np
 
 from config import Configs as cfg
-from lib.dataset.hicodet import HicoDetInstance
+from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.containers import Minibatch
 from lib.models.mask_rcnn import MaskRCNN
 from lib.dataset.utils import Splits
@@ -18,7 +18,7 @@ def save_feats():
     cfg.parse_args()
 
     # im_inds = list(range(12944, 12945))
-    hds = HicoDetInstance(Splits.TRAIN, flipping_prob=float(flipping))
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping))
     hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
 
     mask_rcnn = MaskRCNN()

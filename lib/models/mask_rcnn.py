@@ -7,7 +7,7 @@ import torch.nn as nn
 
 from config import Configs as cfg
 from lib.containers import Minibatch
-from lib.dataset.hicodet import HicoDetInstance, Splits
+from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.detection.detection import im_detect_all_with_feats, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
 from scripts.utils import Timer
@@ -118,7 +118,7 @@ def vis_masks():
 
     # hds = HicoDetSplit(Splits.TRAIN, im_inds=im_inds)
     # hdsl = hds.get_loader(batch_size=cfg.opt.batch_size, shuffle=False)
-    hds = HicoDetInstance(Splits.TEST, im_inds=[0])
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, im_inds=[0])
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
     dummy_coco = dummy_datasets.get_coco_dataset()  # this is used for class names
 

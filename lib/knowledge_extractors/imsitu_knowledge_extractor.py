@@ -92,7 +92,7 @@ class ImSituKnowledgeExtractor:
         concrete_dobjs_per_verb = {}
         for ann in anns.values():
             verb = ann['verb']
-            verb_dobj = abstract_dobj_per_verb.get(verb, None)
+            verb_dobj = abstract_dobj_per_verb.get_split(verb, None)
             if verb_dobj:
                 for frame in ann['frames']:
                     instance = frame[verb_dobj.lower()]

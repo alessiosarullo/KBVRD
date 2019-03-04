@@ -13,106 +13,43 @@ from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img
 from lib.detection.wrappers import COCO_CLASSES
 from scripts.utils import Timer
+from typing import Dict
 
 
-class HicoDetInstance(Dataset):
-    def __init__(self, split,
-                 im_inds=None, pred_inds=None, obj_inds=None,
-                 filter_invisible=True, flipping_prob=0,
-                 hicodet_driver=None):
+class HicoDetInstanceSplit(Dataset):
+    _splits = {}  # type: Dict[Splits, HicoDetInstanceSplit]
+    _hicodet_driver = None
+
+    def __init__(self, split, hicodet_driver, annotations, image_ids, objects, predicates, flipping_prob=0):
         """
         """
         # TODO docs
         assert split in Splits
-        hicodet_driver = hicodet_driver or HicoDetDriver()
-
-        # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
-        im_inds = im_inds or cfg.data.im_inds
-        pred_inds = pred_inds or cfg.data.pred_inds
-        obj_inds = obj_inds or cfg.data.obj_inds
 
         self.split = split
-        self._hicodet = hicodet_driver
+        self.image_ids = image_ids
         self.flipping_prob = flipping_prob
+
+        self._annotations = annotations
+        self._hicodet = hicodet_driver
+        self._objects = objects
+        self._predicates = predicates
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
         ################# Initialize
-        # Set annotations and image index
-        annotations = hicodet_driver.split_data[split]['annotations']
-        image_ids = im_inds or list(range(len(annotations)))
-        if im_inds is not None:
-            annotations = [annotations[i] for i in im_inds]
-
-        # Filter out unwanted predicates/object classes
-        if obj_inds is None and pred_inds is None:
-            self._objects = list(hicodet_driver.objects)
-            self._predicates = list(hicodet_driver.predicates)
-        else:
-            obj_inds = set(obj_inds or range(len(hicodet_driver.objects)))
-            pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
-            assert 0 in pred_inds
-            new_im_inds, new_annotations = [], []
-            pred_count= {}
-            obj_count = {}
-            for i, im_ann in enumerate(annotations):
-                new_im_inters = []
-                for inter in im_ann['interactions']:
-                    ann_obj = hicodet_driver.get_object_index(inter['id'])
-                    ann_pred = hicodet_driver.get_predicate_index(inter['id'])
-                    if ann_obj in obj_inds and ann_pred in pred_inds:
-                        new_im_inters.append(inter)
-                        pred_count[ann_pred] = pred_count.get(ann_pred, 0) + 1
-                        obj_count[ann_obj] = obj_count.get(ann_obj, 0) + 1
-                if new_im_inters:
-                    new_im_inds.append(i)
-                    new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
-            num_inters = sum([len(ann['interactions']) for ann in annotations])
-            diff_num_inters = num_inters - sum([len(ann['interactions']) for ann in new_annotations])
-            if diff_num_inters > 0:
-                print('%d/%d interaction%s been filtered out.' % (diff_num_inters, num_inters, ' has' if diff_num_inters == 1 else 's have'))
-            if len(new_im_inds) < len(image_ids):
-                print('Images have been discarded due to not having feasible predicates or objects. '
-                      'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
-            annotations = new_annotations
-            image_ids = [image_ids[i] for i in new_im_inds]
-
-            # Now we can add the person class: there won't be interactions with persons as an object if not in the initial indices, but the dataset
-            # includes the class anyway because the model must always be able to predict it.
-            # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
-            # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
-            self._objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.person_class})]
-            self._predicates = [hicodet_driver.predicates[i] for i in sorted(set(pred_count.keys()))]
-            if pred_inds - set(pred_count.keys()):
-                print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
-                      ', '.join(['%s (%d)' % (hicodet_driver.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
-            if obj_inds - set(obj_count.keys()):
-                print('The following objects have been discarded due to the lack of feasible predicates: %s.' %
-                      ', '.join(['%s (%d)' % (hicodet_driver.objects[o], o) for o in (obj_inds - set(obj_count.keys()))]))
         self._person_class_index = self._objects.index('person')
-
-        # Filter images with invisible annotations
-        if filter_invisible:  # FIXME add is_train? But then during detection images without boxes are fed
-            vis_im_inds, annotations = zip(*[(i, ann) for i, ann in enumerate(annotations)
-                                             if any([not inter['invis'] for inter in ann['interactions']])])
-            num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
-            if num_new_images < num_old_images:
-                print('Images have been discarded due to not having visible interactions. '
-                      'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
-                image_ids = [image_ids[i] for i in vis_im_inds]
-        assert len(annotations) == len(image_ids)
 
         # Compute COCO mapping
         coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
-        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(self._hicodet.objects)
+        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hicodet_driver.objects)
         self._coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
 
         # Extract the data from Hico-DET annotations
-        self.image_ids = image_ids
         self._im_boxes, self._im_box_classes, self._im_inters, self._im_without_visible_interactions, self._im_filenames = \
             self.compute_gt_data(annotations)
-        assert not (filter_invisible and len(self._im_without_visible_interactions) > 0)
+        assert len(self._im_without_visible_interactions) == 0
         assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == \
-               len(annotations) == len(self.image_ids) == len(self._im_filenames)
+               len(self._annotations) == len(self.image_ids) == len(self._im_filenames)
 
         ################# Data augmentation pipeline
         pass  # You could add a data augmentation pipeline here, but we don't.
@@ -125,12 +62,8 @@ class HicoDetInstance(Dataset):
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
-            try:
-                self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
-                self.pc_image_ids = self.pc_feats_file['image_index'][:]
-            except KeyError:  # Old names
-                self.pc_box_im_inds = self.pc_feats_file['box_im_inds'][:]
-                self.pc_image_ids = self.pc_feats_file['image_ids'][:]
+            self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
+            self.pc_image_ids = self.pc_feats_file['image_index'][:]
 
             assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
             assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
@@ -142,6 +75,41 @@ class HicoDetInstance(Dataset):
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
         else:
             self.pc_feats_file = None
+
+    @classmethod
+    def get_split(cls, split: Splits, im_inds=None, pred_inds=None, obj_inds=None, **kwargs):
+        if split not in cls._splits:
+            if split == Splits.VAL:
+                assert Splits.TRAIN not in cls._splits or cfg.data.val_ratio == 0, 'Training split must be instantiated before validation split.'
+
+            if cls._hicodet_driver is None:
+                cls._hicodet_driver = HicoDetDriver()
+
+            # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
+            im_inds = im_inds or cfg.data.im_inds
+            obj_inds = obj_inds or cfg.data.obj_inds
+            pred_inds = pred_inds or cfg.data.pred_inds
+
+            annotations, image_ids, objects, predicates = compute_annotations(split, cls._hicodet_driver, im_inds, obj_inds, pred_inds)
+            assert len(annotations) == len(image_ids)
+
+            # Split train/val if needed
+            if cfg.data.val_ratio > 0 and split == Splits.TRAIN:
+                num_val_imgs = int(len(annotations) * cfg.data.val_ratio)
+                cls._splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hicodet_driver=cls._hicodet_driver,
+                                                annotations=annotations[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
+                                                objects=objects, predicates=predicates,
+                                                **kwargs)
+                cls._splits[Splits.VAL] = cls(split=Splits.VAL, hicodet_driver=cls._hicodet_driver,
+                                              annotations=annotations[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
+                                              objects=objects, predicates=predicates,
+                                              **kwargs)
+            else:
+                cls._splits[split] = cls(split=split, annotations=annotations, hicodet_driver=cls._hicodet_driver,
+                                         image_ids=image_ids, objects=objects, predicates=predicates,
+                                         **kwargs)
+
+        return cls._splits[split]
 
     @property
     def objects(self):
@@ -169,7 +137,8 @@ class HicoDetInstance(Dataset):
 
     @property
     def img_dir(self):
-        return self._hicodet.get_img_dir(self.split)
+        split = Splits.TRAIN if not self.is_test_split else Splits.TEST
+        return self._hicodet.get_img_dir(split)
 
     @property
     def is_train_split(self):
@@ -311,11 +280,78 @@ class HicoDetInstance(Dataset):
         return self.num_images
 
 
+def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, filter_invisible=True):
+    # Set annotations and image index
+    annotations = hicodet_driver.split_data[split if split == Splits.TEST else Splits.TRAIN]['annotations']
+    image_ids = im_inds or list(range(len(annotations)))
+    if im_inds is not None:
+        annotations = [annotations[i] for i in im_inds]
+
+    # Filter out unwanted predicates/object classes
+    if obj_inds is None and pred_inds is None:
+        objects = list(hicodet_driver.objects)
+        predicates = list(hicodet_driver.predicates)
+    else:
+        obj_inds = set(obj_inds or range(len(hicodet_driver.objects)))
+        pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
+        assert 0 in pred_inds
+        new_im_inds, new_annotations = [], []
+        pred_count = {}
+        obj_count = {}
+        for i, im_ann in enumerate(annotations):
+            new_im_inters = []
+            for inter in im_ann['interactions']:
+                ann_obj = hicodet_driver.get_object_index(inter['id'])
+                ann_pred = hicodet_driver.get_predicate_index(inter['id'])
+                if ann_obj in obj_inds and ann_pred in pred_inds:
+                    new_im_inters.append(inter)
+                    pred_count[ann_pred] = pred_count.get(ann_pred, 0) + 1
+                    obj_count[ann_obj] = obj_count.get(ann_obj, 0) + 1
+            if new_im_inters:
+                new_im_inds.append(i)
+                new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
+        num_inters = sum([len(ann['interactions']) for ann in annotations])
+        diff_num_inters = num_inters - sum([len(ann['interactions']) for ann in new_annotations])
+        if diff_num_inters > 0:
+            print('%d/%d interaction%s been filtered out.' % (diff_num_inters, num_inters, ' has' if diff_num_inters == 1 else 's have'))
+        if len(new_im_inds) < len(image_ids):
+            print('Images have been discarded due to not having feasible predicates or objects. '
+                  'Image index has changed (from %d images to %d).' % (len(image_ids), len(new_im_inds)))
+        annotations = new_annotations
+        image_ids = [image_ids[i] for i in new_im_inds]
+
+        # Now we can add the person class: there won't be interactions with persons as an object if not in the initial indices, but the dataset
+        # includes the class anyway because the model must always be able to predict it.
+        # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
+        # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
+        objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.person_class})]
+        predicates = [hicodet_driver.predicates[i] for i in sorted(set(pred_count.keys()))]
+        if pred_inds - set(pred_count.keys()):
+            print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
+                  ', '.join(['%s (%d)' % (hicodet_driver.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
+        if obj_inds - set(obj_count.keys()):
+            print('The following objects have been discarded due to the lack of feasible predicates: %s.' %
+                  ', '.join(['%s (%d)' % (hicodet_driver.objects[o], o) for o in (obj_inds - set(obj_count.keys()))]))
+
+    # Filter images with invisible annotations
+    if filter_invisible:
+        vis_im_inds, annotations = zip(*[(i, ann) for i, ann in enumerate(annotations)
+                                         if any([not inter['invis'] for inter in ann['interactions']])])
+        num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
+        if num_new_images < num_old_images:
+            print('Images have been discarded due to not having visible interactions. '
+                  'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
+            image_ids = [image_ids[i] for i in vis_im_inds]
+    assert len(annotations) == len(image_ids)
+
+    return annotations, image_ids, objects, predicates
+
+
 def main():
     cfg.parse_args()
     cfg.print()
 
-    hd = HicoDetInstance(Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
+    hd = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
 
 if __name__ == '__main__':

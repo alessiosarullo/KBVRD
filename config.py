@@ -87,6 +87,7 @@ class DataConfig(BaseConfigs):
         self.flip_prob = 0.0
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
+        self.val_ratio = 0.1
         self.prinds = ''  # restrict the dataset to these predicates if not empty
         self.obinds = ''  # restrict the dataset to these objects if not empty
 

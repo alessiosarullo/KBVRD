@@ -5,11 +5,11 @@ import numpy as np
 from config import cfg
 from lib.bbox_utils import compute_ious
 from lib.containers import Minibatch, Prediction, Example
-from lib.dataset.hicodet import HicoDetInstance
+from lib.dataset.hicodet import HicoDetInstanceSplit
 
 
 class EvalStats:
-    def __init__(self, dataset: HicoDetInstance, use_gt_boxes=None, iou_thresh=0.5):
+    def __init__(self, dataset: HicoDetInstanceSplit, use_gt_boxes=None, iou_thresh=0.5):
         if use_gt_boxes is None:
             use_gt_boxes = cfg.program.predcls
         self.use_gt_boxes = use_gt_boxes
@@ -91,7 +91,7 @@ class EvalStats:
             print('    %10s: [%s]' % ('pcAP', ' '.join([_f(appc, _p=2) for appc in ap_per_class])))
 
     @classmethod
-    def evaluate_predictions(cls, dataset: HicoDetInstance, predictions: List[Dict], **kwargs):
+    def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
         assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
         eval_stats = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):

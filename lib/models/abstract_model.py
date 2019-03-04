@@ -6,13 +6,13 @@ import torch.nn as nn
 from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
 from lib.containers import Minibatch, Prediction
-from lib.dataset.hicodet import HicoDetInstance
+from lib.dataset.hicodet import HicoDetInstanceSplit
 from .context import SpatialContext, ObjectContext
 from .mask_rcnn import MaskRCNN
 
 
 class AbstractModel(nn.Module):
-    def __init__(self, dataset: HicoDetInstance, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__()
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
