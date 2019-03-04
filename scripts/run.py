@@ -87,7 +87,7 @@ class Launcher:
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
         val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size)
         training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
-        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader)
+        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, smoothing_window=len(val_loader))
         try:
             for epoch in range(cfg.opt.num_epochs):
                 self.detector.train()
