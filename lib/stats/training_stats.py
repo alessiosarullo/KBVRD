@@ -39,9 +39,6 @@ class SmoothedValue:
 
 class TrainingStats:
     def __init__(self, split, data_loader: DataLoader, smoothing_window=20):
-
-        tboard_dir = os.path.join(cfg.program.tensorboard_dir, split)
-        os.makedirs(tboard_dir)
         # try:
         # except FileExistsError:  # delete the content
         #     for the_file in os.listdir(tboard_dir):
@@ -51,9 +48,11 @@ class TrainingStats:
         self.split = split
         self.data_loader = data_loader
         self.history_window = smoothing_window
-
-        self.tblogger = SummaryWriter(tboard_dir)
         self.tb_ignored_keys = ['iter']
+
+        tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
+        os.makedirs(tboard_dir)
+        self.tblogger = SummaryWriter(tboard_dir)
         self.smoothed_losses = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_total_loss = SmoothedValue(self.history_window)
@@ -128,6 +127,7 @@ class TrainingStats:
                                                                                Timer.format(time_to_collate)),
               'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split_str, 'Epoch', get_only=True).progress()),
                                                                           Timer.format(est_time_per_epoch)))
+        print('-' * 10, flush=True)
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""
