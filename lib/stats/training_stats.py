@@ -112,7 +112,7 @@ class TrainingStats:
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
-        print('{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split, self._get_iter(epoch, batch), epoch, batch, num_batches),
+        print('{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split, self._get_iter(epoch, batch), epoch, batch + 1, num_batches),
               'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                        Timer.format(time_to_load),
                                                                        Timer.format(time_to_collate)),
@@ -120,7 +120,7 @@ class TrainingStats:
                                                                           Timer.format(est_time_per_epoch)))
 
     def _get_iter(self, epoch, batch):
-        return len(self.data_loader) * epoch + batch
+        return len(self.data_loader) * epoch + batch + 1
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""

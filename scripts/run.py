@@ -128,10 +128,10 @@ class Launcher:
             stats.batch_tic()
             epoch_loss += self.train_batch(batch, stats, optimizer)
             stats.batch_toc()
-            if optimizer is None:
+            if optimizer is not None:  # train
                 if batch_idx % cfg.program.print_interval == 0:
                     stats.log_stats(epoch=epoch_idx, batch=batch_idx, lr=optimizer.param_groups[0]['lr'])
-            else:
+            else:  # val
                 if batch_idx % cfg.program.print_interval == 0 or batch_idx == (len(data_loader) - 1):
                     stats.log_stats(epoch=epoch_idx, batch=batch_idx)
         epoch_loss /= len(data_loader)

@@ -16,7 +16,10 @@ from scripts.utils import Timer
 
 
 class HicoDetInstance(Dataset):
-    def __init__(self, split, im_inds=None, pred_inds=None, obj_inds=None, filter_invisible=True, hicodet_driver=None, flipping_prob=0):
+    def __init__(self, split,
+                 im_inds=None, pred_inds=None, obj_inds=None,
+                 filter_invisible=True, flipping_prob=0,
+                 hicodet_driver=None):
         """
         """
         # TODO docs
@@ -115,7 +118,9 @@ class HicoDetInstance(Dataset):
         pass  # You could add a data augmentation pipeline here, but we don't.
 
         ################# In case of precomputed features
-        if self.is_train and cfg.program.load_precomputed_feats:
+        if not self.is_test_split and cfg.program.load_precomputed_feats:
+            # TODO extract features for test set
+            print('Loading precomputed feats for %s split.' % self.split.value)
             assert self.flipping_prob == 0  # TODO extract features for flipped image?
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
@@ -127,7 +132,6 @@ class HicoDetInstance(Dataset):
                 self.pc_box_im_inds = self.pc_feats_file['box_im_inds'][:]
                 self.pc_image_ids = self.pc_feats_file['image_ids'][:]
 
-            # TODO decide whether to add support when this is not true
             assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
             assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
             self.im_id_to_pc_im_idx = {}
@@ -168,8 +172,16 @@ class HicoDetInstance(Dataset):
         return self._hicodet.get_img_dir(self.split)
 
     @property
-    def is_train(self):
+    def is_train_split(self):
         return self.split == Splits.TRAIN
+
+    @property
+    def is_val_split(self):
+        return self.split == Splits.VAL
+
+    @property
+    def is_test_split(self):
+        return self.split == Splits.TEST
 
     @property
     def coco_to_hico_mapping(self):
@@ -238,10 +250,10 @@ class HicoDetInstance(Dataset):
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
-            shuffle = True if self.is_train else False
+            shuffle = True if self.is_train_split else False
         batch_size = batch_size * num_gpus
-        if not self.is_train and batch_size > 1:
-            print('Only single-image batches are supported during evaluation. Batch size changed from %d to 1.' % batch_size)
+        if self.is_test_split and batch_size > 1:
+            print('Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
             batch_size = 1
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
@@ -264,7 +276,7 @@ class HicoDetInstance(Dataset):
         if read_img:
             raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
             img_h, img_w = raw_image.shape[:2]
-            flipped = self.is_train and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
+            flipped = self.is_train_split and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
             if flipped:
                 raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
                 gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
