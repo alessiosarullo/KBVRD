@@ -70,7 +70,7 @@ class Launcher:
             red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
             other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
             params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate * hoi_lr_coeff}, {'params': other_params}]
-            print('LR of HOI branch (%d parameters) multiplied by.' % (len(params[0]['params']), hoi_lr_coeff))
+            print('LR of HOI branch (%d parameters) multiplied by %f.' % (len(params[0]['params']), hoi_lr_coeff))
         else:
             params = self.detector.parameters()
 
