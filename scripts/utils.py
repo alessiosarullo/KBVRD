@@ -55,7 +55,11 @@ class Timer:
         sep = ' ' * 4
         s = ['%s (x%d)' % (self.format(self.spent(average=average)), self.num_instances)]
         for k, v in self.sub_timers.items():
-            sub_s = v._get_lines(average)
+            try:
+                sub_s = v._get_lines(average)
+            except ZeroDivisionError:
+                print(k)
+                raise
             s.append('%s %s: %s' % (sep, k, sub_s[0]))
             s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
         return s

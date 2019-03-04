@@ -94,6 +94,8 @@ class TrainingStats:
             for k, v in stats['Watch'].items():
                 print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
 
+        print('-' * 10, flush=True)
+
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)
 
@@ -127,7 +129,6 @@ class TrainingStats:
                                                                                Timer.format(time_to_collate)),
               'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split_str, 'Epoch', get_only=True).progress()),
                                                                           Timer.format(est_time_per_epoch)))
-        print('-' * 10, flush=True)
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""
