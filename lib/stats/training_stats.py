@@ -38,7 +38,7 @@ class SmoothedValue:
 
 
 class TrainingStats:
-    def __init__(self, split, data_loader: DataLoader, smoothing_window=20):
+    def __init__(self, split, data_loader: DataLoader, history_window=20):
         # try:
         # except FileExistsError:  # delete the content
         #     for the_file in os.listdir(tboard_dir):
@@ -47,7 +47,7 @@ class TrainingStats:
 
         self.split = split
         self.data_loader = data_loader
-        self.history_window = smoothing_window
+        self.history_window = history_window
         self.tb_ignored_keys = ['iter']
 
         tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)

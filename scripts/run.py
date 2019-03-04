@@ -64,12 +64,14 @@ class Launcher:
             # print("Continuing from epoch %d." % (start_epoch + 1))
 
     def get_optim(self):
-        # # Lower the learning rate of some layers. It's a hack, but it helps stabilize the models.
-        # red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
-        # other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
-        # params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate / 10.0}, {'params': other_params}]
-        # print('Reduced LR of %d parameters.' % len(params[0]['params']))
-        params = self.detector.parameters()
+        if cfg.opt.hoi_lr_coeff != 1:
+            # Lower the learning rate of HOI layers..
+            red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
+            other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
+            params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate / cfg.opt.hoi_lr_coeff}, {'params': other_params}]
+            print('Reduced LR of %d parameters.' % len(params[0]['params']))
+        else:
+            params = self.detector.parameters()
 
         if cfg.opt.adam:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
@@ -87,7 +89,7 @@ class Launcher:
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
         val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size)
         training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
-        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, smoothing_window=len(val_loader))
+        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
         try:
             for epoch in range(cfg.opt.num_epochs):
                 self.detector.train()
