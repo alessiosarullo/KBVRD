@@ -50,7 +50,7 @@ class AbstractModel(nn.Module):
             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
 
             if not predict:
-                assert None not in (hoi_infos, box_labels, hoi_labels)
+                assert hoi_infos is not None and box_labels is not None and hoi_labels is not None
                 obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
                 return obj_output, hoi_output, box_labels, hoi_labels
             else:
