@@ -366,7 +366,7 @@ def save_lists():
         f.write('\n'.join(hd.predicates))
     path_action_synsets_file = os.path.join(hd.data_dir, 'action_synsets.txt')
     with open(path_action_synsets_file, 'w') as f:
-        f.write('\n'.join([' '.join([syn for syn in predicate.get_split('syn', [hd.null_interaction])]) for predicate in hd.wn_predicate_dict.values()]))
+        f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', [hd.null_interaction])]) for predicate in hd.wn_predicate_dict.values()]))
 
 
 def print_num_preds():

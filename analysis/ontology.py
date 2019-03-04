@@ -33,9 +33,9 @@ def load_allowed_rels(version):
             p_str = p_str.replace('_', ' ')
             o = o.replace('_', ' ')
             b = (b == 'true')
-            si = l2i.get_split(s, 0)
+            si = l2i.get(s, 0)
             pi = p2i[p_str]
-            oi = l2i.get_split(o, 0)
+            oi = l2i.get(o, 0)
             kb_rels[si, oi, pi] = b
         print('Number absurd relations: %d.' % np.sum(kb_rels == 0))
         kb_rels[0, :, :] = False
