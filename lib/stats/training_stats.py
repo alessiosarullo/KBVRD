@@ -95,7 +95,7 @@ class TrainingStats:
 
     def epoch_toc(self):
         epoch_timer = Timer.get(self.split, 'Epoch')
-        epoch_timer .toc()
+        epoch_timer.toc()
         print('Time for epoch:', Timer.format(epoch_timer.last))
         print('-' * 100, flush=True)
 
@@ -116,7 +116,7 @@ class TrainingStats:
               'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                        Timer.format(time_to_load),
                                                                        Timer.format(time_to_collate)),
-              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Epoch', get_only=True).progress()),
+              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.split, 'Epoch', get_only=True).progress()),
                                                                           Timer.format(est_time_per_epoch)))
 
     def _get_iter(self, epoch, batch):
