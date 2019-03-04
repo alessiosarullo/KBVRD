@@ -135,7 +135,7 @@ class OptimizerConfig(BaseConfigs):
         self.grad_clip = 5.0
 
         self.num_epochs = 10
-        self.batch_size = 4
+        self.batch_size = 8
 
 
 class Configs:
