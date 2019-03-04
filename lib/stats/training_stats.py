@@ -126,14 +126,14 @@ class TrainingStats:
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
         if self.split == Splits.VAL:
-            header = ' epoch {:2d}.'.format(self.split_str, epoch)
+            header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
         else:
             try:
                 batch = kwargs['batch']
                 curr_iter = kwargs['curr_iter']
             except KeyError:
                 raise
-            header = 'Train iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch + 1, num_batches)
+            header = '{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch + 1, num_batches)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
