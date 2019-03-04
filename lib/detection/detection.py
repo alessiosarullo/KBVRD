@@ -20,18 +20,14 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
 
     im_info = inputs['im_info']
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').tic()
     nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)
-    Timer.get('Epoch', 'Batch', 'Detect', 'ImDetBox').toc()
     assert nonnms_boxes.shape[0] > 0  # this might not be true
 
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
     u_nonnms_im_ids = np.unique(nonnms_im_ids)
 
-    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').tic()
     box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
-    Timer.get('Epoch', 'Batch', 'Detect', 'NMS').toc()
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
     u_im_ids = np.unique(im_ids)
@@ -43,9 +39,7 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
 
         box_feats = get_rois_feats(model, feat_map, boxes)
         assert box_feats.shape[1] == feat_dim
-        Timer.get('Epoch', 'Batch', 'Detect', 'Mask').tic()
         masks = im_detect_mask(model, im_ids, boxes, feat_map)
-        Timer.get('Epoch', 'Batch', 'Detect', 'Mask').toc()
 
         assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
                masks.shape[0] == scores.shape[0] == box_feats.shape[0]

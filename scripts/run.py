@@ -103,8 +103,8 @@ class Launcher:
                 if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
                     print('Exiting training early.', flush=True)
                     break
-            Timer.get().print()
             cfg.save()
+            Timer.get().print()
         finally:
             training_stats.close_tensorboard_logger()
 

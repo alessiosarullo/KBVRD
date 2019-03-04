@@ -69,19 +69,13 @@ class MaskRCNN(nn.Module):
             box_classes = box_pred_classes[:, 0].astype(np.int)
             box_class_scores = box_pred_classes[:, 1]
 
-            Timer.get('Epoch', 'Batch', 'Conv').tic()
             fmap = self.mask_rcnn.Conv_Body(x.imgs)
-            Timer.get('Epoch', 'Batch', 'Conv').toc(synchronize=True)
-            Timer.get('Epoch', 'Batch', 'Mask').tic()
             masks = self.get_masks(x.img_infos, fmap, boxes, box_im_ids)
-            Timer.get('Epoch', 'Batch', 'Mask').toc(synchronize=True)
         else:
             inputs = {'data': x.imgs,
                       'im_info': x.img_infos
                       }
-            Timer.get('Epoch', 'Batch', 'Detect').tic()
             box_class_scores, boxes, box_classes, box_im_ids, masks, fmap, box_feats, scores = im_detect_all_with_feats(self.mask_rcnn, inputs)
-            Timer.get('Epoch', 'Batch', 'Detect').toc()
         if kwargs.get('return_det_results', False):
             im_scales = x.img_infos[:, 2].cpu().numpy()
             boxes /= im_scales[box_im_ids, None]
