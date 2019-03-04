@@ -49,11 +49,17 @@ class HicoDetInstance(Dataset):
             pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
             assert 0 in pred_inds
             new_im_inds, new_annotations = [], []
+            pred_count= {}
+            obj_count = {}
             for i, im_ann in enumerate(annotations):
                 new_im_inters = []
                 for inter in im_ann['interactions']:
-                    if hicodet_driver.get_object_index(inter['id']) in obj_inds and hicodet_driver.get_predicate_index(inter['id']) in pred_inds:
+                    ann_obj = hicodet_driver.get_object_index(inter['id'])
+                    ann_pred = hicodet_driver.get_predicate_index(inter['id'])
+                    if ann_obj in obj_inds and ann_pred in pred_inds:
                         new_im_inters.append(inter)
+                        pred_count[ann_pred] = pred_count.get(ann_pred, 0) + 1
+                        obj_count[ann_obj] = obj_count.get(ann_obj, 0) + 1
                 if new_im_inters:
                     new_im_inds.append(i)
                     new_annotations.append({k: (v if k != 'interactions' else new_im_inters) for k, v in im_ann.items()})
@@ -69,9 +75,16 @@ class HicoDetInstance(Dataset):
 
             # Now we can add the person class: there won't be interactions with persons as an object if not in the initial indices, but the dataset
             # includes the class anyway because the model must always be able to predict it.
-            obj_inds.add(hicodet_driver.person_class)
-            self._objects = [hicodet_driver.objects[i] for i in sorted(obj_inds)]
-            self._predicates = [hicodet_driver.predicates[i] for i in sorted(pred_inds)]
+            # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
+            # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
+            self._objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.person_class})]
+            self._predicates = [hicodet_driver.predicates[i] for i in sorted(set(pred_count.keys()))]
+            if pred_inds - set(pred_count.keys()):
+                print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
+                      ', '.join(['%s (%d)' % (hicodet_driver.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
+            if obj_inds - set(obj_count.keys()):
+                print('The following objects have been discarded due to the lack of feasible predicates: %s.' %
+                      ', '.join(['%s (%d)' % (hicodet_driver.objects[o], o) for o in (obj_inds - set(obj_count.keys()))]))
         self._person_class_index = self._objects.index('person')
 
         # Filter images with invisible annotations
@@ -277,9 +290,9 @@ class HicoDetInstance(Dataset):
         return entry
 
     def __getitem__(self, idx):
-        Timer.get('Epoch', 'GetBatch').tic()
+        Timer.get('GetBatch').tic()
         entry = self.get_entry(idx)
-        Timer.get('Epoch', 'GetBatch').toc()
+        Timer.get('GetBatch').toc()
         return entry
 
     def __len__(self):

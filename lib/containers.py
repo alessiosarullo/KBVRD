@@ -112,12 +112,12 @@ class Minibatch:
 
     @classmethod
     def collate(cls, examples):
-        Timer.get('Epoch', 'Collate').tic()
+        Timer.get('Collate').tic()
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
         minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant
-        Timer.get('Epoch', 'Collate').toc()
+        Timer.get('Collate').toc()
         return minibatch
 
     @staticmethod

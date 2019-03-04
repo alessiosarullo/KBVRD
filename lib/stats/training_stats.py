@@ -6,6 +6,8 @@ import torch
 from collections import deque
 from typing import Dict
 from tensorboardX import SummaryWriter
+from scripts.utils import Timer
+from torch.utils.data import DataLoader
 
 
 class SmoothedValue:
@@ -34,19 +36,21 @@ class SmoothedValue:
 
 
 class TrainingStats:
-    def __init__(self, num_batches, smoothing_window=20):
+    def __init__(self, split: str, data_loader: DataLoader, smoothing_window=20):
 
-        os.makedirs(cfg.program.tensorboard_dir)
+        tboard_dir = os.path.join(cfg.program.tensorboard_dir, split)
+        os.makedirs(tboard_dir)
         # try:
         # except FileExistsError:  # delete the content
-        #     for the_file in os.listdir(cfg.program.tensorboard_dir):
-        #         file_path = os.path.join(cfg.program.tensorboard_dir, the_file)
+        #     for the_file in os.listdir(tboard_dir):
+        #         file_path = os.path.join(tboard_dir, the_file)
         #         os.remove(file_path)
 
-        self.num_batches = num_batches
+        self.split = split.capitalize()
+        self.data_loader = data_loader
         self.history_window = smoothing_window
 
-        self.tblogger = SummaryWriter(cfg.program.tensorboard_dir)
+        self.tblogger = SummaryWriter(tboard_dir)
         self.tb_ignored_keys = ['iter']
         self.smoothed_losses = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
@@ -65,13 +69,15 @@ class TrainingStats:
         for name, value in output_dict.get('watch', {}).items():
             self.values_to_watch.setdefault(name, deque(maxlen=self.history_window)).append(value)  # FIXME magic constant
 
-    def log_stats(self, curr_iter, lr):
+    def log_stats(self, epoch, batch, lr=None):
         """Log the tracked statistics."""
+        self._print_times(epoch, batch)
         stats = {'Total loss': self.smoothed_total_loss.get_average(),
-                 'LR': lr,
                  'Metrics': {k: v.get_median() for k, v in self.smoothed_metrics.items()},
                  'Watch': {k: torch.cat(tuple(v), dim=0) for k, v in self.values_to_watch.items()},
                  }
+        if lr is not None:
+            stats['LR'] = lr
         for k, v in self.smoothed_losses.items():
             loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
             stats[loss_name] = v.get_average()
@@ -82,7 +88,39 @@ class TrainingStats:
                 print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
 
         if self.tblogger is not None:
-            self._tb_log_stats(stats, curr_iter)
+            self._tb_log_stats(stats, self._get_iter(epoch, batch))
+
+    def epoch_tic(self):
+        Timer.get(self.split, 'Epoch').tic()
+
+    def epoch_toc(self):
+        epoch_timer = Timer.get(self.split, 'Epoch')
+        epoch_timer .toc()
+        print('Time for epoch:', Timer.format(epoch_timer.last))
+        print('-' * 100, flush=True)
+
+    def batch_tic(self):
+        Timer.get(self.split, 'Epoch', 'Batch').tic()
+
+    def batch_toc(self):
+        Timer.get(self.split, 'Epoch', 'Batch').toc()
+
+    def _print_times(self, epoch, batch):
+        num_batches = len(self.data_loader)
+        time_per_batch = Timer.get(self.split, 'Epoch', 'Batch', get_only=True).spent(average=True)
+        time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
+        time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
+        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
+
+        print('{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split, self._get_iter(epoch, batch), epoch, batch, num_batches),
+              'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
+                                                                       Timer.format(time_to_load),
+                                                                       Timer.format(time_to_collate)),
+              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Epoch', get_only=True).progress()),
+                                                                          Timer.format(est_time_per_epoch)))
+
+    def _get_iter(self, epoch, batch):
+        return len(self.data_loader) * epoch + batch
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""

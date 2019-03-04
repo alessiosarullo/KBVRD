@@ -166,6 +166,12 @@ class Configs:
     @classmethod
     def init_detectron_cfgs(cls):
         import lib.detection.wrappers as pydet
+        if pydet.cfg_from_file is None:
+            assert pydet.cfg is None and pydet.assert_and_infer_cfg is None
+            raise ModuleNotFoundError()
+        else:
+            assert pydet.cfg is not None and pydet.assert_and_infer_cfg is not None
+
         cfg_file = 'pydetectron/configs/baselines/%s.yaml' % cls.model.rcnn_arch
 
         print("Loading Detectron's configs from {}.".format(cfg_file))
