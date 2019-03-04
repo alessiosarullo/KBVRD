@@ -19,11 +19,11 @@ DATETIME=`date +'%Y-%m-%d_%H-%M-%S'`
 EXP_FULL_NAME="${DATETIME}_${EXP_NAME}"
 EXP_DIR=${OUTPUT_DIR}/${EXP_FULL_NAME}
 LOG="$EXP_DIR/log.txt"
-LAST_EXP_SYMLINK="last_exp"
+LAST_EXP_SYMLINK="output/last_exp"
 
 mkdir -p ${EXP_DIR}
 rm -f -- ${LAST_EXP_SYMLINK}
-ln -rs ${EXP_DIR} "output/${LAST_EXP_SYMLINK}"
+ln -rs ${EXP_DIR} ${LAST_EXP_SYMLINK}
 exec &> >(tee -a "$LOG")
 echo Logging ${EXP_DIR} to "$LOG"
 
