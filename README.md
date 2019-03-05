@@ -48,3 +48,12 @@
 1) Substitute `rpn_heads.py` and `model_builder.py`, add `generate_proposals_torch.py`.
     
 1) Compile HighwayLSTM
+    ```
+    cd lib/models/highway_lstm_cuda
+    ./make.sh
+    ```
+    NOTE: if NVCC is not in your current path you might want to use 
+    instead something like:
+    ```
+    PATH="/usr/local/cuda/bin:${PATH}" ./make.sh 
+    ```

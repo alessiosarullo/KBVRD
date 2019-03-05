@@ -16,8 +16,8 @@ echo $CUDA_ARCH
 cd src
 echo "Compiling kernel"
 nvcc -c -o highway_lstm_kernel.cu.o highway_lstm_kernel.cu --compiler-options -fPIC $CUDA_ARCH
-
-# F-Net style
+# Try this if the previous one doesn't work
 #nvcc -c -o highway_lstm_kernel.cu.o highway_lstm_kernel.cu -D GOOGLE_CUDA=1 -x cu -Xcompiler -fPIC $CUDA_ARCH
+
 cd ../
 python build.py
