@@ -158,7 +158,7 @@ class Launcher:
 
             for k, v in hoi_branch.named_parameters():
                 if v.requires_grad:
-                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
+                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm().item()
 
             optimizer.step()
 
