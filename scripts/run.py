@@ -151,19 +151,17 @@ class Launcher:
         losses['total_loss'] = loss
 
         hoi_branch = self.detector.hoi_branch  # type: AbstractHOIModule
-        values_to_watch = {k: v.detach().cpu() for k, v in hoi_branch.values_to_monitor.items()}
+        batch_stats = {'losses': losses, 'hist': {k: v.detach().cpu() for k, v in hoi_branch.values_to_monitor.items()}}
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
-            for k, v in hoi_branch.named_parameters():
-                if v.requires_grad:
-                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
+            batch_stats['watch'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in hoi_branch.named_parameters() if v.requires_grad}
 
             optimizer.step()
 
-        stats.update_stats({'losses': losses, 'hist': values_to_watch})
+        stats.update_stats(batch_stats)
 
         return loss
 
