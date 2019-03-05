@@ -137,7 +137,7 @@ class TrainingStats:
                 curr_iter = kwargs['curr_iter']
             except KeyError:
                 raise
-            header = '{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch + 1, num_batches)
+            header = '{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch, num_batches - 1)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
