@@ -64,8 +64,6 @@ class SimpleHOIModule(AbstractHOIModule):
             ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
         ))
 
-        self.last_values = {}
-
     def _forward(self, union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
         # TODO docs
         # Every input is a Tensor
@@ -84,13 +82,13 @@ class SimpleHOIModule(AbstractHOIModule):
         rel_feats = torch.cat([rel_vis_feats, in_spatial_rels_feats, spatial_ctx_rep, objs_ctx_rep], dim=1)
         rel_emb = self.rel_output_emb_fc(rel_feats)
 
-        self.last_values['visual-boxes'] = in_box_feats
-        self.last_values['visual-union_boxes_feats'] = in_union_boxes_feats
-        self.last_values['spatial'] = in_spatial_rels_feats
-        self.last_values['obj_ctx_rep'] = objs_ctx_rep
-        self.last_values['sp_ctx_rep'] = spatial_ctx_rep
-        self.last_values['concat'] = rel_feats
-        self.last_values['final_emb'] = rel_emb
+        self.values_to_monitor['visual-boxes'] = in_box_feats
+        self.values_to_monitor['visual-union_boxes_feats'] = in_union_boxes_feats
+        self.values_to_monitor['spatial'] = in_spatial_rels_feats
+        self.values_to_monitor['obj_ctx_rep'] = objs_ctx_rep
+        self.values_to_monitor['sp_ctx_rep'] = spatial_ctx_rep
+        self.values_to_monitor['concat'] = rel_feats
+        self.values_to_monitor['final_emb'] = rel_emb
 
         return rel_emb
 

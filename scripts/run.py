@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from config import Configs as cfg
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.models.base_model import BaseModel
+from lib.models.base_model import BaseModel, AbstractHOIModule
 from lib.stats.eval_stats import EvalStats
 from lib.stats.training_stats import TrainingStats
 from scripts.utils import Timer
@@ -148,13 +148,15 @@ class Launcher:
         assert losses is not None
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss
-        values_to_watch = {[k]: v.detach().cpu() for k, v in self.detector.hoi_branch.last_values.items()}
+
+        hoi_branch = self.detector.hoi_branch  # type: AbstractHOIModule
+        values_to_watch = {k: v.detach().cpu() for k, v in hoi_branch.values_to_monitor.items()}
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
-            for k, v in self.detector.hoi_branch.last_values.items():
+            for k, v in hoi_branch.values_to_monitor.items():
                 values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
 
             optimizer.step()

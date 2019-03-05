@@ -324,6 +324,7 @@ class AbstractHOIModule(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
+        self.values_to_monitor = {}
 
     def forward(self, *args, **kwargs):
         # TODO docs
