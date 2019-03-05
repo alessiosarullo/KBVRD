@@ -134,7 +134,7 @@ def print_params(model, breakdown=False):
 
         strings.append('### %s' % module)
         for p_name, (size, prod, p_req_grad) in sorted(mod_data.items(), key=lambda x: -x[1][1]):
-            strings.append("{:<100s}: {:<16s}({:8d})".format(p_name, '[{}]'.format(','.join(size)), prod))
+            strings.append("{:<100s}: {:<16s}({:8d}) [%1s]".format(p_name, '[{}]'.format(','.join(size)), prod, 'x' if p_req_grad else ''))
 
     s = '\n{0}\n{1} total parameters ({2} trainable ones):\n{3}\n{4}\n{0}'.format('#' * 100,
                                                                                   _format(total_params),
