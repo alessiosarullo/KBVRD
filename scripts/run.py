@@ -157,7 +157,8 @@ class Launcher:
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
             for k, v in hoi_branch.values_to_monitor.items():
-                values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
+                if v.requires_grad:
+                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
 
             optimizer.step()
 
