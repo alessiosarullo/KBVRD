@@ -148,13 +148,13 @@ class Launcher:
         assert losses is not None
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss
-        values_to_watch = {[k]: v.detach().cpu() for k, v in self.detector.hoi_branch.last_feats.items()}
+        values_to_watch = {[k]: v.detach().cpu() for k, v in self.detector.hoi_branch.last_values.items()}
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
-            for k, v in self.detector.hoi_branch.last_feats.items():
+            for k, v in self.detector.hoi_branch.last_values.items():
                 values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
 
             optimizer.step()
