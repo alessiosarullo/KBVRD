@@ -51,7 +51,7 @@ def load_word_vectors(wv_type, dim):
         cm = open(fname_txt, 'rb')
         cm = [line for line in cm]
     else:
-        raise RuntimeError('Unable to load word vectors from %s.' % fname)
+        raise RuntimeError('Unable to load word vectors from %s' % fname)
 
     wv_tokens, wv_arr, wv_size = [], array.array('d'), None
     if cm is not None:

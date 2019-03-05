@@ -98,6 +98,7 @@ class AbstractModel(nn.Module):
         spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
         hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        # TODO continue for nmotifs
 
         obj_output = self.obj_output_fc(objs_embs)
         hoi_output = self.hoi_output_fc(hoi_embs)

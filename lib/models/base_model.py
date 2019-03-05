@@ -64,6 +64,10 @@ class SimpleHOIBranch(AbstractHOIBranch):
             ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
         ))
 
+    @property
+    def output_dim(self):
+        return self.hoi_emb_dim
+
     def _forward(self, union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
         # TODO docs
         # Every input is a Tensor
@@ -91,7 +95,3 @@ class SimpleHOIBranch(AbstractHOIBranch):
         self.values_to_monitor['final_emb'] = rel_emb
 
         return rel_emb
-
-    @property
-    def output_dim(self):
-        return self.hoi_emb_dim
