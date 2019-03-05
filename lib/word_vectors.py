@@ -10,6 +10,7 @@ import torch
 
 from config import cfg
 
+# TODO use WordEmbeddings
 
 # FIXME check and update
 def obj_edge_vectors(names, wv_dim=300):
@@ -43,14 +44,14 @@ def load_word_vectors(wv_type, dim):
     fname = os.path.join(root, wv_type + '.' + dim)
     if os.path.isfile(fname + '.pt'):
         fname_pt = fname + '.pt'
-        print('loading word vectors from', fname_pt)
+        print('Loading word vectors from', fname_pt)
         return torch.load(fname_pt)
     if os.path.isfile(fname + '.txt'):
         fname_txt = fname + '.txt'
         cm = open(fname_txt, 'rb')
         cm = [line for line in cm]
     else:
-        raise RuntimeError('unable to load word vectors')
+        raise RuntimeError('Unable to load word vectors from %s.' % fname)
 
     wv_tokens, wv_arr, wv_size = [], array.array('d'), None
     if cm is not None:
