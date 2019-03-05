@@ -5,9 +5,9 @@ set -e
 
 export PYTHONUNBUFFERED="True"
 
-NET='base'
-EXP_NAME=$1
-GPU_ID=$2
+NET=$1
+EXP_NAME=$2
+GPU_ID=$3
 # The following parameters are optional: a default value is provided and it is only substituted if the relative argument is unset or has a null value
 # (e.g., the empty string ''). Remove the colon to only substitute if unset.
 
