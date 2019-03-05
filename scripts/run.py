@@ -78,7 +78,7 @@ class Launcher:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, momentum=0.9)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs')
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
         return optimizer, scheduler
 
     def train(self):
@@ -148,13 +148,19 @@ class Launcher:
         assert losses is not None
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss
-        stats.update_stats({'losses': losses, 'watch': self.detector.hoi_branch.last_feats})
-
+        values_to_watch = {[k]: v.detach().cpu() for k, v in self.detector.hoi_branch.last_feats.items()}
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
+
+            for k, v in self.detector.hoi_branch.last_feats.items():
+                values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
+
             optimizer.step()
+
+        stats.update_stats({'losses': losses, 'watch': values_to_watch})
+
         return loss
 
     def test(self):

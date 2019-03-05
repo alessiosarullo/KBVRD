@@ -64,7 +64,7 @@ class SimpleHOIModule(AbstractHOIModule):
             ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
         ))
 
-        self.last_feats = {}
+        self.last_values = {}
 
     def _forward(self, union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, unique_im_ids, hoi_im_ids, sub_inds, obj_inds):
         # TODO docs
@@ -84,13 +84,13 @@ class SimpleHOIModule(AbstractHOIModule):
         rel_feats = torch.cat([rel_vis_feats, in_spatial_rels_feats, spatial_ctx_rep, objs_ctx_rep], dim=1)
         rel_emb = self.rel_output_emb_fc(rel_feats)
 
-        self.last_feats['visual-boxes'] = in_box_feats.detach().cpu()
-        self.last_feats['visual-union_boxes_feats'] = in_union_boxes_feats.detach().cpu()
-        self.last_feats['spatial'] = in_spatial_rels_feats.detach().cpu()
-        self.last_feats['obj_ctx_rep'] = objs_ctx_rep.detach().cpu()
-        self.last_feats['sp_ctx_rep'] = spatial_ctx_rep.detach().cpu()
-        self.last_feats['concat'] = rel_feats.detach().cpu()
-        self.last_feats['final_emb'] = rel_emb.detach().cpu()
+        self.last_values['visual-boxes'] = in_box_feats
+        self.last_values['visual-union_boxes_feats'] = in_union_boxes_feats
+        self.last_values['spatial'] = in_spatial_rels_feats
+        self.last_values['obj_ctx_rep'] = objs_ctx_rep
+        self.last_values['sp_ctx_rep'] = spatial_ctx_rep
+        self.last_values['concat'] = rel_feats
+        self.last_values['final_emb'] = rel_emb
 
         return rel_emb
 
