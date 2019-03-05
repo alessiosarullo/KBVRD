@@ -132,8 +132,9 @@ class Launcher:
             stats.batch_toc()
 
             self.curr_train_iter += 0 if optimizer is None else 1
-            if optimizer is not None and batch_idx % cfg.program.print_interval == 0:
+            if optimizer is not None and batch_idx % cfg.program.log_interval == 0:
                 stats.log_stats(self.curr_train_iter, epoch_idx, batch=batch_idx,
+                                verbose=batch_idx % cfg.program.log_interval == 0,
                                 lr=optimizer.param_groups[0]['lr'])  # TODO lr for each parameter group
         if optimizer is None:
             stats.log_stats(self.curr_train_iter, epoch_idx)
@@ -158,11 +159,11 @@ class Launcher:
 
             for k, v in hoi_branch.named_parameters():
                 if v.requires_grad:
-                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm().item()
+                    values_to_watch[k + '_gradnorm'] = v.grad.detach().cpu().norm()
 
             optimizer.step()
 
-        stats.update_stats({'losses': losses, 'watch': values_to_watch})
+        stats.update_stats({'losses': losses, 'hist': values_to_watch})
 
         return loss
 

@@ -38,12 +38,9 @@ class SmoothedValue:
 
 
 class TrainingStats:
-    def __init__(self, split, data_loader: DataLoader, history_window=20):
-        # try:
-        # except FileExistsError:  # delete the content
-        #     for the_file in os.listdir(tboard_dir):
-        #         file_path = os.path.join(tboard_dir, the_file)
-        #         os.remove(file_path)
+    def __init__(self, split, data_loader: DataLoader, history_window=None):
+        if history_window is None:
+            history_window = cfg.program.log_interval
 
         self.split = split
         self.data_loader = data_loader
@@ -53,10 +50,11 @@ class TrainingStats:
         tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
         os.makedirs(tboard_dir)
         self.tblogger = SummaryWriter(tboard_dir)
+        self.smoothed_total_loss = SmoothedValue(self.history_window)
         self.smoothed_losses = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
-        self.smoothed_total_loss = SmoothedValue(self.history_window)
-        self.values_to_watch = {}
+        self.values_to_watch = {}  # type: Dict[str, SmoothedValue]
+        self.histograms = {}
 
     @property
     def split_str(self):
@@ -75,30 +73,36 @@ class TrainingStats:
                 self.smoothed_total_loss.append(output_dict['losses'][loss_name].item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
+        for name, value in output_dict.get('hist', {}).items():
+            self.histograms.setdefault(name, deque(maxlen=self.history_window)).append(value)
         for name, value in output_dict.get('watch', {}).items():
-            self.values_to_watch.setdefault(name, deque(maxlen=self.history_window)).append(value)  # FIXME magic constant
+            self.values_to_watch.setdefault(name, SmoothedValue(self.history_window)).append(value.item())
 
-    def log_stats(self, curr_iter, epoch, batch=None, **kwargs):
+    def log_stats(self, curr_iter, epoch, batch=None, verbose=False, **kwargs):
         """Log the tracked statistics."""
-        self._print_times(epoch, batch=batch, curr_iter=curr_iter)
-        stats = {'Total loss': self.smoothed_total_loss.get_average(),
-                 'Metrics': {k: v.get_median() for k, v in self.smoothed_metrics.items()},
-                 'Watch': {k: torch.cat(tuple(v), dim=0) for k, v in self.values_to_watch.items()},
-                 }
-        for k, v in self.smoothed_losses.items():
-            loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
-            stats[loss_name] = v.get_average()
-            print('%-20s %f' % (loss_name, stats[loss_name]))
-        print('%-20s %f' % ('Total loss', stats['Total loss']))
+        if verbose:
+            self._print_times(epoch, batch=batch, curr_iter=curr_iter)
 
+        stats = {'Total loss': self.smoothed_total_loss.get_average(),
+                 'Metrics': {k: v.get_average() for k, v in self.smoothed_metrics.items()},
+                 'Watch': {k: v.get_average() for k, v in self.values_to_watch.items()},
+                 'Hist': {k: torch.cat(tuple(v), dim=0) for k, v in self.histograms.items()},
+                 }
         for k, v in kwargs.items():
             stats[k] = v
 
-        if cfg.program.verbose:
-            for k, v in stats['Watch'].items():
-                print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
+        for k, v in self.smoothed_losses.items():
+            loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
+            stats[loss_name] = v.get_average()
+            if verbose:
+                print('%-20s %f' % (loss_name, stats[loss_name]))
 
-        print('-' * 10, flush=True)
+        if verbose:
+            print('%-20s %f' % ('Total loss', stats['Total loss']))
+            if cfg.program.verbose:
+                for k, v in stats['Hist'].items():
+                    print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
+            print('-' * 10, flush=True)
 
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)

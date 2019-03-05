@@ -37,6 +37,7 @@ class BaseConfigs:
 class ProgramConfig(BaseConfigs):
     def __init__(self):
         self.print_interval = 50
+        self.log_interval = 25
         self.sync = False
         self.verbose = False
 
