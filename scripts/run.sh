@@ -27,4 +27,4 @@ ln -rs ${EXP_DIR} ${LAST_EXP_SYMLINK}
 exec &> >(tee -a "$LOG")
 echo Logging ${EXP_DIR} to "$LOG"
 
-python -u scripts/run.py --model ${NET} --save_dir ${EXP_DIR} "${@:3}"
+python -u scripts/run.py --model ${NET} --save_dir ${EXP_DIR} "${@:4}"
