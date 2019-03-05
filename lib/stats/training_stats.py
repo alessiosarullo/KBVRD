@@ -8,7 +8,7 @@ from typing import Dict
 from tensorboardX import SummaryWriter
 
 from lib.dataset.utils import Splits
-from scripts.utils import Timer
+from lib.stats.utils import Timer
 from torch.utils.data import DataLoader
 
 

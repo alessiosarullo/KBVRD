@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from scripts.utils import Timer
+from lib.stats.utils import Timer
 
 
 class Example:

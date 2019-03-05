@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 from analysis.utils import vis_one_image
-from config import Configs as cfg
+from config import cfg
 from lib.containers import Minibatch
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
@@ -29,7 +29,7 @@ def count():
     # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
 
     results, hds = _setup_and_load()
-    stats = EvalStats.evaluate_predictions(hds, results)
+    stats = EvalStats.evaluate_predictions(hds, results)  # type: EvalStats
     stats.print()
 
     gt_hois = hds.hois

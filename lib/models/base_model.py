@@ -4,7 +4,7 @@ import math
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from .abstract_model import AbstractModel, AbstractHOIModule
+from .abstract_model import AbstractModel, AbstractHOIBranch
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
@@ -15,13 +15,13 @@ class BaseModel(AbstractModel):
         super().__init__(dataset, **kwargs)
 
     def _get_hoi_branch(self):
-        return SimpleHOIModule(self.mask_rcnn_vis_feat_dim,
+        return SimpleHOIBranch(self.mask_rcnn_vis_feat_dim,
                                self.spatial_context_branch.spatial_emb_dim,
                                self.obj_branch.output_ctx_dim,
                                self.spatial_context_branch.output_dim)
 
 
-class SimpleHOIModule(AbstractHOIModule):
+class SimpleHOIBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim):
         super().__init__()
 

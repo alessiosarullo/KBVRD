@@ -7,25 +7,25 @@ import pickle
 
 class BaseConfigs:
     def parse_args(self, args):
-        namespace = self._get_arg_parser().parse_known_args(args)
-        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
+        parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
+        for k, v in vars(self).items():
+            self._add_argument(parser, k, v)
+        namespace = parser.parse_known_args(args)
+        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})  # TODO use defaults instead of the not None check
         self._postprocess_args()
         return namespace[1]
 
+    def _add_argument(self, parser, param_name, param_value):
+        if param_value is not None:
+            parser_kwargs = {'dest': param_name}
+            if type(param_value) == bool:
+                parser_kwargs['action'] = 'store_%s' % str(not param_value).lower()
+            else:
+                parser_kwargs['type'] = type(param_value)
+            parser.add_argument('--%s' % param_name, **parser_kwargs)
+
     def _postprocess_args(self):
         pass
-
-    def _get_arg_parser(self):
-        parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
-        for k, v in vars(self).items():
-            if v is not None:
-                parser_kwargs = {'dest': k}
-                if type(v) == bool:
-                    parser_kwargs['action'] = 'store_%s' % str(not v).lower()
-                else:
-                    parser_kwargs['type'] = type(v)
-                parser.add_argument('--%s' % k, **parser_kwargs)
-        return parser
 
     def __str__(self):
         s = []
@@ -51,6 +51,10 @@ class ProgramConfig(BaseConfigs):
     @property
     def detectron_pretrained_file_format(self):
         return os.path.join('data', 'pretrained_model', '%s.pkl')
+
+    @property
+    def embedding_dir(self):
+        return os.path.join('data', 'embeddings')
 
     @property
     def precomputed_feats_file_format(self):
@@ -125,10 +129,26 @@ class DataConfig(BaseConfigs):
 
 class ModelConfig(BaseConfigs):
     def __init__(self):
+        self.model = None
+
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
         self.bn = False
+        self.bn_momentum = 0.01
+
+    def _add_argument(self, parser, param_name, param_value):
+        if param_name != 'model':
+            super()._add_argument(parser, param_name, param_value)
+        else:
+            try:
+                from scripts.utils import MODELS
+                possible_models = set(MODELS.keys())
+            except ImportError:
+                if __name__ != '__main__':  # Just testing if config works
+                    raise
+                possible_models = {'base', 'nmotifs'}  # Fake models
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=possible_models , required=True)
 
 
 class OptimizerConfig(BaseConfigs):
@@ -243,7 +263,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--load_precomputed_feats', '--adam', '--bn', '--grad_clip', '1.5', '--pixel_mean', '[0, 1, 3]']
+    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--adam', '--bn', '--grad_clip', '1.5']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()

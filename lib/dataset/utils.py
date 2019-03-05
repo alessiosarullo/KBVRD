@@ -5,7 +5,7 @@ import numpy as np
 
 from PIL import ImageOps
 
-from config import Configs as cfg
+from config import cfg
 
 
 class Splits(Enum):

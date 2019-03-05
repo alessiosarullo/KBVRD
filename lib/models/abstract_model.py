@@ -322,7 +322,7 @@ class AbstractModel(nn.Module):
         return rel_im_ids, sub_obj_pairs, rel_preds
 
 
-class AbstractHOIModule(nn.Module):
+class AbstractHOIBranch(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})

@@ -8,14 +8,14 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from config import Configs as cfg
+from config import cfg
 from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.models.base_model import BaseModel, AbstractHOIModule
+from lib.models.abstract_model import AbstractHOIBranch, AbstractModel
 from lib.stats.eval_stats import EvalStats
 from lib.stats.training_stats import TrainingStats
-from scripts.utils import Timer
-from scripts.utils import print_params
+from lib.stats.utils import Timer
+from scripts.utils import print_params, create_model
 
 
 class Launcher:
@@ -26,7 +26,7 @@ class Launcher:
             cfg.load()
             cfg.program.eval_only = True
         cfg.print()
-        self.detector = None  # type: BaseModel
+        self.detector = None  # type: AbstractModel
         self.train_split = None  # type: HicoDetInstanceSplit
         self.eval_result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
         self.curr_train_iter = 0
@@ -51,7 +51,7 @@ class Launcher:
 
         self.train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
-        self.detector = BaseModel(self.train_split)
+        self.detector = create_model(self.train_split)
         self.detector.cuda()
         print_params(self.detector)
 
@@ -152,7 +152,7 @@ class Launcher:
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss
 
-        hoi_branch = self.detector.hoi_branch  # type: AbstractHOIModule
+        hoi_branch = self.detector.hoi_branch  # type: AbstractHOIBranch
         batch_stats = {'losses': losses, 'hist': {k: v.detach().cpu() for k, v in hoi_branch.values_to_monitor.items()}}
         if optimizer:
             optimizer.zero_grad()

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from lib.detection.box_utils import bbox_transform, clip_tiled_boxes
-from scripts.utils import Timer
+from lib.stats.utils import Timer
 
 from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils, nms_gpu
 

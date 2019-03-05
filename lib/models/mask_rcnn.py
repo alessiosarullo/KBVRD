@@ -5,12 +5,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from config import Configs as cfg
+from config import cfg
 from lib.containers import Minibatch
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.detection.detection import im_detect_all_with_feats, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight
-from scripts.utils import Timer
+from lib.stats.utils import Timer
 
 
 class MaskRCNN(nn.Module):

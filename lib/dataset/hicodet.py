@@ -7,12 +7,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from config import Configs as cfg
+from config import cfg
 from lib.containers import Minibatch, Example
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img
 from lib.detection.wrappers import COCO_CLASSES
-from scripts.utils import Timer
+from lib.stats.utils import Timer
 from typing import Dict
 
 

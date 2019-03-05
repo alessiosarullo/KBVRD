@@ -3,7 +3,7 @@ import sys
 import h5py
 import numpy as np
 
-from config import Configs as cfg
+from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.containers import Minibatch
 from lib.models.mask_rcnn import MaskRCNN
