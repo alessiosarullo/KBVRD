@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 
 from config import cfg
-from lib.containers import Minibatch
+from lib.dataset.utils import Minibatch
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.detection.detection import im_detect_all_with_feats, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import segm_results, dummy_datasets, Generalized_RCNN, vis_utils, load_detectron_weight

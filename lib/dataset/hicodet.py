@@ -8,9 +8,8 @@ import torch
 from torch.utils.data import Dataset
 
 from config import cfg
-from lib.containers import Minibatch, Example
 from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.dataset.utils import Splits, preprocess_img
+from lib.dataset.utils import Splits, preprocess_img, Example, Minibatch
 from lib.detection.wrappers import COCO_CLASSES
 from lib.stats.utils import Timer
 from typing import Dict

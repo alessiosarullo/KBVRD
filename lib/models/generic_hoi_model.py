@@ -7,7 +7,8 @@ import torch.nn as nn
 
 from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
-from lib.containers import Minibatch, Prediction
+from lib.models.utils import Prediction
+from lib.dataset.utils import Minibatch
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.mask_rcnn import MaskRCNN
 from lib.models.abstract_model import AbstractHOIModel

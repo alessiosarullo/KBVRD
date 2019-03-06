@@ -1,3 +1,4 @@
+import sys
 import argparse
 import os
 import pickle
@@ -8,15 +9,15 @@ import numpy as np
 
 from analysis.utils import vis_one_image
 from config import cfg
-from lib.containers import Minibatch
-from lib.containers import Prediction
+from lib.dataset.utils import Minibatch
+from lib.models.utils import Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.stats.eval_stats import EvalStats
 
 
 def _setup_and_load():
     cfg.parse_args()
-    with open(cfg.program.result_file_format % 'sgdet', 'rb') as f:
+    with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
@@ -24,22 +25,19 @@ def _setup_and_load():
 
 
 def count():
-    parser = argparse.ArgumentParser()
-    # parser.add_argument('--rescale', action='store_true')
-    # rescale = vars(parser.parse_known_args()[0]).get('rescale', False)
-
     results, hds = _setup_and_load()
-    stats = EvalStats.evaluate_predictions(hds, results)  # type: EvalStats
-    stats.print()
+    stats = EvalStats.evaluate_predictions(hds, results)
+    EvalStats.print(stats)
 
     gt_hois = hds.hois
     gt_hoi_hist = Counter(gt_hois[:, 1])
     num_gt_hois = sum(gt_hoi_hist.values())
     assert num_gt_hois == gt_hois.shape[0]
-    num_pred_hois = np.sum(stats.num_predictions[:, :, -1], axis=0)
+    num_pred_hois = np.sum(list(stats.values())[0].num_predictions[:, :, -1], axis=0)
 
-    print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' '), 100 * gt_hoi_hist[i] / num_gt_hois) for i, c in enumerate(hds.predicates)]))
-    print('Pred HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' '), 100 * num_pred_hois[i] / np.sum(num_pred_hois))
+    print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
+                                         for i, c in enumerate(hds.predicates)]))
+    print('Pred HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_hois[i] / np.sum(num_pred_hois))
                                          for i, c in enumerate(hds.predicates)]))
 
 
@@ -84,7 +82,10 @@ def vis_masks():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=['vis', 'count'])
-    func = vars(parser.parse_known_args()[0])['func']
+    namespace = parser.parse_known_args()
+    func = vars(namespace[0])['func']
+    sys.argv = sys.argv[:1] + namespace[1]
+    print(sys.argv)
     if func == 'vis':
         vis_masks()
     elif func == 'count':

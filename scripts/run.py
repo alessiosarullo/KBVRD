@@ -9,7 +9,6 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.containers import Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.models.generic_hoi_model import GenericHOIModel
 from lib.models.abstract_model import AbstractHOIBranch
@@ -17,7 +16,7 @@ from lib.stats.eval_stats import EvalStats
 from lib.stats.training_stats import TrainingStats
 from lib.stats.utils import Timer
 from scripts.utils import print_params
-from lib.models.utils import get_all_models_by_name
+from lib.models.utils import get_all_models_by_name, Prediction
 
 
 class Launcher:
@@ -29,7 +28,6 @@ class Launcher:
         cfg.print()
         self.detector = None  # type: GenericHOIModel
         self.train_split = None  # type: HicoDetInstanceSplit
-        self.eval_result_file = cfg.program.result_file_format % ('predcls' if cfg.program.predcls else 'sgdet')
         self.curr_train_iter = 0
 
     def run(self):
@@ -119,7 +117,7 @@ class Launcher:
 
             os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
         try:
-            os.remove(self.eval_result_file)
+            os.remove(cfg.program.result_file)
         except FileNotFoundError:
             pass
 
@@ -169,7 +167,7 @@ class Launcher:
 
     def test(self):
         test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-        result_file = self.eval_result_file
+        result_file = cfg.program.result_file
         try:
             with open(result_file, 'rb') as f:
                 all_predictions = pickle.load(f)
@@ -208,7 +206,7 @@ class Launcher:
         Timer.get('Eval').tic()
         result_stats = EvalStats.evaluate_predictions(test_split, all_predictions)
         Timer.get('Eval').toc()
-        result_stats.print()
+        EvalStats.print(result_stats)
 
 
 def main():

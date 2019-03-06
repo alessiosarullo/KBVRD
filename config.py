@@ -82,8 +82,8 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'final.tar')
 
     @property
-    def result_file_format(self):
-        return os.path.join(self.output_path, 'result_test_%s.pkl')
+    def result_file(self):
+        return os.path.join(self.output_path, 'result_test_%s.pkl' % ('predcls' if self.predcls else 'sgdet'))
 
     @property
     def config_file(self):
@@ -105,10 +105,10 @@ class ProgramConfig(BaseConfigs):
                 all_models_dict = get_all_models_by_name()
                 all_models = set(all_models_dict.keys())
             except ImportError:
-                if __name__ != '__main__':  # Just testing if config works
-                    raise
+                # if __name__ != '__main__':  # Just testing if config works
+                #     raise
                 all_models = {'base', 'nmotifs'}  # Fake models
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models , required=True)
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=True)
         elif param_name == 'save_dir':
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=True)
         else:
@@ -261,7 +261,9 @@ class Configs:
             d = pickle.load(f)
         if program:
             output_path = cls.program.output_path
+            predcls = cls.program.predcls
             cls.program.__dict__.update(d['program'])
+            cls.program.predcls = predcls
             assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
         if data:
             cls.data.__dict__.update(d['data'])
@@ -279,7 +281,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5']
+    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5', '--predcls']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()

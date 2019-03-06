@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.containers import Example
+from lib.dataset.utils import Example
 
 
 class FrequencyBias(nn.Module):
