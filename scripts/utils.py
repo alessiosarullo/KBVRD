@@ -11,8 +11,8 @@ MODELS = {'base': BaseModel,
 
 
 def create_model(dataset, **kwargs):
-    model_name = cfg.model.model
-    model = MODELS[model_name]  # type: AbstractModel
+    model_name = cfg.program.model
+    model = MODELS[model_name]  # type: class[AbstractModel]
     return model(dataset, **kwargs)
 
 

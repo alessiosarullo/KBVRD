@@ -42,11 +42,24 @@ class ProgramConfig(BaseConfigs):
         self.verbose = False
 
         self.randomize = False
-        self.eval_only = False
         self.predcls = False
 
+        self.model = None
         self.load_precomputed_feats = False
-        self.save_dir = 'output'
+
+        self.save_dir = ''
+
+    @property
+    def load_train_output(self):
+        return os.path.exists(self.saved_model_file)
+
+    @property
+    def output_root(self):
+        return 'output'
+
+    @property
+    def output_path(self):
+        return os.path.join(self.output_root, self.model, self.save_dir)
 
     @property
     def detectron_pretrained_file_format(self):
@@ -62,26 +75,43 @@ class ProgramConfig(BaseConfigs):
 
     @property
     def checkpoint_file(self):
-        return os.path.join(self.save_dir, 'ckpt.tar')
+        return os.path.join(self.output_path, 'ckpt.tar')
 
     @property
     def saved_model_file(self):
-        return os.path.join(self.save_dir, 'final.tar')
+        return os.path.join(self.output_path, 'final.tar')
 
     @property
     def result_file_format(self):
-        return os.path.join(self.save_dir, 'result_test_%s.pkl')
+        return os.path.join(self.output_path, 'result_test_%s.pkl')
 
     @property
     def config_file(self):
-        return os.path.join(self.save_dir, 'config.pkl')
+        return os.path.join(self.output_path, 'config.pkl')
 
     @property
     def tensorboard_dir(self):
-        return os.path.join(self.save_dir, 'tboard')
+        return os.path.join(self.output_path, 'tboard')
 
     def _postprocess_args(self):
         self.save_dir = self.save_dir.rstrip('/')
+        if len(self.save_dir.split('/')) > 1:
+            raise ValueError('Only specify the subdirectory in %s/ as save_dir.' % os.path.join(self.output_root, self.model))
+
+    def _add_argument(self, parser, param_name, param_value):
+        if param_name == 'model':
+            try:
+                from scripts.utils import MODELS
+                possible_models = set(MODELS.keys())
+            except ImportError:
+                if __name__ != '__main__':  # Just testing if config works
+                    raise
+                possible_models = {'base', 'nmotifs'}  # Fake models
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=possible_models , required=True)
+        elif param_name == 'save_dir':
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=True)
+        else:
+            super()._add_argument(parser, param_name, param_value)
 
 
 class DataConfig(BaseConfigs):
@@ -129,26 +159,11 @@ class DataConfig(BaseConfigs):
 
 class ModelConfig(BaseConfigs):
     def __init__(self):
-        self.model = None
-
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
         self.bn = False
         self.bn_momentum = 0.01
-
-    def _add_argument(self, parser, param_name, param_value):
-        if param_name != 'model':
-            super()._add_argument(parser, param_name, param_value)
-        else:
-            try:
-                from scripts.utils import MODELS
-                possible_models = set(MODELS.keys())
-            except ImportError:
-                if __name__ != '__main__':  # Just testing if config works
-                    raise
-                possible_models = {'base', 'nmotifs'}  # Fake models
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=possible_models , required=True)
 
 
 class OptimizerConfig(BaseConfigs):
@@ -244,9 +259,9 @@ class Configs:
         with open(file_path, 'rb') as f:
             d = pickle.load(f)
         if program:
-            save_dir = cls.program.save_dir
+            output_path = cls.program.output_path
             cls.program.__dict__.update(d['program'])
-            assert cls.program.save_dir.rstrip('/') == save_dir.rstrip('/'), (cls.program.save_dir, save_dir)
+            assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
         if data:
             cls.data.__dict__.update(d['data'])
         if model:
@@ -263,7 +278,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--adam', '--bn', '--grad_clip', '1.5']
+    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--save_dir', 'output/base/blabla', '--bn', '--grad_clip', '1.5']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()

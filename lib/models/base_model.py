@@ -1,10 +1,12 @@
+import math
+
 import torch
 import torch.nn as nn
-import math
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from .abstract_model import AbstractModel, AbstractHOIBranch
+from .context import SpatialContext, ObjectContext
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
@@ -14,11 +16,38 @@ class BaseModel(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-    def _get_hoi_branch(self):
-        return SimpleHOIBranch(self.mask_rcnn_vis_feat_dim,
-                               self.spatial_context_branch.spatial_emb_dim,
-                               self.obj_branch.output_ctx_dim,
-                               self.spatial_context_branch.output_dim)
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
+                                                  self.dataset.num_object_classes +
+                                                  self.spatial_context_branch.output_dim)
+        self.hoi_branch = SimpleHOIBranch(self.mask_rcnn_vis_feat_dim,
+                                          self.spatial_context_branch.spatial_emb_dim,
+                                          self.obj_branch.output_ctx_dim,
+                                          self.spatial_context_branch.output_dim)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        # TODO docs
+
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        hoi_im_ids = hoi_infos[:, 0]
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        im_ids = torch.unique(hoi_im_ids, sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        # TODO continue for nmotifs
+
+        obj_logits = self.obj_output_fc(objs_embs)
+        hoi_logits = self.hoi_output_fc(hoi_embs)
+        return obj_logits, hoi_logits
 
 
 class SimpleHOIBranch(AbstractHOIBranch):

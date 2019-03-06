@@ -82,6 +82,7 @@ class ObjectContext(nn.Module):
 
 
 def compute_context(lstm, feats, im_ids, input_im_ids):
+
     # If I = #images, this is I x [N_i x feat_vec_dim], where N_i = #elements in image i
     feats_per_img = [feats[input_im_ids == im_id, :] for im_id in im_ids]
 

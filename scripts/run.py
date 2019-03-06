@@ -22,9 +22,8 @@ class Launcher:
     def __init__(self):
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
-        if cfg.program.eval_only:
+        if cfg.program.load_train_output:
             cfg.load()
-            cfg.program.eval_only = True
         cfg.print()
         self.detector = None  # type: AbstractModel
         self.train_split = None  # type: HicoDetInstanceSplit
@@ -33,7 +32,7 @@ class Launcher:
 
     def run(self):
         self.setup()
-        if not cfg.program.eval_only:
+        if not cfg.program.load_train_output:
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -53,9 +52,9 @@ class Launcher:
 
         self.detector = create_model(self.train_split)
         self.detector.cuda()
-        print_params(self.detector)
+        print_params(self.detector, breakdown=False)
 
-        if cfg.program.eval_only:
+        if cfg.program.load_train_output:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
             # # TODO resume from checkpoint
@@ -82,23 +81,22 @@ class Launcher:
         return optimizer, scheduler
 
     def train(self):
-        os.makedirs(cfg.program.save_dir, exist_ok=True)
+        os.makedirs(cfg.program.output_path, exist_ok=True)
         val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
 
         optimizer, scheduler = self.get_optim()
 
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
-        val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size)
+        val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size if cfg.program.model != 'nmotifs' else 1)  # FIXME?
         training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
         val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
         try:
             for epoch in range(cfg.opt.num_epochs):
                 self.detector.train()
                 self.train_epoch(epoch, train_loader, training_stats, optimizer)
-                if cfg.program.save_dir is not None:
-                    torch.save({'epoch': epoch,
-                                'state_dict': self.detector.state_dict()},
-                               cfg.program.checkpoint_file)
+                torch.save({'epoch': epoch,
+                            'state_dict': self.detector.state_dict()},
+                           cfg.program.checkpoint_file)
 
                 self.detector.eval()
                 val_loss = self.train_epoch(epoch, val_loader, val_stats)
@@ -184,6 +182,10 @@ class Launcher:
                 prediction = self.detector(batch)  # type: Prediction
                 all_predictions.append(vars(prediction))
                 Timer.get('Test', 'Img').toc()
+
+                if b_idx % 20 == 0:
+                    torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+
                 if b_idx % cfg.program.print_interval == 0:
                     time_per_batch = Timer.get('Test', 'Img', get_only=True).spent(average=True)
                     time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
@@ -195,8 +197,6 @@ class Launcher:
                                                                                        Timer.format(time_to_collate)),
                           'Progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Test', get_only=True).progress()),
                                                                         Timer.format(est_time_per_epoch)))
-
-                    torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
             Timer.get('Test').toc()
 
             with open(result_file, 'wb') as f:

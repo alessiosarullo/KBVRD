@@ -9,7 +9,6 @@ from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
 from lib.containers import Minibatch, Prediction
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from .context import SpatialContext, ObjectContext
 from .mask_rcnn import MaskRCNN
 
 
@@ -21,22 +20,7 @@ class AbstractModel(nn.Module):
         self.dataset = dataset
         self.mask_rcnn = MaskRCNN()
         self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
-
-        # Derived
         self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
-
-        # Branches
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
-                                                  self.dataset.num_object_classes +
-                                                  self.spatial_context_branch.output_dim)
-        self.hoi_branch = self._get_hoi_branch()
-
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
-
-    def _get_hoi_branch(self):
-        raise NotImplementedError()
 
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, predict=False, **kwargs)
@@ -53,12 +37,12 @@ class AbstractModel(nn.Module):
 
             if not predict:
                 assert hoi_infos is not None and box_labels is not None and hoi_labels is not None
-                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
+                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
                 return obj_output, hoi_output, box_labels, hoi_labels
             else:
                 if hoi_infos is not None:
                     assert boxes_ext is not None
-                    obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos)
+                    obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
                     obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
                     hoi_probs = nn.functional.softmax(hoi_output, dim=1).cpu().numpy()
                     hoi_img_inds = hoi_infos[:, 0]
@@ -83,26 +67,8 @@ class AbstractModel(nn.Module):
                                   ho_pairs=ho_pairs,
                                   hoi_scores=hoi_probs)
 
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos):
-        # TODO docs
-
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        hoi_im_ids = hoi_infos[:, 0]
-        sub_inds = hoi_infos[:, 1]
-        obj_inds = hoi_infos[:, 2]
-        im_ids = torch.unique(hoi_im_ids, sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
-        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, im_ids, hoi_im_ids, sub_inds, obj_inds)
-        # TODO continue for nmotifs
-
-        obj_output = self.obj_output_fc(objs_embs)
-        hoi_output = self.hoi_output_fc(hoi_embs)
-        return obj_output, hoi_output
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        raise NotImplementedError()
 
     def first_step(self, batch: Minibatch, predict):  # FIXME change name
         """
@@ -143,6 +109,13 @@ class AbstractModel(nn.Module):
             else:
                 if boxes_ext_np.shape[0] == 0:
                     return None, None, None, None, None, None, None
+
+            # Sort by image
+            inds = np.argsort(boxes_ext_np[:, 0]).astype(np.int64, copy=False)
+            boxes_ext_np = boxes_ext_np[inds]
+            box_feats = box_feats[inds]
+            masks = masks[inds]
+
             hoi_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
             box_labels = hoi_labels = None
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
@@ -229,6 +202,14 @@ class AbstractModel(nn.Module):
         obj_labels = np.concatenate([obj_labels, unmatched_gt_obj_labels], axis=0)
         box_feats = torch.cat([box_feats, unmatched_gt_boxes_feats], dim=0)
         masks = torch.cat([masks, unmatched_gt_boxes_masks], dim=0)
+
+        # Sort by image
+        inds = np.argsort(boxes_ext[:, 0]).astype(np.int64, copy=False)
+        boxes_ext = boxes_ext[inds]
+        obj_labels = obj_labels[inds]
+        box_feats = box_feats[inds]
+        masks = masks[inds]
+
         return boxes_ext, obj_labels, box_feats, masks
 
     def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np,
@@ -332,8 +313,7 @@ class AbstractHOIBranch(nn.Module):
     def forward(self, *args, **kwargs):
         # TODO docs
         with torch.set_grad_enabled(self.training):
-            rel_emb = self._forward(*args, **kwargs)
-            return rel_emb
+            return self._forward(*args, **kwargs)
 
     def _forward(self, *args, **kwargs):
         raise NotImplementedError()

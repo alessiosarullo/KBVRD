@@ -54,7 +54,7 @@ def block_orthogonal(tensor, split_sizes, gain=1.0):
         assert len(block_slice) == 2
         sizes = [x.stop - x.start for x in block_slice]
         tensor_copy = tensor.new(max(sizes), max(sizes))
-        torch.nn.init.orthogonal(tensor_copy, gain=gain)
+        torch.nn.init.orthogonal_(tensor_copy, gain=gain)
         tensor[block_slice] = tensor_copy[0:sizes[0], 0:sizes[1]]
 
 
@@ -66,20 +66,20 @@ class _AlternatingHighwayLSTMFunction(Function):
         self.num_layers = num_layers
         self.train = train
 
-    def forward(self, x, **kwargs) -> Tuple[torch.Tensor, None]:
-        inputs = x  # type: torch.Tensor
-        weight = kwargs['weight']  # type: torch.Tensor
-        bias = kwargs['bias']  # type: torch.Tensor
-        state_accumulator = kwargs['state_accumulator']  # type: torch.Tensor
-        memory_accumulator = kwargs['memory_accumulator']  # type: torch.Tensor
-        dropout_mask = kwargs['dropout_mask']  # type: torch.Tensor
-        lengths = kwargs['lengths']  # type: torch.Tensor
-        gates = kwargs['gates']  # type: torch.Tensor
+    def forward(self,
+                inputs: torch.Tensor,
+                weight: torch.Tensor,
+                bias: torch.Tensor,
+                state_accumulator: torch.Tensor,
+                memory_accumulator: torch.Tensor,
+                dropout_mask: torch.Tensor,
+                lengths: torch.Tensor,
+                gates: torch.Tensor):
         sequence_length, batch_size, input_size = inputs.shape
-        tmp_i = inputs.new_tensor(batch_size, 6 * self.hidden_size)
-        tmp_h = inputs.new_tensor(batch_size, 5 * self.hidden_size)
+        tmp_i = inputs.new(batch_size, 6 * self.hidden_size)
+        tmp_h = inputs.new(batch_size, 5 * self.hidden_size)
         is_training = 1 if self.train else 0
-        highway_lstm_layer.highway_lstm_forward_cuda(input_size,  # type: ignore # pylint: disable=no-member
+        highway_lstm_layer.highway_lstm_forward_cuda(input_size,
                                                      self.hidden_size,
                                                      batch_size,
                                                      self.num_layers,
@@ -254,22 +254,17 @@ class AlternatingHighwayLSTM(torch.nn.Module):
             self.bias.data[bias_index + self.hidden_size:bias_index + 2 * self.hidden_size].fill_(1)
             bias_index += 5 * self.hidden_size
 
-    def forward(self, inputs, initial_state=None) -> Tuple[PackedSequence, torch.Tensor]:
+    def forward(self, inputs) -> Tuple[PackedSequence, torch.Tensor]:
         """
         Parameters
         ----------
         inputs : ``PackedSequence``, required.
             A batch first ``PackedSequence`` to run the stacked LSTM over.
-        initial_state : Tuple[torch.Tensor, torch.Tensor], optional, (default = None)
-            Currently, this is ignored.
 
         Returns
         -------
         output_sequence : ``PackedSequence``
             The encoded sequence of shape (batch_size, sequence_length, hidden_size)
-        final_states: ``torch.Tensor``
-            The per-layer final (state, memory) states of the LSTM, each with shape
-            (num_layers, batch_size, hidden_size).
         """
         inputs, lengths = pad_packed_sequence(inputs, batch_first=False)
 
@@ -289,20 +284,12 @@ class AlternatingHighwayLSTM(torch.nn.Module):
                                                    sequence_length,
                                                    batch_size, 6 * self.hidden_size))
 
-        lengths_variable = Variable(torch.IntTensor(lengths))
+        lengths_variable = lengths.int()
         implementation = _AlternatingHighwayLSTMFunction(self.input_size,
                                                          self.hidden_size,
                                                          num_layers=self.num_layers,
                                                          train=self.training)
-        output, _ = implementation(inputs,
-                                   weight=self.weight,
-                                   bias=self.bias,
-                                   state_accumulator=state_accumulator,
-                                   memory_accumulator=memory_accumulator,
-                                   dropout_mask=dropout_weights,
-                                   lengths=lengths_variable,
-                                   gates=gates
-                                   )
+        output, _ = implementation(inputs, self.weight, self.bias, state_accumulator, memory_accumulator, dropout_weights, lengths_variable, gates)
 
         output = pack_padded_sequence(output, lengths, batch_first=False)
-        return output, None
+        return output

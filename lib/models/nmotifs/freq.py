@@ -15,8 +15,8 @@ class FrequencyBias(nn.Module):
         super(FrequencyBias, self).__init__()
 
         counts = self.get_counts(dataset)
-        pred_dist = np.log(counts / counts.sum(2)[:, :, None] + eps)
-        pred_dist = torch.from_numpy(pred_dist).view(-1, pred_dist.shape[2])
+        pred_dist = np.log(counts / np.maximum(1, np.sum(counts, axis=2, keepdims=True)) + eps)
+        pred_dist = torch.tensor(pred_dist, dtype=torch.float32).view(-1, pred_dist.shape[2])
 
         self.num_objs = dataset.num_object_classes
         self.obj_baseline = nn.Embedding(pred_dist.shape[0], pred_dist.shape[1])
@@ -52,7 +52,7 @@ class FrequencyBias(nn.Module):
         for i in range(len(train_data)):
             ex = train_data.get_entry(i, read_img=False)  # type: Example
             gt_hois = ex.gt_hois
-            ho_pairs = ex.gt_obj_classes[gt_hois[:, :2]]
-            for (h, o), pred in zip(ho_pairs, gt_hois[:, 2]):
+            ho_pairs = ex.gt_obj_classes[gt_hois[:, [0, 2]]]
+            for (h, o), pred in zip(ho_pairs, gt_hois[:, 1]):
                 counts[h, o, pred] += 1
         return counts

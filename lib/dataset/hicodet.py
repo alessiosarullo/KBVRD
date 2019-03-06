@@ -23,7 +23,7 @@ class HicoDetInstanceSplit(Dataset):
     def __init__(self, split, hicodet_driver, annotations, image_ids, objects, predicates, flipping_prob=0):
         """
         """
-        # TODO docs
+        # TODO docs, mention split in print so as not to have confusing messages
         assert split in Splits
 
         self.split = split

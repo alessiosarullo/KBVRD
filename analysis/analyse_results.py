@@ -47,7 +47,7 @@ def vis_masks():
     results, hds = _setup_and_load()
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
 
-    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.save_dir.split('/')[1:]))
+    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     dataset_classes = hds.objects
 
     for b_idx, example in enumerate(hdsl):

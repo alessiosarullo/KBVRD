@@ -202,13 +202,8 @@ class DecoderRNN(torch.nn.Module):
             pred_dist = self.out(previous_state)
             out_dists.append(pred_dist)
 
-            if self.training and labels is not None:  # NOTE: I added the not None label condition, it was not there in the original code
+            if self.training:
                 labels_to_embed = labels[start_ind:end_ind].clone()
-                # Whenever labels are 0 set input to be our max prediction
-                nonzero_pred = pred_dist[:, 1:].max(1)[1] + 1
-                is_bg = (labels_to_embed.data == 0).nonzero()
-                if is_bg.dim() > 0:
-                    labels_to_embed[is_bg.squeeze(1)] = nonzero_pred[is_bg.squeeze(1)]
                 out_commitments.append(labels_to_embed)
                 previous_embed = self.obj_embed(labels_to_embed + 1)
             else:

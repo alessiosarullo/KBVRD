@@ -74,7 +74,7 @@ class LinearizedContext(nn.Module):
     def num_classes(self):
         return len(self.classes)
 
-    def forward(self, obj_vis_feats, obj_logits, im_inds, box_priors):
+    def forward(self, obj_vis_feats, boxes_ext, box_labels):
         """
         Forward pass through the object and edge context
         :param obj_priors:
@@ -84,32 +84,35 @@ class LinearizedContext(nn.Module):
         :return:
         """
 
+        im_inds = boxes_ext[:, 0].long()
+        box_priors = boxes_ext[:, 1:5]
+        obj_logits = boxes_ext[:, 5:].detach()
+
         obj_embed = F.softmax(obj_logits, dim=1) @ self.obj_embed.weight
         pos_embed = self.pos_embed(self.center_size(box_priors))
         obj_pre_rep = torch.cat((obj_vis_feats, obj_embed, pos_embed), dim=1)
 
-        obj_dists, obj_preds, obj_ctx = self.obj_ctx(
-            obj_feats=obj_pre_rep,
-            obj_dists=obj_logits,
-            im_inds=im_inds,
-            box_priors=box_priors,
-        )
+        obj_dists, obj_preds, obj_ctx = self.obj_ctx(obj_feats=obj_pre_rep,
+                                                     obj_logits=obj_logits,
+                                                     im_inds=im_inds,
+                                                     box_priors=box_priors,
+                                                     box_labels=box_labels,
+                                                     )
 
-        edge_ctx = self.edge_ctx(
-            obj_ctx,
-            obj_dists=obj_dists.detach(),
-            im_inds=im_inds,
-            obj_preds=obj_preds,
-            box_priors=box_priors,
-        )
+        edge_ctx = self.edge_ctx(obj_ctx,
+                                 obj_dists=obj_dists.detach(),
+                                 im_inds=im_inds,
+                                 obj_preds=obj_preds,
+                                 box_priors=box_priors,
+                                 )
 
         return obj_dists, obj_preds, edge_ctx
 
-    def obj_ctx(self, obj_feats, obj_dists, im_inds, box_priors):
+    def obj_ctx(self, obj_feats, obj_logits, im_inds, box_priors, box_labels):
         """
         Object context and object classification.
         :param obj_feats: [num_obj, img_dim + object embedding0 dim]
-        :param obj_dists: [num_obj, #classes]
+        :param obj_logits: [num_obj, #classes]
         :param im_inds: [num_obj] the indices of the images
         :param obj_labels: [num_obj] the GT labels of the image
         :param boxes: [num_obj, 4] boxes. We'll use this for NMS
@@ -118,26 +121,27 @@ class LinearizedContext(nn.Module):
                  obj_final_ctx: [num_obj, #feats] For later!
         """
         # Sort by the confidence of the maximum detection.
-        confidence = F.softmax(obj_dists, dim=1).data[:, 1:].max(1)[0]
+        confidence = F.softmax(obj_logits, dim=1).data[:, 1:].max(1)[0]
         perm, inv_perm, ls_transposed = self.sort_rois(im_inds.data, confidence, box_priors)
+
         # Pass object features, sorted by score, into the encoder LSTM
         obj_inp_rep = obj_feats[perm].contiguous()
         input_packed = PackedSequence(obj_inp_rep, ls_transposed)
+        encoder_rep = self.obj_ctx_rnn(input_packed)[0]
 
-        encoder_rep = self.obj_ctx_rnn(input_packed)[0][0]
         # Decode in order
         decoder_inp = PackedSequence(encoder_rep, ls_transposed)
-        obj_dists, obj_preds = self.decoder_rnn(decoder_inp)
+        obj_logits, obj_preds = self.decoder_rnn(decoder_inp, labels=box_labels)
         obj_preds = obj_preds[inv_perm]
-        obj_dists = obj_dists[inv_perm]
+        obj_logits = obj_logits[inv_perm]
         encoder_rep = encoder_rep[inv_perm]
 
-        return obj_dists, obj_preds, encoder_rep
+        return obj_logits, obj_preds, encoder_rep
 
-    def edge_ctx(self, obj_feats, obj_dists, im_inds, obj_preds, box_priors):
+    def edge_ctx(self, obj_ctx_feats, obj_dists, im_inds, obj_preds, box_priors):
         """
         Object context and object classification.
-        :param obj_feats: [num_obj, img_dim + object embedding0 dim]
+        :param obj_ctx_feats: [num_obj, img_dim + object embedding0 dim]
         :param obj_dists: [num_obj, #classes]
         :param im_inds: [num_obj] the indices of the images
         :return: edge_ctx: [num_obj, #feats] For later!
@@ -146,7 +150,7 @@ class LinearizedContext(nn.Module):
         # Only use hard embeddings
         obj_embed2 = self.obj_embed2(obj_preds)
         # obj_embed3 = F.softmax(obj_dists, dim=1) @ self.obj_embed3.weight
-        inp_feats = torch.cat((obj_embed2, obj_feats), 1)
+        inp_feats = torch.cat((obj_embed2, obj_ctx_feats), 1)
 
         # Sort by the confidence of the maximum detection.
         confidence = F.softmax(obj_dists, dim=1).data.view(-1)[
@@ -154,7 +158,7 @@ class LinearizedContext(nn.Module):
         perm, inv_perm, ls_transposed = self.sort_rois(im_inds.data, confidence, box_priors)
 
         edge_input_packed = PackedSequence(inp_feats[perm], ls_transposed)
-        edge_reps = self.edge_ctx_rnn(edge_input_packed)[0][0]
+        edge_reps = self.edge_ctx_rnn(edge_input_packed)[0]
 
         # now we're good! unperm
         edge_ctx = edge_reps[inv_perm]
@@ -196,8 +200,8 @@ class LinearizedContext(nn.Module):
                  Inverse permutation
                  Lengths for the TxB packed sequence.
         """
-        num_im = im_inds[-1] + 1
-        rois_per_image = scores.new(num_im)
+        num_im = im_inds.max() + 1
+        rois_per_image = scores.new_empty(num_im)
         lengths = []
         for i, s, e in enumerate_by_image(im_inds):
             rois_per_image[i] = 2 * (s - e) * num_im + i
@@ -216,7 +220,7 @@ class LinearizedContext(nn.Module):
         perm = perm[inds]
         _, inv_perm = torch.sort(perm)
 
-        return perm, inv_perm, ls_transposed
+        return perm, inv_perm, torch.from_numpy(np.array(ls_transposed))
 
     @staticmethod
     def center_size(boxes):

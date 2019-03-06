@@ -9,55 +9,80 @@ from lib.models.abstract_model import AbstractModel, AbstractHOIBranch
 from .freq import FrequencyBias
 from .lincontext import LinearizedContext
 
+from lib.models.context import SpatialContext, ObjectContext
+
 
 class HOINMotifs(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
+                                                  self.dataset.num_object_classes +
+                                                  self.spatial_context_branch.output_dim)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
 
-        self.rel_compress = nn.Linear(self.pooling_dim, self.num_rels_classes, bias=True)
-        self.rel_compress.weight = torch.nn.init.xavier_normal(self.rel_compress.weight, gain=1.0)
+        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.mask_rcnn_vis_feat_dim)
+        # TODO integrate more with my object branch
 
-        self.freq_bias = FrequencyBias(dataset=dataset)
+        # If not using NeuralMotifs's object logits no gradient flows back into the decoder RNN, so I'll make it explicit here.
+        for name, param in self.named_parameters():
+            if 'decoder_rnn' in name:
+                param.requires_grad = False
 
-    def _get_hoi_branch(self):
-        return HOINMotifsHOIBranch(self.dataset,
-                                   self.mask_rcnn_vis_feat_dim,
-                                   )
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        hoi_im_ids = hoi_infos[:, 0]
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        im_ids = torch.unique(hoi_im_ids, sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(objs_embs)
+
+        # obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
+        _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
+        return obj_logits, hoi_logits
 
 
 class HOINMotifsHOIBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim):
         super().__init__()
 
-        self.pooling_dim = 4096  # Default used in Neural Motifs
-
         self.context = LinearizedContext(classes=dataset.objects, visual_feat_dim=visual_feats_dim)
 
         # Initialize to sqrt(1/2n) so that the outputs all have mean 0 and variance 1 (half contribution comes from LSTM, half from embedding).
         # In practice the pre-lstm stuff tends to have stdev 0.1 so I multiplied this by 10.
-        self.post_lstm = nn.Linear(self.context.edge_ctx_dim, self.pooling_dim * 2)
-        self.post_lstm.weight.data.normal_(0, 10.0 * math.sqrt(1.0 / self.context.edge_ctx_dim))
-        self.post_lstm.bias.data.zero_()
+        self.post_lstm = nn.Linear(self.context.edge_ctx_dim, visual_feats_dim * 2)
+        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.context.edge_ctx_dim))
+        torch.nn.init.zeros_(self.post_lstm.bias)
+
+        self.hoi_output_fc = nn.Linear(visual_feats_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+        self.freq_bias = FrequencyBias(dataset=dataset)
 
     @property
     def output_dim(self):
-        return self.hoi_emb_dim
+        raise NotImplementedError()
 
-    def _forward(self, boxes_ext, boxes_feats, rel_inds, union_box_feats):
-        obj_dists, obj_preds, edge_ctx = self.context(obj_fmaps=boxes_feats,
-                                                      obj_logits=boxes_ext[:, 5:].detach(),
-                                                      im_inds=boxes_ext[:, 0],
-                                                      box_priors=boxes_ext[:, 1:5],
-                                                      )
+    def _forward(self, boxes_ext, box_feats, hoi_infos, union_box_feats, box_labels):
+        obj_logits, obj_classes, edge_ctx = self.context(box_feats, boxes_ext, box_labels)
 
         edge_repr = self.post_lstm(edge_ctx)
-        edge_repr = edge_repr.view(edge_repr.size(0), 2, self.pooling_dim)  # Split into subject and object representations
+        edge_repr = edge_repr.view(edge_repr.shape[0], 2, -1)  # Split into subject and object representations
 
-        sub_repr = edge_repr[:, 0][rel_inds[:, 1]]
-        obj_repr = edge_repr[:, 1][rel_inds[:, 2]]
-        rel_repr = sub_repr * obj_repr * union_box_feats
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
 
-        rel_dists = self.rel_compress(rel_repr)
-        rel_dists = rel_dists + self.freq_bias.index_with_labels(torch.stack((obj_preds[rel_inds[:, 1]], obj_preds[rel_inds[:, 2]]), dim=1))
+        sub_repr = edge_repr[:, 0][sub_inds]
+        obj_repr = edge_repr[:, 1][obj_inds]
+        hoi_repr = sub_repr * obj_repr * union_box_feats
 
-        return rel_dists
+        hoi_logits = self.hoi_output_fc(hoi_repr)
+        hoi_logits = hoi_logits + self.freq_bias.index_with_labels(torch.stack((obj_classes[sub_inds], obj_classes[obj_inds]), dim=1))
+
+        return obj_logits, hoi_logits
