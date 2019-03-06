@@ -9,8 +9,6 @@ from lib.models.abstract_model import AbstractModel, AbstractHOIBranch
 from .freq import FrequencyBias
 from .lincontext import LinearizedContext
 
-from lib.models.context import SpatialContext, ObjectContext
-
 
 class HOINMotifs(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
@@ -44,7 +42,7 @@ class HOINMotifs(AbstractModel):
         # obj_logits = self.obj_output_fc(objs_embs)
 
         # _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
-        
+
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
         return obj_logits, hoi_logits
 
