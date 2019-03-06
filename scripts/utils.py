@@ -1,20 +1,5 @@
 import numpy as np
 
-from config import cfg
-from lib.models.abstract_model import AbstractModel
-from lib.models.base_model import BaseModel
-from lib.models.nmotifs.hoi_nmotifs import HOINMotifs
-
-MODELS = {'base': BaseModel,
-          'nmotifs': HOINMotifs
-          }
-
-
-def create_model(dataset, **kwargs):
-    model_name = cfg.program.model
-    model = MODELS[model_name]  # type: class[AbstractModel]
-    return model(dataset, **kwargs)
-
 
 def print_params(model, breakdown=False):
     """

@@ -5,45 +5,62 @@ import torch.nn as nn
 import torch.nn.parallel
 
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.models.abstract_model import AbstractModel, AbstractHOIBranch
+from lib.models.generic_hoi_model import GenericHOIModel
+from lib.models.abstract_model import AbstractHOIBranch
+from lib.models.context import SpatialContext, ObjectContext
 from .freq import FrequencyBias
 from .lincontext import LinearizedContext
 
 
-class HOINMotifs(AbstractModel):
+class HOINMotifs(GenericHOIModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'nmotifs'
+
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        # self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
-        # self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
-        #                                           self.dataset.num_object_classes +
-        #                                           self.spatial_context_branch.output_dim)
-        # self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
-
         self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.mask_rcnn_vis_feat_dim)
-        # TODO integrate more with my object branch
-
-        # # If not using NeuralMotifs's object logits no gradient flows back into the decoder RNN, so I'll make it explicit here.
-        # for name, param in self.named_parameters():
-        #     if 'decoder_rnn' in name:
-        #         param.requires_grad = False
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        # box_im_ids = boxes_ext[:, 0].long()
-        # hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        # hoi_im_ids = hoi_infos[:, 0]
-        # sub_inds = hoi_infos[:, 1]
-        # obj_inds = hoi_infos[:, 2]
-        # im_ids = torch.unique(hoi_im_ids, sorted=True)
-        # box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        # assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-        #
-        # spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
-        # obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        # obj_logits = self.obj_output_fc(objs_embs)
-
-        # _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
-
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
+        return obj_logits, hoi_logits
+
+
+class HOINMotifsHybrid(GenericHOIModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'nmotifs-h'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
+                                                  self.dataset.num_object_classes +
+                                                  self.spatial_context_branch.output_dim)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
+
+        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.mask_rcnn_vis_feat_dim)
+
+        # If not using NeuralMotifs's object logits no gradient flows back into the decoder RNN, so I'll make it explicit here.
+        for name, param in self.named_parameters():
+            if 'decoder_rnn' in name:
+                param.requires_grad = False
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        hoi_im_ids = hoi_infos[:, 0]
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        im_ids = torch.unique(hoi_im_ids, sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
+        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(objs_embs)
+
+        _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
         return obj_logits, hoi_logits
 
 

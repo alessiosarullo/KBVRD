@@ -5,14 +5,19 @@ import torch.nn as nn
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from .abstract_model import AbstractModel, AbstractHOIBranch
+from .generic_hoi_model import GenericHOIModel
+from lib.models.abstract_model import AbstractHOIBranch
 from .context import SpatialContext, ObjectContext
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
 
 
-class BaseModel(AbstractModel):
+class BaseModel(GenericHOIModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'base'
+
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
@@ -86,11 +91,11 @@ class SimpleHOIBranch(AbstractHOIBranch):
 
         hoi_input_feat_dim = self.hoi_visual_hidden_dim + spatial_emb_dim + spatial_ctx_dim + obj_ctx_dim
         self.rel_output_emb_fc = nn.Sequential(*(
-            [nn.Linear(hoi_input_feat_dim, self.hoi_emb_dim),
-             nn.ReLU(inplace=True),
-             nn.Linear(self.hoi_emb_dim, self.hoi_emb_dim)]
-            +
-            ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
+                [nn.Linear(hoi_input_feat_dim, self.hoi_emb_dim),
+                 nn.ReLU(inplace=True),
+                 nn.Linear(self.hoi_emb_dim, self.hoi_emb_dim)]
+                +
+                ([nn.BatchNorm1d(self.hoi_emb_dim)] if self.use_bn else [])
         ))
 
     @property
