@@ -89,7 +89,7 @@ class Launcher:
         optimizer, scheduler = self.get_optim()
 
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
-        val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size if cfg.program.model != 'nmotifs' else 1)  # FIXME?
+        val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size if not cfg.program.model.startwith('nmotifs') else 1)  # FIXME?
         training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
         val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
         try:
