@@ -44,11 +44,17 @@ class EvalStats:
 
         return num_hoi_predictions_per_class
 
+    @property
+    def num_obj_predictions_per_class(self):
+        return np.sum(self.counts['obj'].num_predictions[:, :, -1], axis=0)
+
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
         assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
         triplet_matching_modes = {'HOI': [0, 1, 2],
-                                  'HI': [0, 1]}
+                                  'HI': [0, 1],
+                                  'I': [1],
+                                  }
 
         eval_stats = cls(dataset, triplet_matching_modes, **kwargs)
         for i, res in enumerate(predictions):
@@ -112,10 +118,10 @@ class EvalStats:
                                   num_classes=self.dataset.num_predicates,
                                   counts=self.counts['hoi-%s' % matching_mode],
                                   )
-        gt_inds_per_prediction, inds = self.match_objects(gt_entry, prediction)
+        gt_inds_per_prediction, inds, predicted_obj_classes = self.match_objects(gt_entry, prediction)
         self._process_classes(img_idx, gt_inds_per_prediction, inds,
                               gt_classes=gt_entry.gt_obj_classes,
-                              predicted_classes=prediction.obj_classes,
+                              predicted_classes=predicted_obj_classes,
                               num_classes=self.dataset.num_object_classes,
                               counts=self.counts['obj'],
                               )
@@ -155,14 +161,14 @@ class EvalStats:
         assert gt_boxes.shape[0] > 0
 
         if self.use_gt_boxes:
+            assert np.allclose(prediction.obj_boxes, gt_boxes, atol=1e-2)
             predict_boxes = gt_boxes
             predict_obj_classes = gt_obj_classes
             predict_obj_scores = np.ones(predict_obj_classes.shape[0])
         else:
             predict_boxes = prediction.obj_boxes
-            predict_obj_score_dists = prediction.obj_scores
-            predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
-            predict_obj_scores = predict_obj_score_dists.max(axis=1)
+            predict_obj_classes = prediction.obj_classes
+            predict_obj_scores = prediction.obj_scores.max(axis=1)
             if predict_boxes is None:
                 assert predict_obj_classes is None and predict_obj_scores is None
                 return None, None
@@ -170,17 +176,17 @@ class EvalStats:
 
         inds = np.argsort(predict_obj_scores)[::-1]
         predict_boxes = predict_boxes[inds, :]
-        predict_obj_classes = predict_obj_classes[inds]
+        sorted_predict_obj_classes = predict_obj_classes[inds]
 
         # Compute matches. It's most efficient to match once and evaluate later.
         overlap = (compute_ious(gt_boxes, predict_boxes) >= self.iou_thresh)
 
         gt_inds_per_prediction = []
-        for i, predicted_class in enumerate(predict_obj_classes):
+        for i, predicted_class in enumerate(sorted_predict_obj_classes):
             class_match = (gt_obj_classes == predicted_class)
             gt_inds_per_prediction.append(np.flatnonzero(overlap[:, i] & class_match).tolist())
 
-        return gt_inds_per_prediction, inds
+        return gt_inds_per_prediction, inds, predict_obj_classes
 
     def match_hois(self, gt_entry: Example, prediction: Prediction, triplet_class_inds):
         # TODO docs
@@ -197,14 +203,13 @@ class EvalStats:
         assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
         if self.use_gt_boxes:
-            predict_boxes = gt_boxes
+            assert np.allclose(prediction.obj_boxes, gt_boxes, atol=1e-2)  # FIXME # TODO
             predict_obj_classes = gt_obj_classes
             predict_obj_scores = np.ones(predict_obj_classes.shape[0])
         else:
-            predict_boxes = prediction.obj_boxes
-            predict_obj_score_dists = prediction.obj_scores
-            predict_obj_classes = predict_obj_score_dists.argmax(axis=1)
-            predict_obj_scores = predict_obj_score_dists.max(axis=1)
+            predict_obj_classes = prediction.obj_classes
+            predict_obj_scores = prediction.obj_scores.max(axis=1)
+        predict_boxes = prediction.obj_boxes
 
         predict_ho_pairs = prediction.ho_pairs
         predict_hois = np.concatenate([predict_ho_pairs, prediction.hoi_classes[:, None]], axis=1)

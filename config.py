@@ -107,9 +107,7 @@ class ProgramConfig(BaseConfigs):
                 all_models_dict = get_all_models_by_name()
                 all_models = set(all_models_dict.keys())
             except ImportError:
-                # if __name__ != '__main__':  # Just testing if config works
-                #     raise
-                all_models = {'base', 'nmotifs'}  # Fake models
+                all_models = {'base', 'nmotifs', 'simple'}  # hard-coded models  # FIXME
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=True)
         elif param_name == 'save_dir':
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=True)

@@ -164,6 +164,10 @@ class HicoDetInstanceSplit(Dataset):
         # Each is (human, interaction, object)
         return np.concatenate(self._im_inters, axis=0)
 
+    @property
+    def obj_labels(self):
+        return np.concatenate(self._im_box_classes, axis=0)
+
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}
         object_index = {o: i for i, o in enumerate(self.objects)}

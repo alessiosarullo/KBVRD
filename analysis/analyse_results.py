@@ -1,7 +1,7 @@
-import sys
 import argparse
 import os
 import pickle
+import sys
 from collections import Counter
 
 import cv2
@@ -9,9 +9,9 @@ import numpy as np
 
 from analysis.utils import vis_one_image
 from config import cfg
+from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch
 from lib.models.utils import Prediction
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.stats.eval_stats import EvalStats
 
 
@@ -34,11 +34,19 @@ def count():
     num_gt_hois = sum(gt_hoi_hist.values())
     assert num_gt_hois == gt_hois.shape[0]
     num_pred_hois = stats.num_hoi_predictions_per_class
-
     print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
                                          for i, c in enumerate(hds.predicates)]))
     print('Pred HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_hois[i] / np.sum(num_pred_hois))
                                          for i, c in enumerate(hds.predicates)]))
+
+    obj_class_hist = Counter(hds.obj_labels)
+    num_gt_obj_classes = sum(obj_class_hist.values())
+    assert num_gt_obj_classes == hds.obj_labels.shape[0]
+    num_pred_objs = stats.num_obj_predictions_per_class
+    print('  GT objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * obj_class_hist[i] / num_gt_obj_classes)
+                                            for i, c in enumerate(hds.objects)]))
+    print('Pred objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_objs[i] / np.sum(num_pred_objs))
+                                            for i, c in enumerate(hds.objects)]))
 
 
 def vis_masks():
