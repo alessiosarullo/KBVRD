@@ -95,8 +95,10 @@ class ProgramConfig(BaseConfigs):
 
     def _postprocess_args(self):
         self.save_dir = self.save_dir.rstrip('/')
-        if len(self.save_dir.split('/')) > 1:
-            raise ValueError('Only specify the subdirectory in %s/ as save_dir.' % os.path.join(self.output_root, self.model))
+        if '/' in self.save_dir:
+            old_save_dir = self.save_dir
+            self.save_dir = self.save_dir.split('/')[-1]
+            assert old_save_dir == self.output_path
 
     def _add_argument(self, parser, param_name, param_value):
         if param_name == 'model':
@@ -105,8 +107,8 @@ class ProgramConfig(BaseConfigs):
                 all_models_dict = get_all_models_by_name()
                 all_models = set(all_models_dict.keys())
             except ImportError:
-                # if __name__ != '__main__':  # Just testing if config works
-                #     raise
+                if __name__ != '__main__':  # Just testing if config works
+                    raise
                 all_models = {'base', 'nmotifs'}  # Fake models
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=True)
         elif param_name == 'save_dir':
