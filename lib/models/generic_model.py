@@ -11,10 +11,10 @@ from lib.models.utils import Prediction
 from lib.dataset.utils import Minibatch
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.mask_rcnn import MaskRCNN
-from lib.models.abstract_model import AbstractHOIModel
+from lib.models.abstract_model import AbstractModel
 
 
-class GenericHOIModel(AbstractHOIModel):
+class GenericModel(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.mask_rcnn = MaskRCNN()

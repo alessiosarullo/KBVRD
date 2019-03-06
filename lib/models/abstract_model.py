@@ -4,7 +4,7 @@ import torch
 from torch import nn as nn
 
 
-class AbstractHOIModel(nn.Module):
+class AbstractModel(nn.Module):
     @classmethod
     def get_cline_name(cls) -> str:
         raise NotImplementedError()

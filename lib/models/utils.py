@@ -2,19 +2,19 @@ from typing import Dict, Type, Set
 
 import numpy as np
 
-from lib.models.abstract_model import AbstractHOIModel
+from lib.models.abstract_model import AbstractModel
 
 
 # noinspection PyUnresolvedReferences
-def get_all_models_by_name() -> Dict[str, Type[AbstractHOIModel]]:
-    # This is needed because otherwise subclasses are not registered. FIXME maybe?
-    from lib.models.base_model import BaseModel
+def get_all_models_by_name() -> Dict[str, Type[AbstractModel]]:
+    # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
+    from lib.models.hoi_models import BaseModel, SimpleModel
     from lib.models.nmotifs.hoi_nmotifs import HOINMotifs, HOINMotifsHybrid
 
     def get_all_subclasses(cls):
         return set(cls.__subclasses__()).union([s for c in cls.__subclasses__() for s in get_all_subclasses(c)])
 
-    all_model_classes = get_all_subclasses(AbstractHOIModel)  # type: Set[Type[AbstractHOIModel]]
+    all_model_classes = get_all_subclasses(AbstractModel)  # type: Set[Type[AbstractModel]]
     all_model_classes_dict = {}
     for model in all_model_classes:
         try:
@@ -36,7 +36,15 @@ class Prediction:
 
     @property
     def hoi_classes(self):
+        if self.hoi_score_distributions is None:
+            return None
         return self.hoi_score_distributions.argmax(axis=1)
+
+    @property
+    def obj_classes(self):
+        if self.obj_scores is None:
+            return None
+        return self.obj_scores.argmax(axis=1)
 
     @classmethod
     def from_dict(cls, prediction_dict):

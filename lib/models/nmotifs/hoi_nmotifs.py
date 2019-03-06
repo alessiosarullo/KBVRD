@@ -5,14 +5,14 @@ import torch.nn as nn
 import torch.nn.parallel
 
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.models.generic_hoi_model import GenericHOIModel
+from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context import SpatialContext, ObjectContext
 from .freq import FrequencyBias
 from .lincontext import LinearizedContext
 
 
-class HOINMotifs(GenericHOIModel):
+class HOINMotifs(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'nmotifs'
@@ -26,7 +26,7 @@ class HOINMotifs(GenericHOIModel):
         return obj_logits, hoi_logits
 
 
-class HOINMotifsHybrid(GenericHOIModel):
+class HOINMotifsHybrid(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'nmotifs-h'

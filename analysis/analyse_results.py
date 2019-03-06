@@ -27,13 +27,13 @@ def _setup_and_load():
 def count():
     results, hds = _setup_and_load()
     stats = EvalStats.evaluate_predictions(hds, results)
-    EvalStats.print(stats)
+    stats.print()
 
     gt_hois = hds.hois
     gt_hoi_hist = Counter(gt_hois[:, 1])
     num_gt_hois = sum(gt_hoi_hist.values())
     assert num_gt_hois == gt_hois.shape[0]
-    num_pred_hois = np.sum(list(stats.values())[0].num_predictions[:, :, -1], axis=0)
+    num_pred_hois = stats.num_hoi_predictions_per_class
 
     print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
                                          for i, c in enumerate(hds.predicates)]))

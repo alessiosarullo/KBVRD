@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.models.generic_hoi_model import GenericHOIModel
+from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.stats.eval_stats import EvalStats
 from lib.stats.training_stats import TrainingStats
@@ -26,7 +26,7 @@ class Launcher:
         if cfg.program.load_train_output:
             cfg.load()
         cfg.print()
-        self.detector = None  # type: GenericHOIModel
+        self.detector = None  # type: GenericModel
         self.train_split = None  # type: HicoDetInstanceSplit
         self.curr_train_iter = 0
 
@@ -50,7 +50,7 @@ class Launcher:
 
         self.train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
 
-        self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericHOIModel
+        self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericModel
         self.detector.cuda()
         print_params(self.detector, breakdown=False)
 
@@ -206,7 +206,7 @@ class Launcher:
         Timer.get('Eval').tic()
         result_stats = EvalStats.evaluate_predictions(test_split, all_predictions)
         Timer.get('Eval').toc()
-        EvalStats.print(result_stats)
+        result_stats.print()
 
 
 def main():
