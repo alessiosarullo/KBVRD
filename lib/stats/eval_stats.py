@@ -22,7 +22,6 @@ class EvalStats:
             self.num_predictions = np.zeros_like(self.num_gt_matches)
 
     def __init__(self, dataset: HicoDetInstanceSplit, triplet_matching_modes, iou_thresh=0.5):
-        self.use_gt_boxes = cfg.program.predcls
         self.iou_thresh = iou_thresh
         self.triplet_matching_modes = triplet_matching_modes
         self.dataset = dataset
@@ -160,18 +159,12 @@ class EvalStats:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
         assert gt_boxes.shape[0] > 0
 
-        if self.use_gt_boxes:
-            assert np.allclose(prediction.obj_boxes, gt_boxes, atol=1e-2)
-            predict_boxes = gt_boxes
-            predict_obj_classes = gt_obj_classes
-            predict_obj_scores = np.ones(predict_obj_classes.shape[0])
-        else:
-            predict_boxes = prediction.obj_boxes
-            predict_obj_classes = prediction.obj_classes
-            predict_obj_scores = prediction.obj_scores.max(axis=1)
-            if predict_boxes is None:
-                assert predict_obj_classes is None and predict_obj_scores is None
-                return None, None
+        predict_boxes = prediction.obj_boxes
+        predict_obj_classes = prediction.obj_classes
+        predict_obj_scores = prediction.obj_scores.max(axis=1)
+        if predict_boxes is None:
+            assert predict_obj_classes is None and predict_obj_scores is None
+            return None, None
         assert len(np.unique(prediction.obj_im_inds)) == 1
 
         inds = np.argsort(predict_obj_scores)[::-1]
@@ -202,13 +195,8 @@ class EvalStats:
             return None, None
         assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
-        if self.use_gt_boxes:
-            assert np.allclose(prediction.obj_boxes, gt_boxes, atol=1e-2)  # FIXME # TODO
-            predict_obj_classes = gt_obj_classes
-            predict_obj_scores = np.ones(predict_obj_classes.shape[0])
-        else:
-            predict_obj_classes = prediction.obj_classes
-            predict_obj_scores = prediction.obj_scores.max(axis=1)
+        predict_obj_classes = prediction.obj_classes
+        predict_obj_scores = prediction.obj_scores.max(axis=1)
         predict_boxes = prediction.obj_boxes
 
         predict_ho_pairs = prediction.ho_pairs
