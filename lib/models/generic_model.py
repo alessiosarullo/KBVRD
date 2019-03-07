@@ -42,7 +42,10 @@ class GenericModel(AbstractModel):
                 if hoi_infos is not None:
                     assert boxes_ext is not None
                     obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
-                    obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+                    if cfg.program.predcls:
+                        obj_prob = None  # this will be assigned later as the object label distribution
+                    else:
+                        obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
                     hoi_probs = nn.functional.softmax(hoi_output, dim=1).cpu().numpy()
                     hoi_img_inds = hoi_infos[:, 0]
                     ho_pairs = hoi_infos[:, 1:]
