@@ -265,8 +265,8 @@ class Configs:
             predcls = cls.program.predcls
             cls.program.__dict__.update(d['program'])
             cls.program.predcls = predcls
-            # assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
             cls.program.save_dir = save_dir
+            assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
         if data:
             cls.data.__dict__.update(d['data'])
         if model:
