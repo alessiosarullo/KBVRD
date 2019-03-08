@@ -30,7 +30,7 @@ class BaseModel(GenericModel):
                                         self.spatial_context_branch.spatial_emb_dim,
                                         self.obj_branch.output_ctx_dim,
                                         self.spatial_context_branch.output_dim,
-                                        self.dataset.num_object_classes)
+                                        self.dataset.objects)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
@@ -54,7 +54,7 @@ class BaseModel(GenericModel):
 
 
 class BaseHOIBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim, num_obj_classes):
+    def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim, objects):
         def _vis_fc_layer():
             return nn.Sequential(*([nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim),
                                     nn.ReLU(inplace=True),
@@ -84,8 +84,8 @@ class BaseHOIBranch(AbstractHOIBranch):
         self.input_obj_ctx_fc = nn.Linear(obj_ctx_dim, obj_ctx_dim)
         torch.nn.init.normal_(self.input_obj_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / obj_ctx_dim))
 
-        self.word_embs = obj_edge_vectors(self.dataset.objects, wv_dim=self.word_emb_dim).detach()
-        self.word_embs_attention_fc = nn.Linear(num_obj_classes, num_obj_classes)
+        self.word_embs = obj_edge_vectors(objects, wv_dim=self.word_emb_dim).detach()
+        self.word_embs_attention_fc = nn.Linear(len(objects), len(objects))
 
         self.rel_sub_fc = _vis_fc_layer()
         self.rel_obj_fc = _vis_fc_layer()
