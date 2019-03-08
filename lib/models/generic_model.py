@@ -249,5 +249,5 @@ class GenericModel(AbstractModel):
 
         hois_infos_and_labels = np.concatenate(hois_infos_and_labels, axis=0)
         hoi_infos = hois_infos_and_labels[:, :3].astype(np.int, copy=False)  # [im_id, sub_ind, obj_ind]
-        hoi_labels = hois_infos_and_labels[:, 3:]  # [pred]
+        hoi_labels = hois_infos_and_labels[:, 3:].astype(np.float32, copy=False)  # [pred]
         return hoi_infos, hoi_labels
