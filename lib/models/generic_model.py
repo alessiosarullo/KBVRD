@@ -232,22 +232,19 @@ class GenericModel(AbstractModel):
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
             predict_gt_match_i = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= gt_match_iou_thr)
 
-            hois_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
+            hoi_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
             for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
                 for from_predict_ind in np.flatnonzero(predict_gt_match_i[:, from_gt_ind]):
                     for to_predict_ind in np.flatnonzero(predict_gt_match_i[:, to_gt_ind]):
                         if from_predict_ind != to_predict_ind:
-                            hois_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
+                            hoi_labels_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
 
-            ho_pairs_i = np.where(hois_i.any(axis=2))
-            hois_i_ext = np.concatenate([np.full(ho_pairs_i[0].shape[0], fill_value=im_id),
-                                         ho_pairs_i[0][:, None] + num_box_seen,
-                                         ho_pairs_i[1][:, None] + num_box_seen,
-                                         hois_i[ho_pairs_i]],
-                                        axis=1)
-            assert hois_i_ext.shape[0] > 0  # since GT boxes are added to predicted ones during training this cannot be empty
-
-            hois_infos_and_labels.append(hois_i_ext)
+            ho_pairs_i = np.where(hoi_labels_i.any(axis=2))
+            hoi_infos_i = np.stack([np.full(ho_pairs_i[0].shape[0], fill_value=im_id),
+                                    ho_pairs_i[0] + num_box_seen,
+                                    ho_pairs_i[1] + num_box_seen], axis=1)
+            assert hoi_infos_i.shape[0] > 0  # since GT boxes are added to predicted ones during training this cannot be empty
+            hois_infos_and_labels.append(np.concatenate([hoi_infos_i, hoi_labels_i[ho_pairs_i]], axis=1))
             num_box_seen += num_predict_boxes_i
 
         hois_infos_and_labels = np.concatenate(hois_infos_and_labels, axis=0)
