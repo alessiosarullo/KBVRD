@@ -170,7 +170,7 @@ class GenericModel(AbstractModel):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
         pred_gt_box_ious = self.iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
-        pred_gt_best_match = np.argmax(pred_gt_box_ious, axis=1)
+        pred_gt_best_match = np.argmax(pred_gt_box_ious, axis=1)  # type: np.ndarray
         obj_labels = batch.gt_obj_classes[pred_gt_best_match]  # assign the best match
 
         has_overlap_with_gt = np.flatnonzero(np.any(pred_gt_box_ious >= self.gt_iou_thr, axis=1))  # filter if not good enough
@@ -178,8 +178,9 @@ class GenericModel(AbstractModel):
         obj_labels = obj_labels[has_overlap_with_gt]
         box_feats = box_feats[has_overlap_with_gt, :]
         masks = masks[has_overlap_with_gt, :]
+        pred_gt_match = pred_gt_best_match[has_overlap_with_gt]
 
-        unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < self.gt_iou_thr, axis=0))
+        unmatched_gt_boxes_inds = np.array(sorted(set(range(gt_boxes_with_imid.shape[0])) - set(pred_gt_match.to_list())))
         if unmatched_gt_boxes_inds.size > 0:
             unmatched_gt_obj_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
             unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
