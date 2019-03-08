@@ -180,7 +180,7 @@ class GenericModel(AbstractModel):
         masks = masks[has_overlap_with_gt, :]
         pred_gt_match = pred_gt_best_match[has_overlap_with_gt]
 
-        unmatched_gt_boxes_inds = np.array(sorted(set(range(gt_boxes_with_imid.shape[0])) - set(pred_gt_match.to_list())))
+        unmatched_gt_boxes_inds = np.array(sorted(set(range(gt_boxes_with_imid.shape[0])) - set(pred_gt_match.tolist())))
         if unmatched_gt_boxes_inds.size > 0:
             unmatched_gt_obj_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
             unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
