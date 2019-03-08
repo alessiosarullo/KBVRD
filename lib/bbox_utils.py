@@ -2,15 +2,6 @@ import numpy as np
 import torch
 
 
-def iou_match_in_img(boxes1, boxes2):
-    box_im_ids1 = boxes1[:, 0]
-    box_im_ids2 = boxes2[:, 0]
-    ious = compute_ious(boxes1[:, 1:5], boxes2[:, 1:5])
-    ious[box_im_ids1[:, None] != box_im_ids2[None, :]] = 0.0
-    argmax_ious = np.argmax(ious, axis=1)
-    return argmax_ious, ious
-
-
 # TODO check and possibly update
 def compute_ious(boxes_a, boxes_b):
     """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap

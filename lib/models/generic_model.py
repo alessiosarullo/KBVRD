@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from config import cfg
-from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
+from lib.bbox_utils import compute_ious, get_union_boxes
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Minibatch
 from lib.models.abstract_model import AbstractModel
@@ -85,8 +85,9 @@ class GenericModel(AbstractModel):
         boxes_ext_np, masks, box_feats = self.filter_and_map_to_hico(boxes_ext_np, masks, box_feats)
 
         if not predict:
+            # FIXME match with GT boxes is done twice
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            hoi_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)
+            hoi_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np, box_labels)
             assert hoi_infos.shape[0] == hoi_labels.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
             box_labels = torch.tensor(box_labels, device=masks.device)
@@ -162,19 +163,21 @@ class GenericModel(AbstractModel):
 
         hoi_im_ids = boxes_ext[hum_inds, 0]
         assert np.all(hoi_im_ids == boxes_ext[obj_inds, 0])
-        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes, not person ones
+        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes
         return hoi_infos
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
-        gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
-        obj_labels = batch.gt_obj_classes[gt_idx_per_pred_box]
-        gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= self.gt_iou_thr, axis=1))
-        boxes_ext = boxes_ext[gt_match, :]
-        obj_labels = obj_labels[gt_match]
-        box_feats = box_feats[gt_match, :]
-        masks = masks[gt_match, :]
+        pred_gt_box_ious = self.iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
+        pred_gt_best_match = np.argmax(pred_gt_box_ious, axis=1)
+        obj_labels = batch.gt_obj_classes[pred_gt_best_match]  # assign the best match
+
+        has_overlap_with_gt = np.flatnonzero(np.any(pred_gt_box_ious >= self.gt_iou_thr, axis=1))  # filter if not good enough
+        boxes_ext = boxes_ext[has_overlap_with_gt, :]
+        obj_labels = obj_labels[has_overlap_with_gt]
+        box_feats = box_feats[has_overlap_with_gt, :]
+        masks = masks[has_overlap_with_gt, :]
 
         unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < self.gt_iou_thr, axis=0))
         if unmatched_gt_boxes_inds.size > 0:
@@ -206,12 +209,19 @@ class GenericModel(AbstractModel):
 
         return boxes_ext, obj_labels, box_feats, masks
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np):
+    @staticmethod
+    def iou_match_in_img(boxes1, boxes2):
+        box_im_ids1 = boxes1[:, 0]
+        box_im_ids2 = boxes2[:, 0]
+        ious = compute_ious(boxes1[:, 1:5], boxes2[:, 1:5])
+        ious[box_im_ids1[:, None] != box_im_ids2[None, :]] = 0.0
+        return ious
+
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np, box_labels):
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
         predict_boxes = boxes_ext_np[:, 1:5]
-        predict_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
 
         hois_infos_and_labels = []
         num_box_seen = 0
@@ -226,7 +236,7 @@ class GenericModel(AbstractModel):
             gt_rels_i = gt_inters[gt_inters_im_ids == im_id]
 
             predict_boxes_i = predict_boxes[predict_box_im_ids_i]
-            predict_box_labels_i = predict_box_classes[predict_box_im_ids_i]
+            predict_box_labels_i = box_labels[predict_box_im_ids_i]
             num_predict_boxes_i = predict_boxes_i.shape[0]
 
             # Find rel distribution
