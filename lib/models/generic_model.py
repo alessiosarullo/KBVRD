@@ -122,11 +122,11 @@ class GenericModel(AbstractModel):
         if hoi_infos.shape[0] == 0:
             assert predict and not cfg.program.predcls
             return boxes_ext, box_feats, masks, None, None, None, None
+        hoi_infos = hoi_infos.astype(np.int, copy=False)
 
         # Note that box indices in `hoi_infos` are over all boxes, NOT relative to each specific image
         hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], hoi_infos[:, 1:])
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=hoi_union_boxes)
-        hoi_infos = hoi_infos.astype(np.int, copy=False)
         assert hoi_infos.shape[0] == union_boxes_feats.shape[0]
         return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels
 
@@ -161,7 +161,7 @@ class GenericModel(AbstractModel):
 
         hoi_im_ids = boxes_ext[hum_inds, 0]
         assert np.all(hoi_im_ids == boxes_ext[obj_inds, 0])
-        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1)  # box indices are over the original boxes, not person ones
+        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes, not person ones
         return hoi_infos
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
@@ -248,6 +248,6 @@ class GenericModel(AbstractModel):
             num_box_seen += num_predict_boxes_i
 
         hois_infos_and_labels = np.concatenate(hois_infos_and_labels, axis=0)
-        hoi_infos = hois_infos_and_labels[:, :3]  # [im_id, sub_ind, obj_ind]
+        hoi_infos = hois_infos_and_labels[:, :3].astype(np.int, copy=False)  # [im_id, sub_ind, obj_ind]
         hoi_labels = hois_infos_and_labels[:, 3:]  # [pred]
         return hoi_infos, hoi_labels
