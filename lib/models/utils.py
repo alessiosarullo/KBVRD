@@ -21,7 +21,6 @@ def get_all_models_by_name() -> Dict[str, Type[AbstractModel]]:
             all_model_classes_dict[model.get_cline_name()] = model
         except NotImplementedError:
             pass
-    print(all_model_classes_dict)
     return all_model_classes_dict
 
 

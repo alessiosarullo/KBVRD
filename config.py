@@ -171,6 +171,7 @@ class OptimizerConfig(BaseConfigs):
     def __init__(self):
         self.adam = False
         self.learning_rate = 1e-3
+        self.momentum = 0.9
         self.hoi_lr_coeff = 1.0
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
