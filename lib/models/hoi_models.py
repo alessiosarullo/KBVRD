@@ -84,7 +84,7 @@ class BaseHOIBranch(AbstractHOIBranch):
         self.input_obj_ctx_fc = nn.Linear(obj_ctx_dim, obj_ctx_dim)
         torch.nn.init.normal_(self.input_obj_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / obj_ctx_dim))
 
-        self.word_embs = obj_edge_vectors(objects, wv_dim=self.word_emb_dim).detach()
+        self.word_embs = obj_edge_vectors(objects, wv_dim=self.word_emb_dim).detach().cuda()  # FIXME
         self.word_embs_attention_fc = nn.Linear(len(objects), len(objects))
 
         self.rel_sub_fc = _vis_fc_layer()
