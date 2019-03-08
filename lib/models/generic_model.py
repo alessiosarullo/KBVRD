@@ -13,6 +13,7 @@ from lib.models.utils import Prediction
 
 class GenericModel(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.gt_iou_thr = 0.5
         super().__init__(**kwargs)
         self.dataset = dataset
         self.mask_rcnn = MaskRCNN()
@@ -85,7 +86,7 @@ class GenericModel(AbstractModel):
 
         if not predict:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            hoi_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)  # FIXME magic constant
+            hoi_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)
             assert hoi_infos.shape[0] == hoi_labels.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
             box_labels = torch.tensor(box_labels, device=masks.device)
@@ -164,18 +165,18 @@ class GenericModel(AbstractModel):
         hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes, not person ones
         return hoi_infos
 
-    def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
+    def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
 
         gt_idx_per_pred_box, pred_gt_box_ious = iou_match_in_img(boxes_ext[:, :5], gt_boxes_with_imid)
         obj_labels = batch.gt_obj_classes[gt_idx_per_pred_box]
-        gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= gt_iou_thr, axis=1))
+        gt_match = np.flatnonzero(np.any(pred_gt_box_ious >= self.gt_iou_thr, axis=1))
         boxes_ext = boxes_ext[gt_match, :]
         obj_labels = obj_labels[gt_match]
         box_feats = box_feats[gt_match, :]
         masks = masks[gt_match, :]
 
-        unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < gt_iou_thr, axis=0))
+        unmatched_gt_boxes_inds = np.flatnonzero(np.all(pred_gt_box_ious < self.gt_iou_thr, axis=0))
         if unmatched_gt_boxes_inds.size > 0:
             unmatched_gt_obj_labels = batch.gt_obj_classes[unmatched_gt_boxes_inds]
             unmatched_gt_labels_onehot = np.zeros((unmatched_gt_boxes_inds.size, self.dataset.num_object_classes))
@@ -205,7 +206,7 @@ class GenericModel(AbstractModel):
 
         return boxes_ext, obj_labels, box_feats, masks
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np, gt_match_iou_thr=0.5):
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np):
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
@@ -230,7 +231,7 @@ class GenericModel(AbstractModel):
 
             # Find rel distribution
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
-            predict_gt_match_i = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= gt_match_iou_thr)
+            predict_gt_match_i = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= self.gt_iou_thr)
 
             hoi_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
             for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
@@ -243,7 +244,12 @@ class GenericModel(AbstractModel):
             hoi_infos_i = np.stack([np.full(ho_pairs_i[0].shape[0], fill_value=im_id),
                                     ho_pairs_i[0] + num_box_seen,
                                     ho_pairs_i[1] + num_box_seen], axis=1)
-            assert hoi_infos_i.shape[0] > 0  # since GT boxes are added to predicted ones during training this cannot be empty
+            if hoi_infos_i.shape[0] == 0:  # since GT boxes are added to predicted ones during training this cannot be empty
+                print(gt_boxes_i)
+                print(predict_boxes_i)
+                print(gt_obj_classes_i)
+                print(predict_box_labels_i)
+                raise RuntimeError
             hois_infos_and_labels.append(np.concatenate([hoi_infos_i, hoi_labels_i[ho_pairs_i]], axis=1))
             num_box_seen += num_predict_boxes_i
 
