@@ -16,7 +16,6 @@ class GenericModel(AbstractModel):
         super().__init__(**kwargs)
         self.dataset = dataset
         self.mask_rcnn = MaskRCNN()
-        self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
         self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
 
     def get_losses(self, x, **kwargs):
@@ -86,8 +85,8 @@ class GenericModel(AbstractModel):
 
         if not predict:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)  # FIXME magic constant
-            assert hoi_im_ids.shape[0] == hoi_labels.shape[0] == ho_pairs.shape[0]
+            hoi_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)  # FIXME magic constant
+            assert hoi_infos.shape[0] == hoi_labels.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
             box_labels = torch.tensor(box_labels, device=masks.device)
             hoi_labels = torch.tensor(hoi_labels, device=masks.device)
@@ -116,20 +115,19 @@ class GenericModel(AbstractModel):
             box_feats = box_feats[inds]
             masks = masks[inds]
 
-            hoi_im_ids, ho_pairs = self.get_all_pairs(boxes_ext_np)
+            hoi_infos = self.get_all_pairs(boxes_ext_np)
             box_labels = hoi_labels = None
         boxes_ext = torch.tensor(boxes_ext_np, device=masks.device, dtype=torch.float32)
 
-        if hoi_im_ids.size == 0:
+        if hoi_infos.shape[0] == 0:
             assert predict and not cfg.program.predcls
             return boxes_ext, box_feats, masks, None, None, None, None
-        assert ho_pairs.shape[0] > 0
 
-        # Note that box indices in `ho_pairs` are over all boxes, NOT relative to each specific image
-        hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_pairs)
+        # Note that box indices in `hoi_infos` are over all boxes, NOT relative to each specific image
+        hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], hoi_infos[:, 1:])
         union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=hoi_union_boxes)
-        assert hoi_im_ids.shape[0] == union_boxes_feats.shape[0]
-        hoi_infos = np.concatenate([hoi_im_ids[:, None], ho_pairs], axis=1).astype(np.int, copy=False)
+        hoi_infos = hoi_infos.astype(np.int, copy=False)
+        assert hoi_infos.shape[0] == union_boxes_feats.shape[0]
         return boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels
 
     def filter_and_map_to_hico(self, boxes_ext: np.ndarray, masks: torch.Tensor, box_feats: torch.Tensor):
@@ -148,7 +146,6 @@ class GenericModel(AbstractModel):
         return boxes_ext_hico, masks, box_feats
 
     def get_all_pairs(self, boxes_ext, box_classes=None):
-        # FIXME there is a significant overlap between this method and rel_gt_assignment. Merge.
         box_classes = box_classes or np.argmax(boxes_ext[:, 5:], axis=1)
         person_box_inds = (box_classes == self.dataset.person_class)
 
@@ -156,21 +153,16 @@ class GenericModel(AbstractModel):
         if person_boxes_ext.shape[0] == 0:
             return np.empty([0, ]), np.empty([0, 2])
 
-        if self.filter_rels_of_non_overlapping_boxes:
-            _, pred_box_ious = iou_match_in_img(person_boxes_ext[:, :5], boxes_ext[:, :5])
-            possible_rels_mat = (0 < pred_box_ious) & (pred_box_ious < 1)
-            subjs, objs = np.where(possible_rels_mat)
-            subjs = np.flatnonzero(person_box_inds)[subjs]
-        else:
-            block_img_mat = (boxes_ext[:, 0][:, None] == boxes_ext[:, 0][None, :])
-            assert block_img_mat.shape[0] == block_img_mat.shape[1]
-            possible_rels_mat = block_img_mat - np.eye(block_img_mat.shape[0])
-            possible_rels_mat = possible_rels_mat[person_box_inds, :]
-            subjs, objs = np.where(possible_rels_mat)
-        rel_im_ids = boxes_ext[subjs, 0]
-        assert np.all(rel_im_ids == boxes_ext[objs, 0])
-        sub_obj_pairs = np.stack([subjs, objs], axis=1)  # this is over the original boxes, not person ones
-        return rel_im_ids, sub_obj_pairs
+        block_img_mat = (boxes_ext[:, 0][:, None] == boxes_ext[:, 0][None, :])
+        assert block_img_mat.shape[0] == block_img_mat.shape[1]
+        possible_rels_mat = block_img_mat - np.eye(block_img_mat.shape[0])
+        possible_rels_mat = possible_rels_mat[person_box_inds, :]
+        hum_inds, obj_inds = np.where(possible_rels_mat)
+
+        hoi_im_ids = boxes_ext[hum_inds, 0]
+        assert np.all(hoi_im_ids == boxes_ext[obj_inds, 0])
+        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1)  # box indices are over the original boxes, not person ones
+        return hoi_infos
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map, gt_iou_thr=0.5):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
@@ -220,7 +212,7 @@ class GenericModel(AbstractModel):
         predict_boxes = boxes_ext_np[:, 1:5]
         predict_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
 
-        hois_ext = []
+        hois_infos_and_labels = []
         num_box_seen = 0
         for im_id in np.unique(gt_box_im_ids):
             # Get image values
@@ -248,18 +240,17 @@ class GenericModel(AbstractModel):
                             hois_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
 
             ho_pairs_i = np.where(hois_i.any(axis=2))
-            hois_i_ext = np.concatenate([np.full(ho_pairs_i.shape[0], fill_value=im_id),
+            hois_i_ext = np.concatenate([np.full(ho_pairs_i[0].shape[0], fill_value=im_id),
                                          ho_pairs_i[0][:, None] + num_box_seen,
                                          ho_pairs_i[1][:, None] + num_box_seen,
                                          hois_i[ho_pairs_i]],
                                         axis=1)
             assert hois_i_ext.shape[0] > 0  # since GT boxes are added to predicted ones during training this cannot be empty
 
-            hois_ext.append(hois_i_ext)
+            hois_infos_and_labels.append(hois_i_ext)
             num_box_seen += num_predict_boxes_i
 
-        hois_ext = np.concatenate(hois_ext, axis=0)
-        hoi_im_ids = hois_ext[:, 0]
-        ho_pairs = hois_ext[:, [1, 2]]  # [sub_ind, obj_ind]
-        hoi_labels = hois_ext[:, 3:]  # [pred]
-        return hoi_im_ids, ho_pairs, hoi_labels
+        hois_infos_and_labels = np.concatenate(hois_infos_and_labels, axis=0)
+        hoi_infos = hois_infos_and_labels[:, :3]  # [im_id, sub_ind, obj_ind]
+        hoi_labels = hois_infos_and_labels[:, 3:]  # [pred]
+        return hoi_infos, hoi_labels
