@@ -35,9 +35,13 @@ class SpatialContext(nn.Module):
     def output_dim(self):
         return 2 * self.spatial_rnn_emb_dim  # 2 because of BiLSTM
 
-    def forward(self, masks, unique_im_ids, hoi_im_ids, sub_inds, obj_inds, **kwargs):
+    def forward(self, masks, unique_im_ids, hoi_infos, **kwargs):
         # TODO docs
         with torch.set_grad_enabled(self.training):
+            hoi_im_ids = hoi_infos[:, 0]
+            sub_inds = hoi_infos[:, 1]
+            obj_inds = hoi_infos[:, 2]
+
             masks = masks.view([masks.shape[0], -1])
             ho_pair_masks = torch.cat([masks[sub_inds, :], masks[obj_inds, :]], dim=1)
             spatial_rels_feats = self.spatial_rels_fc(ho_pair_masks)

@@ -10,7 +10,7 @@ import torch
 
 from config import cfg
 
-# TODO use WordEmbeddings
+# TODO merge with WordEmbeddings
 
 # FIXME check and update
 def obj_edge_vectors(names, wv_dim=300):
@@ -25,7 +25,7 @@ def obj_edge_vectors(names, wv_dim=300):
             vectors[i] = wv_arr[wv_index]
         else:
             # Try the longest word (hopefully won't be a preposition
-            lw_token = sorted(token.split(' '), key=lambda x: len(x), reverse=True)[0]
+            lw_token = sorted(token.replace('_', ' ').strip().split(' '), key=lambda x: len(x), reverse=True)[0]
             print("{} -> {} ".format(token, lw_token))
             wv_index = wv_dict.get(lw_token, None)
             if wv_index is not None:

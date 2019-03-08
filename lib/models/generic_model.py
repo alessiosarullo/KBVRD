@@ -12,7 +12,12 @@ from lib.models.utils import Prediction
 
 
 class GenericModel(AbstractModel):
+    @classmethod
+    def get_cline_name(cls) -> str:
+        raise NotImplementedError()
+
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        # FIXME? params
         self.gt_iou_thr = 0.5
         super().__init__(**kwargs)
         self.dataset = dataset
@@ -153,18 +158,18 @@ class GenericModel(AbstractModel):
 
         person_boxes_ext = boxes_ext[person_box_inds, :]
         if person_boxes_ext.shape[0] == 0:
-            return np.empty([0, ]), np.empty([0, 2])
+            return np.empty([0, 3])
+        else:
+            block_img_mat = (boxes_ext[:, 0][:, None] == boxes_ext[:, 0][None, :])
+            assert block_img_mat.shape[0] == block_img_mat.shape[1]
+            possible_rels_mat = block_img_mat - np.eye(block_img_mat.shape[0])
+            possible_rels_mat = possible_rels_mat[person_box_inds, :]
+            hum_inds, obj_inds = np.where(possible_rels_mat)
 
-        block_img_mat = (boxes_ext[:, 0][:, None] == boxes_ext[:, 0][None, :])
-        assert block_img_mat.shape[0] == block_img_mat.shape[1]
-        possible_rels_mat = block_img_mat - np.eye(block_img_mat.shape[0])
-        possible_rels_mat = possible_rels_mat[person_box_inds, :]
-        hum_inds, obj_inds = np.where(possible_rels_mat)
-
-        hoi_im_ids = boxes_ext[hum_inds, 0]
-        assert np.all(hoi_im_ids == boxes_ext[obj_inds, 0])
-        hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes
-        return hoi_infos
+            hoi_im_ids = boxes_ext[hum_inds, 0]
+            assert np.all(hoi_im_ids == boxes_ext[obj_inds, 0])
+            hoi_infos = np.stack([hoi_im_ids, hum_inds, obj_inds], axis=1).astype(np.int, copy=False)  # box indices are over the original boxes
+            return hoi_infos
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext, box_feats, masks, feat_map):
         gt_boxes_with_imid = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
