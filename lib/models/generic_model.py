@@ -1,22 +1,20 @@
-from abc import ABC
-
 import numpy as np
-import numpy.random as npr
 import torch
 import torch.nn as nn
 
 from config import cfg
 from lib.bbox_utils import iou_match_in_img, compute_ious, get_union_boxes
-from lib.models.utils import Prediction
-from lib.dataset.utils import Minibatch
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.models.mask_rcnn import MaskRCNN
+from lib.dataset.utils import Minibatch
 from lib.models.abstract_model import AbstractModel
+from lib.models.mask_rcnn import MaskRCNN
+from lib.models.utils import Prediction
 
 
 class GenericModel(AbstractModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
+        super().__init__(**kwargs)
+        self.dataset = dataset
         self.mask_rcnn = MaskRCNN()
         self.filter_rels_of_non_overlapping_boxes = False  # TODO? create config for this
         self.mask_rcnn_vis_feat_dim = self.mask_rcnn.output_feat_dim
@@ -24,14 +22,14 @@ class GenericModel(AbstractModel):
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, predict=False, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
-        hoi_loss = nn.functional.cross_entropy(hoi_output, hoi_labels)
+        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels)
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
     def forward(self, x, predict=True, **kwargs):
         # TODO docs
 
         with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.first_step(x, predict)
+            boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.detection_and_gt_assignment(x, predict)
             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
 
             if not predict:
@@ -46,7 +44,7 @@ class GenericModel(AbstractModel):
                         obj_prob = None  # this will be assigned later as the object label distribution
                     else:
                         obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    hoi_probs = nn.functional.softmax(hoi_output, dim=1).cpu().numpy()
+                    hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
                     hoi_img_inds = hoi_infos[:, 0]
                     ho_pairs = hoi_infos[:, 1:]
                 else:
@@ -72,7 +70,7 @@ class GenericModel(AbstractModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
-    def first_step(self, batch: Minibatch, predict):  # FIXME change name
+    def detection_and_gt_assignment(self, batch: Minibatch, predict):
         """
         :param batch:
         :param kwargs:
@@ -88,7 +86,7 @@ class GenericModel(AbstractModel):
 
         if not predict:
             boxes_ext_np, box_labels, box_feats, masks = self.box_gt_assignment(batch, boxes_ext_np, box_feats, masks, feat_map)
-            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np, max_num_bg_rels_per_img=0)  # FIXME magic constant
+            hoi_im_ids, ho_pairs, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np)  # FIXME magic constant
             assert hoi_im_ids.shape[0] == hoi_labels.shape[0] == ho_pairs.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
             box_labels = torch.tensor(box_labels, device=masks.device)
@@ -215,18 +213,17 @@ class GenericModel(AbstractModel):
 
         return boxes_ext, obj_labels, box_feats, masks
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np,
-                           num_sample_per_gt=4, filter_non_overlap=False, gt_match_iou_thr=0.5,
-                           max_num_fg_rels_per_img=None, max_num_bg_rels_per_img=64):  # FIXME move some/all default values to cfg
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext_np, gt_match_iou_thr=0.5):
         gt_boxes, gt_box_im_ids, gt_obj_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext_np[:, 0]
         predict_boxes = boxes_ext_np[:, 1:5]
         predict_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
 
-        rel_infos = []
+        hois_ext = []
         num_box_seen = 0
         for im_id in np.unique(gt_box_im_ids):
+            # Get image values
             predict_box_im_ids_i = (predict_box_im_ids == im_id)
             gt_box_im_ids_i = (gt_box_im_ids == im_id)
             assert np.any(predict_box_im_ids_i)
@@ -237,71 +234,32 @@ class GenericModel(AbstractModel):
 
             predict_boxes_i = predict_boxes[predict_box_im_ids_i]
             predict_box_labels_i = predict_box_classes[predict_box_im_ids_i]
-            predict_human_boxes_i = (predict_box_labels_i == self.dataset.person_class)
+            num_predict_boxes_i = predict_boxes_i.shape[0]
 
+            # Find rel distribution
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
-            predict_gt_match = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= gt_match_iou_thr)
+            predict_gt_match_i = (predict_box_labels_i[:, None] == gt_obj_classes_i[None, :]) & (iou_predict_to_gt_i >= gt_match_iou_thr)
 
-            human_subject_possibilities = np.zeros((predict_boxes_i.shape[0], predict_boxes_i.shape[0]), dtype=bool)
-            human_subject_possibilities[predict_human_boxes_i, :] = True
-            human_subject_possibilities[np.arange(predict_boxes_i.shape[0]), np.arange(predict_boxes_i.shape[0])] = False
-            rel_possibilities = human_subject_possibilities
-            if filter_non_overlap:
-                # Limit to IOUs that overlap, but are not the exact same box
-                iou_predict_boxes_i = compute_ious(predict_boxes_i, predict_boxes_i)
-                predict_boxes_intersect = (0 < iou_predict_boxes_i) & (iou_predict_boxes_i < 1)
-                rel_possibilities = rel_possibilities & predict_boxes_intersect
-
-            # Sample the GT relationships.
-            fg_rels = []
-            p_size = []
+            hois_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
             for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
-                fg_rels_i = []
-                fg_scores_i = []
-
-                for from_predict_ind in np.flatnonzero(predict_gt_match[:, from_gt_ind]):
-                    for to_predict_ind in np.flatnonzero(predict_gt_match[:, to_gt_ind]):
+                for from_predict_ind in np.flatnonzero(predict_gt_match_i[:, from_gt_ind]):
+                    for to_predict_ind in np.flatnonzero(predict_gt_match_i[:, to_gt_ind]):
                         if from_predict_ind != to_predict_ind:
-                            fg_rels_i.append((from_predict_ind, to_predict_ind, rel_id))
-                            fg_scores_i.append((iou_predict_to_gt_i[from_predict_ind, from_gt_ind] * iou_predict_to_gt_i[to_predict_ind, to_gt_ind]))
-                            rel_possibilities[from_predict_ind, to_predict_ind] = False
-                if len(fg_rels_i) == 0:
-                    continue
-                p = np.array(fg_scores_i)
-                p = p / p.sum()
-                p_size.append(p.shape[0])
-                num_to_add = min(p.shape[0], num_sample_per_gt)
-                for rel_to_add in npr.choice(p.shape[0], p=p, size=num_to_add, replace=False):
-                    fg_rels.append(fg_rels_i[rel_to_add])
+                            hois_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
 
-            fg_rels = np.array(fg_rels, dtype=np.int64)
-            if fg_rels.size > 0 and max_num_fg_rels_per_img is not None and fg_rels.shape[0] > max_num_fg_rels_per_img:
-                fg_rels = fg_rels[npr.choice(fg_rels.shape[0], size=max_num_fg_rels_per_img, replace=False)]
-            elif fg_rels.size == 0:
-                fg_rels = np.zeros((0, 3), dtype=np.int64)
+            ho_pairs_i = np.where(hois_i.any(axis=2))
+            hois_i_ext = np.concatenate([np.full(ho_pairs_i.shape[0], fill_value=im_id),
+                                         ho_pairs_i[0][:, None] + num_box_seen,
+                                         ho_pairs_i[1][:, None] + num_box_seen,
+                                         hois_i[ho_pairs_i]],
+                                        axis=1)
+            assert hois_i_ext.shape[0] > 0  # since GT boxes are added to predicted ones during training this cannot be empty
 
-            bg_rels = np.zeros((0, 3), dtype=np.int64)
-            if max_num_bg_rels_per_img > 0:
-                bg_candidate_ho_pairs = np.stack(np.where(rel_possibilities), axis=1)
-                num_bg_candidate_ho_pairs = bg_candidate_ho_pairs.shape[0]
-                if num_bg_candidate_ho_pairs > 0:
-                    num_bg_rel_to_sample = min(max_num_bg_rels_per_img - fg_rels.shape[0], num_bg_candidate_ho_pairs)
-                    bg_ho_pairs = bg_candidate_ho_pairs[np.random.choice(num_bg_candidate_ho_pairs, size=num_bg_rel_to_sample, replace=False), :]
-                    bg_rels = np.stack([bg_ho_pairs, np.zeros(bg_ho_pairs.shape[0], dtype=np.int64)], axis=1)
+            hois_ext.append(hois_i_ext)
+            num_box_seen += num_predict_boxes_i
 
-            all_rels_i = np.concatenate((fg_rels, bg_rels), axis=0)
-            if all_rels_i.size == 0:
-                # Just put something here
-                all_rels_i = np.array([[0, 0, 0]], dtype=np.int64)
-            all_rels_i[:, :2] += num_box_seen
-            all_rels_i = all_rels_i[np.lexsort((all_rels_i[:, 1], all_rels_i[:, 0]))]
-
-            rel_infos.append(np.column_stack([np.full(all_rels_i.shape[0], fill_value=im_id, dtype=np.int64),
-                                              all_rels_i]))
-
-            num_box_seen += predict_boxes_i.shape[0]
-        rel_infos = np.concatenate(rel_infos, axis=0)
-        rel_im_ids = rel_infos[:, 0]
-        sub_obj_pairs = rel_infos[:, 1:3]  # [sub_ind, obj_ind]
-        rel_preds = rel_infos[:, 3]  # [pred]
-        return rel_im_ids, sub_obj_pairs, rel_preds
+        hois_ext = np.concatenate(hois_ext, axis=0)
+        hoi_im_ids = hois_ext[:, 0]
+        ho_pairs = hois_ext[:, [1, 2]]  # [sub_ind, obj_ind]
+        hoi_labels = hois_ext[:, 3:]  # [pred]
+        return hoi_im_ids, ho_pairs, hoi_labels

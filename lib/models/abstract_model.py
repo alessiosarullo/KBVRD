@@ -9,10 +9,9 @@ class AbstractModel(nn.Module):
     def get_cline_name(cls) -> str:
         raise NotImplementedError()
 
-    def __init__(self, dataset, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
-        self.dataset = dataset
 
     def get_losses(self, batch, **kwargs):
         raise NotImplementedError()

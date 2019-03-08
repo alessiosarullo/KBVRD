@@ -355,10 +355,20 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
 
 
 def main():
+    import sys
+    sys.argv += ['--model', 'base', '--save_dir', 'fake']
     cfg.parse_args()
-    cfg.print()
 
     hd = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
+    for im_i, hois in enumerate(hd._im_inters):
+        # u_hois, counts = np.unique(hois[:, [0, 2]], return_counts=True)
+
+        hh_inter = np.any(hois[:, 0] == hois[:, 2])
+        counts = np.sum(hh_inter)
+
+        if np.any(counts > 1):
+            print(im_i, np.sum(counts > 1))
+
 
 
 if __name__ == '__main__':

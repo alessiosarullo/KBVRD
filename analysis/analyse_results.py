@@ -24,7 +24,7 @@ def _setup_and_load():
     return results, hds
 
 
-def count():
+def vrd_style_eval_count():
     results, hds = _setup_and_load()
     stats = EvalStats.evaluate_predictions(hds, results)
     stats.print()
@@ -47,6 +47,18 @@ def count():
                                             for i, c in enumerate(hds.objects)]))
     print('Pred objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_objs[i] / np.sum(num_pred_objs))
                                             for i, c in enumerate(hds.objects)]))
+
+
+def count():
+    results, hds = _setup_and_load()
+    stats = EvalStats.evaluate_predictions(hds, results)
+    stats.print()
+
+    gt_hois = hds.hois
+    gt_hoi_hist = Counter(gt_hois[:, 1])
+    num_gt_hois = sum(gt_hoi_hist.values())
+    print('GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
+                                       for i, c in enumerate(hds.predicates)]))
 
 
 def vis_masks():
