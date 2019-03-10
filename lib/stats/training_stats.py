@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import shutil
 
 from config import cfg
 import torch
@@ -48,6 +49,10 @@ class TrainingStats:
         self.tb_ignored_keys = ['iter']
 
         tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
+        try:
+            shutil.rmtree(tboard_dir)
+        except FileNotFoundError:
+            pass
         os.makedirs(tboard_dir)
         self.tblogger = SummaryWriter(tboard_dir)
         self.smoothed_total_loss = SmoothedValue(self.history_window)

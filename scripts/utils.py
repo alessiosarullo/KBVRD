@@ -14,13 +14,13 @@ def print_params(model, breakdown=False):
         else:
             return '%.1fM' % (_n / 10 ** 6)
 
-    modules = {'RCNN': {}, 'Object branch': {}, 'Spatial branch': {}, 'Human-Object-Interaction branch': {}, 'Other': {}}
+    modules = {'Visual module': {}, 'Object branch': {}, 'Spatial branch': {}, 'Human-Object-Interaction branch': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
         if not ('bias' in p_name.split('.')[-1] or 'bn' in p_name.split('.')[-1]):
 
             p_name_root = p_name.split('.')[0]
-            if 'rcnn' in p_name_root:
-                module = 'RCNN'
+            if 'visual' in p_name_root:
+                module = 'Visual module'
             elif p_name_root.startswith('obj'):
                 module = 'Object branch'
             elif 'spatial' in p_name_root:
