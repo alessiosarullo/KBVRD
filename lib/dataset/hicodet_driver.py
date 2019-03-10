@@ -130,7 +130,7 @@ class HicoDet:
         return self._objects
 
     @property
-    def person_class(self) -> int:
+    def human_class(self) -> int:
         return self._obj_class_index['person']
 
     def get_predicate_index(self, interaction_id):
