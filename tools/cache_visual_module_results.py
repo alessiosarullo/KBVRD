@@ -17,18 +17,17 @@ def save_feats():
     flipping = False
 
     sys.argv += ['--model', 'base', '--save_dir', 'fake']  # fake required arguments
-    sys.argv += ['--batch_size', str(batch_size)]
+    sys.argv += ['--batch_size', str(batch_size), '--val_ratio', '0']
     cfg.parse_args()
 
     train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping))
-    val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL, flipping_prob=float(flipping))
     test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=float(flipping))
+    assert Splits.VAL not in HicoDetInstanceSplit._splits
 
     vm = VisualModule(dataset=train_split)
     vm.cuda()
     vm.eval()
-    for split, hds in [(Splits.VAL, val_split),
-                       # (Splits.TRAIN, train_split),
+    for split, hds in [(Splits.TRAIN, train_split),
                        # (Splits.TEST, test_split),
                        ]:
         hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)

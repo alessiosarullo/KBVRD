@@ -54,20 +54,22 @@ class HicoDetInstanceSplit(Dataset):
         pass  # You could add a data augmentation pipeline here.
 
         ################# In case of precomputed features
-        if not self.split == Splits.TEST and cfg.program.load_precomputed_feats:
-            # TODO extract features for test set
+        if cfg.program.load_precomputed_feats:
             print('Loading precomputed feats for %s split.' % self.split.value)
-            assert self.flipping_prob == 0  # TODO extract features for flipped image?
-            precomputed_feats_fn = cfg.program.precomputed_feats_file_format % cfg.model.rcnn_arch
+            assert self.flipping_prob == 0  # TODO? extract features for flipped image
+            precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch, self.split.value)
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
-            self.pc_box_pred_classes = self.pc_feats_file['box_pred_classes'][:]
-            try:
-                self.pc_box_im_inds = self.pc_feats_file['box_im_ids'][:]
-                self.pc_image_ids = self.pc_feats_file['image_index'][:]
-            except KeyError:  # Old names, but the file hasn't been re-generated since the change.
-                self.pc_box_im_inds = self.pc_feats_file['box_im_inds'][:]
-                self.pc_image_ids = self.pc_feats_file['image_ids'][:]
 
+            self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
+            self.pc_hoi_infos = self.pc_feats_file['hoi_infos'][:].astype(np.int)
+            self.pc_hoi_im_inds = self.pc_hoi_infos[:, 0]
+            try:
+                self.pc_box_labels = self.pc_feats_file['box_labels'][:]
+            except KeyError:
+                self.pc_box_labels = None
+
+            # Map image IDs to indices over the precomputed image IDs
+            self.pc_image_ids = self.pc_feats_file['image_ids'][:]
             assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
             assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
             self.im_id_to_pc_im_idx = {}
@@ -76,6 +78,7 @@ class HicoDetInstanceSplit(Dataset):
                 assert len(pc_im_idx) == 1, pc_im_idx
                 assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
+
         else:
             self.pc_feats_file = None
 
@@ -240,13 +243,28 @@ class HicoDetInstanceSplit(Dataset):
         if self.pc_feats_file is not None:
             pc_im_idx = self.im_id_to_pc_im_idx[img_id]
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
+
             inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
             start, end = inds[0], inds[-1] + 1
             assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-            entry.precomputed_boxes = self.pc_feats_file['boxes'][start:end, :]
-            entry.precomputed_obj_scores = self.pc_feats_file['box_scores'][start:end, :]
+
+            entry.precomputed_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
             entry.precomputed_box_feats = self.pc_feats_file['box_feats'][start:end, :]
-            entry.precomputed_obj_classes = self.pc_box_pred_classes[start:end, :]
+            entry.precomputed_masks = self.pc_feats_file['masks'][start:end, :, :]
+            if self.pc_box_labels is not None:
+                entry.precomputed_box_labels = self.pc_box_labels[start:end]
+            else:
+                entry.precomputed_box_labels = None
+
+            inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
+            start, end = inds[0], inds[-1] + 1
+            assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+            entry.precomputed_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
+            entry.precomputed_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
+            try:
+                entry.precomputed_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
+            except KeyError:
+                entry.precomputed_hoi_labels = None
         return entry
 
     def __getitem__(self, idx):
