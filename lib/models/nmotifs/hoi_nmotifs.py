@@ -7,7 +7,7 @@ import torch.nn.parallel
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
-from lib.models.context import SpatialContext, ObjectContext
+from lib.models.context_modules import SpatialContext, ObjectContext
 from .freq import FrequencyBias
 from .lincontext import LinearizedContext
 
@@ -19,7 +19,7 @@ class HOINMotifs(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.mask_rcnn_vis_feat_dim)
+        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
@@ -33,13 +33,13 @@ class HOINMotifsHybrid(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.output_dim)
         self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
 
-        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.mask_rcnn_vis_feat_dim)
+        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
 
         # If not using NeuralMotifs's object logits no gradient flows back into the decoder RNN, so I'll make it explicit here.
         for name, param in self.named_parameters():

@@ -1,4 +1,5 @@
 import os
+from typing import Dict
 from typing import List
 
 import cv2
@@ -12,7 +13,6 @@ from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img, Example, Minibatch
 from lib.detection.wrappers import COCO_CLASSES
 from lib.stats.utils import Timer
-from typing import Dict
 
 
 class HicoDetInstanceSplit(Dataset):
@@ -31,17 +31,17 @@ class HicoDetInstanceSplit(Dataset):
 
         self._annotations = annotations
         self._hicodet = hicodet_driver
-        self._objects = objects
-        self._predicates = predicates
+        self.objects = objects
+        self.predicates = predicates
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
         ################# Initialize
-        self._person_class_index = self._objects.index('person')
+        self.human_class = self.objects.index('person')
 
-        # Compute COCO mapping
-        coco_obj_to_idx = {v.replace(' ', '_'): k for k, v in COCO_CLASSES.items()}
+        # Compute mappings to and from COCO
+        coco_obj_to_idx = {c.replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
         assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hicodet_driver.objects)
-        self._coco_to_hico_mapping = [coco_obj_to_idx[obj] for obj in self._objects]
+        self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.objects], dtype=np.int)
 
         # Extract the data from Hico-DET annotations
         self._im_boxes, self._im_box_classes, self._im_inters, self._im_without_visible_interactions, self._im_filenames = \
@@ -51,10 +51,10 @@ class HicoDetInstanceSplit(Dataset):
                len(self._annotations) == len(self.image_ids) == len(self._im_filenames)
 
         ################# Data augmentation pipeline
-        pass  # You could add a data augmentation pipeline here, but we don't.
+        pass  # You could add a data augmentation pipeline here.
 
         ################# In case of precomputed features
-        if not self.is_test_split and cfg.program.load_precomputed_feats:
+        if not self.split == Splits.TEST and cfg.program.load_precomputed_feats:
             # TODO extract features for test set
             print('Loading precomputed feats for %s split.' % self.split.value)
             assert self.flipping_prob == 0  # TODO extract features for flipped image?
@@ -115,18 +115,6 @@ class HicoDetInstanceSplit(Dataset):
         return cls._splits[split]
 
     @property
-    def objects(self):
-        return self._objects
-
-    @property
-    def predicates(self):
-        return self._predicates
-
-    @property
-    def person_class(self):
-        return self._person_class_index
-
-    @property
     def num_object_classes(self):
         return len(self.objects)
 
@@ -140,24 +128,8 @@ class HicoDetInstanceSplit(Dataset):
 
     @property
     def img_dir(self):
-        split = Splits.TRAIN if not self.is_test_split else Splits.TEST
+        split = Splits.TEST if self.split == Splits.TEST else Splits.TRAIN
         return self._hicodet.get_img_dir(split)
-
-    @property
-    def is_train_split(self):
-        return self.split == Splits.TRAIN
-
-    @property
-    def is_val_split(self):
-        return self.split == Splits.VAL
-
-    @property
-    def is_test_split(self):
-        return self.split == Splits.TEST
-
-    @property
-    def coco_to_hico_mapping(self):
-        return self._coco_to_hico_mapping
 
     @property
     def hois(self):
@@ -215,7 +187,7 @@ class HicoDetInstanceSplit(Dataset):
                 im_interactions[:, 2] += num_hum_boxes
 
                 boxes.append(np.concatenate([im_hum_boxes, im_obj_boxes], axis=0))
-                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self.person_class, dtype=np.int), im_obj_box_classes]))
+                box_classes.append(np.concatenate([np.full(num_hum_boxes, fill_value=self.human_class, dtype=np.int), im_obj_box_classes]))
                 interactions.append(im_interactions)
             else:
                 boxes.append([])
@@ -226,9 +198,9 @@ class HicoDetInstanceSplit(Dataset):
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
-            shuffle = True if self.is_train_split else False
+            shuffle = True if self.split == Splits.TRAIN else False
         batch_size = batch_size * num_gpus
-        if self.is_test_split and batch_size > 1:
+        if self.split == Splits.TEST and batch_size > 1:
             print('Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
             batch_size = 1
         data_loader = torch.utils.data.DataLoader(
@@ -252,7 +224,7 @@ class HicoDetInstanceSplit(Dataset):
         if read_img:
             raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
             img_h, img_w = raw_image.shape[:2]
-            flipped = self.is_train_split and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
+            flipped = self.split == Splits.TRAIN and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
             if flipped:
                 raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
                 gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
@@ -331,7 +303,7 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
         # includes the class anyway because the model must always be able to predict it.
         # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
         # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
-        objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.person_class})]
+        objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.human_class})]
         predicates = [hicodet_driver.predicates[i] for i in sorted(set(pred_count.keys()))]
         if pred_inds - set(pred_count.keys()):
             print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
@@ -368,7 +340,6 @@ def main():
 
         if np.any(counts > 1):
             print(im_i, np.sum(counts > 1))
-
 
 
 if __name__ == '__main__':

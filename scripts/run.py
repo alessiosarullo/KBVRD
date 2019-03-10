@@ -115,7 +115,7 @@ class Launcher:
             except FileNotFoundError:
                 pass
 
-            os.symlink(os.path.abspath(cfg.program.checkpoint_file), cfg.program.saved_model_file)
+            os.rename(cfg.program.checkpoint_file, cfg.program.saved_model_file)
         try:
             os.remove(cfg.program.result_file)
         except FileNotFoundError:

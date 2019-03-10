@@ -13,7 +13,7 @@ from config import cfg
 # TODO merge with WordEmbeddings
 
 # FIXME check and update
-def obj_edge_vectors(names, wv_dim=300):
+def obj_edge_vectors(names, wv_dim=300) -> torch.Tensor:
     wv_dict, wv_arr, wv_size = load_word_vectors(wv_type='glove.6B', dim=wv_dim)
 
     vectors = torch.Tensor(len(names), wv_dim)

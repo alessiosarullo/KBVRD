@@ -71,7 +71,7 @@ class ProgramConfig(BaseConfigs):
 
     @property
     def precomputed_feats_file_format(self):
-        return os.path.join('cache', 'precomputed__%s.h5')
+        return os.path.join('cache', 'precomputed__%s_%s.h5')
 
     @property
     def checkpoint_file(self):

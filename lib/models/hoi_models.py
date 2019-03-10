@@ -6,7 +6,7 @@ import torch.nn as nn
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.abstract_model import AbstractHOIBranch
-from lib.models.context import SpatialContext, ObjectContext
+from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
 from lib.word_vectors import obj_edge_vectors
 
@@ -22,11 +22,11 @@ class BaseModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.mask_rcnn.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.mask_rcnn_vis_feat_dim +
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.output_dim)
-        self.hoi_branch = BaseHOIBranch(self.mask_rcnn_vis_feat_dim,
+        self.hoi_branch = BaseHOIBranch(self.visual_module.vis_feat_dim,
                                         self.spatial_context_branch.spatial_emb_dim,
                                         self.obj_branch.output_ctx_dim,
                                         self.spatial_context_branch.output_dim,
@@ -84,7 +84,7 @@ class BaseHOIBranch(AbstractHOIBranch):
         self.input_obj_ctx_fc = nn.Linear(obj_ctx_dim, obj_ctx_dim)
         torch.nn.init.normal_(self.input_obj_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / obj_ctx_dim))
 
-        self.word_embs = obj_edge_vectors(objects, wv_dim=self.word_emb_dim).detach()
+        self.word_embs = obj_edge_vectors(objects, wv_dim=self.word_emb_dim).detach().cuda()  # FIXME
         self.word_embs_attention_fc = nn.Linear(len(objects), len(objects))
 
         self.rel_sub_fc = _vis_fc_layer()
@@ -148,7 +148,7 @@ class SimpleModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = SimpleHOIBranch(self.mask_rcnn_vis_feat_dim)
+        self.hoi_branch = SimpleHOIBranch(self.visual_module.vis_feat_dim)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):

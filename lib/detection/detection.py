@@ -2,9 +2,38 @@ import numpy as np
 import torch
 
 from lib.detection.box_utils import bbox_transform, clip_tiled_boxes
-from lib.stats.utils import Timer
+from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils
 
-from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils, nms_gpu
+
+def im_detect_boxes(model, inputs):
+    """
+    Returned `masks`, `box_feats` and `feat_map` are Torch, the rest is NumPy
+    """
+    # TODO docs
+
+    assert not cfg.TEST.BBOX_AUG.ENABLED
+    assert not cfg.MODEL.KEYPOINTS_ON
+    assert cfg.MODEL.MASK_ON
+    assert not cfg.TEST.MASK_AUG.ENABLED
+
+    im_info = inputs['im_info']
+
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)  # NOTE: boxes are scaled back to the image size
+    assert nonnms_boxes.shape[0] > 0
+
+    nonnms_scores = nonnms_scores.cpu().numpy()
+    nonnms_boxes = nonnms_boxes.cpu().numpy()
+    u_nonnms_im_ids = np.unique(nonnms_im_ids)
+
+    box_inds, boxes, _, _ = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+
+    scores = nonnms_scores[box_inds, :]
+    im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
+    u_im_ids = np.unique(im_ids)
+    assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
+
+    assert boxes.shape[0] == im_ids.shape[0] == scores.shape[0]
+    return im_ids, boxes, scores, feat_map
 
 
 def im_detect_all_with_feats(model, inputs, feat_dim=2048):
@@ -27,7 +56,7 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     nonnms_boxes = nonnms_boxes.cpu().numpy()
     u_nonnms_im_ids = np.unique(nonnms_im_ids)
 
-    box_inds, box_classes, box_class_scores, boxes = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    box_inds, boxes, box_classes, box_class_scores = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
     scores = nonnms_scores[box_inds, :]
     im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
     u_im_ids = np.unique(im_ids)
@@ -46,6 +75,7 @@ def im_detect_all_with_feats(model, inputs, feat_dim=2048):
     else:
         masks = feat_map.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
         box_feats = feat_map.new_zeros((0, feat_dim))
+
     return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 
@@ -149,7 +179,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
     box_classes = all_results[:, 6].astype(np.int)
     scores = all_results[:, 4]
     boxes = all_results[:, :4].astype(np.float32, copy=False)
-    return boxes_ids, box_classes, scores, boxes
+    return boxes_ids, boxes, box_classes, scores
 
 
 def im_detect_mask(model, im_ids, boxes, blob_conv):

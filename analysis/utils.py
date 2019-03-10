@@ -8,6 +8,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 
+from lib.bbox_utils import rescale_masks_to_img
+
 
 def plot_mat(conf_mat, xticklabels, yticklabels):
     lfsize = 8
@@ -49,7 +51,7 @@ def plot_mat(conf_mat, xticklabels, yticklabels):
     plt.show()
 
 
-def vis_one_image(im, boxes, box_classes, class_names, masks=None, thresh=0.9,
+def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=None, thresh=0.9,
                   output_file_path=None, show_class=False, dpi=200, box_alpha=0.0, ext='png'):
     """Visual debugging of detections."""
 
@@ -75,7 +77,6 @@ def vis_one_image(im, boxes, box_classes, class_names, masks=None, thresh=0.9,
         if score < thresh:
             continue
 
-        print(class_names[box_classes[i]], score)
         ax.add_patch(
             plt.Rectangle((bbox[0], bbox[1]),
                           bbox[2] - bbox[0],
@@ -116,11 +117,19 @@ def vis_one_image(im, boxes, box_classes, class_names, masks=None, thresh=0.9,
                     alpha=0.5)
                 ax.add_patch(polygon)
 
-        if output_file_path is None:
-            plt.show()
-        else:
-            fig.savefig(output_file_path + '.' + ext, dpi=dpi)
-            plt.close('all')
+    for ub in union_boxes:
+        ax.add_patch(
+            plt.Rectangle((ub[0], ub[1]),
+                          ub[2] - ub[0],
+                          ub[3] - ub[1],
+                          fill=False, edgecolor='r',
+                          linewidth=0.3, alpha=box_alpha))
+
+    if output_file_path is None:
+        plt.show()
+    else:
+        fig.savefig(output_file_path + '.' + ext, dpi=dpi)
+        plt.close('all')
 
 
 def colormap(rgb=False):
@@ -211,3 +220,20 @@ def colormap(rgb=False):
     if not rgb:
         color_list = color_list[:, ::-1]
     return color_list
+
+
+def postprocess_for_visualisation(boxes_ext, masks, union_boxes, img_infos):
+    assert img_infos.shape[0] == 1
+    img_infos = img_infos[0].cpu().numpy()
+    im_h, im_w = img_infos[:2].astype(np.int)
+    im_scale = img_infos[2]
+    boxes_ext = boxes_ext.cpu().numpy()
+    masks = masks.cpu().numpy()
+
+    box_classes = np.argmax(boxes_ext[:, 5:], axis=1)
+    boxes = boxes_ext[:, 1:5] / im_scale
+    boxes_with_scores = np.concatenate((boxes, boxes_ext[np.arange(boxes_ext.shape[0]), 5 + box_classes][:, None]), axis=1)
+    masks = rescale_masks_to_img(masks, boxes, im_h, im_w)
+
+    union_boxes = union_boxes / im_scale
+    return boxes_with_scores, box_classes, masks, union_boxes

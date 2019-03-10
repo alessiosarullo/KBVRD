@@ -19,6 +19,9 @@ class AbstractModel(nn.Module):
     def forward(self, x, predict=True, **kwargs):
         raise NotImplementedError()
 
+    def __call__(self, *args, **kwargs):
+        return super().__call__(*args, **kwargs)
+
 
 class AbstractHOIBranch(nn.Module):
     def __init__(self, *args, **kwargs):
