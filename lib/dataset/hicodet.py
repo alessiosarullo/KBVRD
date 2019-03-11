@@ -55,9 +55,10 @@ class HicoDetInstanceSplit(Dataset):
 
         ################# In case of precomputed features
         if cfg.program.load_precomputed_feats:
-            print('Loading precomputed feats for %s split.' % self.split.value)
             assert self.flipping_prob == 0  # TODO? extract features for flipped image
-            precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch, self.split.value)
+            precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
+                                                                                (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
+            print('Loading precomputed feats for %s split from %s.' % (self.split.value, precomputed_feats_fn))
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
 
             self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
