@@ -324,9 +324,10 @@ class HicoDetInstanceSplit(Dataset):
                         precomp_hoi_infos = precomp_hoi_infos[feasible_labels_inds]
                         precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_labels_inds]
                         precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_labels_inds]
+                        pc_hoi_labels = pc_hoi_labels[feasible_labels_inds, :]
                         assert np.all(np.sum(pc_hoi_labels, axis=1) >= 1), pc_hoi_labels
 
-                        entry.precomp_hoi_labels = pc_hoi_labels[feasible_labels_inds, :]
+                        entry.precomp_hoi_labels = pc_hoi_labels
                     except KeyError:
                         entry.precomp_hoi_labels = None
                     entry.precomp_hoi_infos = precomp_hoi_infos
