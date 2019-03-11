@@ -294,8 +294,8 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
                     feasible_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
 
-                    box_inds = np.full_like(precomp_boxes_ext.shape[0], fill_value=-1)
-                    box_inds[feasible_labels_inds] = np.arange(sum(feasible_labels_inds))
+                    box_inds = np.full_like(precomp_box_labels, fill_value=-1)
+                    box_inds[feasible_labels_inds] = np.arange(np.sum(feasible_labels_inds))
                     precomp_boxes_ext = precomp_boxes_ext[feasible_labels_inds]
                     precomp_box_feats = precomp_box_feats[feasible_labels_inds]
                     precomp_masks = precomp_masks[feasible_labels_inds]
