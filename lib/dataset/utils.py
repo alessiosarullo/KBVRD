@@ -127,7 +127,7 @@ class Minibatch:
             self.__dict__.update({k: None for k, v in self.__dict__.items() if k.startswith('gt_')})
 
             for k, v in self.__dict__.items():
-                if k.startswith('pc_') and ('labels' not in k):
+                if k.startswith('pc_') and ('label' not in k):
                     if not v:
                         v = [np.empty(0)]
                     self.__dict__[k] = np.concatenate(v, axis=0)

@@ -4,6 +4,7 @@ set -x
 set -e
 
 export PYTHONUNBUFFERED="True"
+#export CUDA_LAUNCH_BLOCKING=1  # uncomment this to debug CUDA errors
 
 NET=$1
 EXP_NAME=$2

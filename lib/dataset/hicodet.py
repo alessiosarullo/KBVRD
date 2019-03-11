@@ -85,8 +85,9 @@ class HicoDetInstanceSplit(Dataset):
                 assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
 
-            self.box_ext_class_inds = np.concatenate([np.arange(5), 5 + np.array(object_inds, dtype=np.int)])
+            self.obj_class_inds = np.array(object_inds, dtype=np.int)
             self.hoi_class_inds = np.array(predicate_inds, dtype=np.int)
+            self.box_ext_class_inds = np.concatenate([np.arange(5), 5 + self.obj_class_inds])
         else:
             self.pc_feats_file = None
 
@@ -280,14 +281,32 @@ class HicoDetInstanceSplit(Dataset):
                 start, end = inds[0], inds[-1] + 1
                 assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
-                pc_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
-                entry.precomp_boxes_ext = pc_boxes_ext[:, self.box_ext_class_inds]
-                entry.precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
-                entry.precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
+                precomp_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
+                precomp_boxes_ext = precomp_boxes_ext[:, self.box_ext_class_inds]
+                precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
+                precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
                 if self.pc_box_labels is not None:
-                    entry.precomp_box_labels = self.pc_box_labels[start:end]
+                    precomp_box_labels = self.pc_box_labels[start:end]
+                    num_boxes = precomp_box_labels.shape[0]
+                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
+                    precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
+                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
+                    feasible_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
+
+                    precomp_boxes_ext = precomp_boxes_ext[feasible_labels_inds]
+                    precomp_box_feats = precomp_box_feats[feasible_labels_inds]
+                    precomp_masks = precomp_masks[feasible_labels_inds]
+                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_labels_inds]
+                    assert np.all(np.sum(precomp_box_labels_one_hot, axis=1) == 1), precomp_box_labels_one_hot
+                    x = np.where(precomp_box_labels)
+                    assert x[0] == np.arange(np.sum(feasible_labels_inds))
+                    precomp_box_labels = x[1].astype(precomp_box_labels_one_hot)
                 else:
-                    entry.precomp_box_labels = None
+                    precomp_box_labels = None
+                entry.precomp_boxes_ext = precomp_boxes_ext
+                entry.precomp_box_feats = precomp_box_feats
+                entry.precomp_masks = precomp_masks
+                entry.precomp_box_labels = precomp_box_labels
 
                 # HOI data
                 inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
@@ -298,7 +317,7 @@ class HicoDetInstanceSplit(Dataset):
                     entry.precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
                     entry.precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                     try:
-                        pc_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
+                        pc_hoi_labels = self.pc_feats_file['hoi_labels'][start:end, :]
                         entry.precomp_hoi_labels = pc_hoi_labels[:, self.hoi_class_inds]
                     except KeyError:
                         entry.precomp_hoi_labels = None
