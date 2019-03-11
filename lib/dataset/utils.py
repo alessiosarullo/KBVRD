@@ -159,7 +159,7 @@ class Minibatch:
 
             self.imgs = _im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
             assert self.imgs.shape[0] == self.img_infos.shape[0]
-            assert self.imgs.shape[2:] == self.img_infos[0, :2]
+            assert self.imgs.shape[2] == self.img_infos[0, 0] and self.imgs.shape[3] == self.img_infos[0, 1]
 
             self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
             self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
