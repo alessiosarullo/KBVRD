@@ -313,14 +313,25 @@ class HicoDetInstanceSplit(Dataset):
                 if inds.size > 0:
                     start, end = inds[0], inds[-1] + 1
                     assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-                    entry.precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
-                    entry.precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
-                    entry.precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
+                    precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
+                    precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
+                    precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                     try:
                         pc_hoi_labels = self.pc_feats_file['hoi_labels'][start:end, :]
-                        entry.precomp_hoi_labels = pc_hoi_labels[:, self.hoi_class_inds]
+                        pc_hoi_labels = pc_hoi_labels[:, self.hoi_class_inds]
+                        feasible_labels_inds = np.any(pc_hoi_labels, axis=1)
+
+                        precomp_hoi_infos = precomp_hoi_infos[feasible_labels_inds]
+                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_labels_inds]
+                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_labels_inds]
+                        assert np.all(np.sum(pc_hoi_labels, axis=1) == 1), pc_hoi_labels
+
+                        entry.precomp_hoi_labels = pc_hoi_labels[feasible_labels_inds, :]
                     except KeyError:
                         entry.precomp_hoi_labels = None
+                    entry.precomp_hoi_infos = precomp_hoi_infos
+                    entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
+                    entry.precomp_hoi_union_feats = precomp_hoi_union_feats
             assert (entry.precomp_box_labels is None and entry.precomp_hoi_labels is None) or \
                    (entry.precomp_box_labels is not None and entry.precomp_hoi_labels is not None)
         return entry
