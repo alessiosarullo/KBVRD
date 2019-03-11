@@ -19,7 +19,7 @@ class HicoDetInstanceSplit(Dataset):
     _splits = {}  # type: Dict[Splits, HicoDetInstanceSplit]
     _hicodet_driver = None
 
-    def __init__(self, split, hicodet_driver, annotations, image_ids, objects, predicates, flipping_prob=0):
+    def __init__(self, split, hicodet_driver, annotations, image_ids, object_inds, predicate_inds, flipping_prob=0):
         """
         """
         # TODO docs, mention split in print so as not to have confusing messages
@@ -31,8 +31,11 @@ class HicoDetInstanceSplit(Dataset):
 
         self._annotations = annotations
         self._hicodet = hicodet_driver
-        self.objects = objects
-        self.predicates = predicates
+
+        object_inds = sorted(object_inds)
+        self.objects = [hicodet_driver.objects[i] for i in object_inds]
+        self.predicates = [hicodet_driver.predicates[i] for i in sorted(predicate_inds)]
+        self.box_class_inds = np.concatenate([np.arange(5), 5 + np.array(object_inds, dtype=np.int)])
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
         ################# Initialize
@@ -60,6 +63,7 @@ class HicoDetInstanceSplit(Dataset):
                                                                                 (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
             print('Loading precomputed feats for %s split from %s.' % (self.split.value, precomputed_feats_fn))
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
+            assert self.pc_feats_file['box_feats'].shape[1] == self.pc_feats_file['union_boxes_feats'].shape[1] == 2048  # FIXME magic constant
 
             self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
             self.pc_hoi_infos = self.pc_feats_file['hoi_infos'][:].astype(np.int)
@@ -98,7 +102,7 @@ class HicoDetInstanceSplit(Dataset):
             obj_inds = obj_inds or cfg.data.obj_inds
             pred_inds = pred_inds or cfg.data.pred_inds
 
-            annotations, image_ids, objects, predicates = compute_annotations(split, cls._hicodet_driver, im_inds, obj_inds, pred_inds)
+            annotations, image_ids, object_inds, predicate_inds = compute_annotations(split, cls._hicodet_driver, im_inds, obj_inds, pred_inds)
             assert len(annotations) == len(image_ids)
 
             # Split train/val if needed
@@ -106,15 +110,15 @@ class HicoDetInstanceSplit(Dataset):
                 num_val_imgs = int(len(annotations) * cfg.data.val_ratio)
                 cls._splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hicodet_driver=cls._hicodet_driver,
                                                 annotations=annotations[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
-                                                objects=objects, predicates=predicates,
+                                                object_inds=object_inds, predicate_inds=predicate_inds,
                                                 **kwargs)
                 cls._splits[Splits.VAL] = cls(split=Splits.VAL, hicodet_driver=cls._hicodet_driver,
                                               annotations=annotations[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
-                                              objects=objects, predicates=predicates,
+                                              object_inds=object_inds, predicate_inds=predicate_inds,
                                               **kwargs)
             else:
                 cls._splits[split] = cls(split=split, annotations=annotations, hicodet_driver=cls._hicodet_driver,
-                                         image_ids=image_ids, objects=objects, predicates=predicates,
+                                         image_ids=image_ids, object_inds=object_inds, predicate_inds=predicate_inds,
                                          **kwargs)
 
         return cls._splits[split]
@@ -153,9 +157,7 @@ class HicoDetInstanceSplit(Dataset):
     def precomputed_visual_feat_dim(self):
         if not self.has_precomputed:
             raise AttributeError('No precomputed visual features are present.')
-        feat_dim = self.pc_feats_file['box_feats'].shape[1]
-        assert feat_dim == self.pc_feats_file['union_boxes_feats'].shape[1]
-        return feat_dim
+        return self.pc_feats_file['box_feats'].shape[1]
 
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}
@@ -276,7 +278,8 @@ class HicoDetInstanceSplit(Dataset):
                 start, end = inds[0], inds[-1] + 1
                 assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
-                entry.precomp_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
+                pc_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
+                entry.precomp_boxes_ext = pc_boxes_ext[:, self.box_class_inds]
                 entry.precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
                 entry.precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
                 if self.pc_box_labels is not None:
@@ -319,8 +322,8 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
 
     # Filter out unwanted predicates/object classes
     if obj_inds is None and pred_inds is None:
-        objects = list(hicodet_driver.objects)
-        predicates = list(hicodet_driver.predicates)
+        final_objects_inds = list(range(len(hicodet_driver.objects)))
+        final_pred_inds = list(range(len(hicodet_driver.predicates)))
     else:
         obj_inds = set(obj_inds or range(len(hicodet_driver.objects)))
         pred_inds = set(pred_inds or range(len(hicodet_driver.predicates)))
@@ -354,8 +357,8 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
         # includes the class anyway because the model must always be able to predict it.
         # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
         # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
-        objects = [hicodet_driver.objects[i] for i in sorted(set(obj_count.keys()) | {hicodet_driver.human_class})]
-        predicates = [hicodet_driver.predicates[i] for i in sorted(set(pred_count.keys()))]
+        final_objects_inds = sorted(set(obj_count.keys()) | {hicodet_driver.human_class})
+        final_pred_inds = sorted(set(pred_count.keys()))
         if pred_inds - set(pred_count.keys()):
             print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
                   ', '.join(['%s (%d)' % (hicodet_driver.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
@@ -374,7 +377,7 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
             image_ids = [image_ids[i] for i in vis_im_inds]
     assert len(annotations) == len(image_ids)
 
-    return annotations, image_ids, objects, predicates
+    return annotations, image_ids, final_objects_inds, final_pred_inds
 
 
 def main():
