@@ -24,47 +24,44 @@ class SquarePad:
 
 
 class Example:
-    def __init__(self, idx_in_split, img_id, img_fn,
-                 gt_boxes, gt_obj_classes, gt_hois,
-                 image, img_size, img_scale_factor, flipped, ):
+    def __init__(self, idx_in_split, img_id, img_fn, precomputed):
         self.index = idx_in_split
         self.id = img_id
         self.fn = img_fn
 
-        self.image = image
-        self.img_size = img_size
-        self.scale = img_scale_factor
-        self.flipped = flipped
+        self.img_size = None
+        self.scale = None
+        self.flipped = False
 
-        self.gt_boxes = gt_boxes
-        self.gt_obj_classes = gt_obj_classes
-        self.gt_hois = gt_hois
+        self.precomputed = precomputed
+        if self.precomputed:
+            self.precomp_boxes_ext = None
+            self.precomp_box_feats = None
+            self.precomp_masks = None
 
-        self.precomputed_boxes = None
-        self.precomputed_box_feats = None
-        self.precomputed_obj_scores = None
-        self.precomputed_obj_classes = None
+            self.precomp_hoi_infos = None
+            self.precomp_hoi_union_boxes = None
+            self.precomp_hoi_union_feats = None
 
-    @property
-    def has_precomputed(self):
-        if self.precomputed_boxes is not None:
-            assert self.precomputed_obj_scores is not None and \
-                   self.precomputed_box_feats is not None and \
-                   self.precomputed_obj_classes is not None
-            return True
+            self.precomp_box_labels = None
+            self.precomp_hoi_labels = None
         else:
-            assert self.precomputed_obj_scores is None and self.precomputed_box_feats is None and self.precomputed_obj_classes is None
-            return False
+            self.image = None
+            self.gt_boxes = None
+            self.gt_obj_classes = None
+            self.gt_hois = None
 
 
 class Minibatch:
     # TODO refactor in list[Example], then merged when called vectorize()
     def __init__(self):
 
-        self.imgs = []
         self.img_infos = []
         self.other_ex_data = []
+        self.precomputed = []
 
+        # These will be empty if using precomputed features
+        self.imgs = []
         self.gt_boxes = []
         self.gt_obj_classes = []
         self.gt_box_im_ids = []
@@ -72,14 +69,17 @@ class Minibatch:
         self.gt_hoi_im_ids = []
 
         # These will be empty if not using precomputed features
+        self.pc_boxes_ext = []
         self.pc_box_feats = []
-        self.pc_boxes = []
-        self.pc_box_scores = []
-        self.box_im_ids = []
-        self.box_pred_classes = []
+        self.pc_masks = []
+        self.pc_hoi_infos = []
+        self.pc_hoi_union_boxes = []
+        self.pc_hoi_union_feats = []
+        self.pc_box_labels = []
+        self.pc_hoi_labels = []
 
     def append(self, ex: Example):
-        self.imgs += [ex.image]
+        im_id_in_batch = len(self.img_infos)
         self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]
 
         self.other_ex_data += [{'index': ex.index,
@@ -88,46 +88,86 @@ class Minibatch:
                                 'flipped': ex.flipped
                                 }]
 
-        self.gt_boxes += [ex.gt_boxes * ex.scale]
-        self.gt_obj_classes += [ex.gt_obj_classes]
-        self.gt_hois += [ex.gt_hois]
+        self.precomputed.append(ex.precomputed)
+        if ex.precomputed:
+            boxes_ext = ex.precomp_boxes_ext
+            if boxes_ext is not None:
+                boxes_ext[:, 0] = im_id_in_batch
+                self.pc_boxes_ext += [boxes_ext]
+                self.pc_box_feats += [ex.precomp_box_feats]
+                self.pc_masks += [ex.precomp_masks]
 
-        self.gt_box_im_ids += [np.full_like(ex.gt_obj_classes, fill_value=len(self.gt_box_im_ids))]
-        self.gt_hoi_im_ids += [np.full(ex.gt_hois.shape[0], fill_value=len(self.gt_hoi_im_ids), dtype=np.int)]
+                self.pc_box_labels += [ex.precomp_box_labels]
 
-        if ex.has_precomputed:
-            self.pc_box_feats += [ex.precomputed_box_feats]
-            self.pc_boxes += [ex.precomputed_boxes]
-            self.pc_box_scores += [ex.precomputed_obj_scores]
-            self.box_im_ids += [np.full(ex.precomputed_boxes.shape[0], fill_value=len(self.box_im_ids))]
-            self.box_pred_classes += [ex.precomputed_obj_classes]
+                hoi_infos = ex.precomp_hoi_infos
+                if hoi_infos is not None:
+                    num_boxes = sum([boxes.shape[0] for boxes in self.pc_boxes_ext[:-1]])
+                    hoi_infos[:, 0] = im_id_in_batch
+                    hoi_infos[:, 1:] += num_boxes
+                    self.pc_hoi_infos += [hoi_infos]
+                    self.pc_hoi_union_boxes += [ex.precomp_hoi_union_boxes]
+                    self.pc_hoi_union_feats += [ex.precomp_hoi_union_feats]
+
+                    self.pc_hoi_labels += [ex.precomp_hoi_labels]
+        else:
+            self.imgs += [ex.image]
+            self.gt_boxes += [ex.gt_boxes * ex.scale]
+            self.gt_obj_classes += [ex.gt_obj_classes]
+            self.gt_hois += [ex.gt_hois]
+
+            self.gt_box_im_ids += [np.full_like(ex.gt_obj_classes, fill_value=len(self.gt_box_im_ids))]
+            self.gt_hoi_im_ids += [np.full(ex.gt_hois.shape[0], fill_value=len(self.gt_hoi_im_ids), dtype=np.int)]
 
     def vectorize(self, device):
-        self.imgs = _im_list_to_4d_tensor(self._to_tensor(self.imgs, device=device))  # 4D NCHW tensor
-
         img_infos = np.stack(self.img_infos, axis=0)
-        im_scales = img_infos[:, 2]
-        im_infos = np.concatenate([np.tile(self.imgs.shape[2:], reps=[im_scales.size, 1]), im_scales[:, None]], axis=1)
-        self.img_infos = torch.tensor(im_infos, dtype=torch.float32, device=device)
-        assert self.imgs.shape[0] == self.img_infos.shape[0]
+        img_infos[:, 0] = max(img_infos[:, 0])
+        img_infos[:, 1] = max(img_infos[:, 1])
+        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
 
-        self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
-        self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
-        self.gt_obj_classes = np.concatenate(self.gt_obj_classes, axis=0)
-        self.gt_hoi_im_ids = np.concatenate(self.gt_hoi_im_ids, axis=0)
-        self.gt_hois = np.concatenate(self.gt_hois, axis=0)
-        assert len(self.gt_boxes) == len(self.gt_obj_classes) == len(self.gt_box_im_ids)
-        assert len(self.gt_hois) == len(self.gt_hoi_im_ids)
+        assert len(set(self.precomputed)) == 1, self.precomputed
+        precomputed = self.precomputed[0]
 
-        assert len(self.pc_box_feats) == len(self.pc_boxes) == len(self.pc_box_scores) == len(self.box_im_ids) == len(self.box_pred_classes)
-        if self.pc_box_feats:
-            self.box_im_ids = np.concatenate(self.box_im_ids, axis=0)
-            self.pc_boxes = np.concatenate(self.pc_boxes, axis=0)
-            self.pc_box_scores = np.concatenate(self.pc_box_scores, axis=0)
-            self.pc_box_feats = self._to_tensor(self.pc_box_feats, device, concat=True)
-            self.box_pred_classes = np.concatenate(self.box_pred_classes, axis=0)
+        if precomputed:
+            assert all([len(v) == 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
+            self.__dict__.update({k: None for k, v in self.__dict__.items() if k.startswith('gt_')})
+
+            for k, v in self.__dict__.items():
+                if k.startswith('pc_'):
+                    if not v:
+                        v = [np.empty(0)]
+                    self.__dict__[k] = np.concatenate(v, axis=0)
+
+            assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
+            assert self.pc_hoi_infos.shape[0] == self.pc_hoi_union_boxes.shape[0] == self.pc_hoi_union_feats.shape[0]
+
+            if self.pc_box_labels[0] is None:
+                assert all([l is None for l in self.pc_box_labels])
+                assert all([l is None for l in self.pc_hoi_labels])
+                self.pc_box_labels = self.pc_hoi_labels = None
+            else:
+                assert all([l is not None for l in self.pc_box_labels])
+                assert all([l is not None for l in self.pc_hoi_labels])
+                assert len(self.pc_box_labels) == len(self.pc_hoi_labels) == self.img_infos.shape[0]
+                self.pc_box_labels = np.concatenate(self.pc_box_labels, axis=0)
+                self.pc_hoi_labels = np.concatenate(self.pc_hoi_labels, axis=0)
+                assert self.pc_boxes_ext.shape[0] == self.pc_box_labels.shape[0]
+                assert self.pc_hoi_infos.shape[0] == self.pc_hoi_labels.shape[0]
         else:
-            self.pc_box_feats = self.pc_boxes = self.pc_box_scores = self.box_im_ids = self.box_pred_classes = None
+            assert all([len(v) > 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
+            assert all([len(v) == 0 for k, v in self.__dict__.items() if k.startswith('pc_')])
+            self.__dict__.update({k: None for k, v in self.__dict__.items() if k.startswith('pc_')})
+
+            self.imgs = _im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
+            assert self.imgs.shape[0] == self.img_infos.shape[0]
+            assert self.imgs.shape[2:] == self.img_infos[0, :2]
+
+            self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
+            self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
+            self.gt_obj_classes = np.concatenate(self.gt_obj_classes, axis=0)
+            self.gt_hoi_im_ids = np.concatenate(self.gt_hoi_im_ids, axis=0)
+            self.gt_hois = np.concatenate(self.gt_hois, axis=0)
+            assert len(self.gt_boxes) == len(self.gt_obj_classes) == len(self.gt_box_im_ids)
+            assert len(self.gt_hois) == len(self.gt_hoi_im_ids)
 
     @classmethod
     def collate(cls, examples):
@@ -138,14 +178,6 @@ class Minibatch:
         minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant
         Timer.get('Collate').toc()
         return minibatch
-
-    @staticmethod
-    def _to_tensor(values, device, concat=False):
-        tensor_list = [torch.tensor(v, device=device) for v in values]
-        if concat:
-            return torch.cat(tensor_list, dim=0)
-        else:
-            return tensor_list
 
 
 def _im_list_to_4d_tensor(ims, use_fpn=False):

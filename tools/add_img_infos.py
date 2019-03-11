@@ -36,6 +36,8 @@ def save_feats():
                 assert im_data.other_ex_data[0]['flipped'] == flipping
 
                 all_img_infos.append(im_data.img_infos.cpu().numpy())
+                if im_i % 10 == 0 or im_i == len(hd_loader) - 1:
+                    print('Image %6d/%d' % (im_i, len(hd_loader)))
 
             assert len(all_img_infos) == len(hd_loader)
             all_img_infos = np.concatenate([x for x in all_img_infos if x is not None], axis=0)

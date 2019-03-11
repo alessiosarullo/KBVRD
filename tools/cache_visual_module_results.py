@@ -30,7 +30,7 @@ def save_feats():
     for split, hds in [(Splits.TRAIN, train_split),
                        # (Splits.TEST, test_split),
                        ]:
-        hdsl = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
+        hd_loader = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
 
         precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch, split.value)
         feat_file = h5py.File(precomputed_feats_fn, 'w')
@@ -40,15 +40,16 @@ def save_feats():
         feat_file.create_dataset('union_boxes_feats', shape=(0, vm.vis_feat_dim), maxshape=(None, vm.vis_feat_dim))
 
         try:
-            all_union_boxes, all_hoi_infos, all_box_labels, all_hoi_labels = empty_lists(4, len(hdsl))
+            all_union_boxes, all_hoi_infos, all_box_labels, all_hoi_labels, all_img_infos = empty_lists(5, len(hd_loader))
             box_cache = {k: [] for k in feat_file if not k.startswith('union')}
             hoi_cache = {k: [] for k in feat_file if k.startswith('union')}
             inference = (split == Splits.TEST)
-            for im_i, im_data in enumerate(hdsl):
+            for im_i, im_data in enumerate(hd_loader):
                 im_data = im_data  # type: Minibatch
                 assert len(im_data.other_ex_data) == 1
                 assert im_data.other_ex_data[0]['flipped'] == flipping
 
+                all_img_infos[im_i] = im_data.img_infos.cpu().numpy()
                 x = vm(im_data, mode_inference=inference)
 
                 x = (value.cpu().numpy() if value is not None and not isinstance(value, np.ndarray) else value for value in x)
@@ -74,8 +75,8 @@ def save_feats():
                 else:
                     assert inference
 
-                if im_i % 10 == 0 or im_i == len(hdsl) - 1:
-                    print('Image %6d/%d' % (im_i, len(hdsl)))
+                if im_i % 10 == 0 or im_i == len(hd_loader) - 1:
+                    print('Image %6d/%d' % (im_i, len(hd_loader)))
 
                     box_cache = {k: np.concatenate(v, axis=0) for k, v in box_cache.items()}
                     num_rois, feat_dim = box_cache['box_feats'].shape
@@ -99,9 +100,12 @@ def save_feats():
 
             all_union_boxes = np.concatenate([x for x in all_union_boxes if x is not None], axis=0)
             all_hoi_infos = np.concatenate([x for x in all_hoi_infos if x is not None], axis=0)
+            all_img_infos = np.concatenate([x for x in all_img_infos if x is not None], axis=0)
+            assert all_img_infos.shape[0] == len(hd_loader)
             feat_file.create_dataset('image_ids', data=np.array(hds.image_ids, dtype=np.int))
             feat_file.create_dataset('union_boxes', data=all_union_boxes)
             feat_file.create_dataset('hoi_infos', data=all_hoi_infos.astype(np.int))
+            feat_file.create_dataset('img_infos', data=all_img_infos.astype(np.int))
 
             if any([b is not None for b in all_box_labels]):
                 assert all([b is not None for b in all_box_labels])

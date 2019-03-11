@@ -63,6 +63,7 @@ class HicoDetInstanceSplit(Dataset):
             self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
             self.pc_hoi_infos = self.pc_feats_file['hoi_infos'][:].astype(np.int)
             self.pc_hoi_im_inds = self.pc_hoi_infos[:, 0]
+            self.pc_image_infos = self.pc_feats_file['img_infos'][:].astype(np.int)
             try:
                 self.pc_box_labels = self.pc_feats_file['box_labels'][:]
             except KeyError:
@@ -143,6 +144,18 @@ class HicoDetInstanceSplit(Dataset):
     def obj_labels(self):
         return np.concatenate(self._im_box_classes, axis=0)
 
+    @property
+    def has_precomputed(self):
+        return self.pc_feats_file is not None
+
+    @ property
+    def precomputed_visual_feat_dim(self):
+        if not self.has_precomputed:
+            raise AttributeError('No precomputed visual features are present.')
+        feat_dim = self.pc_feats_file['box_feats'].shape[1]
+        assert feat_dim == self.pc_feats_file['union_boxes_feats'].shape[1]
+        return feat_dim
+
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}
         object_index = {o: i for i, o in enumerate(self.objects)}
@@ -220,51 +233,70 @@ class HicoDetInstanceSplit(Dataset):
 
     def get_entry(self, idx, read_img=True):
         # Read the image
+
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
-        gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 
-        if read_img:
-            raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
-            img_h, img_w = raw_image.shape[:2]
-            flipped = self.split == Splits.TRAIN and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
-            if flipped:
-                raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
-                gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
-            image, img_scale_factor = preprocess_img(raw_image)
-            img_size = (img_h, img_w)
+        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn, precomputed=self.has_precomputed)
+        if not self.has_precomputed:
+            gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
+
+            if read_img:
+                raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
+                img_h, img_w = raw_image.shape[:2]
+                flipped = self.split == Splits.TRAIN and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
+                if flipped:
+                    raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
+                    gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
+                image, img_scale_factor = preprocess_img(raw_image)
+                img_size = (img_h, img_w)
+
+                entry.image = image
+                entry.img_size = img_size
+                entry.scale = img_scale_factor
+                entry.flipped = flipped
+
+            entry.gt_boxes = gt_boxes
+            entry.gt_obj_classes = self._im_box_classes[idx].copy()
+            entry.gt_hois = self._im_inters[idx].copy()
         else:
-            image = img_size = img_scale_factor = flipped = None
-
-        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn,
-                        gt_boxes=gt_boxes, gt_obj_classes=self._im_box_classes[idx].copy(), gt_hois=self._im_inters[idx].copy(),
-                        image=image, img_size=img_size, img_scale_factor=img_scale_factor, flipped=flipped)
-
-        if self.pc_feats_file is not None:
             pc_im_idx = self.im_id_to_pc_im_idx[img_id]
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
 
+            # Image data
+            img_infos = self.pc_image_infos[pc_im_idx]
+            assert img_infos.shape == (3,)
+            entry.img_size = img_infos[:2]
+            entry.scale = img_infos[2]
+
+            # Object data
             inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
-            start, end = inds[0], inds[-1] + 1
-            assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+            if inds:
+                start, end = inds[0], inds[-1] + 1
+                assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
-            entry.precomputed_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
-            entry.precomputed_box_feats = self.pc_feats_file['box_feats'][start:end, :]
-            entry.precomputed_masks = self.pc_feats_file['masks'][start:end, :, :]
-            if self.pc_box_labels is not None:
-                entry.precomputed_box_labels = self.pc_box_labels[start:end]
-            else:
-                entry.precomputed_box_labels = None
+                entry.precomp_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
+                entry.precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
+                entry.precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
+                if self.pc_box_labels is not None:
+                    entry.precomp_box_labels = self.pc_box_labels[start:end]
+                else:
+                    entry.precomp_box_labels = None
 
-            inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
-            start, end = inds[0], inds[-1] + 1
-            assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-            entry.precomputed_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
-            entry.precomputed_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
-            try:
-                entry.precomputed_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
-            except KeyError:
-                entry.precomputed_hoi_labels = None
+                # HOI data
+                inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
+                if inds:
+                    start, end = inds[0], inds[-1] + 1
+                    assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+                    entry.precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
+                    entry.precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
+                    entry.precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
+                    try:
+                        entry.precomp_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
+                    except KeyError:
+                        entry.precomp_hoi_labels = None
+            assert (entry.precomp_box_labels is None and entry.precomp_hoi_labels is None) or \
+                   (entry.precomp_box_labels is not None and entry.precomp_hoi_labels is not None)
         return entry
 
     def __getitem__(self, idx):
