@@ -286,6 +286,7 @@ class HicoDetInstanceSplit(Dataset):
                 precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
                 precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
                 if self.pc_box_labels is not None:
+                    # TODO mapping of obj inds for rels
                     precomp_box_labels = self.pc_box_labels[start:end]
                     num_boxes = precomp_box_labels.shape[0]
                     precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
@@ -293,6 +294,8 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
                     feasible_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
 
+                    box_inds = np.full_like(precomp_boxes_ext.shape[0], fill_value=-1)
+                    box_inds[feasible_labels_inds] = np.arange(sum(feasible_labels_inds))
                     precomp_boxes_ext = precomp_boxes_ext[feasible_labels_inds]
                     precomp_box_feats = precomp_box_feats[feasible_labels_inds]
                     precomp_masks = precomp_masks[feasible_labels_inds]
@@ -303,6 +306,7 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_box_labels = x[1].astype(precomp_box_labels_one_hot.dtype)
                 else:
                     precomp_box_labels = None
+                    box_inds = np.arange(precomp_boxes_ext.shape[0])
                 entry.precomp_boxes_ext = precomp_boxes_ext
                 entry.precomp_box_feats = precomp_box_feats
                 entry.precomp_masks = precomp_masks
@@ -330,6 +334,9 @@ class HicoDetInstanceSplit(Dataset):
                         entry.precomp_hoi_labels = pc_hoi_labels
                     except KeyError:
                         entry.precomp_hoi_labels = None
+                    precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
+                    precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
+                    assert np.all(precomp_hoi_infos >= 0)
                     entry.precomp_hoi_infos = precomp_hoi_infos
                     entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
                     entry.precomp_hoi_union_feats = precomp_hoi_union_feats
