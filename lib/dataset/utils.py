@@ -119,11 +119,6 @@ class Minibatch:
             self.gt_hoi_im_ids += [np.full(ex.gt_hois.shape[0], fill_value=len(self.gt_hoi_im_ids), dtype=np.int)]
 
     def vectorize(self, device):
-        img_infos = np.stack(self.img_infos, axis=0)
-        img_infos[:, 0] = max(img_infos[:, 0])
-        img_infos[:, 1] = max(img_infos[:, 1])
-        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
-
         assert len(set(self.precomputed)) == 1, self.precomputed
         precomputed = self.precomputed[0]
 
@@ -139,6 +134,11 @@ class Minibatch:
 
             assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
             assert self.pc_hoi_infos.shape[0] == self.pc_hoi_union_boxes.shape[0] == self.pc_hoi_union_feats.shape[0]
+
+            img_infos = np.stack(self.img_infos, axis=0)
+            img_infos[:, 0] = max(img_infos[:, 0])
+            img_infos[:, 1] = max(img_infos[:, 1])
+            self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
 
             if self.pc_box_labels[0] is None:
                 assert all([l is None for l in self.pc_box_labels])
@@ -158,8 +158,13 @@ class Minibatch:
             self.__dict__.update({k: None for k, v in self.__dict__.items() if k.startswith('pc_')})
 
             self.imgs = _im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
+
+            img_infos = np.stack(self.img_infos, axis=0)
+            img_infos[:, 0] = self.imgs.shape[2]
+            img_infos[:, 1] = self.imgs.shape[3]
+            self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
+
             assert self.imgs.shape[0] == self.img_infos.shape[0]
-            assert self.imgs.shape[2] == self.img_infos[0, 0] and self.imgs.shape[3] == self.img_infos[0, 1], (self.imgs.shape, self.img_infos)
 
             self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
             self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
@@ -223,26 +228,29 @@ def preprocess_img(im):
 
     # TODO fix docs
     """Prepare an image for use as a network input blob. Specially:
-          - Subtract per-channel pixel mean
           - Convert to float32
+          - Subtract per-channel pixel mean
           - Rescale to each of the specified target size (capped at max_size)
         Returns a list of transformed images, one for each target size. Also returns
         the scale factors that were used to compute each returned image.
         """
-    max_size = cfg.data.im_max_size
-    target_size = cfg.data.im_scale
 
     im = im.astype(np.float32, copy=False)
     im -= cfg.data.pixel_mean
-    im_shape = im.shape
-    im_size_min = np.min(im_shape[0:2])
-    im_size_max = np.max(im_shape[0:2])
-
-    # Calculate target resize scale
-    im_scale = float(target_size) / float(im_size_min)
-    if np.round(im_scale * im_size_max) > max_size:  # Prevent the biggest axis from being more than max_size
-        im_scale = float(max_size) / float(im_size_max)
-
+    im_scale = calculate_im_scale(im.shape[:2])
     im_resized = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
     processed_im = np.transpose(im_resized, axes=(2, 0, 1))  # to CHW
     return processed_im, im_scale
+
+
+def calculate_im_scale(im_size):
+    """ Calculate target resize scale. """
+    max_size = cfg.data.im_max_size
+    target_size = cfg.data.im_scale
+
+    im_size_min = np.min(im_size)
+    im_size_max = np.max(im_size)
+    im_scale = float(target_size) / float(im_size_min)
+    if np.round(im_scale * im_size_max) > max_size:  # Prevent the biggest axis from being more than max_size
+        im_scale = float(max_size) / float(im_size_max)
+    return im_scale
