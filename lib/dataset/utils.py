@@ -127,7 +127,7 @@ class Minibatch:
             self.__dict__.update({k: None for k, v in self.__dict__.items() if k.startswith('gt_')})
 
             for k, v in self.__dict__.items():
-                if k.startswith('pc_'):
+                if k.startswith('pc_') and ('labels' not in k):
                     if not v:
                         v = [np.empty(0)]
                     self.__dict__[k] = np.concatenate(v, axis=0)
@@ -147,7 +147,8 @@ class Minibatch:
             else:
                 assert all([l is not None for l in self.pc_box_labels])
                 assert all([l is not None for l in self.pc_hoi_labels])
-                assert len(self.pc_box_labels) == len(self.pc_hoi_labels) == self.img_infos.shape[0]
+                assert len(self.pc_box_labels) == len(self.pc_hoi_labels) == self.img_infos.shape[0], \
+                    (len(self.pc_box_labels), len(self.pc_hoi_labels), self.img_infos.shape[0])
                 self.pc_box_labels = np.concatenate(self.pc_box_labels, axis=0)
                 self.pc_hoi_labels = np.concatenate(self.pc_hoi_labels, axis=0)
                 assert self.pc_boxes_ext.shape[0] == self.pc_box_labels.shape[0]
