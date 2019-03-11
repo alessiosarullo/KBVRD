@@ -298,7 +298,7 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_masks = precomp_masks[feasible_labels_inds]
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_labels_inds]
                     assert np.all(np.sum(precomp_box_labels_one_hot, axis=1) == 1), precomp_box_labels_one_hot
-                    x = np.where(precomp_box_labels)
+                    x = np.where(precomp_box_labels_one_hot)
                     assert np.all(x[0] == np.arange(np.sum(feasible_labels_inds)))
                     precomp_box_labels = x[1].astype(precomp_box_labels_one_hot)
                 else:
