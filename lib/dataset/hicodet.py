@@ -33,9 +33,9 @@ class HicoDetInstanceSplit(Dataset):
         self._hicodet = hicodet_driver
 
         object_inds = sorted(object_inds)
+        predicate_inds = sorted(predicate_inds)
         self.objects = [hicodet_driver.objects[i] for i in object_inds]
-        self.predicates = [hicodet_driver.predicates[i] for i in sorted(predicate_inds)]
-        self.box_class_inds = np.concatenate([np.arange(5), 5 + np.array(object_inds, dtype=np.int)])
+        self.predicates = [hicodet_driver.predicates[i] for i in predicate_inds]
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
         ################# Initialize
@@ -85,6 +85,8 @@ class HicoDetInstanceSplit(Dataset):
                 assert im_id not in self.im_id_to_pc_im_idx
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
 
+            self.box_ext_class_inds = np.concatenate([np.arange(5), 5 + np.array(object_inds, dtype=np.int)])
+            self.hoi_class_inds = np.array(predicate_inds, dtype=np.int)
         else:
             self.pc_feats_file = None
 
@@ -279,7 +281,7 @@ class HicoDetInstanceSplit(Dataset):
                 assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
                 pc_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
-                entry.precomp_boxes_ext = pc_boxes_ext[:, self.box_class_inds]
+                entry.precomp_boxes_ext = pc_boxes_ext[:, self.box_ext_class_inds]
                 entry.precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
                 entry.precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
                 if self.pc_box_labels is not None:
@@ -296,7 +298,8 @@ class HicoDetInstanceSplit(Dataset):
                     entry.precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
                     entry.precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                     try:
-                        entry.precomp_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
+                        pc_hoi_labels = self.pc_feats_file['hoi_labels'][start:end]
+                        entry.precomp_hoi_labels = pc_hoi_labels[:, self.hoi_class_inds]
                     except KeyError:
                         entry.precomp_hoi_labels = None
             assert (entry.precomp_box_labels is None and entry.precomp_hoi_labels is None) or \
