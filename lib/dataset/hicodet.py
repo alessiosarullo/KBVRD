@@ -311,7 +311,7 @@ class HicoDetInstanceSplit(Dataset):
                 # HOI data
                 img_hoi_inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
                 assert img_hoi_inds.size > 0, (idx, pc_im_idx, img_id, img_fn)
-                
+
                 start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
                 precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
@@ -346,7 +346,8 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_box_feats = precomp_box_feats[hoi_box_inds]
                     precomp_masks = precomp_masks[hoi_box_inds]
                     precomp_box_labels = precomp_box_labels[hoi_box_inds]
-                    box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
+                    box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
+                    box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
                     precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
                     precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
                     assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
