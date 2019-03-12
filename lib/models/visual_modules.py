@@ -61,7 +61,6 @@ class VisualModule(nn.Module):
             hoi_union_boxes = batch.pc_hoi_union_boxes
             hoi_union_boxes_feats = torch.tensor(batch.pc_hoi_union_feats, device=device)
             return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, hoi_infos, box_labels, hoi_labels
-
         else:
             with torch.set_grad_enabled(self.training):
                 boxes_ext_np, feat_map = self.mask_rcnn(batch)
