@@ -28,7 +28,7 @@ def save_feats():
     vm.cuda()
     vm.eval()
     for split, hds in [(Splits.TRAIN, train_split),
-                       # (Splits.TEST, test_split),
+                       (Splits.TEST, test_split),
                        ]:
         hd_loader = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
 
@@ -49,7 +49,9 @@ def save_feats():
                 assert len(im_data.other_ex_data) == 1
                 assert im_data.other_ex_data[0]['flipped'] == flipping
 
-                all_img_infos[im_i] = im_data.img_infos.cpu().numpy()
+                im_infos = np.array([*im_data.other_ex_data[0]['im_size'], im_data.other_ex_data[0]['im_scale']])
+                all_img_infos[im_i] = im_infos
+
                 x = vm(im_data, mode_inference=inference)
 
                 x = (value.cpu().numpy() if value is not None and not isinstance(value, np.ndarray) else value for value in x)
@@ -100,12 +102,15 @@ def save_feats():
 
             all_union_boxes = np.concatenate([x for x in all_union_boxes if x is not None], axis=0)
             all_hoi_infos = np.concatenate([x for x in all_hoi_infos if x is not None], axis=0)
-            all_img_infos = np.concatenate([x for x in all_img_infos if x is not None], axis=0)
+
+            assert len(all_img_infos) == len(hd_loader)
+            all_img_infos = np.stack([x for x in all_img_infos if x is not None], axis=0)
             assert all_img_infos.shape[0] == len(hd_loader)
+
             feat_file.create_dataset('image_ids', data=np.array(hds.image_ids, dtype=np.int))
             feat_file.create_dataset('union_boxes', data=all_union_boxes)
             feat_file.create_dataset('hoi_infos', data=all_hoi_infos.astype(np.int))
-            feat_file.create_dataset('img_infos', data=all_img_infos.astype(np.int))
+            feat_file.create_dataset('img_infos', data=all_img_infos)
 
             if any([b is not None for b in all_box_labels]):
                 assert all([b is not None for b in all_box_labels])

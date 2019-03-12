@@ -85,7 +85,9 @@ class Minibatch:
         self.other_ex_data += [{'index': ex.index,
                                 'id': ex.id,
                                 'fn': ex.fn,
-                                'flipped': ex.flipped
+                                'flipped': ex.flipped,
+                                'im_size': ex.img_size,  # this won't be changed
+                                'im_scale': ex.scale,
                                 }]
 
         self.precomputed.append(ex.precomputed)

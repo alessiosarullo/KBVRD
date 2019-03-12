@@ -29,20 +29,24 @@ def save_feats():
         feat_file = h5py.File(precomputed_feats_fn, 'r+')
 
         try:
+            if 'img_infos' in feat_file:
+                del feat_file['img_infos']
+
             all_img_infos = []
             for im_i, im_data in enumerate(hd_loader):
                 im_data = im_data  # type: Minibatch
                 assert len(im_data.other_ex_data) == 1
                 assert im_data.other_ex_data[0]['flipped'] == flipping
 
-                all_img_infos.append(im_data.img_infos.cpu().numpy())
+                im_infos = np.array([*im_data.other_ex_data[0]['im_size'], im_data.other_ex_data[0]['im_scale']])
+                all_img_infos.append(im_infos)
                 if im_i % 10 == 0 or im_i == len(hd_loader) - 1:
                     print('Image %6d/%d' % (im_i, len(hd_loader)))
 
             assert len(all_img_infos) == len(hd_loader)
-            all_img_infos = np.concatenate([x for x in all_img_infos if x is not None], axis=0)
+            all_img_infos = np.stack([x for x in all_img_infos if x is not None], axis=0)
             assert all_img_infos.shape[0] == len(hd_loader)
-            feat_file.create_dataset('img_infos', data=all_img_infos.astype(np.int))
+            feat_file.create_dataset('img_infos', data=all_img_infos)
 
         finally:
             feat_file.close()

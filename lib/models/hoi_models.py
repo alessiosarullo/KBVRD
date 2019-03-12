@@ -117,7 +117,7 @@ class BaseHOIBranch(AbstractHOIBranch):
         in_spatial_ctx = self.input_sp_ctx_fc(spatial_ctx)
         in_obj_ctx = self.input_obj_ctx_fc(obj_ctx)
 
-        wemb_attention_w = torch.nn.functional.softmax(self.word_embs_attention_fc(boxes_ext[:, 5:]))
+        wemb_attention_w = torch.nn.functional.softmax(self.word_embs_attention_fc(boxes_ext[:, 5:]), dim=1)
         wembs = torch.mm(wemb_attention_w, self.word_embs)  # attended embeddings
         obj_wembs = wembs[obj_inds, :]  # getting the word embedding for the subject doesn't make a lot of sense, since it's always "person"
 

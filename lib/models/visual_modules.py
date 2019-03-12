@@ -34,7 +34,6 @@ class VisualModule(nn.Module):
     def forward(self, batch: Minibatch, mode_inference, **kwargs):
         # TODO docs
         # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-
         if self._precomputed:
             boxes_ext_np = batch.pc_boxes_ext
             if mode_inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
@@ -71,6 +70,7 @@ class VisualModule(nn.Module):
                     return None, None, None, None, None, None, None, None
 
                 boxes_ext_np, box_feats, masks, hoi_infos, box_labels, hoi_labels = self.process_boxes(batch, mode_inference, feat_map, boxes_ext_np)
+
                 boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
 
                 if hoi_infos.shape[0] == 0:
@@ -80,7 +80,7 @@ class VisualModule(nn.Module):
 
                 # Note that box indices in `hoi_infos` are over all boxes, NOT relative to each specific image
                 hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], hoi_infos[:, 1:])
-                hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=hoi_union_boxes)
+                hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=np.concatenate([hoi_infos[:, :1], hoi_union_boxes], axis=1))
                 assert hoi_infos.shape[0] == hoi_union_boxes_feats.shape[0]
                 return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, hoi_infos, box_labels, hoi_labels
 
@@ -121,7 +121,7 @@ class VisualModule(nn.Module):
             box_labels = hoi_labels = None
 
         masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
-        box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, 1:5])
+        box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, :5])
         assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
 
         return boxes_ext_np, box_feats, masks, hoi_infos, box_labels, hoi_labels

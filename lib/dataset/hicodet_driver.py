@@ -361,12 +361,16 @@ def save_lists():
     path_objects_file = os.path.join(hd.data_dir, 'objects.txt')
     with open(path_objects_file, 'w') as f:
         f.write('\n'.join(hd.objects))
-    path_objects_file = os.path.join(hd.data_dir, 'predicates.txt')
-    with open(path_objects_file, 'w') as f:
+    path_file = os.path.join(hd.data_dir, 'predicates.txt')
+    with open(path_file, 'w') as f:
         f.write('\n'.join(hd.predicates))
     path_action_synsets_file = os.path.join(hd.data_dir, 'action_synsets.txt')
     with open(path_action_synsets_file, 'w') as f:
         f.write('\n'.join([' '.join([syn for syn in predicate.get('syn', [hd.null_interaction])]) for predicate in hd.wn_predicate_dict.values()]))
+
+    path_file = os.path.join(hd.data_dir, 'interactions.txt')
+    with open(path_file, 'w') as f:
+        f.write('\n'.join(['%-20s %s' % (inter['pred'], inter['obj']) for inter in hd.interactions]))
 
 
 def print_num_preds():
@@ -394,7 +398,7 @@ def print_num_objs():
 
 
 if __name__ == '__main__':
-    # save_lists()
-    print_num_preds()
-    print('=' * 100)
-    print_num_objs()
+    save_lists()
+    # print_num_preds()
+    # print('=' * 100)
+    # print_num_objs()

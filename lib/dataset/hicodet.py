@@ -68,7 +68,7 @@ class HicoDetInstanceSplit(Dataset):
             self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
             self.pc_hoi_infos = self.pc_feats_file['hoi_infos'][:].astype(np.int)
             self.pc_hoi_im_inds = self.pc_hoi_infos[:, 0]
-            self.pc_image_infos = self.pc_feats_file['img_infos'][:].astype(np.int)
+            self.pc_image_infos = self.pc_feats_file['img_infos'][:]
             try:
                 self.pc_box_labels = self.pc_feats_file['box_labels'][:]
             except KeyError:
@@ -156,7 +156,7 @@ class HicoDetInstanceSplit(Dataset):
     def has_precomputed(self):
         return self.pc_feats_file is not None
 
-    @ property
+    @property
     def precomputed_visual_feat_dim(self):
         if not self.has_precomputed:
             raise AttributeError('No precomputed visual features are present.')
@@ -276,10 +276,10 @@ class HicoDetInstanceSplit(Dataset):
             entry.scale = img_infos[2]
 
             # Object data
-            inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
-            if inds.size > 0:
-                start, end = inds[0], inds[-1] + 1
-                assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+            img_box_inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
+            if img_box_inds.size > 0:
+                start, end = img_box_inds[0], img_box_inds[-1] + 1
+                assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
                 precomp_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
                 precomp_boxes_ext = precomp_boxes_ext[:, self.box_ext_class_inds]
@@ -292,59 +292,70 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
                     precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
-                    feasible_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
+                    feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
 
                     box_inds = np.full_like(precomp_box_labels, fill_value=-1)
-                    box_inds[feasible_labels_inds] = np.arange(np.sum(feasible_labels_inds))
-                    precomp_boxes_ext = precomp_boxes_ext[feasible_labels_inds]
-                    precomp_box_feats = precomp_box_feats[feasible_labels_inds]
-                    precomp_masks = precomp_masks[feasible_labels_inds]
-                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_labels_inds]
+                    box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
+                    precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
+                    precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
+                    precomp_masks = precomp_masks[feasible_box_labels_inds]
+                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
                     assert np.all(np.sum(precomp_box_labels_one_hot, axis=1) == 1), precomp_box_labels_one_hot
                     x = np.where(precomp_box_labels_one_hot)
-                    assert np.all(x[0] == np.arange(np.sum(feasible_labels_inds)))
+                    assert np.all(x[0] == np.arange(np.sum(feasible_box_labels_inds)))
                     precomp_box_labels = x[1].astype(precomp_box_labels_one_hot.dtype)
                 else:
                     precomp_box_labels = None
                     box_inds = None
-                entry.precomp_boxes_ext = precomp_boxes_ext
-                entry.precomp_box_feats = precomp_box_feats
-                entry.precomp_masks = precomp_masks
-                entry.precomp_box_labels = precomp_box_labels
 
                 # HOI data
-                inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
-                if inds.size > 0:
-                    start, end = inds[0], inds[-1] + 1
-                    assert np.all(inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+                img_hoi_inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
+                if img_hoi_inds.size > 0:
+                    start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
+                    assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
                     precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
                     precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
                     precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                     try:
-                        pc_hoi_labels = self.pc_feats_file['hoi_labels'][start:end, :]
+                        precomp_hoi_labels = self.pc_feats_file['hoi_labels'][start:end, :]
                     except KeyError:
-                        pc_hoi_labels = None
+                        precomp_hoi_labels = None
 
-                    if pc_hoi_labels is not None:
+                    if precomp_hoi_labels is not None:
                         assert precomp_box_labels is not None and box_inds is not None
-                        pc_hoi_labels = pc_hoi_labels[:, self.hoi_class_inds]
+                        precomp_hoi_labels = precomp_hoi_labels[:, self.hoi_class_inds]
 
+                        # Remap HOIs box indices
                         precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
                         precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
 
-                        feasible_labels_inds = np.any(pc_hoi_labels, axis=1) & np.all(precomp_hoi_infos >=0, axis=1)
+                        # Filter out HOIs
+                        feasible_hoi_labels_inds = np.any(precomp_hoi_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
+                        precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
+                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
+                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
+                        precomp_hoi_labels = precomp_hoi_labels[feasible_hoi_labels_inds, :]
+                        assert np.all(np.sum(precomp_hoi_labels, axis=1) >= 1), precomp_hoi_labels
 
-                        precomp_hoi_infos = precomp_hoi_infos[feasible_labels_inds]
-                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_labels_inds]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_labels_inds]
-                        pc_hoi_labels = pc_hoi_labels[feasible_labels_inds, :]
-                        assert np.all(np.sum(pc_hoi_labels, axis=1) >= 1), pc_hoi_labels
+                        # Filter out boxes without interactions
+                        hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
+                        if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape)):
+                            print('Bingo!')
+                        precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
+                        precomp_box_feats = precomp_box_feats[hoi_box_inds]
+                        precomp_masks = precomp_masks[hoi_box_inds]
+                        precomp_box_labels = precomp_box_labels[hoi_box_inds]
 
                     assert np.all(precomp_hoi_infos >= 0)
-                    entry.precomp_hoi_labels = pc_hoi_labels
+                    entry.precomp_hoi_labels = precomp_hoi_labels
                     entry.precomp_hoi_infos = precomp_hoi_infos
                     entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
                     entry.precomp_hoi_union_feats = precomp_hoi_union_feats
+
+                entry.precomp_boxes_ext = precomp_boxes_ext
+                entry.precomp_box_feats = precomp_box_feats
+                entry.precomp_masks = precomp_masks
+                entry.precomp_box_labels = precomp_box_labels
             assert (entry.precomp_box_labels is None and entry.precomp_hoi_labels is None) or \
                    (entry.precomp_box_labels is not None and entry.precomp_hoi_labels is not None)
         return entry
