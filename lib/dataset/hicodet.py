@@ -270,7 +270,7 @@ class HicoDetInstanceSplit(Dataset):
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
 
             # Image data
-            img_infos = self.pc_image_infos[pc_im_idx]
+            img_infos = self.pc_image_infos[pc_im_idx].copy()
             assert img_infos.shape == (3,)
             entry.img_size = img_infos[:2]
             entry.scale = img_infos[2]
@@ -287,7 +287,7 @@ class HicoDetInstanceSplit(Dataset):
                 precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
                 if self.pc_box_labels is not None:
                     # TODO mapping of obj inds for rels
-                    precomp_box_labels = self.pc_box_labels[start:end]
+                    precomp_box_labels = self.pc_box_labels[start:end].copy()
                     num_boxes = precomp_box_labels.shape[0]
                     precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
                     precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
@@ -314,7 +314,7 @@ class HicoDetInstanceSplit(Dataset):
 
                 start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-                precomp_hoi_infos = self.pc_hoi_infos[start:end, :]
+                precomp_hoi_infos = self.pc_hoi_infos[start:end, :].copy()
                 precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
                 precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                 try:
