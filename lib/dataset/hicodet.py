@@ -339,8 +339,8 @@ class HicoDetInstanceSplit(Dataset):
 
                         # Filter out boxes without interactions
                         hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                        if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape)):
-                            print('Bingo!')
+                        # if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape)):
+                        #     print('Bingo!')  # FIXME
                         precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
                         precomp_box_feats = precomp_box_feats[hoi_box_inds]
                         precomp_masks = precomp_masks[hoi_box_inds]
