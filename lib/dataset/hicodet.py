@@ -310,7 +310,7 @@ class HicoDetInstanceSplit(Dataset):
 
                 # HOI data
                 img_hoi_inds = np.flatnonzero(self.pc_hoi_im_inds == pc_im_idx)
-                assert img_hoi_inds.size > 0, (idx, pc_im_idx, img_id, img_fn)
+                assert img_hoi_inds.size > 0 or self.split == Splits.TEST, (idx, pc_im_idx, img_id, img_fn)
 
                 start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
