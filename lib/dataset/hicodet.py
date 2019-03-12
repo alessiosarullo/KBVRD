@@ -332,6 +332,7 @@ class HicoDetInstanceSplit(Dataset):
 
                     # Filter out HOIs
                     feasible_hoi_labels_inds = np.any(precomp_hoi_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
+                    assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, img_fn)
                     precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
                     precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
                     precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
