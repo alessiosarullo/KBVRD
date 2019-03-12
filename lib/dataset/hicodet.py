@@ -19,7 +19,7 @@ class HicoDetInstanceSplit(Dataset):
     _splits = {}  # type: Dict[Splits, HicoDetInstanceSplit]
     _hicodet_driver = None
 
-    def __init__(self, split, hicodet_driver, annotations, image_ids, object_inds, predicate_inds, flipping_prob=0):
+    def __init__(self, split, hicodet_driver, annotations, image_ids, object_inds, predicate_inds, flipping_prob=0, load_precomputed=None):
         """
         """
         # TODO docs, mention split in print so as not to have confusing messages
@@ -56,8 +56,10 @@ class HicoDetInstanceSplit(Dataset):
         ################# Data augmentation pipeline
         pass  # You could add a data augmentation pipeline here.
 
-        ################# In case of precomputed features
-        if cfg.program.load_precomputed_feats:
+        ################# Possibly load precomputed features
+        if load_precomputed is None:
+            load_precomputed = cfg.program.load_precomputed_feats
+        if load_precomputed:
             assert self.flipping_prob == 0  # TODO? extract features for flipped image
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
                                                                                 (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
@@ -237,14 +239,14 @@ class HicoDetInstanceSplit(Dataset):
         )
         return data_loader
 
-    def get_entry(self, idx, read_img=True):
+    def get_entry(self, idx, read_img=True, ignore_precomputed=False):
         # Read the image
 
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
 
         entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn, precomputed=self.has_precomputed)
-        if not self.has_precomputed:
+        if not self.has_precomputed or ignore_precomputed:
             gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 
             if read_img:

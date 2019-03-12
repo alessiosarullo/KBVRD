@@ -23,7 +23,7 @@ class EvalStats:
 
         eval_stats = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
-            ex = dataset.get_entry(i, read_img=False)
+            ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
             eval_stats.process_prediction(ex, prediction)
 
