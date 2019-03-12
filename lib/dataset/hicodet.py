@@ -337,14 +337,15 @@ class HicoDetInstanceSplit(Dataset):
                         precomp_hoi_labels = precomp_hoi_labels[feasible_hoi_labels_inds, :]
                         assert np.all(np.sum(precomp_hoi_labels, axis=1) >= 1), precomp_hoi_labels
 
-                        # Filter out boxes without interactions
-                        hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                        # if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape)):
-                        #     print('Bingo!')  # FIXME
-                        precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
-                        precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                        precomp_masks = precomp_masks[hoi_box_inds]
-                        precomp_box_labels = precomp_box_labels[hoi_box_inds]
+                        # FIXME enable
+                        # # Filter out boxes without interactions
+                        # hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
+                        # # if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape)):
+                        # #     print('Bingo!')  # FIXME
+                        # precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
+                        # precomp_box_feats = precomp_box_feats[hoi_box_inds]
+                        # precomp_masks = precomp_masks[hoi_box_inds]
+                        # precomp_box_labels = precomp_box_labels[hoi_box_inds]
 
                     assert np.all(precomp_hoi_infos >= 0)
                     entry.precomp_hoi_labels = precomp_hoi_labels
