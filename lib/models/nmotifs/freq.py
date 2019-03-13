@@ -50,7 +50,7 @@ class FrequencyBias(nn.Module):
     def get_counts(train_data: HicoDetInstanceSplit):
         counts = np.zeros((train_data.num_object_classes, train_data.num_object_classes, train_data.num_predicates), dtype=np.int64)
         for i in range(len(train_data)):
-            ex = train_data.get_entry(i, read_img=False)  # type: Example
+            ex = train_data.get_entry(i, read_img=False, ignore_precomputed=True)  # type: Example
             gt_hois = ex.gt_hois
             ho_pairs = ex.gt_obj_classes[gt_hois[:, [0, 2]]]
             for (h, o), pred in zip(ho_pairs, gt_hois[:, 1]):
