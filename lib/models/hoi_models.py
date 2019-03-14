@@ -181,9 +181,8 @@ class KModel(BaseModel):
         self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes),
                                                            nn.Softmax(dim=1))
         imsitu_ke = ImSituKnowledgeExtractor()
-        imsitu_prior = torch.from_numpy(imsitu_ke.extract_prior_matrix(self.dataset)).float().cuda().detach()
-        self.imsitu_prior_fc = nn.Linear(imsitu_prior.shape[1], self.imsitu_prior_emb_dim)
-        self.imsitu_prior_emb = self.imsitu_prior_fc(imsitu_prior)
+        self.imsitu_prior = torch.from_numpy(imsitu_ke.extract_prior_matrix(self.dataset)).float().cuda().detach()
+        self.imsitu_prior_fc = nn.Linear(self.imsitu_prior.shape[1], self.imsitu_prior_emb_dim)
         self.imsitu_hoi_final = nn.Sequential(*([nn.Linear(self.hoi_branch.output_dim + self.imsitu_prior_emb_dim, self.imsitu_branch_final_emb_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Linear(self.imsitu_branch_final_emb_dim, self.imsitu_branch_final_emb_dim)]
@@ -207,7 +206,8 @@ class KModel(BaseModel):
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
         hoi_embs_pre_imsitu = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, boxes_ext, im_ids, hoi_infos)
 
-        imsitu_emb = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior_emb)
+        imsitu_prior_emb = self.imsitu_prior_fc(self.imsitu_prior)
+        imsitu_emb = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), imsitu_prior_emb)
         hoi_obj_imsitu_emb = imsitu_emb[hoi_infos[:, 2], :]
         hoi_embs = self.imsitu_hoi_final(torch.cat([hoi_embs_pre_imsitu, hoi_obj_imsitu_emb], axis=1))
 
