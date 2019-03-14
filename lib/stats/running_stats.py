@@ -1,16 +1,16 @@
 import os
-import numpy as np
 import shutil
-
-from config import cfg
-import torch
 from collections import deque
 from typing import Dict
-from tensorboardX import SummaryWriter
 
+import numpy as np
+import torch
+from tensorboardX import SummaryWriter
+from torch.utils.data import DataLoader
+
+from config import cfg
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
-from torch.utils.data import DataLoader
 
 
 class SmoothedValue:
@@ -69,7 +69,7 @@ class RunningStats:
         return '%s epoch' % self.split_str
 
     def update_stats(self, output_dict):
-        assert sum([int('total' in k.lower()) for k in output_dict.get('losses', {})]) == 1
+        assert sum([int('total' in k.lower()) for k in output_dict.get('losses', {})]) <= 1
         for loss_name, loss in output_dict.get('losses', {}).items():
             self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
@@ -123,7 +123,7 @@ class RunningStats:
     def batch_toc(self):
         Timer.get(self.epoch_str, 'Batch').toc()
 
-    def print_times(self, epoch, batch=None, curr_iter=None):
+    def print_times(self, epoch=None, batch=None, curr_iter=None):
         num_batches = len(self.data_loader)
         time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
@@ -132,8 +132,8 @@ class RunningStats:
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
+        curr_iter_str = 'iter {:6d}'.format(curr_iter) if curr_iter is not None else ''
         if self.split == Splits.TRAIN:
-            curr_iter_str = 'iter {:6d}'.format(curr_iter) if curr_iter is not None else ''
             header = '{:s} {:s} ({:s}, {:s}).'.format(self.split_str, curr_iter_str, epoch_str, batch_str)
         else:
             if epoch is not None:
@@ -144,8 +144,9 @@ class RunningStats:
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
                                                                                Timer.format(time_to_collate)),
-              'Current epoch progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
-                                                                          Timer.format(est_time_per_epoch)))
+              'Current {:s}progress: {:>7s}/{:>7s} (estimated).'.format('epoch' if epoch is not None else '',
+                                                                        Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
+                                                                        Timer.format(est_time_per_epoch)))
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""
