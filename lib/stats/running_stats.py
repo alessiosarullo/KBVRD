@@ -38,7 +38,7 @@ class SmoothedValue:
         return self.total / self.count
 
 
-class TrainingStats:
+class RunningStats:
     def __init__(self, split, data_loader: DataLoader, history_window=None):
         if history_window is None:
             history_window = cfg.program.log_interval
@@ -55,7 +55,6 @@ class TrainingStats:
             pass
         os.makedirs(tboard_dir)
         self.tblogger = SummaryWriter(tboard_dir)
-        self.smoothed_total_loss = SmoothedValue(self.history_window)
         self.smoothed_losses = {}  # type: Dict[str, SmoothedValue]
         self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
         self.values_to_watch = {}  # type: Dict[str, SmoothedValue]
@@ -72,10 +71,7 @@ class TrainingStats:
     def update_stats(self, output_dict):
         assert sum([int('total' in k.lower()) for k in output_dict['losses'].keys()]) == 1
         for loss_name, loss in output_dict['losses'].items():
-            if 'total' not in loss_name.lower():
-                self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
-            else:
-                self.smoothed_total_loss.append(output_dict['losses'][loss_name].item())
+            self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
         for name, value in output_dict.get('hist', {}).items():
@@ -89,8 +85,7 @@ class TrainingStats:
         if verbose:
             self._print_times(epoch, batch=batch, curr_iter=curr_iter)
 
-        stats = {'Total loss': self.smoothed_total_loss.get_average(),
-                 'Metrics': {k: v.get_average() for k, v in self.smoothed_metrics.items()},
+        stats = {'Metrics': {k: v.get_average() for k, v in self.smoothed_metrics.items()},
                  'Watch': {k: v.get_average() for k, v in self.values_to_watch.items()},
                  'Hist': {k: torch.cat(tuple(v), dim=0) for k, v in self.histograms.items()},
                  }
@@ -99,12 +94,13 @@ class TrainingStats:
 
         for k, v in self.smoothed_losses.items():
             loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
-            stats[loss_name] = v.get_average()
+            loss_value = v.get_average()
+            if 'total' not in loss_name.lower():
+                stats[loss_name] = loss_value
             if verbose:
-                print('%-20s %f' % (loss_name, stats[loss_name]))
+                print('%-20s %f' % (loss_name, loss_value))
 
         if verbose:
-            print('%-20s %f' % ('Total loss', stats['Total loss']))
             if cfg.program.verbose:
                 for k, v in stats['Hist'].items():
                     print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
@@ -136,15 +132,21 @@ class TrainingStats:
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
-        if self.split == Splits.VAL:
-            header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
-        else:
+        if self.split == Splits.TRAIN:
             try:
                 batch = kwargs['batch']
                 curr_iter = kwargs['curr_iter']
             except KeyError:
                 raise
             header = '{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch, num_batches - 1)
+        elif self.split == Splits.VAL:
+            header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
+        else:
+            assert self.split == Splits.TEST
+            if epoch is not None:
+                header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
+            else:
+                header = '{:s}.'.format(self.split_str)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),

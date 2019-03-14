@@ -1,4 +1,5 @@
 import time
+from typing import Dict
 
 import torch
 
@@ -24,7 +25,7 @@ class Timer:
                 timer = timer.sub_timers[subt]
             else:
                 timer = timer.sub_timers.setdefault(subt, Timer())
-        return timer
+        return timer  # type: Timer
 
     def tic(self):
         global_t = self.get()

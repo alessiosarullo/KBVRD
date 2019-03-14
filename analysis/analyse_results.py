@@ -12,7 +12,7 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch
 from lib.models.utils import Prediction
-from lib.stats.eval_stats import EvalStats
+from lib.stats.evaluator import Evaluator
 
 
 def _setup_and_load():
@@ -20,14 +20,15 @@ def _setup_and_load():
     with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
+    cfg.program.load_precomputed_feats = False
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     return results, hds
 
 
 def vrd_style_eval_count():
     results, hds = _setup_and_load()
-    stats = EvalStats.evaluate_predictions(hds, results)
-    stats.print()
+    stats = Evaluator.evaluate_predictions(hds, results)
+    stats.print_metrics()
 
     gt_hois = hds.hois
     gt_hoi_hist = Counter(gt_hois[:, 1])
@@ -51,8 +52,8 @@ def vrd_style_eval_count():
 
 def count():
     results, hds = _setup_and_load()
-    stats = EvalStats.evaluate_predictions(hds, results)
-    stats.print()
+    stats = Evaluator.evaluate_predictions(hds, results)
+    stats.print_metrics()
 
     gt_hois = hds.hois
     gt_hoi_hist = Counter(gt_hois[:, 1])

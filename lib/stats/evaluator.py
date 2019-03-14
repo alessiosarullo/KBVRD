@@ -1,35 +1,46 @@
 from typing import List, Dict
 
 import numpy as np
+from sklearn.metrics import average_precision_score
 
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
 from lib.models.utils import Prediction
 
-from sklearn.metrics import average_precision_score
 
-
-class EvalStats:
+class Evaluator:
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
         self.dataset = dataset
         self.hoi_labels = []
         self.hoi_predictions = []
 
+        self.metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
+                                 'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
+                                 }
+        self.metrics = {}  # type: Dict[str, np.ndarray]
+
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
         assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
 
-        eval_stats = cls(dataset, **kwargs)
+        evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
             ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
-            eval_stats.process_prediction(ex, prediction)
+            evaluator.process_prediction(ex, prediction)
 
-        return eval_stats  # type: EvalStats
+        evaluator.compute_metrics()
+        return evaluator  # type: Evaluator
 
-    def print(self):
+    def compute_metrics(self):
+        labels = np.concatenate(self.hoi_labels, axis=0)
+        predictions = np.concatenate(self.hoi_predictions, axis=0)
+        for metric, func in self.metric_functions.items():
+            self.metrics[metric] = func(labels, predictions)
+
+    def print_metrics(self):
         def _f(_x, _p):
             if _x < 1:
                 if _x > 0:
@@ -39,12 +50,9 @@ class EvalStats:
             else:
                 return ('%{}d%%'.format(_p + 3)) % 100
 
-        labels = np.concatenate(self.hoi_labels, axis=0)
-        predictions = np.concatenate(self.hoi_predictions, axis=0)
-        micro_map = average_precision_score(labels, predictions, average='micro')
-        pc_map = average_precision_score(labels, predictions, average=None)
-        print('  umAP: %s' % _f(np.mean(micro_map), _p=2))
-        print('pc-mAP: %s @ [%s]' % (_f(np.mean(pc_map), _p=2), ' '.join([_f(pcap, _p=2) for pcap in pc_map])))
+        for k, v in self.metrics.items():
+            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v]) if v.size > 1 else ''
+            print('%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str))
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
         # TODO docs

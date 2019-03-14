@@ -12,8 +12,8 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
-from lib.stats.eval_stats import EvalStats
-from lib.stats.training_stats import TrainingStats
+from lib.stats.evaluator import Evaluator
+from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
 from scripts.utils import print_params
 from lib.models.utils import get_all_models_by_name, Prediction
@@ -27,18 +27,22 @@ class Launcher:
             cfg.load()
         cfg.print()
         self.detector = None  # type: GenericModel
-        self.train_split = None  # type: HicoDetInstanceSplit
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: HicoDetInstanceSplit
         self.curr_train_iter = 0
 
     def run(self):
         self.setup()
-        if not cfg.program.load_train_output:
+        if cfg.program.load_train_output:
+            print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            all_predictions = self.evaluate()
+            print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        else:
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            self.train()
+            all_predictions = self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        self.test()
-        print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        with open(cfg.program.result_file, 'wb') as f:
+            pickle.dump(all_predictions, f)
+        print('Wrote results to %s.' % cfg.program.result_file)
 
     def setup(self):
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -49,6 +53,8 @@ class Launcher:
         print('RNG seed:', seed)
 
         self.train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
+        self.val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
+        self.test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericModel
         self.detector.cuda()
@@ -82,25 +88,31 @@ class Launcher:
 
     def train(self):
         os.makedirs(cfg.program.output_path, exist_ok=True)
-        val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
 
         optimizer, scheduler = self.get_optim()
 
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
-        val_loader = val_split.get_loader(batch_size=cfg.opt.batch_size if not cfg.program.model.startswith('nmotifs') else 1)  # FIXME?
-        training_stats = TrainingStats(split=Splits.TRAIN, data_loader=train_loader)
-        val_stats = TrainingStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
+        val_loader = self.val_split.get_loader(batch_size=cfg.opt.batch_size if not cfg.program.model.startswith('nmotifs') else 1)  # FIXME?
+        test_loader = self.test_split.get_loader(batch_size=1)
+
+        training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
+        val_stats = RunningStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
+        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader))
+
         try:
             for epoch in range(cfg.opt.num_epochs):
                 self.detector.train()
-                self.train_epoch(epoch, train_loader, training_stats, optimizer)
+                self.loss_epoch(epoch, train_loader, training_stats, optimizer)
                 torch.save({'epoch': epoch,
                             'state_dict': self.detector.state_dict()},
                            cfg.program.checkpoint_file)
 
                 self.detector.eval()
-                val_loss = self.train_epoch(epoch, val_loader, val_stats)
+                val_loss = self.loss_epoch(epoch, val_loader, val_stats)
                 scheduler.step(val_loss)
+
+                all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
+
                 if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
                     print('Exiting training early.', flush=True)
                     break
@@ -114,19 +126,17 @@ class Launcher:
                 os.remove(cfg.program.saved_model_file)
             except FileNotFoundError:
                 pass
-
             os.rename(cfg.program.checkpoint_file, cfg.program.saved_model_file)
-        try:
-            os.remove(cfg.program.result_file)
-        except FileNotFoundError:
-            pass
 
-    def train_epoch(self, epoch_idx, data_loader, stats: TrainingStats, optimizer=None):
+        # noinspection PyUnboundLocalVariable
+        return all_predictions
+
+    def loss_epoch(self, epoch_idx, data_loader, stats: RunningStats, optimizer=None):
         stats.epoch_tic()
         epoch_loss = 0
         for batch_idx, batch in enumerate(data_loader):
             stats.batch_tic()
-            epoch_loss += self.train_batch(batch, stats, optimizer)
+            epoch_loss += self.loss_batch(batch, stats, optimizer)
             stats.batch_toc()
 
             if optimizer is not None:
@@ -142,7 +152,7 @@ class Launcher:
         stats.epoch_toc()
         return epoch_loss
 
-    def train_batch(self, batch, stats, optimizer=None):
+    def loss_batch(self, batch, stats, optimizer=None):
         """ :arg `optimizer` should be None on validation batches. """
 
         losses = self.detector.get_losses(batch)
@@ -165,48 +175,33 @@ class Launcher:
 
         return loss
 
-    def test(self):
-        test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-        result_file = cfg.program.result_file
-        try:
-            with open(result_file, 'rb') as f:
-                all_predictions = pickle.load(f)
-            print('Loaded predictions from %s.' % result_file)
-        except FileNotFoundError:
-            self.detector.eval()
-            test_loader = test_split.get_loader(batch_size=1)
-            all_predictions = []
-            Timer.get('Test').tic()
-            for b_idx, batch in enumerate(test_loader):
-                Timer.get('Test', 'Img').tic()
-                prediction = self.detector(batch)  # type: Prediction
-                all_predictions.append(vars(prediction))
-                Timer.get('Test', 'Img').toc()
+    def eval_epoch(self, epoch_idx, data_loader, stats: RunningStats):
+        self.detector.eval()
+        all_predictions = []
 
-                if b_idx % 20 == 0:
-                    torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+        stats.epoch_tic()
+        for batch_idx, batch in enumerate(data_loader):
+            stats.batch_tic()
+            prediction = self.detector(batch)  # type: Prediction
+            all_predictions.append(vars(prediction))
+            stats.batch_toc()
 
-                if b_idx % cfg.program.print_interval == 0:
-                    time_per_batch = Timer.get('Test', 'Img', get_only=True).spent(average=True)
-                    time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
-                    time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
-                    est_time_per_epoch = len(test_loader) * (time_per_batch + time_to_load * 1 + time_to_collate)
-                    print('Img {:5d}/{:5d}.'.format(b_idx, len(test_loader)),
-                          'Avg: {:>5s}/detection, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
-                                                                                       Timer.format(time_to_load),
-                                                                                       Timer.format(time_to_collate)),
-                          'Progress: {:>7s}/{:>7s} (estimated).'.format(Timer.format(Timer.get('Test', get_only=True).progress()),
-                                                                        Timer.format(est_time_per_epoch)))
-            Timer.get('Test').toc()
+            if batch_idx % 20 == 0:
+                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
 
-            with open(result_file, 'wb') as f:
-                pickle.dump(all_predictions, f)
-            print('Wrote results to %s.' % result_file)
+        evaluator = Evaluator.evaluate_predictions(self.test_split, all_predictions)  # type: Evaluator
+        evaluator.print_metrics()
+        stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
+        stats.log_stats(self.curr_train_iter, epoch_idx)
 
-        Timer.get('Eval').tic()
-        result_stats = EvalStats.evaluate_predictions(test_split, all_predictions)
-        Timer.get('Eval').toc()
-        result_stats.print()
+        stats.epoch_toc()
+        return all_predictions
+
+    def evaluate(self):
+        test_loader = self.test_split.get_loader(batch_size=1)
+        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader))
+        all_predictions = self.eval_epoch(None, test_loader, test_stats)
+        return all_predictions
 
 
 def main():
