@@ -1,28 +1,4 @@
-from typing import Dict, Type, Set
-
 import numpy as np
-
-from lib.models.abstract_model import AbstractModel
-
-try:  # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
-    from lib.models.hoi_models import *
-    from lib.models.nmotifs.hoi_nmotifs import *
-except ImportError:
-    pass
-
-
-def get_all_models_by_name() -> Dict[str, Type[AbstractModel]]:
-    def get_all_subclasses(cls):
-        return set(cls.__subclasses__()).union([s for c in cls.__subclasses__() for s in get_all_subclasses(c)])
-
-    all_model_classes = get_all_subclasses(AbstractModel)  # type: Set[Type[AbstractModel]]
-    all_model_classes_dict = {}
-    for model in all_model_classes:
-        try:
-            all_model_classes_dict[model.get_cline_name()] = model
-        except NotImplementedError:
-            pass
-    return all_model_classes_dict
 
 
 class Prediction:

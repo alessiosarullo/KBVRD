@@ -5,11 +5,11 @@ import torch.nn as nn
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.word_embeddings import WordEmbeddings
+from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
-from lib.dataset.word_embeddings import WordEmbeddings
-from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM

@@ -110,7 +110,7 @@ class ProgramConfig(BaseConfigs):
 
     def _add_argument(self, parser, param_name, param_value):
         if param_name == 'model':
-            from lib.models.utils import get_all_models_by_name
+            from scripts.utils import get_all_models_by_name
             all_models_dict = get_all_models_by_name()
             if all_models_dict:
                 all_models = set(all_models_dict.keys())

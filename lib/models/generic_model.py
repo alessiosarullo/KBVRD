@@ -6,9 +6,8 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Minibatch
 from lib.models.abstract_model import AbstractModel
-from lib.models.utils import Prediction
 from lib.models.visual_modules import VisualModule
-
+from lib.models.utils import Prediction
 
 class GenericModel(AbstractModel):
     @classmethod
@@ -75,3 +74,5 @@ class GenericModel(AbstractModel):
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
+
+
