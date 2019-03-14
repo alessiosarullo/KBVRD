@@ -3,15 +3,18 @@ import pickle
 
 import numpy as np
 
+from config import cfg
+
 from analysis.utils import plot_mat
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits
 from lib.dataset.imsitu_driver import ImSitu
 
 
-# TODO check after Hico predicate refactor
 class ImSituKnowledgeExtractor:
     def __init__(self):
+        self.cache_file = os.path.join(cfg.program.cache_root, 'imsitu_dobjs.pkl')
+
         self.imsitu = ImSitu()
 
         # FIXME direct objects only? Doesn't work for example in "jump over an obstacle", though
@@ -71,9 +74,8 @@ class ImSituKnowledgeExtractor:
         return op_mat
 
     def get_dobj_tokens_in_verb_abstracts(self):
-        cache_file = os.path.join('cache', 'dobjs.pkl')
         try:
-            with open(cache_file, 'rb') as f:
+            with open(self.cache_file, 'rb') as f:
                 direct_objects_per_verb = pickle.load(f)
         except FileNotFoundError:
             import requests
@@ -116,7 +118,7 @@ class ImSituKnowledgeExtractor:
                         print('CoreNLP server stopped.')
                 print('Parsed: %d/%d' % (len(direct_objects_per_verb), len(verbs)))
 
-            with open(cache_file, 'wb') as f:
+            with open(self.cache_file, 'wb') as f:
                 pickle.dump(direct_objects_per_verb, f)
         return direct_objects_per_verb
 
