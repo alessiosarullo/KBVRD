@@ -210,7 +210,7 @@ class KModel(BaseModel):
         imsitu_prior_emb = self.imsitu_prior_fc(self.imsitu_prior)
         imsitu_emb = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), imsitu_prior_emb)
         hoi_obj_imsitu_emb = imsitu_emb[hoi_infos[:, 2], :]
-        hoi_embs = self.imsitu_hoi_final(torch.cat([hoi_embs_pre_imsitu, hoi_obj_imsitu_emb], axis=1))
+        hoi_embs = self.imsitu_hoi_final(torch.cat([hoi_embs_pre_imsitu, hoi_obj_imsitu_emb], dim=1))
 
         self.values_to_monitor['obj_embs'] = objs_embs
 

@@ -137,14 +137,14 @@ class RunningStats:
             header = '{:s} {:s} ({:s}, {:s}).'.format(self.split_str, curr_iter_str, epoch_str, batch_str)
         else:
             if epoch is not None:
-                header = '{:s}, {:s}, {:s}.'.format(self.split_str, epoch_str, batch_str)
+                header = '{:s}. {:s}, {:s}.'.format(self.split_str, epoch_str.capitalize(), batch_str)
             else:
-                header = '{:s}, {:s}.'.format(self.split_str, batch_str)
+                header = '{:s}. {:s}.'.format(self.split_str, batch_str.capitalize())
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
                                                                                Timer.format(time_to_collate)),
-              'Current {:s}progress: {:>7s}/{:>7s} (estimated).'.format('epoch' if epoch is not None else '',
+              'Current {:s}progress: {:>7s}/{:>7s} (estimated).'.format('epoch ' if epoch is not None else '',
                                                                         Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
                                                                         Timer.format(est_time_per_epoch)))
 
