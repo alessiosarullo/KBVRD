@@ -69,8 +69,8 @@ class RunningStats:
         return '%s epoch' % self.split_str
 
     def update_stats(self, output_dict):
-        assert sum([int('total' in k.lower()) for k in output_dict.get('losses')]) == 1
-        for loss_name, loss in output_dict.get('losses').items():
+        assert sum([int('total' in k.lower()) for k in output_dict.get('losses', {})]) == 1
+        for loss_name, loss in output_dict.get('losses', {}).items():
             self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
