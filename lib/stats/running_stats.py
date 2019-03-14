@@ -131,11 +131,15 @@ class RunningStats:
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
+        epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
         if self.split == Splits.TRAIN:
             curr_iter_str = 'iter {:6d}'.format(curr_iter) if curr_iter is not None else ''
-            header = '{:s} {:s} (epoch {:2d}, {:s}).'.format(self.split_str, curr_iter_str, epoch, batch_str)
+            header = '{:s} {:s} ({:s}, {:s}).'.format(self.split_str, curr_iter_str, epoch_str, batch_str)
         else:
-            header = '{:s}, epoch {:2d}, {:s}.'.format(self.split_str, epoch, batch_str)
+            if epoch is not None:
+                header = '{:s}, {:s}, {:s}.'.format(self.split_str, epoch_str, batch_str)
+            else:
+                header = '{:s}, {:s}.'.format(self.split_str, batch_str)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
