@@ -138,7 +138,7 @@ class Launcher:
             epoch_loss += self.loss_batch(batch, stats, optimizer)
             stats.batch_toc()
 
-            verbose = batch_idx % (cfg.program.print_interval * (100 * int(bool(optimizer is None)))) == 0
+            verbose = batch_idx % (cfg.program.print_interval * (100 if optimizer is None else 1)) == 0
             if verbose:
                 stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
