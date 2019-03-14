@@ -164,6 +164,7 @@ class KModel(BaseModel):
         return 'kb'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.imsitu_prior_emb_dim = 256
         self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
