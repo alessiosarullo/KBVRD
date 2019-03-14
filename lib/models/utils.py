@@ -8,7 +8,7 @@ from lib.models.abstract_model import AbstractModel
 # noinspection PyUnresolvedReferences
 def get_all_models_by_name() -> Dict[str, Type[AbstractModel]]:
     # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
-    from lib.models.hoi_models import BaseModel, SimpleModel
+    from lib.models.hoi_models import BaseModel, KModel
     from lib.models.nmotifs.hoi_nmotifs import HOINMotifs, HOINMotifsHybrid
 
     def get_all_subclasses(cls):
