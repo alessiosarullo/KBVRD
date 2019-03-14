@@ -212,8 +212,6 @@ class KModel(BaseModel):
         hoi_obj_imsitu_emb = imsitu_emb[hoi_infos[:, 2], :]
         hoi_embs = self.imsitu_hoi_final(torch.cat([hoi_embs_pre_imsitu, hoi_obj_imsitu_emb], dim=1))
 
-        self.values_to_monitor['obj_embs'] = objs_embs
-
         obj_logits = self.obj_output_fc(objs_embs)
         hoi_logits = self.hoi_output_fc(hoi_embs)
         return obj_logits, hoi_logits
