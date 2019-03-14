@@ -10,8 +10,8 @@ class SpatialContext(nn.Module):
 
         # FIXME params
         self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
-        self.spatial_emb_dim = 64
-        self.spatial_rnn_emb_dim = 64
+        self.spatial_emb_dim = 128
+        self.spatial_rnn_emb_dim = 128
 
         self.spatial_rels_fc = nn.Sequential(*(
             [nn.Linear(input_dim, self.spatial_emb_dim),

@@ -2,72 +2,111 @@ import os
 import pickle
 import re
 
+from config import cfg
+
 import numpy as np
+import torch
 
 
 class WordEmbeddings:
-    def __init__(self, source='numberbatch'):
+    def __init__(self, source='numberbatch', dim=None, normalize=False):
         """
         Attributes:
             embeddings: [array] NxD matrix consisting of N D-dimensional embeddings
             vocabulary: [list] the N words composing the vocabulary, sorted according to `embeddings`'s rows
         """
+        # TODO fix docs
 
-        self.data_dir = os.path.join('data', 'embeddings')
         self.loaders = {'numberbatch': {'parser': self.parse_numberbatch,
                                         'src_file': 'numberbatch-en.txt',
                                         },
                         'glove': {'parser': self.parse_glove,
-                                  'src_file': 'glove.6B.300d.txt',
+                                  'src_file': 'glove.6B.%dd.txt',
+                                  'default_dim': 300,
                                   },
                         }
 
-        self.normalize = True
+        self.source = source
+
         try:
-            self._embeddings, self.vocabulary = self.load(source.lower())
+            dim = dim or self.loaders[source].get('default_dim', None)
+            self._embeddings, self.vocabulary = self.load(source.lower(), dim)
         except KeyError:
             raise ValueError('Unknown source %s. Possible sources:' % source, list(self.loaders.keys()))
+        if normalize:
+            norms = np.linalg.norm(self._embeddings, axis=1)
+            norms[norms == 0] = 1
+            self._embeddings /= norms[:, None]
 
         self.word_index = {v: i for i, v in enumerate(self.vocabulary)}
+        self.dim = self._embeddings.shape[1]
 
-    def embedding(self, word):
+    def embedding(self, word: str, none_on_miss=True):
         try:
             if word == 'hair drier':  # FIXME hard coded
                 word = 'hair dryer'
-            return self._embeddings[self.word_index[word], :]
-        except KeyError as e:
-            return np.zeros_like(self._embeddings[0, :])  # FIXME
-            # new_message = str(e).replace("'", '')
-            # print(new_message)
-            # if ' ' in word:
-            #     new_message += '. Suggestions: [%s]' % ', '.join([w for w in self.word_index if w.startswith(word.split()[0])])
-            # raise KeyError(new_message)
+            idx = self.word_index[word]
+        except KeyError:
+            if none_on_miss:
+                return None
+            else:
+                return np.zeros_like(self._embeddings[0, :])
+        return self._embeddings[idx, :]
 
-    def load(self, source):
+    def get_embeddings(self, words, retry=False):
+        # vectors = np.random.standard_normal((len(words), self.dim))  # This is what they do in NeuralMotifs, but I'm not sure it's a good idea.
+        vectors = np.zeros((len(words), self.dim))
+        fails = []
+        replacements = {}
+        for i, word in enumerate(words):
+            emb = self.embedding(word, none_on_miss=True)
+            if emb is None and retry and not word.startswith('_'):
+                tokens = word.replace('_', ' ').strip().split(' ')
+                if retry == 'longest':
+                    repl_word = sorted(tokens, key=lambda x: len(x), reverse=True)[0]
+                elif retry == 'first':
+                    repl_word = tokens[0]
+                elif retry == 'last':
+                    repl_word = tokens[-1]
+                else:
+                    raise ValueError(retry)
+
+                replacements[word] = repl_word
+                emb = self.embedding(repl_word, none_on_miss=True)
+
+            if emb is not None:
+                vectors[i] = emb
+            else:
+                fails.append(word)
+
+        if retry:
+            for w in fails:
+                if not w.startswith('_'):
+                    del replacements[w]
+        if replacements:
+            print('These words were not found and have been replaced: %s.' % ', '.join(['%s -> %s' % (k, v) for k, v in replacements.items()]))
+        if fails:
+            print('Default embedding will be used for %s.' % ', '.join(fails))
+        return vectors.astype(np.float32, copy=False)
+
+    def load(self, source, dim):
         src_fn = self.loaders[source]['src_file']
-        path_cache_file = os.path.join(self.data_dir, os.path.splitext(src_fn)[0] + '_cache.pkl')
+        if dim is not None:
+            src_fn = src_fn % dim
+        path_cache_file = os.path.join(cfg.program.cache_root, os.path.splitext(src_fn)[0] + '_cache.pkl')
         try:
             with open(path_cache_file, 'rb') as f:
-                print('Loading cached %s embeddings' % source)
+                print('Loading cached %s embeddings.' % source)
                 embedding_mat, vocabulary = pickle.load(f)
         except FileNotFoundError:
-            print('Parsing %s embeddings' % source)
-            embedding_mat, vocabulary = self.loaders[source]['parser'](os.path.join(self.data_dir, src_fn))
-            print('Cleaning')
+            print('Parsing and caching %s embeddings.' % source)
+            embedding_mat, vocabulary = self.loaders[source]['parser'](os.path.join(cfg.program.embedding_dir, src_fn))
+            # Cleaning
             clean_words_inds = [i for i, word in enumerate(vocabulary) if not bool(re.search(r"[^a-zA-Z0-9_'\-]", word))]
-            vocabulary = [vocabulary[i].replace('_', ' ') for i in clean_words_inds]
+            vocabulary = [vocabulary[i].replace('_', ' ').strip() for i in clean_words_inds]
             embedding_mat = embedding_mat[clean_words_inds, :]
-            if self.normalize:
-                print('Normalizing')
-                norms = np.linalg.norm(embedding_mat, axis=1)
-                norms[norms == 0] = 1
-                embedding_mat /= norms[:, None]
-            else:
-                print('Using unnormalized embeddings')
             with open(path_cache_file, 'wb') as f:
-                print('Caching results')
                 pickle.dump((embedding_mat, vocabulary), f)
-        print('Done')
         return embedding_mat, vocabulary
 
     @staticmethod
@@ -108,7 +147,7 @@ class WordEmbeddings:
             tokens = line.split()
             embedding_mat[i, :] = np.array([float(x) for x in tokens[1:]])
 
-            # # Words do not start with '/c/en/' in the english-only version
+            # This is needed if words start with '/c/LANGUAGE_TAG/'. It's not the case in the english-only version.
             # word_id_tokens = tokens[0].split('/')
             # assert len(word_id_tokens) == 4, (word_id_tokens, i, line)
             # vocabulary.append(word_id_tokens[-1])

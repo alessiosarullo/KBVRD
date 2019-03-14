@@ -85,6 +85,7 @@ class TrainingStats:
 
     def log_stats(self, curr_iter, epoch, batch=None, verbose=False, **kwargs):
         """Log the tracked statistics."""
+        Timer.get(self.epoch_str, 'Stats').tic()
         if verbose:
             self._print_times(epoch, batch=batch, curr_iter=curr_iter)
 
@@ -111,6 +112,7 @@ class TrainingStats:
 
         if self.tblogger is not None:
             self._tb_log_stats(stats, curr_iter)
+        Timer.get(self.epoch_str, 'Stats').toc()
 
     def epoch_tic(self):
         Timer.get(self.epoch_str).tic()

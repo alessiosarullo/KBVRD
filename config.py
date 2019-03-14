@@ -50,28 +50,36 @@ class ProgramConfig(BaseConfigs):
         self.save_dir = ''
 
     @property
-    def load_train_output(self):
-        return os.path.exists(self.saved_model_file)
-
-    @property
     def output_root(self):
         return 'output'
+
+    @property
+    def data_root(self):
+        return 'data'
+
+    @property
+    def cache_root(self):
+        return 'cache'
+
+    @property
+    def embedding_dir(self):
+        return os.path.join(self.data_root, 'embeddings')
+
+    @property
+    def detectron_pretrained_file_format(self):
+        return os.path.join(self.data_root, 'pretrained_model', '%s.pkl')
+
+    @property
+    def precomputed_feats_file_format(self):
+        return os.path.join(self.cache_root, 'precomputed__%s_%s.h5')
 
     @property
     def output_path(self):
         return os.path.join(self.output_root, self.model, self.save_dir)
 
     @property
-    def detectron_pretrained_file_format(self):
-        return os.path.join('data', 'pretrained_model', '%s.pkl')
-
-    @property
-    def embedding_dir(self):
-        return os.path.join('data', 'embeddings')
-
-    @property
-    def precomputed_feats_file_format(self):
-        return os.path.join('cache', 'precomputed__%s_%s.h5')
+    def config_file(self):
+        return os.path.join(self.output_path, 'config.pkl')
 
     @property
     def checkpoint_file(self):
@@ -86,12 +94,12 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'result_test_%s.pkl' % ('predcls' if self.predcls else 'sgdet'))
 
     @property
-    def config_file(self):
-        return os.path.join(self.output_path, 'config.pkl')
-
-    @property
     def tensorboard_dir(self):
         return os.path.join(self.output_path, 'tboard')
+
+    @property
+    def load_train_output(self):
+        return os.path.exists(self.saved_model_file)
 
     def _postprocess_args(self):
         self.save_dir = self.save_dir.rstrip('/')

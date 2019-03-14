@@ -1,6 +1,9 @@
 import json
 import os
 
+from typing import Dict, Any, Tuple
+
+from config import cfg
 
 class ImSitu:
     def __init__(self):
@@ -47,7 +50,7 @@ class ImSitu:
                                 ]
                     }
         """
-        data_dir = os.path.join('data', 'imSitu')
+        data_dir = os.path.join(cfg.program.data_root, 'imSitu')
         self.image_dir = os.path.join(data_dir, 'images')
         self.path_domain_file = os.path.join(data_dir, 'imsitu_space.json')
         self.path_train_file = os.path.join(data_dir, 'train.json')
@@ -57,10 +60,8 @@ class ImSitu:
         self.nouns, self.verbs, self.train, self.val, self.test = self.load()
         self.verbs = self.fix_verbs(self.verbs)
 
-        self._print_verb_entry('riding')
-
     @staticmethod
-    def fix_verbs(verbs):
+    def fix_verbs(verbs) -> Dict[str, Dict]:
         verbs['riding']['abstract'] = verbs['riding']['abstract'].replace(' then ', ' the ')
         verbs['teaching']['abstract'] = verbs['teaching']['abstract'].replace(' to teach ', ' teaches ')
         return verbs
@@ -83,7 +84,7 @@ class ImSitu:
                 for r, d in v.items():
                     print(('%15s  - %-' + str(ln) + 's %s') % ('', r + ':', d))
 
-    def load(self):
+    def load(self) -> Tuple[Dict[str, Dict], Dict[str, Dict], Dict[str, Dict], Dict[str, Dict], Dict[str, Dict]]:
         with open(self.path_domain_file, 'r') as f:
             domain = json.load(f)
         verbs, nouns = domain['verbs'], domain['nouns']
@@ -100,7 +101,7 @@ class ImSitu:
 
 def main():
     imsitu = ImSitu()
-
+    imsitu._print_verb_entry('riding')
 
 if __name__ == '__main__':
     main()

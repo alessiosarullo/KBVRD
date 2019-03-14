@@ -16,7 +16,7 @@ def save_plot(img, filename):
 
 def main(recolor=True, lw=10):
     data_dir = os.path.join('data', 'sample')
-    img = np.array(Image.open(os.path.join(data_dir, 'im_friends.jpg')).load_raw('RGB'))
+    img = np.array(Image.open(os.path.join(data_dir, 'im_friends.jpg'))._load_raw('RGB'))
     print(img.shape)
 
     img_with_bbs = img.copy()
@@ -29,10 +29,10 @@ def main(recolor=True, lw=10):
         else:
             # Read the mask
             mask_img = Image.open(os.path.join(data_dir, 'im_friends_mask_%s.jpg' % name))
-            mask_img_color = np.array(mask_img.load_raw('RGB'))
+            mask_img_color = np.array(mask_img._load_raw('RGB'))
 
             # Convert to grayscale and find bounding box enclosing the mask
-            mask = 1 - np.round(np.array(mask_img.load_raw('L')) / 255)
+            mask = 1 - np.round(np.array(mask_img._load_raw('L')) / 255)
             idx_y, idx_x = np.where(mask > 0)
             bb = [min(idx_y), min(idx_x), max(idx_y), max(idx_x)]
 

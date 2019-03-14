@@ -37,8 +37,8 @@ def obj_edge_vectors(names, wv_dim=300) -> torch.Tensor:
 
 
 def load_word_vectors(wv_type, dim):
+    """Load word vectors from a path, trying .pt and .txt extensions."""
     root = cfg.program.embedding_dir
-    """Load word vectors from a path, trying .pt, .txt, and .zip extensions."""
     if isinstance(dim, int):
         dim = str(dim) + 'd'
     fname = os.path.join(root, wv_type + '.' + dim)

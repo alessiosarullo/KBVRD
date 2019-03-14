@@ -5,7 +5,7 @@ from torch.nn import functional as F
 from torch.nn.utils.rnn import PackedSequence
 
 from config import cfg
-from lib.word_vectors import obj_edge_vectors
+from lib.models.nmotifs.word_vectors import obj_edge_vectors
 from .decoder_rnn import DecoderRNN
 from .pytorch_misc import arange, enumerate_by_image, transpose_packed_sequence_inds
 from ..highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM

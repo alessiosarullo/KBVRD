@@ -32,6 +32,11 @@
     Note: you need GCC for pycocotools and you might need to change 
     `cuda90`  depending on your CUDA version.
     
+    If you want to parse imSitu from scratch you will also need:
+    ```
+    conda install requests nltk
+    ```
+    
 1) Compile Detectron
 
     ```

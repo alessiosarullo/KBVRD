@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.utils.rnn import PackedSequence
 
-from lib.word_vectors import obj_edge_vectors
+from lib.models.nmotifs.word_vectors import obj_edge_vectors
 from ..highway_lstm_cuda.alternating_highway_lstm import block_orthogonal
 
 
