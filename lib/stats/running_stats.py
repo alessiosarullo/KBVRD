@@ -69,8 +69,8 @@ class RunningStats:
         return '%s epoch' % self.split_str
 
     def update_stats(self, output_dict):
-        assert sum([int('total' in k.lower()) for k in output_dict['losses'].keys()]) == 1
-        for loss_name, loss in output_dict['losses'].items():
+        assert sum([int('total' in k.lower()) for k in output_dict.get('losses')]) == 1
+        for loss_name, loss in output_dict.get('losses').items():
             self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
             self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
@@ -79,11 +79,9 @@ class RunningStats:
         for name, value in output_dict.get('watch', {}).items():
             self.values_to_watch.setdefault(name, SmoothedValue(self.history_window)).append(value.item())
 
-    def log_stats(self, curr_iter, epoch, batch=None, verbose=False, **kwargs):
+    def log_stats(self, curr_iter, verbose=False, **kwargs):
         """Log the tracked statistics."""
         Timer.get(self.epoch_str, 'Stats').tic()
-        if verbose:
-            self._print_times(epoch, batch=batch, curr_iter=curr_iter)
 
         stats = {'Metrics': {k: v.get_average() for k, v in self.smoothed_metrics.items()},
                  'Watch': {k: v.get_average() for k, v in self.values_to_watch.items()},
@@ -125,28 +123,19 @@ class RunningStats:
     def batch_toc(self):
         Timer.get(self.epoch_str, 'Batch').toc()
 
-    def _print_times(self, epoch, **kwargs):
+    def print_times(self, epoch, batch=None, curr_iter=None):
         num_batches = len(self.data_loader)
         time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate)
 
+        batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         if self.split == Splits.TRAIN:
-            try:
-                batch = kwargs['batch']
-                curr_iter = kwargs['curr_iter']
-            except KeyError:
-                raise
-            header = '{:s} iter {:6d} (epoch {:2d}, batch {:5d}/{:5d}).'.format(self.split_str, curr_iter, epoch, batch, num_batches - 1)
-        elif self.split == Splits.VAL:
-            header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
+            curr_iter_str = 'iter {:6d}'.format(curr_iter) if curr_iter is not None else ''
+            header = '{:s} {:s} (epoch {:2d}, {:s}).'.format(self.split_str, curr_iter_str, epoch, batch_str)
         else:
-            assert self.split == Splits.TEST
-            if epoch is not None:
-                header = '{:s} epoch {:2d}.'.format(self.split_str, epoch)
-            else:
-                header = '{:s}.'.format(self.split_str)
+            header = '{:s}, epoch {:2d}, {:s}.'.format(self.split_str, epoch, batch_str)
 
         print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate.'.format(Timer.format(time_per_batch),
                                                                                Timer.format(time_to_load),
