@@ -10,12 +10,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.models.generic_model import GenericModel, Prediction
 from lib.models.abstract_model import AbstractHOIBranch
+from lib.models.generic_model import GenericModel, Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
-from scripts.utils import print_params
+from scripts.utils import print_params, get_all_models_by_name
 
 
 class Launcher:
