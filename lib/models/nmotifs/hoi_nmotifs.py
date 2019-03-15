@@ -137,11 +137,16 @@ class NMotifsKBHOIBranch(AbstractHOIBranch):
 
         self.freq_bias = FrequencyBias(dataset=dataset)
 
-        # KB
+        # # # KB
         eps = 1e-3
-        imsitu_prior_matrix = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
-        obj_pred_prior = np.log(imsitu_prior_matrix / np.maximum(1, np.sum(imsitu_prior_matrix, axis=1, keepdims=True)) + eps)
-        self.imsitu_prior = nn.Embedding.from_pretrained(torch.from_numpy(obj_pred_prior).float(), freeze=True)
+        imsitu_prior_matrix = ImSituKnowledgeExtractor().extract_prior_matrix(dataset).T  # P x O
+        # We don't want to penalise predicates that are not present
+        imsitu_prior_matrix[~np.any(imsitu_prior_matrix, axis=1), :] = 1
+        pred_obj_prior = np.log(imsitu_prior_matrix / np.sum(imsitu_prior_matrix, axis=1, keepdims=True))
+        assert not (np.any(np.isnan(pred_obj_prior)) or np.any(np.isinf(pred_obj_prior)))
+        obj_pred_prior = torch.from_numpy(pred_obj_prior.T).float()
+        assert obj_pred_prior.shape == (dataset.num_object_classes, dataset.num_predicates)
+        self.imsitu_prior = nn.Embedding.from_pretrained(obj_pred_prior, freeze=True)
 
     @property
     def output_dim(self):
