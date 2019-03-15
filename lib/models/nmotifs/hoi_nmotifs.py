@@ -163,7 +163,7 @@ class NMotifsKBHOIBranch(AbstractHOIBranch):
         hoi_logits = self.hoi_output_fc(hoi_repr)
         hoi_logits = hoi_logits + self.freq_bias.index_with_labels(torch.stack((obj_classes[sub_inds], obj_classes[obj_inds]), dim=1))
 
-        imsitu_hoi_logits = self.imsitu_prior(obj_inds)
+        imsitu_hoi_logits = self.imsitu_prior(torch.from_numpy(obj_inds))
         hoi_logits += imsitu_hoi_logits
 
         return obj_logits, hoi_logits
