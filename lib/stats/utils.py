@@ -22,7 +22,10 @@ class Timer:
         timer = cls.global_timer
         for subt in args:
             if get_only:
-                timer = timer.sub_timers[subt]
+                try:
+                    timer = timer.sub_timers[subt]
+                except KeyError:
+                    raise ValueError('Unknown timer %s.' % subt)
             else:
                 timer = timer.sub_timers.setdefault(subt, Timer())
         return timer  # type: Timer

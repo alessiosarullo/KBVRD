@@ -60,10 +60,6 @@ class RunningStats:
         self.values_to_watch = {}  # type: Dict[str, SmoothedValue]
         self.histograms = {}
 
-        # FIXME?
-        Timer.get(self.epoch_str, 'Stats').tic()
-        Timer.get(self.epoch_str, 'Stats').toc()
-
     @property
     def split_str(self):
         return self.split.value.capitalize()
@@ -132,7 +128,10 @@ class RunningStats:
         time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
-        time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
+        try:
+            time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
+        except ValueError:
+            time_for_stats = 0
         est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate + time_for_stats)
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''

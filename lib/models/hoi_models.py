@@ -145,16 +145,6 @@ class BaseHOIBranch(AbstractHOIBranch):
         rel_feats2 = torch.cat([rel_emb1, objs_ctx_rep, obj_wembs], dim=1)
         rel_emb_final = self.rel_final_emb_fc(rel_feats2)
 
-        self.values_to_monitor['visual-boxes'] = in_box_feats
-        self.values_to_monitor['visual-union_boxes_feats'] = in_union_boxes_feats
-        self.values_to_monitor['spatial'] = in_spatial_rels_feats
-        self.values_to_monitor['obj_ctx_rep'] = objs_ctx_rep
-        self.values_to_monitor['sp_ctx_rep'] = spatial_ctx_rep
-        self.values_to_monitor['rel_feats1'] = rel_feats1
-        self.values_to_monitor['rel_emb1'] = rel_emb1
-        self.values_to_monitor['rel_feats2'] = rel_feats2
-        self.values_to_monitor['rel_emb_final'] = rel_emb_final
-
         return rel_emb_final
 
 
