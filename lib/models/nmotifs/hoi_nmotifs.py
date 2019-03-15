@@ -141,8 +141,7 @@ class NMotifsKBHOIBranch(AbstractHOIBranch):
         eps = 1e-3
         imsitu_prior_matrix = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
         obj_pred_prior = np.log(imsitu_prior_matrix / np.maximum(1, np.sum(imsitu_prior_matrix, axis=1, keepdims=True)) + eps)
-        self.imsitu_prior = nn.Embedding(obj_pred_prior.shape[0], obj_pred_prior.shape[1])
-        self.imsitu_prior.weight = torch.from_numpy(obj_pred_prior).float().cuda().detach()
+        self.imsitu_prior = nn.Embedding.from_pretrained(torch.from_numpy(obj_pred_prior).float(), freeze=True)
         assert self.imsitu_prior.shape[1] == self.dataset.num_predicates
 
     @property
