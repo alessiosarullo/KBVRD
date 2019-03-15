@@ -77,8 +77,8 @@ class HOINMotifsKB(GenericModel):
 
         imsitu_ke = ImSituKnowledgeExtractor()
         self.imsitu_prior = torch.from_numpy(imsitu_ke.extract_prior_matrix(self.dataset)).float().cuda().detach()
-        self.imsitu_prior_fc = nn.Linear(self.imsitu_prior.shape[1], self.dataset.num_predicates)
         assert self.imsitu_prior.shape[1] == self.dataset.num_predicates
+        self.imsitu_prior_fc = nn.Linear(self.imsitu_prior.shape[1], self.dataset.num_predicates)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -93,8 +93,9 @@ class HOINMotifsKB(GenericModel):
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
 
         imsitu_prior_emb = self.imsitu_prior_fc(self.imsitu_prior)
-        hoi_imsitu_prior_logits = imsitu_prior_emb[obj_inds, :]
-        hoi_logits = (hoi_logits + hoi_imsitu_prior_logits) / 2
+        imsitu_obj_emb = torch.mm(nn.functional.softmax(obj_logits.detach(), dim=1), imsitu_prior_emb)
+        imsitu_hoi_logits = imsitu_obj_emb[obj_inds, :]
+        hoi_logits = (hoi_logits + imsitu_hoi_logits) / 2
 
         return obj_logits, hoi_logits
 
