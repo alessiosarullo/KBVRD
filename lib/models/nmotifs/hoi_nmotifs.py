@@ -142,7 +142,7 @@ class NMotifsKBHOIBranch(AbstractHOIBranch):
         imsitu_prior_matrix = ImSituKnowledgeExtractor().extract_prior_matrix(dataset).T  # P x O
         # We don't want to penalise predicates that are not present
         imsitu_prior_matrix[~np.any(imsitu_prior_matrix, axis=1), :] = 1
-        pred_obj_prior = np.log(imsitu_prior_matrix / np.sum(imsitu_prior_matrix, axis=1, keepdims=True))
+        pred_obj_prior = np.log(imsitu_prior_matrix / np.sum(imsitu_prior_matrix, axis=1, keepdims=True) + 1e-3)
         assert not (np.any(np.isnan(pred_obj_prior)) or np.any(np.isinf(pred_obj_prior)))
         obj_pred_prior = torch.from_numpy(pred_obj_prior.T).float()
         assert obj_pred_prior.shape == (dataset.num_object_classes, dataset.num_predicates)
