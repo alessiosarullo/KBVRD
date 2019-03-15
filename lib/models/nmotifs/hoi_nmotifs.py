@@ -8,8 +8,9 @@ from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context_modules import SpatialContext, ObjectContext
-from .freq import FrequencyBias
-from .lincontext import LinearizedContext
+from lib.models.nmotifs.freq import FrequencyBias
+from lib.models.nmotifs.lincontext import LinearizedContext
+from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 
 
 class HOINMotifs(GenericModel):
@@ -61,6 +62,43 @@ class HOINMotifsHybrid(GenericModel):
         obj_logits = self.obj_output_fc(objs_embs)
 
         _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
+        return obj_logits, hoi_logits
+
+
+class HOINMotifsKB(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'nmotifs-kb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.imsitu_branch_final_emb_dim = 512
+        super().__init__(dataset, **kwargs)
+        self.hoi_branch = HOINMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
+
+        self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.dataset.num_object_classes, self.dataset.num_object_classes),
+                                                           nn.Softmax(dim=1))
+        imsitu_ke = ImSituKnowledgeExtractor()
+        self.imsitu_prior = torch.from_numpy(imsitu_ke.extract_prior_matrix(self.dataset)).float().cuda().detach()
+        assert self.imsitu_prior.shape[1] == self.dataset.num_predicates
+        self.imsitu_prior_fc = nn.Linear(self.imsitu_prior.shape[1], self.dataset.num_predicates)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        hoi_im_ids = hoi_infos[:, 0]
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        im_ids = torch.unique(hoi_im_ids, sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
+
+        imsitu_prior_emb = self.imsitu_prior_fc(self.imsitu_prior)
+        imsitu_emb = torch.mm(self.imsitu_prior_obj_attention_fc(obj_logits.detach()), imsitu_prior_emb)
+        hoi_imsitu_prior_logits = imsitu_emb[obj_inds, :]
+        hoi_logits = (hoi_logits + hoi_imsitu_prior_logits) / 2
+
         return obj_logits, hoi_logits
 
 
