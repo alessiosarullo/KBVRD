@@ -60,6 +60,10 @@ class RunningStats:
         self.values_to_watch = {}  # type: Dict[str, SmoothedValue]
         self.histograms = {}
 
+        # FIXME?
+        Timer.get(self.epoch_str, 'Stats').tic()
+        Timer.get(self.epoch_str, 'Stats').toc()
+
     @property
     def split_str(self):
         return self.split.value.capitalize()
