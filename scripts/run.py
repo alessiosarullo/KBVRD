@@ -139,14 +139,14 @@ class Launcher:
             stats.batch_toc()
 
             verbose = (batch_idx % (cfg.program.print_interval * (100 if optimizer is None else 1)) == 0)
-            if verbose:
-                stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
-
             if optimizer is not None:
                 if batch_idx % cfg.program.log_interval == 0:
                     stats.log_stats(self.curr_train_iter, verbose=verbose,
                                     lr=optimizer.param_groups[0]['lr'])  # TODO lr for each parameter group
                 self.curr_train_iter += 1
+            else:
+                if verbose:
+                    stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
         if optimizer is None:
             stats.log_stats(self.curr_train_iter, epoch_idx)

@@ -8,6 +8,7 @@ import numpy as np
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.imsitu_driver import ImSitu
+from lib.dataset.utils import Splits
 
 
 class ImSituKnowledgeExtractor:
@@ -50,7 +51,7 @@ class ImSituKnowledgeExtractor:
         # for i, pred in enumerate(dataset.predicates):
         #     try:
         #         verb = pred_verb_matches[pred]
-        #         instance_list = self.concrete_dobjs_per_verb[verb]
+        #         instance_list = sorted(self.concrete_dobjs_count_per_verb[verb].keys())
         #         dobj = self.abstract_dobj_per_verb[verb]
         #     except KeyError:
         #         verb, instance_list, dobj = '', '', ''
@@ -184,3 +185,13 @@ class ImSituKnowledgeExtractor:
         matching_dobjs_per_verb = {verb: {instance: count for instance, count in instances.items() if instance in hd_obj_set}
                                    for verb, instances in concrete_dobjs_per_verb.items()}
         return matching_dobjs_per_verb
+
+
+def main():
+    imsitu_ke = ImSituKnowledgeExtractor()
+    hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
+    imsitu_op_mat = imsitu_ke.extract_prior_matrix(hd)
+
+
+if __name__ == '__main__':
+    main()

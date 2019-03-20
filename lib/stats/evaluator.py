@@ -96,16 +96,7 @@ class Evaluator:
         for h, o, i in gt_hois:
             gt_hoi_mat[h, o, i] = 1
 
-        # By default assume either all 0s, a uniform distribution over foreground interactions or a delta at null interaction.
-        # All zeros
         predict_hoi_mat = np.zeros([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
-        # Uniform over foreground
-        # predict_hoi_mat = np.ones([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
-        # predict_hoi_mat /= (predict_hoi_mat.shape[2] - 1)
-        # predict_hoi_mat[:, :, 0] = 0
-        # Delta
-        # predict_hoi_mat = np.zeros([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
-        # predict_hoi_mat[:, :, 0] = 1
         for pair_idx, (h, o) in enumerate(predict_ho_pairs):
             predict_hoi_mat[h, o, :] = predict_hoi_scores[pair_idx, :]
 
@@ -115,12 +106,22 @@ class Evaluator:
         gt_to_predict_box_match[~gt_pred_ious.any(axis=1)] = -1
 
         hoi_labels = np.empty((gt_hois.shape[0], self.dataset.num_predicates), dtype=gt_hoi_mat.dtype)
-        hoi_predictions = np.empty((gt_hois.shape[0], self.dataset.num_predicates), dtype=predict_hoi_mat.dtype)
+
+        # For unmatched pairs assume by default either all 0s, a uniform distribution over foreground interactions or a delta at null interaction.
+        # All zeros
+        hoi_predictions = np.zeros((gt_hois.shape[0], self.dataset.num_predicates), dtype=predict_hoi_mat.dtype)
+        # Uniform over foreground
+        # hoi_predictions = np.ones((gt_hois.shape[0], self.dataset.num_predicates), dtype=predict_hoi_mat.dtype)
+        # hoi_predictions /= (hoi_predictions.shape[1] - 1)
+        # hoi_predictions[:, 0] = 0
+        # Delta
+        # hoi_predictions = np.zeros((gt_hois.shape[0], self.dataset.num_predicates), dtype=predict_hoi_mat.dtype)
+        # hoi_predictions[:, 0] = 1
         for i, (gh, go) in enumerate(gt_hois[:, :2]):
             hoi_labels[i, :] = gt_hoi_mat[gh, go, :]
 
             ph, po = gt_to_predict_box_match[[gh, go]]
-            if ph != -1 and po != -1:
+            if ph != -1 and po != -1 and np.any(predict_hoi_mat[ph, po, :]):
                 hoi_predictions[i, :] = predict_hoi_mat[ph, po, :]
         assert np.all(np.any(hoi_labels, axis=1))
 
