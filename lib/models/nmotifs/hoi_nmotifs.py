@@ -107,7 +107,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         return obj_logits, hoi_logits
 
 
-class NMotifsKB(NMotifs):
+class NMotifsNoBias(NMotifs):
     @classmethod
     def get_cline_name(cls):
         return 'nmotifs-nobias'
