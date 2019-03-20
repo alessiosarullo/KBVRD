@@ -14,21 +14,16 @@ class FrequencyBias(nn.Module):
     def __init__(self, dataset: HicoDetInstanceSplit, eps=1e-3):
         super(FrequencyBias, self).__init__()
 
-        counts = self.get_counts(dataset)
-        pred_dist = np.log(counts / np.maximum(1, np.sum(counts, axis=2, keepdims=True)) + eps)
-        pred_dist = torch.tensor(pred_dist, dtype=torch.float32).view(-1, pred_dist.shape[2])
+        self.counts = self.get_counts(dataset)
+        pred_dist = np.log(self.counts / np.maximum(1, np.sum(self.counts, axis=1, keepdims=True)) + eps)
+        pred_dist = torch.tensor(pred_dist, dtype=torch.float32)
 
-        self.num_objs = dataset.num_object_classes
+        assert pred_dist.shape[0] == dataset.num_object_classes
         self.obj_baseline = nn.Embedding(pred_dist.shape[0], pred_dist.shape[1])
         self.obj_baseline.weight.data = pred_dist
-        assert pred_dist.shape[0] == self.num_objs ** 2
 
-    def index_with_labels(self, labels):
-        """
-        :param labels: [batch_size, 2] 
-        :return: 
-        """
-        return self.obj_baseline(labels[:, 0] * self.num_objs + labels[:, 1])
+    def index_with_labels(self, obj_labels):
+        return self.obj_baseline(obj_labels)  # obj_labels is an array of object predicted labels (no probability distribution)
 
     def forward(self, obj_cands0, obj_cands1):
         """
@@ -48,11 +43,12 @@ class FrequencyBias(nn.Module):
 
     @staticmethod
     def get_counts(train_data: HicoDetInstanceSplit):
-        counts = np.zeros((train_data.num_object_classes, train_data.num_object_classes, train_data.num_predicates), dtype=np.int64)
+        counts = np.zeros((train_data.num_object_classes, train_data.num_predicates), dtype=np.int64)
         for i in range(len(train_data)):
             ex = train_data.get_entry(i, read_img=False, ignore_precomputed=True)  # type: Example
             gt_hois = ex.gt_hois
-            ho_pairs = ex.gt_obj_classes[gt_hois[:, [0, 2]]]
-            for (h, o), pred in zip(ho_pairs, gt_hois[:, 1]):
-                counts[h, o, pred] += 1
+            objs = ex.gt_obj_classes[gt_hois[:, 2]]
+            assert np.all(ex.gt_obj_classes[gt_hois[:, 0]] == train_data.human_class)
+            for o, pred in zip(objs, gt_hois[:, 1]):
+                counts[o, pred] += 1
         return counts

@@ -11,7 +11,7 @@ from lib.dataset.hicodet_driver import HicoDet
 from lib.dataset.word_embeddings import WordEmbeddings
 
 
-class ConceptnetExtractor:
+class ConceptnetKnowledgeExtractor:
     def __init__(self):
         self._path_sep = '#'
         self._useless_rels = ['MannerOf', 'EtymologicallyRelatedTo', 'DerivedFrom', 'AtLocation',
@@ -158,7 +158,7 @@ class ConceptnetExtractor:
 def main():
     random.seed(3)
 
-    cnet_ex = ConceptnetExtractor()
+    cnet_ex = ConceptnetKnowledgeExtractor()
     dataset = HicoDet()
     cnet_op_mat = cnet_ex.get_prior_matrix(dataset, len_max_path=1)
 

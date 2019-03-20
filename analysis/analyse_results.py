@@ -16,7 +16,15 @@ from lib.stats.evaluator import Evaluator
 
 
 def _setup_and_load():
-    cfg.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str)
+    namespace = parser.parse_known_args()
+    model = vars(namespace[0])['model']
+    print('Model: %s.' % model)
+    sys.argv = sys.argv[:1] + namespace[1]
+
+    cfg.parse_args(allow_required=False)
+    cfg.program.model = model
     with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()

@@ -12,7 +12,6 @@ from config import cfg
 from lib.bbox_utils import compute_ious, get_union_boxes
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch
-from lib.models.mask_rcnn import MaskRCNN
 
 
 # noinspection PyCallingNonCallable
@@ -24,6 +23,7 @@ class VisualModule(nn.Module):
         self._precomputed = self.dataset.has_precomputed
 
         if not self._precomputed:
+            from lib.models.mask_rcnn import MaskRCNN
             self.mask_rcnn = MaskRCNN()
             self.mask_resolution = self.mask_rcnn.mask_resolution
             self.vis_feat_dim = self.mask_rcnn.output_feat_dim

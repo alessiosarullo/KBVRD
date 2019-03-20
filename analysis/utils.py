@@ -11,10 +11,13 @@ from matplotlib.patches import Polygon
 from lib.bbox_utils import rescale_masks_to_img
 
 
-def plot_mat(conf_mat, xticklabels, yticklabels):
+def plot_mat(conf_mat, xticklabels, yticklabels, axes=None):
     lfsize = 8
-    plt.figure(figsize=(16, 9))
-    ax = plt.gca()
+    if axes is None:
+        plt.figure(figsize=(16, 9))
+        ax = plt.gca()
+    else:
+        ax = axes
     ax.matshow(conf_mat, cmap=plt.get_cmap('jet'), vmin=0, vmax=1)
 
     y_tick_labels = [l.replace('_', ' ') for l in yticklabels]
@@ -48,7 +51,8 @@ def plot_mat(conf_mat, xticklabels, yticklabels):
     ax.tick_params(axis='x', which='minor', top=True, labeltop=False, bottom=True, labelbottom=True, labelsize=lfsize)
 
     plt.tight_layout()
-    plt.show()
+    if axes is None:
+        plt.show()
 
 
 def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=None, thresh=0.9,

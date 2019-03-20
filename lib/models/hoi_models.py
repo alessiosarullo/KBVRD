@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -153,36 +154,18 @@ class KModel(BaseModel):
     def get_cline_name(cls):
         return 'kb'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, eps=1e-3, **kwargs):
         self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.imsitu_prior_emb_dim = 256
         self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
 
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
-                                                  self.dataset.num_object_classes +
-                                                  self.spatial_context_branch.output_dim)
-        self.hoi_branch = BaseHOIBranch(self.visual_module.vis_feat_dim,
-                                        self.spatial_context_branch.spatial_emb_dim,
-                                        self.obj_branch.output_ctx_dim,
-                                        self.spatial_context_branch.output_dim,
-                                        self.dataset.objects)
-
         self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes),
                                                            nn.Softmax(dim=1))
         imsitu_ke = ImSituKnowledgeExtractor()
-        self.imsitu_prior = torch.from_numpy(imsitu_ke.extract_prior_matrix(self.dataset)).float().cuda().detach()
-        self.imsitu_prior_fc = nn.Linear(self.imsitu_prior.shape[1], self.imsitu_prior_emb_dim)
-        self.imsitu_hoi_final = nn.Sequential(*([nn.Linear(self.hoi_branch.output_dim + self.imsitu_prior_emb_dim, self.imsitu_branch_final_emb_dim),
-                                                 nn.ReLU(inplace=True),
-                                                 nn.Linear(self.imsitu_branch_final_emb_dim, self.imsitu_branch_final_emb_dim)]
-                                                +
-                                                ([nn.BatchNorm1d(self.imsitu_branch_final_emb_dim)] if self.use_bn else [])
-                                                ))
-
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.imsitu_branch_final_emb_dim, self.dataset.num_predicates)
+        imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
+        imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + eps)
+        self.imsitu_prior = torch.from_numpy(imsitu_prior).float().cuda()
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs
@@ -195,13 +178,13 @@ class KModel(BaseModel):
 
         spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_embs_pre_imsitu = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, boxes_ext, im_ids, hoi_infos)
-
-        imsitu_prior_emb = self.imsitu_prior_fc(self.imsitu_prior)
-        imsitu_emb = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), imsitu_prior_emb)
-        hoi_obj_imsitu_emb = imsitu_emb[hoi_infos[:, 2], :]
-        hoi_embs = self.imsitu_hoi_final(torch.cat([hoi_embs_pre_imsitu, hoi_obj_imsitu_emb], dim=1))
+        hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, boxes_ext, im_ids, hoi_infos)
 
         obj_logits = self.obj_output_fc(objs_embs)
         hoi_logits = self.hoi_output_fc(hoi_embs)
+
+        imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior)
+        hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
+        hoi_logits += hoi_obj_imsitu_prior
+
         return obj_logits, hoi_logits

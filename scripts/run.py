@@ -195,7 +195,7 @@ class Launcher:
             if batch_idx % 1000 == 0:
                 stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
-        evaluator = Evaluator.evaluate_predictions(self.test_split, all_predictions)  # type: Evaluator
+        evaluator = Evaluator.evaluate_predictions(data_loader.dataset, all_predictions)  # type: Evaluator
         evaluator.print_metrics()
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)

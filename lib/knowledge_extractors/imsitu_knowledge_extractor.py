@@ -1,13 +1,12 @@
 import os
 import pickle
+from collections import Counter
+from typing import Dict
 
 import numpy as np
 
 from config import cfg
-
-from analysis.utils import plot_mat
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Splits
 from lib.dataset.imsitu_driver import ImSitu
 
 
@@ -19,32 +18,34 @@ class ImSituKnowledgeExtractor:
 
         # FIXME direct objects only? Doesn't work for example in "jump over an obstacle", though
         dobj_tokens_in_verb_abstracts = self.get_dobj_tokens_in_verb_abstracts()
-        for i, (verb, dobjs) in enumerate(dobj_tokens_in_verb_abstracts.items()):
-            print('%3d %-15s > %-120s %s' % (i, verb, self.imsitu.verbs[verb]['abstract'], dobjs))
+        # for i, (verb, dobjs) in enumerate(dobj_tokens_in_verb_abstracts.items()):
+        #     print('%3d %-15s > %-120s %s' % (i, verb, self.imsitu.verbs[verb]['abstract'], dobjs))
 
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
-        self.concrete_dobjs_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
+        self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
     def extract_prior_matrix(self, dataset: HicoDetInstanceSplit):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
-        print()
-        print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
-        print('%-20s %10s  %s' % ('PREDICATE', 'VERB', 'ABSTRACT'))
-        for pred in dataset.predicates:
-            verb = pred_verb_matches.get(pred, None)
-            v_str = ('%10s: %s' % (verb, self.imsitu.verbs[verb]['abstract'])) if verb is not None else ''
-            print('%-20s %s' % (pred, v_str))
-        print()
-        for i, pred in enumerate(dataset.predicates):
-            try:
-                verb = pred_verb_matches[pred]
-                abstract = self.imsitu.verbs[verb]['abstract']
-                abstract_obj = self.abstract_dobj_per_verb[verb]
-                abstract = abstract.split(abstract_obj)[0] + (abstract_obj if abstract_obj in abstract else '')
-                v_str = '%-15s > %-15s %-50s' % (verb, abstract_obj, abstract)
-            except KeyError:
-                v_str = ''
-            print('%3d %-20s %s' % (i, pred, v_str))
+        # print()
+        # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
+        # print('%-20s %10s  %s' % ('PREDICATE', 'VERB', 'ABSTRACT'))
+        # for pred in dataset.predicates:
+        #     verb = pred_verb_matches.get(pred, None)
+        #     v_str = ('%10s: %s' % (verb, self.imsitu.verbs[verb]['abstract'])) if verb is not None else ''
+        #     print('%-20s %s' % (pred, v_str))
+        #
+        # print()
+        # for i, pred in enumerate(dataset.predicates):
+        #     try:
+        #         verb = pred_verb_matches[pred]
+        #         abstract = self.imsitu.verbs[verb]['abstract']
+        #         abstract_obj = self.abstract_dobj_per_verb[verb]
+        #         abstract = abstract.split(abstract_obj)[0] + (abstract_obj if abstract_obj in abstract else '')
+        #         v_str = '%-15s > %-15s %-50s' % (verb, abstract_obj, abstract)
+        #     except KeyError:
+        #         v_str = ''
+        #     print('%3d %-20s %s' % (i, pred, v_str))
+        #
         # print()
         # for i, pred in enumerate(dataset.predicates):
         #     try:
@@ -55,22 +56,22 @@ class ImSituKnowledgeExtractor:
         #         verb, instance_list, dobj = '', '', ''
         #     print('%3d %-20s %-15s %-15s > %-s' % (i, pred, verb, dobj, instance_list))
 
-        matching_dobjs_per_verb = self.match_objects(dataset, self.concrete_dobjs_per_verb)
+        matching_dobjs_count_per_verb = self.match_objects(dataset, self.concrete_dobjs_count_per_verb)
         # print()
         # for i, pred in enumerate(dataset.predicates):
         #     try:
         #         verb = pred_verb_matches[pred]
-        #         instance_list = matching_dobjs_per_verb[verb]
+        #         instance_list = matching_dobjs_count_per_verb[verb]
         #         dobj = abstract_dobj_per_verb[verb]
         #     except KeyError:
         #         verb, instance_list, dobj = '', '', ''
         #     print('%3d %-20s %-15s %-15s > %-s' % (i, pred, verb, dobj, instance_list if instance_list or not verb else '##########'))
 
-        matching_dobjs_per_pred = {pred: matching_dobjs_per_verb.get(pred_verb_matches.get(pred), []) for pred in dataset.predicates}
+        matching_dobjs_count_per_pred = {pred: matching_dobjs_count_per_verb.get(pred_verb_matches.get(pred), {}) for pred in dataset.predicates}
 
         # Object-predicate matrix
-        op_mat = np.array([[1 if obj in matching_dobjs_per_pred.get(pred, []) else 0 for obj in dataset.objects]
-                           for pred in dataset.predicates]).T
+        op_mat = np.array([[matching_dobjs_count_per_pred.get(pred, {}).get(obj, 0) for obj in dataset.objects]
+                           for pred in dataset.predicates], dtype=np.float).T
         return op_mat
 
     def get_dobj_tokens_in_verb_abstracts(self):
@@ -145,8 +146,8 @@ class ImSituKnowledgeExtractor:
                 for frame in ann['frames']:
                     instance = frame.get(verb_dobj.lower(), None)
                     if instance:  # might be empty or None
-                        concrete_dobjs_per_verb.setdefault(verb, set()).add(instance)
-        concrete_dobjs_per_verb = {verb: sorted(set([instance for iid in instance_ids for instance in self.imsitu.nouns[iid]['gloss']]))
+                        concrete_dobjs_per_verb.setdefault(verb, []).append(instance)
+        concrete_dobjs_per_verb = {verb: Counter([instance for iid in instance_ids for instance in self.imsitu.nouns[iid]['gloss']])
                                    for verb, instance_ids in concrete_dobjs_per_verb.items()}
         return concrete_dobjs_per_verb
 
@@ -175,28 +176,11 @@ class ImSituKnowledgeExtractor:
                 pred_verb_matches[orig_pred] = match
         return pred_verb_matches
 
-    def match_objects(self, dataset, concrete_dobjs_per_verb):
+    @staticmethod
+    def match_objects(dataset, concrete_dobjs_per_verb: Dict[str, Counter]):
         # TODO instead of only matching objects in hico-det some more refined procedure could be applied. For example, matching considering
         # embedding similarity or definitions
         hd_obj_set = set(dataset.objects)
-        matching_dobjs_per_verb = {verb: [instance for instance in instances if instance in hd_obj_set]
+        matching_dobjs_per_verb = {verb: {instance: count for instance, count in instances.items() if instance in hd_obj_set}
                                    for verb, instances in concrete_dobjs_per_verb.items()}
         return matching_dobjs_per_verb
-
-
-def main():
-    imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
-    imsitu_op_mat = imsitu_ke.extract_prior_matrix(hd)
-
-    # Hico object-predicate matrix
-    hico_op_mat = np.zeros([len(hd.objects), len(hd.predicates)])
-    for _, i, o in hd.hois:
-        hico_op_mat[o, i] = 1
-
-    # Plot
-    # plot_mat((imsitu_op_mat + hico_op_mat * 2) / 3, hd.predicates, hd.objects)
-
-
-if __name__ == '__main__':
-    main()

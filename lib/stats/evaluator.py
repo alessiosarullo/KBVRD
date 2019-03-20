@@ -1,7 +1,8 @@
+from collections import Counter
 from typing import List, Dict
 
 import numpy as np
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, recall_score, precision_score
 
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
@@ -18,6 +19,18 @@ class Evaluator:
 
         self.metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
                                  'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
+                                 'u-rec': lambda labels, predictions: recall_score(np.argmax(labels, axis=1),
+                                                                                   np.argmax(predictions, axis=1),
+                                                                                   average='micro'),
+                                 'M-rec': lambda labels, predictions: recall_score(np.argmax(labels, axis=1),
+                                                                                   np.argmax(predictions, axis=1),
+                                                                                   average=None),
+                                 'u-prc': lambda labels, predictions: precision_score(np.argmax(labels, axis=1),
+                                                                                      np.argmax(predictions, axis=1),
+                                                                                      average='micro'),
+                                 'M-prc': lambda labels, predictions: precision_score(np.argmax(labels, axis=1),
+                                                                                      np.argmax(predictions, axis=1),
+                                                                                      average=None),
                                  }
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
@@ -53,6 +66,11 @@ class Evaluator:
         for k, v in self.metrics.items():
             per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v]) if v.size > 1 else ''
             print('%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str))
+        gt_hois = self.dataset.hois
+        gt_hoi_hist = Counter(gt_hois[:, 1])
+        num_gt_hois = sum(gt_hoi_hist.values())
+        print('%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in range(self.dataset.num_predicates)])))
+        print('%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in range(self.dataset.num_predicates)])))
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
         # TODO docs
@@ -78,7 +96,16 @@ class Evaluator:
         for h, o, i in gt_hois:
             gt_hoi_mat[h, o, i] = 1
 
+        # By default assume either all 0s, a uniform distribution over foreground interactions or a delta at null interaction.
+        # All zeros
         predict_hoi_mat = np.zeros([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
+        # Uniform over foreground
+        # predict_hoi_mat = np.ones([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
+        # predict_hoi_mat /= (predict_hoi_mat.shape[2] - 1)
+        # predict_hoi_mat[:, :, 0] = 0
+        # Delta
+        # predict_hoi_mat = np.zeros([num_predict_objs, num_predict_objs, predict_hoi_scores.shape[1]])
+        # predict_hoi_mat[:, :, 0] = 1
         for pair_idx, (h, o) in enumerate(predict_ho_pairs):
             predict_hoi_mat[h, o, :] = predict_hoi_scores[pair_idx, :]
 
@@ -87,15 +114,15 @@ class Evaluator:
         gt_to_predict_box_match = np.argmax(gt_pred_ious, axis=1)
         gt_to_predict_box_match[~gt_pred_ious.any(axis=1)] = -1
 
-        hoi_labels, hoi_predictions = [], []
-        for gh, go in gt_hois[:, :2]:
-            hoi_labels.append(gt_hoi_mat[gh, go, :])
+        hoi_labels = np.empty((gt_hois.shape[0], self.dataset.num_predicates), dtype=gt_hoi_mat.dtype)
+        hoi_predictions = np.empty((gt_hois.shape[0], self.dataset.num_predicates), dtype=predict_hoi_mat.dtype)
+        for i, (gh, go) in enumerate(gt_hois[:, :2]):
+            hoi_labels[i, :] = gt_hoi_mat[gh, go, :]
 
             ph, po = gt_to_predict_box_match[[gh, go]]
             if ph != -1 and po != -1:
-                hoi_predictions.append(predict_hoi_mat[ph, po, :])
-            else:
-                hoi_predictions.append(np.zeros(predict_hoi_mat.shape[2]))
+                hoi_predictions[i, :] = predict_hoi_mat[ph, po, :]
+        assert np.all(np.any(hoi_labels, axis=1))
 
-        self.hoi_labels.append(np.stack(hoi_labels, axis=0))
-        self.hoi_predictions.append(np.stack(hoi_predictions, axis=0))
+        self.hoi_labels.append(hoi_labels)
+        self.hoi_predictions.append(hoi_predictions)

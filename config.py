@@ -6,16 +6,16 @@ import pickle
 
 
 class BaseConfigs:
-    def parse_args(self, args):
+    def parse_args(self, args, allow_required=True):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            self._add_argument(parser, k, v)
+            self._add_argument(parser, k, v, allow_required=allow_required)
         namespace = parser.parse_known_args(args)
         self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})  # TODO use defaults instead of the not None check
         self._postprocess_args()
         return namespace[1]
 
-    def _add_argument(self, parser, param_name, param_value):
+    def _add_argument(self, parser, param_name, param_value, allow_required=True):
         if param_value is not None:
             parser_kwargs = {'dest': param_name}
             if type(param_value) == bool:
@@ -108,17 +108,14 @@ class ProgramConfig(BaseConfigs):
             self.save_dir = self.save_dir.split('/')[-1]
             assert old_save_dir == self.output_path
 
-    def _add_argument(self, parser, param_name, param_value):
+    def _add_argument(self, parser, param_name, param_value, allow_required=True):
         if param_name == 'model':
             from scripts.utils import get_all_models_by_name
             all_models_dict = get_all_models_by_name()
-            if all_models_dict:
-                all_models = set(all_models_dict.keys())
-            else:
-                all_models = {'base', 'nmotifs', 'simple'}  # hard-coded models  # FIXME remove
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=True)
+            all_models = set(all_models_dict.keys())
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=allow_required)
         elif param_name == 'save_dir':
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=True)
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=allow_required)
         else:
             super()._add_argument(parser, param_name, param_value)
 
@@ -201,11 +198,11 @@ class Configs:
     opt = OptimizerConfig()
 
     @classmethod
-    def parse_args(cls):
+    def parse_args(cls, allow_required=True):
         args = sys.argv
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
-                args = v.parse_args(args)
+                args = v.parse_args(args, allow_required=allow_required)
         if args[1:]:
             # Detectron configurations should not be changed.
             raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))
@@ -221,6 +218,7 @@ class Configs:
         import lib.detection.wrappers as pydet
         if pydet.cfg_from_file is None:
             assert pydet.cfg is None and pydet.assert_and_infer_cfg is None
+            cls.model.mask_resolution = 14  # FIXME magic constant
             raise ModuleNotFoundError()
         else:
             assert pydet.cfg is not None and pydet.assert_and_infer_cfg is not None
