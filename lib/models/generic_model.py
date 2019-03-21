@@ -24,8 +24,8 @@ class GenericModel(AbstractModel):
 
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
-        obj_loss = nn.functional.cross_entropy(obj_output, box_labels) / self.dataset.num_object_classes
-        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels)
+        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
