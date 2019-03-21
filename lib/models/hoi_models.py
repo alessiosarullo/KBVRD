@@ -11,6 +11,7 @@ from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeE
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
+from lib.models.nmotifs.freq import FrequencyBias
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
@@ -186,5 +187,23 @@ class KModel(BaseModel):
         imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior)
         hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
         hoi_logits += hoi_obj_imsitu_prior
+
+        return obj_logits, hoi_logits
+
+
+class BiasModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'bias'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.freq_bias = FrequencyBias(dataset=dataset)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        obj_logits, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        obj_classes = 5 + torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+        hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
 
         return obj_logits, hoi_logits
