@@ -141,7 +141,7 @@ class BaseHOIBranch(AbstractHOIBranch):
         rel_emb1 = self.rel_spatial_emb_fc(rel_feats1)
 
         wemb_attention_w = self.word_embs_attention(boxes_ext[:, 5:])
-        wembs = torch.mm(wemb_attention_w, self.word_embs)  # attended embeddings
+        wembs = torch.mm(wemb_attention_w, self.word_embs.weight)  # attended embeddings
         obj_wembs = wembs[obj_inds, :]  # getting the word embedding for the subject doesn't make a lot of sense, since it's always "person"
         objs_ctx_rep = torch.cat([in_obj_ctx[i, :].expand((hoi_im_ids == im_id).sum(), -1) for i, im_id in enumerate(unique_im_ids)], dim=0)
         rel_feats2 = torch.cat([rel_emb1, objs_ctx_rep, obj_wembs], dim=1)
@@ -184,7 +184,7 @@ class KModel(BaseModel):
         obj_logits = self.obj_output_fc(objs_embs)
         hoi_logits = self.hoi_output_fc(hoi_embs)
 
-        imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior)
+        imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior.weight)
         hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
         hoi_logits += hoi_obj_imsitu_prior
 
