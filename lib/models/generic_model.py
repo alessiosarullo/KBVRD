@@ -9,6 +9,7 @@ from lib.models.abstract_model import AbstractModel
 from lib.models.visual_modules import VisualModule
 from lib.models.utils import Prediction
 
+
 class GenericModel(AbstractModel):
     @classmethod
     def get_cline_name(cls) -> str:
@@ -23,7 +24,7 @@ class GenericModel(AbstractModel):
 
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
-        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        obj_loss = nn.functional.cross_entropy(obj_output, box_labels) / self.dataset.num_object_classes
         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels)
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
@@ -74,5 +75,3 @@ class GenericModel(AbstractModel):
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
-
-
