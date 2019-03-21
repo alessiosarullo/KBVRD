@@ -166,7 +166,7 @@ class KModel(BaseModel):
         imsitu_ke = ImSituKnowledgeExtractor()
         imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
         imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + eps)
-        self.imsitu_prior = torch.from_numpy(imsitu_prior).float().cuda()
+        self.imsitu_prior = torch.from_numpy(imsitu_prior).float()
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs

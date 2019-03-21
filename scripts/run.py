@@ -58,6 +58,8 @@ class Launcher:
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericModel
         if torch.cuda.is_available():
             self.detector.cuda()
+        else:
+            print('!!!!!!!!!!!!!!!!! Running on CPU!')
         print_params(self.detector, breakdown=False)
 
         if cfg.program.load_train_output:
