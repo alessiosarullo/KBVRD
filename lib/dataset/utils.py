@@ -183,7 +183,7 @@ class Minibatch:
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
-        minibatch.vectorize(device=torch.device('cuda'))  # FIXME magic constant
+        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
         Timer.get('Collate').toc()
         return minibatch
 

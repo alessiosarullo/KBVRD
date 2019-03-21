@@ -56,7 +56,8 @@ class Launcher:
         self.test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericModel
-        self.detector.cuda()
+        if torch.cuda.is_available():
+            self.detector.cuda()
         print_params(self.detector, breakdown=False)
 
         if cfg.program.load_train_output:

@@ -88,7 +88,7 @@ class BaseHOIBranch(AbstractHOIBranch):
 
         word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)
         num_object_classes = len(objects_class_names)
-        self.word_embs = torch.from_numpy(word_embeddings).cuda().detach()
+        self.word_embs = torch.from_numpy(word_embeddings).detach()
         self.word_embs_attention = nn.Sequential(nn.Linear(num_object_classes, num_object_classes),
                                                  nn.Softmax(dim=1))
 
@@ -203,7 +203,25 @@ class BiasModel(BaseModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         obj_logits, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        obj_classes = 5 + torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+        obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+        hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
+
+        return obj_logits, hoi_logits
+
+
+class KBiasModel(KModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'kb-bias'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.freq_bias = FrequencyBias(dataset=dataset)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        obj_logits, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
         hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
 
         return obj_logits, hoi_logits

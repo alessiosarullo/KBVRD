@@ -39,7 +39,7 @@ class VisualModule(nn.Module):
             if mode_inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
                 return None, None, None, None, None, None, None, None
 
-            device = torch.device('cuda')
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             boxes_ext = torch.tensor(boxes_ext_np, device=device)
             box_feats = torch.tensor(batch.pc_box_feats, device=device)
             masks = torch.tensor(batch.pc_masks, device=device)
