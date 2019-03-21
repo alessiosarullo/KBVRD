@@ -88,7 +88,7 @@ class BaseHOIBranch(AbstractHOIBranch):
 
         word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)
         num_object_classes = len(objects_class_names)
-        self.word_embs = torch.from_numpy(word_embeddings).detach()
+        self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
         self.word_embs_attention = nn.Sequential(nn.Linear(num_object_classes, num_object_classes),
                                                  nn.Softmax(dim=1))
 
@@ -166,7 +166,7 @@ class KModel(BaseModel):
         imsitu_ke = ImSituKnowledgeExtractor()
         imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
         imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + eps)
-        self.imsitu_prior = torch.from_numpy(imsitu_prior).float()
+        self.imsitu_prior = torch.nn.Embedding.from_pretrained(torch.from_numpy(imsitu_prior).float(), freeze=False)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs
