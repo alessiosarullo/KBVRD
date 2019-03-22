@@ -52,7 +52,7 @@ class BaseModel(GenericModel):
             freqs.append(int_counts)
 
         if freqs:
-            self.priors = []
+            self.priors = nn.ModuleList()
             for fmat in freqs:
                 priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
                 self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False))
