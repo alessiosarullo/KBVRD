@@ -52,9 +52,10 @@ class BaseModel(GenericModel):
             freqs.append(int_counts)
 
         if freqs:
-            freqs = np.stack(freqs, axis=2)
-            priors = np.log(freqs / np.maximum(1, np.sum(freqs, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
-            self.priors = torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False)
+            self.priors = []
+            for fmat in freqs:
+                priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
+                self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False))
         else:
             self.priors = None
 
@@ -76,8 +77,9 @@ class BaseModel(GenericModel):
 
         if self.priors is not None:
             obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
-            hoi_obj_priors = self.priors[obj_classes[hoi_infos[:, 2]], :, :]
-            hoi_logits += torch.sum(hoi_obj_priors, dim=2)
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
+            for prior in self.priors:
+                hoi_logits += prior(hoi_obj_classes)
 
         return obj_logits, hoi_logits
 
