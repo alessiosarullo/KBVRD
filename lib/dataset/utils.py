@@ -6,7 +6,6 @@ import torch
 from PIL import ImageOps
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.stats.utils import Timer
 
 
@@ -260,7 +259,7 @@ def calculate_im_scale(im_size):
     return im_scale
 
 
-def get_counts(dataset: HicoDetInstanceSplit):
+def get_counts(dataset):
     counts = np.zeros((dataset.num_object_classes, dataset.num_predicates), dtype=np.int64)
     for i in range(len(dataset)):
         ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)  # type: Example
