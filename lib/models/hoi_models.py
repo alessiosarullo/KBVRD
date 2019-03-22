@@ -11,7 +11,7 @@ from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeE
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
-from lib.models.nmotifs.freq import FrequencyBias
+from lib.dataset.utils import get_counts
 
 
 # from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
@@ -28,8 +28,6 @@ class BaseModel(GenericModel):
         self.imsitu_prior_emb_dim = 256
         self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
-        self.use_int_freq = cfg.model.use_int_freq
-        self.use_ext_imsitu = cfg.model.use_imsitu
 
         self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
@@ -45,16 +43,20 @@ class BaseModel(GenericModel):
         self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
 
-        if self.use_ext_imsitu:
-            self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes),
-                                                               nn.Softmax(dim=1))
-            imsitu_ke = ImSituKnowledgeExtractor()
-            imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
-            imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
-            self.imsitu_prior = torch.nn.Embedding.from_pretrained(torch.from_numpy(imsitu_prior).float(), freeze=False)
+        freqs = []
+        if cfg.model.use_imsitu:
+            imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(self.dataset)
+            freqs.append(imsitu_counts)
+        if cfg.model.use_int_freq:
+            int_counts = get_counts(dataset=dataset)
+            freqs.append(int_counts)
 
-        if self.use_int_freq:
-            self.freq_bias = FrequencyBias(dataset=dataset)
+        if freqs:
+            freqs = np.stack(freqs, axis=2)
+            priors = np.log(freqs / np.maximum(1, np.sum(freqs, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
+            self.priors = torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False)
+        else:
+            self.priors = None
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs
@@ -72,15 +74,10 @@ class BaseModel(GenericModel):
         obj_logits = self.obj_output_fc(objs_embs)
         hoi_logits = self.hoi_output_fc(hoi_embs)
 
-        if self.use_ext_imsitu:
-            imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior.weight)
-            hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
-            hoi_logits += hoi_obj_imsitu_prior
-
-        if self.use_int_freq:
-            hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        if self.priors is not None:
             obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
-            hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
+            hoi_obj_priors = self.priors[obj_classes[hoi_infos[:, 2]], :, :]
+            hoi_logits += torch.sum(hoi_obj_priors, dim=2)
 
         return obj_logits, hoi_logits
 

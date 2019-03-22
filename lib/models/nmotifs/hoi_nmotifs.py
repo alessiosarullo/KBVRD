@@ -8,7 +8,8 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.generic_model import GenericModel
-from lib.models.nmotifs.freq import FrequencyBias
+from lib.models.nmotifs.freq import FrequencyLogProbs
+from lib.dataset.utils import get_counts
 from lib.models.nmotifs.lincontext import LinearizedContext
 
 
@@ -43,7 +44,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
         if self.use_bias:
-            self.freq_bias = FrequencyBias(dataset=dataset)
+            self.freq_bias = FrequencyLogProbs(counts=get_counts(dataset=dataset))
 
     @property
     def output_dim(self):
@@ -64,6 +65,6 @@ class NMotifsHOIBranch(AbstractHOIBranch):
 
         hoi_logits = self.hoi_output_fc(hoi_repr)
         if self.use_bias:
-            hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[obj_inds])
+            hoi_logits = hoi_logits + self.freq_bias(obj_classes[obj_inds])
 
         return obj_logits, hoi_logits

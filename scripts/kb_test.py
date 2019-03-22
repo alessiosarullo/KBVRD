@@ -9,7 +9,7 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Example
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
-from lib.models.nmotifs.freq import FrequencyBias
+from lib.models.nmotifs.freq import FrequencyLogProbs
 from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
 
@@ -35,7 +35,7 @@ def main():
     assert not np.any(np.isinf(imsitu_prior)) and not np.any(np.isnan(imsitu_prior)) and np.allclose(np.sum(imsitu_prior, axis=1), 1)
 
     # Hico object-predicate matrix
-    model = FrequencyBias(hd)
+    model = FrequencyLogProbs(hd)
     model.eval()
     freq_op_mat = model.counts
     freq_prior = freq_op_mat.astype(np.float)
