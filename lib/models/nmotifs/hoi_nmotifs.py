@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.parallel
 
+from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.generic_model import GenericModel
@@ -16,9 +17,9 @@ class NMotifs(GenericModel):
     def get_cline_name(cls):
         return 'nmotifs'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, use_int_freq=False, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim, use_bias=use_int_freq)
+        self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
@@ -26,9 +27,9 @@ class NMotifs(GenericModel):
 
 
 class NMotifsHOIBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim, use_bias):
+    def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim):
         super().__init__()
-        self.use_bias = use_bias
+        self.use_bias = cfg.model.use_int_freq
 
         self.context = LinearizedContext(classes=dataset.objects, visual_feat_dim=visual_feats_dim)
 

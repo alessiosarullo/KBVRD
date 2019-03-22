@@ -1,9 +1,10 @@
 import math
-import numpy as np
 
+import numpy as np
 import torch
 import torch.nn as nn
 
+from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
@@ -21,14 +22,14 @@ class BaseModel(GenericModel):
     def get_cline_name(cls):
         return 'base'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, use_int_freq=False, use_imsitu=False, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.use_bn = False
         self.imsitu_prior_emb_dim = 256
         self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
-        self.use_int_freq = use_int_freq
-        self.use_ext_imsitu = use_imsitu
+        self.use_int_freq = cfg.model.use_int_freq
+        self.use_ext_imsitu = cfg.model.use_imsitu
 
         self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +

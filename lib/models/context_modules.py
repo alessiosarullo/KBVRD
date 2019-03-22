@@ -8,8 +8,7 @@ class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):
         super().__init__()
 
-        # FIXME params
-        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        self.use_bn = False
         self.spatial_emb_dim = 128
         self.spatial_rnn_emb_dim = 128
 
