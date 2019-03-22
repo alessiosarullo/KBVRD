@@ -1,17 +1,14 @@
 import math
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
 
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.models.generic_model import GenericModel
 from lib.models.abstract_model import AbstractHOIBranch
-from lib.models.context_modules import SpatialContext, ObjectContext
+from lib.models.generic_model import GenericModel
 from lib.models.nmotifs.freq import FrequencyBias
 from lib.models.nmotifs.lincontext import LinearizedContext
-from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 
 
 class NMotifs(GenericModel):
@@ -19,56 +16,19 @@ class NMotifs(GenericModel):
     def get_cline_name(cls):
         return 'nmotifs'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, use_int_freq=False, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
+        self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim, use_bias=use_int_freq)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
         return obj_logits, hoi_logits
 
 
-class NMotifsHybrid(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'nmotifs-h'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
-                                                  self.dataset.num_object_classes +
-                                                  self.spatial_context_branch.output_dim)
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
-
-        self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
-
-        # If not using NeuralMotifs's object logits no gradient flows back into the decoder RNN, so I'll make it explicit here.
-        for name, param in self.named_parameters():
-            if 'decoder_rnn' in name:
-                param.requires_grad = False
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        hoi_im_ids = hoi_infos[:, 0]
-        sub_inds = hoi_infos[:, 1]
-        obj_inds = hoi_infos[:, 2]
-        im_ids = torch.unique(hoi_im_ids, sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_im_ids, sub_inds, obj_inds)
-        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        obj_logits = self.obj_output_fc(objs_embs)
-
-        _, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
-        return obj_logits, hoi_logits
-
-
 class NMotifsHOIBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim):
+    def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim, use_bias):
         super().__init__()
+        self.use_bias = use_bias
 
         self.context = LinearizedContext(classes=dataset.objects, visual_feat_dim=visual_feats_dim)
 
@@ -81,13 +41,14 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         self.hoi_output_fc = nn.Linear(visual_feats_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.freq_bias = FrequencyBias(dataset=dataset)
+        if self.use_bias:
+            self.freq_bias = FrequencyBias(dataset=dataset)
 
     @property
     def output_dim(self):
         raise NotImplementedError()
 
-    def _forward(self, boxes_ext, box_feats, hoi_infos, union_box_feats, box_labels, use_bias=True):
+    def _forward(self, boxes_ext, box_feats, hoi_infos, union_box_feats, box_labels):
         obj_logits, obj_classes, edge_ctx = self.context(box_feats, boxes_ext, box_labels)
 
         edge_repr = self.post_lstm(edge_ctx)
@@ -101,17 +62,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         hoi_repr = sub_repr * obj_repr * union_box_feats
 
         hoi_logits = self.hoi_output_fc(hoi_repr)
-        if use_bias:
+        if self.use_bias:
             hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[obj_inds])
 
-        return obj_logits, hoi_logits
-
-
-class NMotifsNoBias(NMotifs):
-    @classmethod
-    def get_cline_name(cls):
-        return 'nmotifs-nobias'
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels, use_bias=False)
         return obj_logits, hoi_logits

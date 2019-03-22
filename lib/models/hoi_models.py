@@ -4,7 +4,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
@@ -22,8 +21,14 @@ class BaseModel(GenericModel):
     def get_cline_name(cls):
         return 'base'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, use_int_freq=False, use_imsitu=False, **kwargs):
+        # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        self.use_bn = False
+        self.imsitu_prior_emb_dim = 256
+        self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
+        self.use_int_freq = use_int_freq
+        self.use_ext_imsitu = use_imsitu
 
         self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
@@ -33,10 +38,22 @@ class BaseModel(GenericModel):
                                         self.spatial_context_branch.spatial_emb_dim,
                                         self.obj_branch.output_ctx_dim,
                                         self.spatial_context_branch.output_dim,
-                                        self.dataset.objects)
+                                        self.dataset.objects,
+                                        **kwargs)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
+
+        if self.use_ext_imsitu:
+            self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes),
+                                                               nn.Softmax(dim=1))
+            imsitu_ke = ImSituKnowledgeExtractor()
+            imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
+            imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
+            self.imsitu_prior = torch.nn.Embedding.from_pretrained(torch.from_numpy(imsitu_prior).float(), freeze=False)
+
+        if self.use_int_freq:
+            self.freq_bias = FrequencyBias(dataset=dataset)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs
@@ -53,11 +70,22 @@ class BaseModel(GenericModel):
 
         obj_logits = self.obj_output_fc(objs_embs)
         hoi_logits = self.hoi_output_fc(hoi_embs)
+
+        if self.use_ext_imsitu:
+            imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior.weight)
+            hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
+            hoi_logits += hoi_obj_imsitu_prior
+
+        if self.use_int_freq:
+            hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+            hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
+
         return obj_logits, hoi_logits
 
 
 class BaseHOIBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim, objects_class_names):
+    def __init__(self, visual_feats_dim, spatial_emb_dim, obj_ctx_dim, spatial_ctx_dim, objects_class_names, **kwargs):
         def _vis_fc_layer():
             return nn.Sequential(*([nn.Linear(visual_feats_dim, self.hoi_visual_hidden_dim),
                                     nn.ReLU(inplace=True),
@@ -66,12 +94,11 @@ class BaseHOIBranch(AbstractHOIBranch):
                                    ([nn.BatchNorm1d(self.hoi_visual_hidden_dim)] if self.use_bn else [])
                                    ))
 
-        # FIXME? params
-        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.hoi_visual_hidden_dim = 1024
         self.hoi_emb_dim = 1024
         self.word_emb_dim = 200
-        super().__init__()
+        self.use_bn = False
+        super().__init__(**kwargs)
 
         # TODO? Maybe use BN with no momentum instead of setting the standard deviation manually?
         self.input_vis_feats_fc = nn.Linear(visual_feats_dim, visual_feats_dim)
@@ -86,7 +113,7 @@ class BaseHOIBranch(AbstractHOIBranch):
         self.input_obj_ctx_fc = nn.Linear(obj_ctx_dim, obj_ctx_dim)
         torch.nn.init.normal_(self.input_obj_ctx_fc.weight, mean=0, std=10 * math.sqrt(1.0 / obj_ctx_dim))
 
-        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)
+        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)  # FIXME magic constant
         num_object_classes = len(objects_class_names)
         self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
         self.word_embs_attention = nn.Sequential(nn.Linear(num_object_classes, num_object_classes),
@@ -148,80 +175,3 @@ class BaseHOIBranch(AbstractHOIBranch):
         rel_emb_final = self.rel_final_emb_fc(rel_feats2)
 
         return rel_emb_final
-
-
-class KModel(BaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'kb'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, eps=1e-3, **kwargs):
-        self.use_bn = cfg.model.bn  # Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
-        self.imsitu_prior_emb_dim = 256
-        self.imsitu_branch_final_emb_dim = 512
-        super().__init__(dataset, **kwargs)
-
-        self.imsitu_prior_obj_attention_fc = nn.Sequential(nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes),
-                                                           nn.Softmax(dim=1))
-        imsitu_ke = ImSituKnowledgeExtractor()
-        imsitu_prior = imsitu_ke.extract_prior_matrix(self.dataset)
-        imsitu_prior = np.log(imsitu_prior / np.maximum(1, np.sum(imsitu_prior, axis=1, keepdims=True)) + eps)
-        self.imsitu_prior = torch.nn.Embedding.from_pretrained(torch.from_numpy(imsitu_prior).float(), freeze=False)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        # TODO docs
-
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
-        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_embs = self.hoi_branch(union_boxes_feats, spatial_rels_feats, box_feats, spatial_ctx, obj_ctx, boxes_ext, im_ids, hoi_infos)
-
-        obj_logits = self.obj_output_fc(objs_embs)
-        hoi_logits = self.hoi_output_fc(hoi_embs)
-
-        imsitu_prior_per_obj = torch.mm(self.imsitu_prior_obj_attention_fc(objs_embs), self.imsitu_prior.weight)
-        hoi_obj_imsitu_prior = imsitu_prior_per_obj[hoi_infos[:, 2], :]
-        hoi_logits += hoi_obj_imsitu_prior
-
-        return obj_logits, hoi_logits
-
-
-class BiasModel(BaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'bias'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.freq_bias = FrequencyBias(dataset=dataset)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        obj_logits, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
-        hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
-
-        return obj_logits, hoi_logits
-
-
-class KBiasModel(KModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'kb-bias'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.freq_bias = FrequencyBias(dataset=dataset)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        obj_logits, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
-        hoi_logits = hoi_logits + self.freq_bias.index_with_labels(obj_classes[hoi_infos[:, 2]])
-
-        return obj_logits, hoi_logits

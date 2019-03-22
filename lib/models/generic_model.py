@@ -16,8 +16,7 @@ class GenericModel(AbstractModel):
         raise NotImplementedError()
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        # FIXME? params
-        self.gt_iou_thr = 0.5
+        self.gt_iou_thr = 0.5  # before superclass' constructor's invocation because of the dict update of attributes according to keyword arguments.
         super().__init__(**kwargs)
         self.dataset = dataset
         self.visual_module = VisualModule(dataset, **kwargs)
