@@ -6,15 +6,14 @@ import torch.nn as nn
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.utils import get_counts
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
-from lib.dataset.utils import get_counts
-
-from lib.models.nmotifs.lincontext import center_size, sort_rois, arange, PackedSequence
 from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
+from lib.models.nmotifs.lincontext import sort_rois, PackedSequence
 
 
 class BaseModel(GenericModel):
@@ -200,8 +199,12 @@ class NMHybridModel(BaseModel):
                                                    hidden_size=self.rnn_hidden_dim,
                                                    num_layers=self.edge_ctx_num_layers,
                                                    recurrent_dropout_probability=self.dropout_rate)
+        self.post_lstm = nn.Linear(self.context.edge_ctx_dim, self.visual_module.vis_feat_dim * 2)
+        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.context.edge_ctx_dim))
+        torch.nn.init.zeros_(self.post_lstm.bias)
 
-        self.hoi_output_fc = nn.Linear(self.rnn_hidden_dim, self.dataset.num_predicates)
+        self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
     def edge_ctx(self, obj_feats, box_im_ids, obj_preds, box_priors):
         obj_embed2 = self.word_embs(obj_preds)
@@ -226,14 +229,20 @@ class NMHybridModel(BaseModel):
         obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
 
         # FIXME this doesn't use spatial context
-        obj_preds = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-        hoi_embs = self.edge_ctx(objs_embs, box_im_ids=box_im_ids, obj_preds=obj_preds, box_priors=boxes_ext[:, 1:5],)
+        obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+        hoi_obj_embs = self.edge_ctx(objs_embs, box_im_ids=box_im_ids, obj_preds=obj_classes, box_priors=boxes_ext[:, 1:5],)
+        edge_repr = self.post_lstm(hoi_obj_embs)
+        edge_repr = edge_repr.view(edge_repr.shape[0], 2, -1)  # Split into subject and object representations
+        sub_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        sub_repr = edge_repr[:, 0][sub_inds]
+        obj_repr = edge_repr[:, 1][obj_inds]
+        hoi_repr = sub_repr * obj_repr * union_boxes_feats
 
         obj_logits = self.obj_output_fc(objs_embs)
-        hoi_logits = self.hoi_output_fc(hoi_embs)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
 
         if self.priors is not None:
-            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
             for prior in self.priors:
                 hoi_logits += prior(hoi_obj_classes)
