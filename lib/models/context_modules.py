@@ -90,8 +90,8 @@ def compute_context(lstm, feats, im_ids, input_im_ids):
 
     feats_seq = nn.utils.rnn.pad_sequence(feats_per_img)  # this is max(N_i) x I x D
     context_feat_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x 2 * hidden_state_dim
-    # spatial_rel_ctx, _ = nn.utils.rnn.pad_packed_sequence(spatial_rel_ctx, batch_first=True)  # shouldn't be needed
 
+    # FIXME! This might not work well with padding (i.e., max(N_i)). The mean should only be computed across objects actually in the image.
     context_feats = context_feat_seq.mean(dim=0)  # this is I x whatever
     assert context_feats.shape[0] == len(im_ids)
     return context_feats

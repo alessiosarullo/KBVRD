@@ -13,8 +13,8 @@ from lib.models.context_modules import SpatialContext, ObjectContext
 from lib.models.generic_model import GenericModel
 from lib.dataset.utils import get_counts
 
-
-# from .highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
+from lib.models.nmotifs.lincontext import center_size, sort_rois, arange, PackedSequence
+from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
 
 
 class BaseModel(GenericModel):
@@ -175,3 +175,67 @@ class BaseHOIBranch(AbstractHOIBranch):
         rel_emb_final = self.rel_final_emb_fc(rel_feats2)
 
         return rel_emb_final
+
+
+class NMHybridModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'nmh'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        super().__init__(dataset, **kwargs)
+
+        self.word_emb_dim = 200
+        self.edge_ctx_num_layers = 4
+        self.rnn_hidden_dim = 256
+        self.order = 'leftright'
+        self.dropout_rate = 0.1
+
+        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(self.dataset.objects)
+        self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
+
+        hoi_input_dim = self.obj_branch.output_feat_dim
+        self.edge_ctx_rnn = AlternatingHighwayLSTM(input_size=self.word_emb_dim + hoi_input_dim,
+                                                   hidden_size=self.rnn_hidden_dim,
+                                                   num_layers=self.edge_ctx_num_layers,
+                                                   recurrent_dropout_probability=self.dropout_rate)
+
+        self.hoi_output_fc = nn.Linear(self.rnn_hidden_dim, self.dataset.num_predicates)
+
+    def edge_ctx(self, obj_feats, box_im_ids, obj_preds, box_priors):
+        obj_embed2 = self.word_embs(obj_preds)
+        inp_feats = torch.cat((obj_embed2, obj_feats), 1)
+
+        perm, inv_perm, ls_transposed = sort_rois(self.order, box_im_ids, box_priors)
+        edge_input_packed = PackedSequence(inp_feats[perm], ls_transposed)
+        edge_reps = self.edge_ctx_rnn(edge_input_packed)[0]
+        edge_ctx = edge_reps[inv_perm]
+        return edge_ctx
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        # TODO docs
+
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
+        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+
+        # FIXME this doesn't use spatial context
+        obj_preds = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+        hoi_embs = self.edge_ctx(objs_embs, box_im_ids=box_im_ids, obj_preds=obj_preds, box_priors=boxes_ext[:, 1:5],)
+
+        obj_logits = self.obj_output_fc(objs_embs)
+        hoi_logits = self.hoi_output_fc(hoi_embs)
+
+        if self.priors is not None:
+            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
+            for prior in self.priors:
+                hoi_logits += prior(hoi_obj_classes)
+
+        return obj_logits, hoi_logits
