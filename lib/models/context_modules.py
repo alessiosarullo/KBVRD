@@ -79,7 +79,7 @@ class ObjectContext(nn.Module):
         return 2 * self.obj_rnn_emb_dim  # 2 because of BiLSTM
 
     @property
-    def output_feat_dim(self):
+    def output_repr_dim(self):
         return self.obj_fc_dim
 
 

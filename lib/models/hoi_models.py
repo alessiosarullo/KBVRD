@@ -39,7 +39,7 @@ class BaseModel(GenericModel):
                                         self.dataset.objects,
                                         **kwargs)
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_feat_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.dataset.num_predicates)
 
         freqs = []
@@ -184,37 +184,9 @@ class NMHybridModel(BaseModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         super().__init__(dataset, **kwargs)
-
-        self.word_emb_dim = 200
-        self.edge_ctx_num_layers = 4
-        self.rnn_hidden_dim = 256
-        self.order = 'leftright'
-        self.dropout_rate = 0.1
-
-        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(self.dataset.objects)
-        self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
-
-        hoi_input_dim = self.obj_branch.output_feat_dim
-        self.edge_ctx_rnn = AlternatingHighwayLSTM(input_size=self.word_emb_dim + hoi_input_dim,
-                                                   hidden_size=self.rnn_hidden_dim,
-                                                   num_layers=self.edge_ctx_num_layers,
-                                                   recurrent_dropout_probability=self.dropout_rate)
-        self.post_lstm = nn.Linear(self.rnn_hidden_dim, self.visual_module.vis_feat_dim * 2)
-        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.rnn_hidden_dim))
-        torch.nn.init.zeros_(self.post_lstm.bias)
-
-        self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
+        self.hoi_branch = NMofifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset.objects)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
-
-    def edge_ctx(self, obj_feats, box_im_ids, obj_preds, box_priors):
-        obj_embed2 = self.word_embs(obj_preds)
-        inp_feats = torch.cat((obj_embed2, obj_feats), 1)
-
-        perm, inv_perm, ls_transposed = sort_rois(self.order, box_im_ids, box_priors)
-        edge_input_packed = PackedSequence(inp_feats[perm], ls_transposed)
-        edge_reps = self.edge_ctx_rnn(edge_input_packed)[0]
-        edge_ctx = edge_reps[inv_perm]
-        return edge_ctx
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # TODO docs
@@ -226,25 +198,63 @@ class NMHybridModel(BaseModel):
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
         spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
-        obj_ctx, objs_embs = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
 
-        # FIXME this doesn't use spatial context
-        obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-        hoi_obj_embs = self.edge_ctx(objs_embs, box_im_ids=box_im_ids, obj_preds=obj_classes, box_priors=boxes_ext[:, 1:5],)
-        edge_repr = self.post_lstm(hoi_obj_embs)
-        edge_repr = edge_repr.view(edge_repr.shape[0], 2, -1)  # Split into subject and object representations
-        sub_inds = hoi_infos[:, 1]
-        obj_inds = hoi_infos[:, 2]
-        sub_repr = edge_repr[:, 0][sub_inds]
-        obj_repr = edge_repr[:, 1][obj_inds]
-        hoi_repr = sub_repr * obj_repr * union_boxes_feats
-
-        obj_logits = self.obj_output_fc(objs_embs)
+        obj_logits = self.obj_output_fc(obj_repr)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
         if self.priors is not None:
+            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
             for prior in self.priors:
                 hoi_logits += prior(hoi_obj_classes)
 
         return obj_logits, hoi_logits
+
+
+class NMofifsHOIBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, obj_feat_dim, objects_class_names, **kwargs):
+        self.word_emb_dim = 200
+        self.edge_ctx_num_layers = 4
+        self.rnn_hidden_dim = 256
+        self.order = 'leftright'
+        self.dropout_rate = 0.1
+        super().__init__(**kwargs)
+        self.hoi_repr_dim = visual_feats_dim
+
+        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)
+        self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
+
+        hoi_input_dim = obj_feat_dim
+        self.hoi_obj_birnn = AlternatingHighwayLSTM(input_size=self.word_emb_dim + hoi_input_dim,
+                                                    hidden_size=self.rnn_hidden_dim,
+                                                    num_layers=self.edge_ctx_num_layers,
+                                                    recurrent_dropout_probability=self.dropout_rate)
+        self.post_lstm = nn.Linear(self.rnn_hidden_dim, self.hoi_repr_dim * 2)
+        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.rnn_hidden_dim))
+        torch.nn.init.zeros_(self.post_lstm.bias)
+
+    @property
+    def output_dim(self):
+        return self.hoi_repr_dim
+
+    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        subj_inds = hoi_infos[:, 1]
+        dobj_inds = hoi_infos[:, 2]
+
+        # FIXME this doesn't use spatial context
+        obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+        hoi_input_obj_repr = torch.cat((self.word_embs(obj_classes), box_repr), dim=1)
+        perm, inv_perm, ls_transposed = sort_rois(self.order, box_im_ids, box_priors=boxes_ext[:, 1:5])
+        hoi_output_obj_repr = self.hoi_obj_birnn(PackedSequence(hoi_input_obj_repr[perm], ls_transposed))[0]
+        hoi_output_obj_repr = hoi_output_obj_repr[inv_perm]
+
+        hoi_ho_repr = self.post_lstm(hoi_output_obj_repr)
+        hoi_ho_repr = hoi_ho_repr.view(hoi_ho_repr.shape[0], 2, -1)  # Split into subject and object representations
+        subj_repr = hoi_ho_repr[:, 0][subj_inds]
+        dobj_repr = hoi_ho_repr[:, 1][dobj_inds]
+        hoi_repr = subj_repr * dobj_repr * union_boxes_feats
+
+        return hoi_repr
