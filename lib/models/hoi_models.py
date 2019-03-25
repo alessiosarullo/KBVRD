@@ -199,8 +199,8 @@ class NMHybridModel(BaseModel):
                                                    hidden_size=self.rnn_hidden_dim,
                                                    num_layers=self.edge_ctx_num_layers,
                                                    recurrent_dropout_probability=self.dropout_rate)
-        self.post_lstm = nn.Linear(self.context.edge_ctx_dim, self.visual_module.vis_feat_dim * 2)
-        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.context.edge_ctx_dim))
+        self.post_lstm = nn.Linear(self.rnn_hidden_dim, self.visual_module.vis_feat_dim * 2)
+        torch.nn.init.normal_(self.post_lstm.weight, mean=0, std=10 * math.sqrt(1.0 / self.rnn_hidden_dim))
         torch.nn.init.zeros_(self.post_lstm.bias)
 
         self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
