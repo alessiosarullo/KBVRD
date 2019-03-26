@@ -55,6 +55,13 @@ class BaseModel(GenericModel):
             for fmat in freqs:
                 priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
                 self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False))
+
+            self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.priors)),
+                                                        nn.Sigmoid())
+
+            # self.prior_weight = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, 1),
+            #                                   nn.Sigmoid())
+            # torch.nn.init.xavier_uniform_(self.prior_weight[0].weight, gain=torch.nn.init.calculate_gain('sigmoid'))
         else:
             self.priors = None
 
@@ -75,10 +82,13 @@ class BaseModel(GenericModel):
         hoi_logits = self.hoi_output_fc(hoi_embs)
 
         if self.priors is not None:
-            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels
+            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels during training
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
-            for prior in self.priors:
-                hoi_logits += prior(hoi_obj_classes)
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0)
+
+            src_att = self.prior_source_attention(hoi_embs)
+
+            hoi_logits = hoi_logits + (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
 
         return obj_logits, hoi_logits
 
