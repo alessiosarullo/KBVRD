@@ -52,7 +52,8 @@ class ObjectContext(nn.Module):
         super().__init__()
 
         # FIXME params
-        self.use_bn = False  # Since the batches are small due to memory constraint, BN is not suitable. TODO Maybe switch to GN?
+        # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
+        self.use_bn = False
         self.obj_fc_dim = 1024
         self.obj_rnn_emb_dim = 1024
 
