@@ -79,13 +79,14 @@ class KBModel(GenericModel):
         if self.priors is not None:
             obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels during training
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
-            priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0)
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0).exp()
 
             if self.prior_source_attention is not None:
                 src_att = self.prior_source_attention(hoi_repr)
-                hoi_logits = hoi_logits + (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+                prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
             else:
-                hoi_logits = hoi_logits + priors.sum(dim=0)
+                prior_contribution = priors.sum(dim=0)
+            hoi_logits += prior_contribution.log()
 
         return obj_logits, hoi_logits
 

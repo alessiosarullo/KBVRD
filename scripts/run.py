@@ -103,6 +103,7 @@ class Launcher:
 
         try:
             for epoch in range(cfg.opt.num_epochs):
+                print('Epoch %d start.' % epoch)
                 self.detector.train()
                 self.loss_epoch(epoch, train_loader, training_stats, optimizer)
                 torch.save({'epoch': epoch,
