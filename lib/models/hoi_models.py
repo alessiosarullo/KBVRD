@@ -48,7 +48,7 @@ class KBModel(GenericModel):
             self.priors = nn.ModuleList()
             for fmat in freqs:
                 priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
-                self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False))
+                self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=cfg.model.freeze_prior))
 
             if cfg.model.prior_att:
                 self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.priors)),
