@@ -77,8 +77,8 @@ class KBModel(GenericModel):
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
         if self.priors is not None:
-            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels during training
-            hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
+            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
             priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0).exp()
 
             if self.prior_source_attention is not None:
