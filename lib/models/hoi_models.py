@@ -19,7 +19,7 @@ from lib.models.nmotifs.lincontext import sort_rois, PackedSequence
 class KBModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'base'
+        return 'kb'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         self.imsitu_prior_emb_dim = 256
