@@ -56,8 +56,11 @@ class BaseModel(GenericModel):
                 priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
                 self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=False))
 
-            self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.priors)),
-                                                        nn.Sigmoid())
+            if cfg.model.prior_att:
+                self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.priors)),
+                                                            nn.Sigmoid())
+            else:
+                self.prior_source_attention = None
 
             # self.prior_weight = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, 1),
             #                                   nn.Sigmoid())
@@ -86,9 +89,11 @@ class BaseModel(GenericModel):
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
             priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0)
 
-            src_att = self.prior_source_attention(hoi_embs)
-
-            hoi_logits = hoi_logits + (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+            if self.prior_source_attention is not None:
+                src_att = self.prior_source_attention(hoi_embs)
+                hoi_logits = hoi_logits + (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+            else:
+                hoi_logits = hoi_logits + priors.sum(dim=0)
 
         return obj_logits, hoi_logits
 

@@ -170,6 +170,7 @@ class ModelConfig(BaseConfigs):
 
         self.use_int_freq = False
         self.use_imsitu = False
+        self.prior_att = False
 
         self.bn_momentum = 0.01
 
