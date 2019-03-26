@@ -33,7 +33,11 @@ class KBModel(GenericModel):
         self.hoi_branch = NMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset.objects)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        if cfg.model.lsig:
+            self.hoi_output_fc = [nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True),
+                                  nn.LogSigmoid()]
+        else:
+            self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
         freqs = []
