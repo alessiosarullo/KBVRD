@@ -220,10 +220,15 @@ class NMHybridModel(BaseModel):
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
         if self.priors is not None:
-            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+            obj_classes = torch.argmax(boxes_ext[:, 5:], dim=1)  # FIXME in nmotifs they use actual labels during training
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]]
-            for prior in self.priors:
-                hoi_logits += prior(hoi_obj_classes)
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0)
+
+            if self.prior_source_attention is not None:
+                src_att = self.prior_source_attention(hoi_repr)
+                hoi_logits = hoi_logits + (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+            else:
+                hoi_logits = hoi_logits + priors.sum(dim=0)
 
         return obj_logits, hoi_logits
 
