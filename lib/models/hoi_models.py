@@ -36,7 +36,8 @@ class KBModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = KBHOIRefinementBranch(dataset, self.hoi_branch.word_embeddings)  # FIXME word embeddings (maybe move here)
+        # FIXME word embeddings (maybe move here)
+        self.hoi_refinement_branch = KBHOIRefinementBranch(dataset, self.hoi_branch.word_embeddings, self.hoi_branch.output_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -105,7 +106,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
 
 
 class KBHOIRefinementBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, word_embs, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit, word_embs, hoi_repr_dim, **kwargs):
         self.gc_repr_dim = 256
         super().__init__(**kwargs)
 
@@ -154,7 +155,7 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
                 self.bias_priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=not cfg.model.train_prior))
 
             if cfg.model.prior_att:
-                self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.bias_priors)),
+                self.prior_source_attention = nn.Sequential(nn.Linear(hoi_repr_dim, len(self.bias_priors)),
                                                             nn.Sigmoid())
             else:
                 self.prior_source_attention = None
