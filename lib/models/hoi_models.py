@@ -170,7 +170,7 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
 
             pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
             obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True)
-            pred_obj_sim = pred_gc_repr_norm * obj_gc_repr_norm.t()
+            pred_obj_sim = pred_gc_repr_norm @ obj_gc_repr_norm.t()
 
             hoi_logits += pred_obj_sim.clamp(min=1e-8).log()
 
