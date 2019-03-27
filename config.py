@@ -173,7 +173,6 @@ class ModelConfig(BaseConfigs):
         self.prior_att = False
         self.train_prior = False
         self.kb_sim = False
-        self.train_prior_emb = False
 
         self.bn_momentum = 0.01
 
