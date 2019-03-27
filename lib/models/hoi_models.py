@@ -39,6 +39,8 @@ class KBModel(GenericModel):
         # FIXME word embeddings (maybe move here)
         self.hoi_refinement_branch = KBHOIRefinementBranch(dataset, self.hoi_branch.word_embeddings, self.hoi_branch.output_dim)
 
+        self.values_to_monitor = {}  # FIXME delete
+
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
@@ -54,6 +56,9 @@ class KBModel(GenericModel):
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+
+        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
+            self.values_to_monitor.setdefault(k, []).append(v)
 
         return obj_logits, hoi_logits
 
@@ -125,6 +130,7 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
                 int_counts = get_counts(dataset=dataset)
                 int_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+            op_adj_mat = np.minimum(1, op_adj_mat)  # does not matter if the same information is present in different sources TODO try without?
 
             if np.any(op_adj_mat):
                 po_adj_mat = op_adj_mat.T
@@ -182,8 +188,10 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
             if self.prior_source_attention is not None:
                 src_att = self.prior_source_attention(hoi_repr)
                 prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+                self.values_to_monitor['hoi_attention'] = src_att.cpu().numpy()
             else:
                 prior_contribution = priors.sum(dim=0)
             hoi_logits += prior_contribution.log()
+
 
         return hoi_logits

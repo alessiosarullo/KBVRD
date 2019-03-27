@@ -49,7 +49,7 @@ def print_params(model, breakdown=False):
                 module = 'Object branch'
             elif 'spatial' in p_name_root:
                 module = 'Spatial branch'
-            elif p_name_root.startswith('hoi'):
+            elif p_name_root.startswith('hoi_branch'):
                 module = 'Human-Object-Interaction branch'
             else:
                 module = 'Other'
