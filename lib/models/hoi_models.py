@@ -164,19 +164,19 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
 
     def _forward(self, hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels=None):
 
+        obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+        hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
         if self.use_kb_sim:
             obj_gc_repr = self.op_adj_mat @ self.op_wemb_gc_fc(self.pred_word_embs)
             pred_gc_repr = self.po_adj_mat @ self.po_wemb_gc_fc(self.obj_word_embs)
 
-            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
             obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True)
-            pred_obj_sim = pred_gc_repr_norm @ obj_gc_repr_norm.t()
+            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
+            obj_pred_sim = obj_gc_repr_norm @ pred_gc_repr_norm.t()
 
-            hoi_logits += pred_obj_sim.clamp(min=1e-8).log()
+            hoi_logits += obj_pred_sim[hoi_obj_classes, :].clamp(min=1e-8).log()
 
         if self.bias_priors is not None:
-            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
             priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).exp()
 
             if self.prior_source_attention is not None:
