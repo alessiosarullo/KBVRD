@@ -116,8 +116,9 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
 
         # Sim
-        self.obj_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.objects)), requires_grad=False)
-        self.pred_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
+        tpe = cfg.model.train_prior_emb
+        self.obj_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.objects)), requires_grad=tpe)
+        self.pred_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=tpe)
 
         self.use_kb_sim = False
         if cfg.model.kb_sim:
