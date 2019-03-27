@@ -141,10 +141,16 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
         hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
 
         if self.use_kb_sim:
-            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
-            obj_gc_repr = self.op_adj_mat @ self.pred_word_embs
-            hoi_repr = self.post_sim(torch.cat([hoi_repr, obj_gc_repr[hoi_obj_classes, :]], dim=1))
+            if box_labels is not None:
+                obj_classes = box_labels
+                hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
+                obj_gc_repr = self.op_adj_mat @ self.pred_word_embs
+                hoi_repr = self.post_sim(torch.cat([hoi_repr, obj_gc_repr[hoi_obj_classes, :]], dim=1))
+            else:
+                hoi_obj_classes = boxes_ext[hoi_infos[:, 2], 5:].detach()
+                obj_gc_repr = self.op_adj_mat @ self.pred_word_embs
+                attended_obj_gc_repr = hoi_obj_classes @ obj_gc_repr
+                hoi_repr = self.post_sim(torch.cat([hoi_repr, attended_obj_gc_repr], dim=1))
 
         return hoi_repr
 
