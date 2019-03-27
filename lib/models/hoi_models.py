@@ -131,13 +131,13 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
                 po_adj_mat[0, :] = 1  # null interaction can have any object
                 po_adj_mat /= np.maximum(1, np.sum(po_adj_mat, axis=1, keepdims=True))  # normalise
                 self.po_adj_mat = torch.nn.Parameter(torch.from_numpy(po_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
-                self.po_wemb_gc_fc = nn.Sequential(nn.Linear(self.obj_word_embs.embedding_dim, self.gc_repr_dim),
+                self.po_wemb_gc_fc = nn.Sequential(nn.Linear(self.obj_word_embs.shape[1], self.gc_repr_dim),
                                                    nn.ReLU()
                                                    )
 
                 op_adj_mat /= np.maximum(1, np.sum(op_adj_mat, axis=1, keepdims=True))  # normalise
                 self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
-                self.op_wemb_gc_fc = nn.Sequential(nn.Linear(self.pred_word_embs.embedding_dim, self.gc_repr_dim),
+                self.op_wemb_gc_fc = nn.Sequential(nn.Linear(self.pred_word_embs.shape[1], self.gc_repr_dim),
                                                    nn.ReLU()
                                                    )
                 self.use_kb_sim = True
