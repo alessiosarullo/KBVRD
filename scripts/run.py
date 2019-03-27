@@ -188,12 +188,17 @@ class Launcher:
         self.detector.eval()
         all_predictions = []
 
+        vtm = {}  # FIXME delete
+
         stats.epoch_tic()
         for batch_idx, batch in enumerate(data_loader):
             stats.batch_tic()
             prediction = self.detector(batch)  # type: Prediction
             all_predictions.append(vars(prediction))
             stats.batch_toc()
+
+            for k, v in self.detector.values_to_monitor.items():
+                vtm.setdefault(k, []).append(v)
 
             if batch_idx % 20 == 0:
                 torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.

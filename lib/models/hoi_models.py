@@ -58,7 +58,7 @@ class KBModel(GenericModel):
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
-            self.values_to_monitor.setdefault(k, []).append(v)
+            self.values_to_monitor[k] = v
 
         return obj_logits, hoi_logits
 
@@ -188,7 +188,7 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
             if self.prior_source_attention is not None:
                 src_att = self.prior_source_attention(hoi_repr)
                 prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
-                self.values_to_monitor['hoi_attention'] = src_att.cpu().numpy()
+                self.values_to_monitor['hoi_attention'] = src_att.detach().cpu().numpy()
             else:
                 prior_contribution = priors.sum(dim=0)
             hoi_logits += prior_contribution.log()
