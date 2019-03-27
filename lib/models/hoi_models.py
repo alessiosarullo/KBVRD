@@ -176,8 +176,8 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
             obj_gc_repr = self.op_adj_mat @ self.op_wemb_gc_fc(self.pred_word_embs)
             pred_gc_repr = self.po_adj_mat @ self.po_wemb_gc_fc(self.obj_word_embs)
 
-            obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True)
-            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
+            obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True).clamp(min=1e-8)
+            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True).clamp(min=1e-8)
             obj_pred_sim = obj_gc_repr_norm @ pred_gc_repr_norm.t()
 
             hoi_logits += obj_pred_sim[hoi_obj_classes, :].clamp(min=1e-8).log()

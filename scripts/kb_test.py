@@ -12,6 +12,7 @@ from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeE
 from lib.models.nmotifs.freq import FrequencyLogProbs
 from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
+from lib.dataset.utils import get_counts
 
 
 def main():
@@ -35,9 +36,7 @@ def main():
     assert not np.any(np.isinf(imsitu_prior)) and not np.any(np.isnan(imsitu_prior)) and np.allclose(np.sum(imsitu_prior, axis=1), 1)
 
     # Hico object-predicate matrix
-    model = FrequencyLogProbs(hd)
-    model.eval()
-    freq_op_mat = model.counts
+    freq_op_mat = get_counts(hd)
     freq_prior = freq_op_mat.astype(np.float)
     freq_prior[:, 0] = 0
     freq_prior[~np.any(freq_prior, axis=1), 1:] = 1
@@ -118,16 +117,19 @@ def main():
         # imsitu_prior = imsitu_prior[[idx], :]
         # plot_mat((imsitu_prior + freq_prior * 2) / 3, predicates, objects)
 
-        plt.figure(figsize=(16, 9))
-        gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
-                               wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
+        # plt.figure(figsize=(16, 9))
+        # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
+        #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
+        #
+        # plot_mat(freq_prior, predicates, objects, axes=plt.subplot(gs[0, 0]))
+        # plot_mat(imsitu_prior, predicates, objects, axes=plt.subplot(gs[0, 1]))
+        #
+        # plot_mat(prior_mul, predicates, objects, axes=plt.subplot(gs[1, 0]))
+        #
+        # plot_mat(prior_sum, predicates, objects, axes=plt.subplot(gs[1, 1]))
+        # plt.show()
 
-        plot_mat(freq_prior, predicates, objects, axes=plt.subplot(gs[0, 0]))
-        plot_mat(imsitu_prior, predicates, objects, axes=plt.subplot(gs[0, 1]))
-
-        plot_mat(prior_mul, predicates, objects, axes=plt.subplot(gs[1, 0]))
-
-        plot_mat(prior_smax, predicates, objects, axes=plt.subplot(gs[1, 1]))
+        plot_mat((prior_sum > 0).astype(np.float), predicates, objects)
         plt.show()
 
 
