@@ -30,37 +30,13 @@ class KBModel(GenericModel):
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.output_dim)
-        self.hoi_branch = NMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset.objects)
+        self.hoi_branch = NMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        freqs = []
-        if cfg.model.use_imsitu:
-            imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(self.dataset)
-            freqs.append(imsitu_counts)
-        if cfg.model.use_int_freq:
-            int_counts = get_counts(dataset=dataset)
-            freqs.append(int_counts)
-
-        if freqs:
-            self.priors = nn.ModuleList()
-            for fmat in freqs:
-                priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
-                self.priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=not cfg.model.train_prior))
-
-            if cfg.model.prior_att:
-                self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.priors)),
-                                                            nn.Sigmoid())
-            else:
-                self.prior_source_attention = None
-
-            # self.prior_weight = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, 1),
-            #                                   nn.Sigmoid())
-            # torch.nn.init.xavier_uniform_(self.prior_weight[0].weight, gain=torch.nn.init.calculate_gain('sigmoid'))
-        else:
-            self.priors = None
+        self.hoi_refinement_branch = KBHOIRefinementBranch(dataset, self.hoi_branch.word_embeddings)  # FIXME word embeddings (maybe move here)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -76,23 +52,13 @@ class KBModel(GenericModel):
         obj_logits = self.obj_output_fc(obj_repr)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        if self.priors is not None:
-            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
-            priors = torch.stack([prior(hoi_obj_classes) for prior in self.priors], dim=0).exp()
-
-            if self.prior_source_attention is not None:
-                src_att = self.prior_source_attention(hoi_repr)
-                prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
-            else:
-                prior_contribution = priors.sum(dim=0)
-            hoi_logits += prior_contribution.log()
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         return obj_logits, hoi_logits
 
 
 class NMotifsHOIBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, obj_feat_dim, objects_class_names, **kwargs):
+    def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
         self.word_emb_dim = 200
         self.edge_ctx_num_layers = 4
         self.rnn_hidden_dim = 256
@@ -101,8 +67,8 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         self.hoi_repr_dim = visual_feats_dim
 
-        word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim).get_embeddings(objects_class_names)
-        self.word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embeddings), freeze=True)
+        self.word_embeddings = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embeddings.get_embeddings(dataset.objects)), freeze=True)
 
         hoi_input_dim = obj_feat_dim
         self.hoi_obj_birnn = AlternatingHighwayLSTM(input_size=self.word_emb_dim + hoi_input_dim,
@@ -124,7 +90,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
 
         # FIXME this doesn't use spatial context
         obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-        hoi_input_obj_repr = torch.cat((self.word_embs(obj_classes), box_repr), dim=1)
+        hoi_input_obj_repr = torch.cat((self.obj_word_embs(obj_classes), box_repr), dim=1)
         perm, inv_perm, ls_transposed = sort_rois(self.order, box_im_ids, box_priors=boxes_ext[:, 1:5])
         hoi_output_obj_repr = self.hoi_obj_birnn(PackedSequence(hoi_input_obj_repr[perm], ls_transposed))[0]
         hoi_output_obj_repr = hoi_output_obj_repr[inv_perm]
@@ -136,3 +102,87 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         hoi_repr = subj_repr * dobj_repr * union_boxes_feats
 
         return hoi_repr
+
+
+class KBHOIRefinementBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetInstanceSplit, word_embs, **kwargs):
+        self.gc_repr_dim = 256
+        super().__init__(**kwargs)
+
+        # Sim
+        self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embs.get_embeddings(dataset.objects)), freeze=True)
+        self.pred_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), freeze=True)
+
+        self.use_kb_sim = False
+        if cfg.model.kb_sim:
+            op_adj_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+            if cfg.model.use_imsitu:
+                imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
+                imsitu_counts[:, 0] = 0  # exclude null interaction
+                op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+            if cfg.model.use_int_freq:
+                int_counts = get_counts(dataset=dataset)
+                int_counts[:, 0] = 0  # exclude null interaction
+                op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+
+            if np.any(op_adj_mat):
+                po_adj_mat = op_adj_mat.T
+                po_adj_mat[0, :] = 1  # null interaction can have any object
+                po_adj_mat /= np.maximum(1, np.sum(po_adj_mat, axis=1, keepdims=True))  # normalise
+                self.po_adj_mat = torch.nn.Parameter(torch.po_adj_mat(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
+                self.po_wemb_gc_fc = nn.Sequential(nn.Linear(self.obj_word_embs.embedding_dim, self.gc_repr_dim),
+                                                   nn.ReLU()
+                                                   )
+
+                op_adj_mat /= np.maximum(1, np.sum(op_adj_mat, axis=1, keepdims=True))  # normalise
+                self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
+                self.op_wemb_gc_fc = nn.Sequential(nn.Linear(self.pred_word_embs.embedding_dim, self.gc_repr_dim),
+                                                   nn.ReLU()
+                                                   )
+                self.use_kb_sim = True
+
+        # Freq bias
+        freqs = []
+        if cfg.model.use_int_freq:
+            int_counts = get_counts(dataset=dataset)
+            freqs.append(int_counts)
+
+        if freqs:
+            self.bias_priors = nn.ModuleList()
+            for fmat in freqs:
+                priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
+                self.bias_priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=not cfg.model.train_prior))
+
+            if cfg.model.prior_att:
+                self.prior_source_attention = nn.Sequential(nn.Linear(self.hoi_branch.output_dim, len(self.bias_priors)),
+                                                            nn.Sigmoid())
+            else:
+                self.prior_source_attention = None
+        else:
+            self.bias_priors = None
+
+    def _forward(self, hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels=None):
+
+        if self.use_kb_sim:
+            obj_gc_repr = self.op_adj_mat * self.op_wemb_gc_fc(self.pred_word_embs)
+            pred_gc_repr = self.po_adj_mat * self.po_wemb_gc_fc(self.obj_word_embs)
+
+            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
+            obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True)
+            pred_obj_sim = pred_gc_repr_norm * obj_gc_repr_norm.t()
+
+            hoi_logits += pred_obj_sim.clamp(min=1e-8).log()
+
+        if self.bias_priors is not None:
+            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).exp()
+
+            if self.prior_source_attention is not None:
+                src_att = self.prior_source_attention(hoi_repr)
+                prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+            else:
+                prior_contribution = priors.sum(dim=0)
+            hoi_logits += prior_contribution.log()
+
+        return hoi_logits

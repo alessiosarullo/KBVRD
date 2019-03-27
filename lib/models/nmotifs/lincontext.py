@@ -165,7 +165,7 @@ class LinearizedContext(nn.Module):
         return edge_ctx
 
 
-def sort_rois(order, batch_idx, box_priors, confidence=None):
+def sort_rois(order, batch_idx, box_priors=None, confidence=None):
     """
     :param batch_idx: tensor with what index we're on
     :param confidence: tensor with confidences between [0,1)
@@ -173,10 +173,9 @@ def sort_rois(order, batch_idx, box_priors, confidence=None):
     :return: Permutation, inverse permutation, and the lengths transposed (same as _sort_by_score)
     """
 
-    cxcywh = center_size(box_priors)
     if order == 'size':
+        cxcywh = center_size(box_priors)
         sizes = cxcywh[:, 2] * cxcywh[:, 3]
-        # sizes = (box_priors[:, 2] - box_priors[:, 0] + 1) * (box_priors[:, 3] - box_priors[:, 1] + 1)
         assert sizes.min() > 0.0
         scores = sizes / (sizes.max() + 1)
     elif order == 'confidence':
@@ -185,6 +184,7 @@ def sort_rois(order, batch_idx, box_priors, confidence=None):
     elif order == 'random':
         scores = torch.FloatTensor(np.random.rand(batch_idx.size(0))).cuda(batch_idx.get_device())
     elif order == 'leftright':
+        cxcywh = center_size(box_priors)
         centers = cxcywh[:, 0]
         scores = centers / (centers.max() + 1)
     else:

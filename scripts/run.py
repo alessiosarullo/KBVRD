@@ -19,6 +19,7 @@ from scripts.utils import print_params, get_all_models_by_name
 
 
 class Launcher:
+    # FIXME general: rename "object" in SPO triplets as "target" or something else to avoid ambiguity. Also "verb" might be better than "predicate"
     def __init__(self):
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
