@@ -165,8 +165,8 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
     def _forward(self, hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels=None):
 
         if self.use_kb_sim:
-            obj_gc_repr = self.op_adj_mat * self.op_wemb_gc_fc(self.pred_word_embs)
-            pred_gc_repr = self.po_adj_mat * self.po_wemb_gc_fc(self.obj_word_embs)
+            obj_gc_repr = self.op_adj_mat @ self.op_wemb_gc_fc(self.pred_word_embs)
+            pred_gc_repr = self.po_adj_mat @ self.po_wemb_gc_fc(self.obj_word_embs)
 
             pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True)
             obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True)
