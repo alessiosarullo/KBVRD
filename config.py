@@ -105,7 +105,8 @@ class ProgramConfig(BaseConfigs):
         self.save_dir = self.save_dir.rstrip('/')
         if '/' in self.save_dir:
             old_save_dir = self.save_dir
-            self.save_dir = self.save_dir.split('/')[-1]
+            self.save_dir = old_save_dir.split('/')[-1]
+            self.model = self.model or old_save_dir.split('/')[-2]
             assert old_save_dir == self.output_path
 
     def _add_argument(self, parser, param_name, param_value, allow_required=True):
@@ -186,7 +187,7 @@ class OptimizerConfig(BaseConfigs):
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
-        self.num_epochs = 10
+        self.num_epochs = 5
         self.batch_size = 8
 
 

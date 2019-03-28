@@ -3,28 +3,26 @@ import os
 import pickle
 import sys
 from collections import Counter
+from typing import Dict
 
 import cv2
+import matplotlib
 import numpy as np
+from matplotlib import pyplot as plt
 
-from analysis.utils import vis_one_image
+from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch
 from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
 
+matplotlib.use('Qt5Agg')
+
 
 def _setup_and_load():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str)
-    namespace = parser.parse_known_args()
-    model = vars(namespace[0])['model']
-    print('Model: %s.' % model)
-    sys.argv = sys.argv[:1] + namespace[1]
-
     cfg.parse_args(allow_required=False)
-    cfg.program.model = model
+
     with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
@@ -56,6 +54,56 @@ def vrd_style_eval_count():
                                             for i, c in enumerate(hds.objects)]))
     print('Pred objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_objs[i] / np.sum(num_pred_objs))
                                             for i, c in enumerate(hds.objects)]))
+
+
+def att():  # FIXME delete
+    results, hds = _setup_and_load()
+    stats = Evaluator.evaluate_predictions(hds, results)
+    stats.print_metrics()
+
+    with open('att.pkl', 'rb') as f:
+        vtm = pickle.load(f)  # type: Dict
+    assert len(vtm) == 1
+    im_att_orig = list(vtm.values())[0]
+
+    assert len(im_att_orig) == len(stats.hoi_labels) == len(stats.hoi_obj_labels) == len(stats.hoi_gt_pred_assignment)
+    im_att = []
+    for iv, igt2p in zip(im_att_orig, stats.hoi_gt_pred_assignment):
+        if igt2p.size > 0:
+            x = np.array([iv[gt2p, :] if gt2p >= 0 else [0] for gt2p in igt2p])
+            im_att.append(x)
+    att = np.concatenate(im_att, axis=0)
+    hoi_labels = np.concatenate(stats.hoi_labels, axis=0)
+    hoi_obj_labels = np.concatenate(stats.hoi_obj_labels, axis=0).astype(np.int)
+    assert att.shape[0] == hoi_labels.shape[0] == hoi_obj_labels.shape[0]
+
+    mat = np.zeros((hds.num_object_classes, hds.num_predicates, 1))
+    mat2 = np.zeros((hds.num_object_classes, hds.num_predicates))
+    for i in range(att.shape[0]):
+        pred_att = att[i, :]
+        obj = hoi_obj_labels[i]
+        pred = np.flatnonzero(hoi_labels[i, :])
+        for p in pred:
+            mat[obj, p, :] += pred_att
+            mat2[obj, p] += 1
+    # assert np.sum(mat2 > 0) == 600, np.sum(mat2 > 0)  # FIXME it's 599, one is missing
+
+    mat = mat / np.maximum(1, mat2[:, :, None])
+
+    # msum = np.sum(mat, axis=2)
+    # msum[msum == 0] = 1
+    # mat = mat / msum[:, :, None]
+    # mat = mat.reshape(-1, mat.shape[2]).T
+
+    mat = mat.squeeze(axis=2)
+
+    # plt.figure(figsize=(16, 9))
+    # ax = plt.gca()
+    # ax.matshow(mat, cmap=plt.get_cmap('jet'), vmin=0, vmax=1)
+    # plt.show()
+
+    plot_mat(mat, hds.predicates, hds.objects)
+    plt.show()
 
 
 def count():
@@ -109,18 +157,17 @@ def vis_masks():
 
 
 def main():
+    funcs = {'vis': vis_masks,
+             'count': count,
+             'att': att,
+             }
     parser = argparse.ArgumentParser()
-    parser.add_argument('func', type=str, choices=['vis', 'count'])
+    parser.add_argument('func', type=str, choices=funcs.keys())
     namespace = parser.parse_known_args()
     func = vars(namespace[0])['func']
     sys.argv = sys.argv[:1] + namespace[1]
     print(sys.argv)
-    if func == 'vis':
-        vis_masks()
-    elif func == 'count':
-        count()
-    else:
-        raise ValueError('Unknown function %s.' % func)
+    funcs[func]()
 
 
 if __name__ == '__main__':

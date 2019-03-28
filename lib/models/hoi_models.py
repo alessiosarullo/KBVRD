@@ -249,5 +249,4 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
                 prior_contribution = priors.sum(dim=0)
             hoi_logits += prior_contribution.log()
 
-
         return hoi_logits

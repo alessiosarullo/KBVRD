@@ -26,7 +26,6 @@ try:
     from modeling.model_builder import Generalized_RCNN
 
     import utils.misc as misc_utils
-    import utils.vis as vis_utils
     from utils.timer import Timer
     from utils.detectron_weight_helper import load_detectron_weight
     from utils.blob import prep_im_for_blob, get_image_blob
@@ -37,7 +36,6 @@ except ImportError:
     nms_gpu = None
     Generalized_RCNN = None
     misc_utils = None
-    vis_utils = None
     Timer = None
     load_detectron_weight = None
     prep_im_for_blob = get_image_blob = None

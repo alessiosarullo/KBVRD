@@ -103,6 +103,7 @@ class Launcher:
         test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader))
 
         try:
+            cfg.save()
             for epoch in range(cfg.opt.num_epochs):
                 print('Epoch %d start.' % epoch)
                 self.detector.train()
@@ -120,7 +121,6 @@ class Launcher:
                 if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
                     print('Exiting training early.', flush=True)
                     break
-            cfg.save()
             Timer.get().print()
         finally:
             training_stats.close_tensorboard_logger()
@@ -197,7 +197,7 @@ class Launcher:
             all_predictions.append(vars(prediction))
             stats.batch_toc()
 
-            for k, v in self.detector.values_to_monitor.items():
+            for k, v in self.detector.values_to_monitor.items():  # FIXME delete
                 vtm.setdefault(k, []).append(v)
 
             if batch_idx % 20 == 0:
@@ -209,6 +209,9 @@ class Launcher:
         evaluator.print_metrics()
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
+
+        with open('att.pkl', 'wb') as f: # FIXME delete
+            pickle.dump(vtm, f)
 
         stats.epoch_toc()
         return all_predictions

@@ -11,14 +11,14 @@ from matplotlib.patches import Polygon
 from lib.bbox_utils import rescale_masks_to_img
 
 
-def plot_mat(conf_mat, xticklabels, yticklabels, axes=None):
+def plot_mat(mat, xticklabels, yticklabels, axes=None):
     lfsize = 8
     if axes is None:
         plt.figure(figsize=(16, 9))
         ax = plt.gca()
     else:
         ax = axes
-    ax.matshow(conf_mat, cmap=plt.get_cmap('jet'), vmin=0, vmax=1)
+    ax.matshow(mat, cmap=plt.get_cmap('jet'), vmin=0, vmax=1)
 
     y_tick_labels = [l.replace('_', ' ') for l in yticklabels]
     y_ticks = np.arange(len(y_tick_labels))
