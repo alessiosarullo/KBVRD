@@ -126,7 +126,7 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
                                               nn.Sigmoid())
         self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_input_size, self.memory_output_size),
-                                               nn.ReLU)
+                                               nn.ReLU())
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
