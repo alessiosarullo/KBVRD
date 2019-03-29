@@ -115,9 +115,9 @@ class NMotifsHOIBranch(AbstractHOIBranch):
 class MemNMotifsHOIBranch(NMotifsHOIBranch):
     def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
         self.mem_att_entropy = 1 / 0.1
-        self.memory_input_size = self.output_dim
         self.memory_output_size = 1024
         super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
+        self.memory_input_size = self.output_dim
         memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
 
         mem = torch.empty(self.memory_input_size, memory_size)
