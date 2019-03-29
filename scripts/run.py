@@ -218,7 +218,7 @@ class Launcher:
 
     def evaluate(self):
         test_loader = self.test_split.get_loader(batch_size=1)
-        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader))
+        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader), tboard_log=False)
         all_predictions = self.eval_epoch(None, test_loader, test_stats)
         return all_predictions
 

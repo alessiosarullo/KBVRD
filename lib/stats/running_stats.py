@@ -13,33 +13,32 @@ from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class SmoothedValue:
-    """Track a series of values and provide access to smoothed values over a window or the global series average. """
-
-    def __init__(self, window_size):
-        self.deque = deque(maxlen=window_size)
-        self.series = []
+class History:
+    def __init__(self, window_size=None):
+        if window_size is None:
+            self.values = []
+        else:
+            self.values = deque(maxlen=window_size)
         self.total = 0.0
         self.count = 0
 
     def append(self, value):
-        self.deque.append(value)
-        self.series.append(value)
+        self.values.append(value)
         self.count += 1
         self.total += value
 
     def get_median(self):
-        return np.median(self.deque)
+        return np.median(self.values)
 
     def get_average(self):
-        return np.mean(self.deque)
+        return np.mean(self.values)
 
     def get_global_average(self):
         return self.total / self.count
 
 
 class RunningStats:
-    def __init__(self, split, data_loader: DataLoader, history_window=None):
+    def __init__(self, split, data_loader: DataLoader, history_window=None, tboard_log=True):
         if history_window is None:
             history_window = cfg.program.log_interval
 
@@ -48,16 +47,19 @@ class RunningStats:
         self.history_window = history_window
         self.tb_ignored_keys = ['iter']
 
-        tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
-        try:
-            shutil.rmtree(tboard_dir)
-        except FileNotFoundError:
-            pass
-        os.makedirs(tboard_dir)
-        self.tblogger = SummaryWriter(tboard_dir)
-        self.smoothed_losses = {}  # type: Dict[str, SmoothedValue]
-        self.smoothed_metrics = {}  # type: Dict[str, SmoothedValue]
-        self.values_to_watch = {}  # type: Dict[str, SmoothedValue]
+        if tboard_log:
+            tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
+            try:
+                shutil.rmtree(tboard_dir)
+            except FileNotFoundError:
+                pass
+            os.makedirs(tboard_dir)
+            self.tblogger = SummaryWriter(tboard_dir)
+        else:
+            self.tblogger = None
+        self.smoothed_losses = {}  # type: Dict[str, History]
+        self.smoothed_metrics = {}  # type: Dict[str, History]
+        self.values_to_watch = {}  # type: Dict[str, History]
         self.histograms = {}
 
     @property
@@ -71,13 +73,13 @@ class RunningStats:
     def update_stats(self, output_dict):
         assert sum([int('total' in k.lower()) for k in output_dict.get('losses', {})]) <= 1
         for loss_name, loss in output_dict.get('losses', {}).items():
-            self.smoothed_losses.setdefault(loss_name, SmoothedValue(self.history_window)).append(loss.item())
+            self.smoothed_losses.setdefault(loss_name, History(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
-            self.smoothed_metrics.setdefault(metric_name, SmoothedValue(self.history_window)).append(metric.item())
+            self.smoothed_metrics.setdefault(metric_name, History(window_size=None)).append(metric.item())
         for name, value in output_dict.get('hist', {}).items():
             self.histograms.setdefault(name, deque(maxlen=self.history_window)).append(value)
         for name, value in output_dict.get('watch', {}).items():
-            self.values_to_watch.setdefault(name, SmoothedValue(self.history_window)).append(value.item())
+            self.values_to_watch.setdefault(name, History(self.history_window)).append(value.item())
 
     def log_stats(self, curr_iter, verbose=False, **kwargs):
         """Log the tracked statistics."""
@@ -110,6 +112,7 @@ class RunningStats:
 
     def epoch_tic(self):
         Timer.get(self.epoch_str).tic()
+        self.smoothed_metrics = {}
 
     def epoch_toc(self):
         epoch_timer = Timer.get(self.epoch_str, get_only=True)
