@@ -117,13 +117,13 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         self.mem_att_entropy = 1 / 0.1
         self.memory_output_size = 1024
         super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
-        self.memory_input_size = self.output_dim
+        self.memory_input_size = self.hoi_repr_dim
         memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
 
         mem = torch.empty(self.memory_input_size, memory_size)
         nn.init.xavier_uniform_(mem, gain=1.0)
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(mem), requires_grad=True)
-        self.memory_attention = nn.Sequential(nn.Linear(self.output_dim, 1),
+        self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
                                               nn.Sigmoid())
         self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_input_size, self.memory_output_size),
                                                nn.ReLU)
