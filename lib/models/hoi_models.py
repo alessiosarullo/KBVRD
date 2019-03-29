@@ -140,8 +140,8 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
 
         if hoi_labels is not None:
             misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
-            updates = misses.view(-1, 1) * memory_repr
-            self.memory_keys = torch.nn.normalize(self.memory_keys + hoi_labels.t() @ updates)
+            updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
+            self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
 
         return hoi_repr
 
