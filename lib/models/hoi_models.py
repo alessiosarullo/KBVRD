@@ -136,7 +136,7 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         memory_att = torch.nn.functional.softmax(self.mem_att_entropy * memory_sim, dim=1)
         memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
         memory_output = self.memory_readout_fc(memory_repr)
-        hoi_repr += memory_output
+        hoi_repr = hoi_repr + memory_output
 
         if hoi_labels is not None:
             misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
