@@ -30,14 +30,16 @@ class KBModel(GenericModel):
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.output_dim)
-        self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+        if cfg.model.use_memory:
+            self.hoi_branch = MemNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+        else:
+            self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        # FIXME word embeddings (maybe move here)
-        self.hoi_refinement_branch = KBHOIRefinementBranch(dataset, self.hoi_branch.word_embs, self.hoi_branch.output_dim)
+        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
         self.values_to_monitor = {}  # FIXME delete
 
@@ -110,6 +112,40 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         return hoi_repr
 
 
+class MemNMotifsHOIBranch(NMotifsHOIBranch):
+    def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
+        self.mem_att_entropy = 1 / 0.1
+        self.memory_input_size = self.output_dim
+        self.memory_output_size = 1024
+        super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
+        memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
+
+        mem = torch.empty(self.memory_input_size, memory_size)
+        nn.init.xavier_uniform_(mem, gain=1.0)
+        self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(mem), requires_grad=True)
+        self.memory_attention = nn.Sequential(nn.Linear(self.output_dim, 1),
+                                              nn.Sigmoid())
+        self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_input_size, self.memory_output_size),
+                                               nn.ReLU)
+
+    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
+
+        hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
+        memory_sim = hor_repr_norm @ self.memory_keys
+        memory_att = torch.nn.softmax(self.mem_att_entropy * memory_sim, dim=1)
+        memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
+        memory_output = self.memory_readout_fc(memory_repr)
+        hoi_repr += memory_output
+
+        if hoi_labels is not None:
+            misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
+            updates = misses.view(-1, 1) * memory_repr
+            self.memory_keys = torch.nn.normalize(self.memory_keys + hoi_labels.t() @ updates)
+
+        return hoi_repr
+
+
 class KBNMotifsHOIBranch(NMotifsHOIBranch):
     def __init__(self, visual_feats_dim, obj_feat_dim, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
@@ -166,43 +202,10 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
         return hoi_repr
 
 
-class KBHOIRefinementBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, word_embs, hoi_repr_dim, **kwargs):
+class KBHOIBiasBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetInstanceSplit, hoi_repr_dim, **kwargs):
         self.gc_repr_dim = 256
         super().__init__(**kwargs)
-
-        # Sim
-        self.obj_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.objects)), requires_grad=False)
-        self.pred_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
-
-        self.use_kb_sim = False
-        # if cfg.model.kb_sim:
-        #     op_adj_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
-        #     if cfg.model.use_imsitu:
-        #         imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
-        #         imsitu_counts[:, 0] = 0  # exclude null interaction
-        #         op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-        #     if cfg.model.use_int_freq:
-        #         int_counts = get_counts(dataset=dataset)
-        #         int_counts[:, 0] = 0  # exclude null interaction
-        #         op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-        #     op_adj_mat = np.minimum(1, op_adj_mat)  # does not matter if the same information is present in different sources TODO try without?
-        #
-        #     if np.any(op_adj_mat):
-        #         po_adj_mat = op_adj_mat.T
-        #         po_adj_mat[0, :] = 1  # null interaction can have any object
-        #         po_adj_mat /= np.maximum(1, np.sum(po_adj_mat, axis=1, keepdims=True))  # normalise
-        #         self.po_adj_mat = torch.nn.Parameter(torch.from_numpy(po_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
-        #         self.po_wemb_gc_fc = nn.Sequential(nn.Linear(self.obj_word_embs.shape[1], self.gc_repr_dim),
-        #                                            nn.ReLU()
-        #                                            )
-        #
-        #         op_adj_mat /= np.maximum(1, np.sum(op_adj_mat, axis=1, keepdims=True))  # normalise
-        #         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
-        #         self.op_wemb_gc_fc = nn.Sequential(nn.Linear(self.pred_word_embs.shape[1], self.gc_repr_dim),
-        #                                            nn.ReLU()
-        #                                            )
-        #         self.use_kb_sim = True
 
         # Freq bias
         freqs = []
@@ -228,15 +231,6 @@ class KBHOIRefinementBranch(AbstractHOIBranch):
 
         obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
         hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
-        if self.use_kb_sim:
-            obj_gc_repr = self.op_adj_mat @ self.op_wemb_gc_fc(self.pred_word_embs)
-            pred_gc_repr = self.po_adj_mat @ self.po_wemb_gc_fc(self.obj_word_embs)
-
-            obj_gc_repr_norm = obj_gc_repr / torch.norm(obj_gc_repr, 2, dim=1, keepdim=True).clamp(min=1e-8)
-            pred_gc_repr_norm = pred_gc_repr / torch.norm(pred_gc_repr, 2, dim=1, keepdim=True).clamp(min=1e-8)
-            obj_pred_sim = obj_gc_repr_norm @ pred_gc_repr_norm.t()
-
-            hoi_logits += obj_pred_sim[hoi_obj_classes, :].clamp(min=1e-8).log()
 
         if self.bias_priors is not None:
             priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).exp()

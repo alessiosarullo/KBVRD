@@ -40,6 +40,7 @@ def print_params(model, breakdown=False):
 
     modules = {'Visual module': {}, 'Object branch': {}, 'Spatial branch': {}, 'Human-Object-Interaction branch': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
+        # FIXME check the parameters are recorded correctly
         if not ('bias' in p_name.split('.')[-1] or 'bn' in p_name.split('.')[-1]):
 
             p_name_root = p_name.split('.')[0]

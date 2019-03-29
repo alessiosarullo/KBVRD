@@ -175,6 +175,8 @@ class ModelConfig(BaseConfigs):
         self.train_prior = False
         self.kb_sim = False
 
+        self.use_memory = False
+
         self.bn_momentum = 0.01
 
 
