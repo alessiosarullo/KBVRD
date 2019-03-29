@@ -120,7 +120,7 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         self.memory_input_size = self.hoi_repr_dim
         memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
 
-        mem = torch.empty(self.memory_input_size, memory_size)
+        mem = torch.empty(memory_size, self.memory_input_size)
         nn.init.xavier_uniform_(mem, gain=1.0)
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(mem), requires_grad=True)
         self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
@@ -132,7 +132,7 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
 
         hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
-        memory_sim = hor_repr_norm @ self.memory_keys
+        memory_sim = hor_repr_norm @ self.memory_keys.t()
         memory_att = torch.nn.functional.softmax(self.mem_att_entropy * memory_sim, dim=1)
         memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
         memory_output = self.memory_readout_fc(memory_repr)
