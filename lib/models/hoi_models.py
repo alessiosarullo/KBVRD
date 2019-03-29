@@ -133,7 +133,7 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
 
         hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
         memory_sim = hor_repr_norm @ self.memory_keys
-        memory_att = torch.nn.softmax(self.mem_att_entropy * memory_sim, dim=1)
+        memory_att = torch.nn.functional.softmax(self.mem_att_entropy * memory_sim, dim=1)
         memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
         memory_output = self.memory_readout_fc(memory_repr)
         hoi_repr += memory_output
