@@ -24,7 +24,10 @@ class BaseModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2),
+                                                     hidden_spatial_repr_dim=512,
+                                                     spatial_rnn_repr_dim=1024,
+                                                     )
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.context_dim)
@@ -37,16 +40,16 @@ class BaseModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        spatial_ctx, spatial_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
+        spatial_ctx, spatial_repr = self.spatial_context_branch(masks, im_ids, hoi_infos)
         obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
 
         obj_logits = self.obj_output_fc(obj_repr)
-        hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos,
+        hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos,
                                         box_labels, hoi_labels)
 
         return obj_logits, hoi_logits
 
-    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
 
@@ -60,8 +63,8 @@ class SpatialModel(BaseModel):
         self.hoi_output_fc = nn.Linear(self.spatial_context_branch.repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        hoi_logits = self.hoi_output_fc(spatial_feats)
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_logits = self.hoi_output_fc(spatial_repr)
         return hoi_logits
 
 
@@ -79,7 +82,7 @@ class KBModel(BaseModel):
 
         self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
-    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
@@ -100,7 +103,7 @@ class MemoryModel(BaseModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         return hoi_logits
