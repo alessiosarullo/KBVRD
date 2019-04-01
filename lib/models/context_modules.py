@@ -20,15 +20,16 @@ class SpatialContext(nn.Module):
                 +
                 ([nn.BatchNorm1d(self.hidden_spatial_repr_dim)] if self.use_bn else [])
         ))
-        # self.spatial_rel_ctx_bilstm = nn.LSTM(
-        #     input_size=self.hidden_spatial_repr_dim,
-        #     hidden_size=self.spatial_rnn_repr_dim,
-        #     num_layers=1,  # if you want to use dropout the number of layers has to be greater than 1, since it's not added after the last one
-        #     bidirectional=True)
-        self.spatial_rel_ctx_bilstm = AlternatingHighwayLSTM(input_size=self.hidden_spatial_repr_dim,
-                                                             hidden_size=self.spatial_rnn_repr_dim,
-                                                             num_layers=2,
-                                                             recurrent_dropout_probability=self.dropout_rate)
+        self.spatial_rel_ctx_bilstm = nn.LSTM(
+            input_size=self.hidden_spatial_repr_dim,
+            hidden_size=self.spatial_rnn_repr_dim,
+            num_layers=2,
+            dropout=self.dropout_rate,
+            bidirectional=True)
+        # self.spatial_rel_ctx_bilstm = AlternatingHighwayLSTM(input_size=self.hidden_spatial_repr_dim,
+        #                                                      hidden_size=self.spatial_rnn_repr_dim,
+        #                                                      num_layers=2,
+        #                                                      recurrent_dropout_probability=self.dropout_rate)
 
     @property
     def context_dim(self):
