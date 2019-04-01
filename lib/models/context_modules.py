@@ -84,11 +84,11 @@ class ObjectContext(nn.Module):
             return object_context, object_embeddings
 
     @property
-    def output_ctx_dim(self):
+    def ctx_dim(self):
         return 2 * self.obj_rnn_emb_dim  # 2 because of BiLSTM
 
     @property
-    def output_repr_dim(self):
+    def repr_dim(self):
         return self.obj_fc_dim
 
 

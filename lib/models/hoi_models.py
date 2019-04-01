@@ -31,7 +31,7 @@ class BaseModel(GenericModel):
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.context_dim)
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -60,7 +60,7 @@ class SpatialModel(BaseModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_output_fc = nn.Linear(self.spatial_context_branch.repr_dim, dataset.num_predicates, bias=True)
+        self.hoi_output_fc = nn.Linear(self.spatial_context_branch.repr_dim + self.obj_branch.repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
     def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
@@ -75,7 +75,7 @@ class KBModel(BaseModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+        self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, dataset)
 
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
@@ -99,7 +99,7 @@ class MemoryModel(BaseModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_branch = MemNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+        self.hoi_branch = MemNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, dataset)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
