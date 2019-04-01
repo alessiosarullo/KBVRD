@@ -64,7 +64,7 @@ class SpatialModel(BaseModel):
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
     def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        hoi_logits = self.hoi_output_fc(spatial_repr)
+        hoi_logits = self.hoi_output_fc(torch.cat([spatial_repr, obj_repr[hoi_infos[:, 2], :]], dim=1))
         return hoi_logits
 
 

@@ -11,7 +11,7 @@ class SpatialContext(nn.Module):
         self.use_bn = False
         self.hidden_spatial_repr_dim = 128
         self.spatial_rnn_repr_dim = 128
-        self.dropout_rate=0.1
+        self.dropout_rate = 0.1
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.spatial_rels_fc = nn.Sequential(*(
@@ -23,9 +23,10 @@ class SpatialContext(nn.Module):
         self.spatial_rel_ctx_bilstm = nn.LSTM(
             input_size=self.hidden_spatial_repr_dim,
             hidden_size=self.spatial_rnn_repr_dim,
-            num_layers=2,
-            dropout=self.dropout_rate,
-            bidirectional=True)
+            num_layers=1,
+            bidirectional=True,
+            # dropout=self.dropout_rate,
+        )
         # self.spatial_rel_ctx_bilstm = AlternatingHighwayLSTM(input_size=self.hidden_spatial_repr_dim,
         #                                                      hidden_size=self.spatial_rnn_repr_dim,
         #                                                      num_layers=2,
