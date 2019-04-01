@@ -167,7 +167,7 @@ class Launcher:
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss
 
-        hoi_branch = self.detector.hoi_branch  # type: AbstractHOIBranch
+        # hoi_branch = self.detector.hoi_branch  # type: AbstractHOIBranch
         batch_stats = {'losses': losses,
                        # 'hist': {k: v.detach().cpu() for k, v in hoi_branch.values_to_monitor.items()}
                        }

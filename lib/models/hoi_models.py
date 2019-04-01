@@ -41,11 +41,12 @@ class BaseModel(GenericModel):
         obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
 
         obj_logits = self.obj_output_fc(obj_repr)
-        hoi_logits = self._hoi_branch(boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+        hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos,
+                                        box_labels, hoi_labels)
 
         return obj_logits, hoi_logits
 
-    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
 
@@ -59,7 +60,7 @@ class SpatialModel(BaseModel):
         self.hoi_output_fc = nn.Linear(self.spatial_context_branch.repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_logits = self.hoi_output_fc(spatial_feats)
         return hoi_logits
 
@@ -78,7 +79,7 @@ class KBModel(BaseModel):
 
         self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
-    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
@@ -99,7 +100,7 @@ class MemoryModel(BaseModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         return hoi_logits
