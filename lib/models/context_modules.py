@@ -11,6 +11,7 @@ class SpatialContext(nn.Module):
         self.use_bn = False
         self.hidden_spatial_repr_dim = 128
         self.spatial_rnn_repr_dim = 128
+        self.dropout_rate=0.1
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.spatial_rels_fc = nn.Sequential(*(
