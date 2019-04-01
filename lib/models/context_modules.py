@@ -30,8 +30,12 @@ class SpatialContext(nn.Module):
             bidirectional=True)
 
     @property
-    def output_dim(self):
+    def context_dim(self):
         return 2 * self.spatial_rnn_emb_dim  # 2 because of BiLSTM
+
+    @property
+    def repr_dim(self):
+        return self.spatial_emb_dim
 
     def forward(self, masks, unique_im_ids, hoi_infos, **kwargs):
         # TODO docs

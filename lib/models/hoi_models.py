@@ -16,30 +16,19 @@ from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHig
 from lib.models.nmotifs.lincontext import sort_rois, PackedSequence
 
 
-class KBModel(GenericModel):
+class BaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'kb'
+        raise NotImplementedError()
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        self.imsitu_prior_emb_dim = 256
-        self.imsitu_branch_final_emb_dim = 512
         super().__init__(dataset, **kwargs)
 
         self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
-                                                  self.spatial_context_branch.output_dim)
-        if cfg.model.use_memory:
-            self.hoi_branch = MemNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
-        else:
-            self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
-
+                                                  self.spatial_context_branch.context_dim)
         self.obj_output_fc = nn.Linear(self.obj_branch.output_repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
-
-        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -48,19 +37,75 @@ class KBModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        spatial_ctx, spatial_rels_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
+        spatial_ctx, spatial_feats = self.spatial_context_branch(masks, im_ids, hoi_infos)
         obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
 
         obj_logits = self.obj_output_fc(obj_repr)
-        hoi_logits = self.hoi_output_fc(hoi_repr)
-
-        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+        hoi_logits = self._hoi_branch(boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
 
         for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
             self.values_to_monitor[k] = v
 
         return obj_logits, hoi_logits
+
+    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        raise NotImplementedError()
+
+
+class SpatialModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'spatial'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.hoi_output_fc = nn.Linear(self.spatial_context_branch.repr_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_logits = self.hoi_output_fc(spatial_feats)
+        return hoi_logits
+
+
+class KBModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'kb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.hoi_branch = KBNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
+
+    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+
+        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
+            self.values_to_monitor[k] = v
+        return hoi_logits
+
+
+class MemoryModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'mem'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.hoi_branch = MemNMotifsHOIBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_repr_dim, dataset)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+    def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
+        return hoi_logits
 
 
 class NMotifsHOIBranch(AbstractHOIBranch):
@@ -106,40 +151,6 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         subj_repr = hoi_ho_repr[:, 0][subj_inds]
         dobj_repr = hoi_ho_repr[:, 1][dobj_inds]
         hoi_repr = subj_repr * dobj_repr * union_boxes_feats
-
-        return hoi_repr
-
-
-class MemNMotifsHOIBranch(NMotifsHOIBranch):
-    def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
-        self.mem_att_entropy = 1 / 0.1
-        super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
-        self.memory_input_size = self.hoi_repr_dim
-        self.memory_output_size = self.hoi_repr_dim
-        memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
-
-        mem = torch.empty(memory_size, self.memory_input_size)
-        nn.init.xavier_uniform_(mem, gain=1.0)
-        self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(mem), requires_grad=True)
-        self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
-                                              nn.Sigmoid())
-        self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_input_size, self.memory_output_size),
-                                               nn.ReLU())
-
-    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
-
-        hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
-        memory_sim = hor_repr_norm @ self.memory_keys.t()
-        memory_att = torch.nn.functional.softmax(self.mem_att_entropy * memory_sim, dim=1)
-        memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
-        memory_output = self.memory_readout_fc(memory_repr)
-        hoi_repr = hoi_repr + memory_output
-
-        if hoi_labels is not None:
-            misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
-            updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
-            self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
 
         return hoi_repr
 
@@ -196,6 +207,40 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
                 hoi_obj_classes = boxes_ext[hoi_infos[:, 2], 5:].detach()
                 attended_obj_gc_repr = hoi_obj_classes @ obj_gc_repr
                 hoi_repr = self.post_sim(torch.cat([hoi_repr, attended_obj_gc_repr], dim=1))
+
+        return hoi_repr
+
+
+class MemNMotifsHOIBranch(NMotifsHOIBranch):
+    def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
+        self.mem_att_entropy = 1 / 0.1
+        super().__init__(visual_feats_dim, obj_feat_dim, dataset, **kwargs)
+        self.memory_input_size = self.hoi_repr_dim
+        self.memory_output_size = self.hoi_repr_dim
+        memory_size = dataset.num_predicates  # this CANNOT be modified without changing the forward pass
+
+        mem = torch.empty(memory_size, self.memory_input_size)
+        nn.init.xavier_uniform_(mem, gain=1.0)
+        self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(mem), requires_grad=True)
+        self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
+                                              nn.Sigmoid())
+        self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_input_size, self.memory_output_size),
+                                               nn.ReLU())
+
+    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
+
+        hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
+        memory_sim = hor_repr_norm @ self.memory_keys.t()
+        memory_att = torch.nn.functional.softmax(self.mem_att_entropy * memory_sim, dim=1)
+        memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
+        memory_output = self.memory_readout_fc(memory_repr)
+        hoi_repr = hoi_repr + memory_output
+
+        if hoi_labels is not None:
+            misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
+            updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
+            self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
 
         return hoi_repr
 
