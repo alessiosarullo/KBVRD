@@ -43,9 +43,6 @@ class BaseModel(GenericModel):
         obj_logits = self.obj_output_fc(obj_repr)
         hoi_logits = self._hoi_branch(boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
 
-        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
-            self.values_to_monitor[k] = v
-
         return obj_logits, hoi_logits
 
     def _hoi_branch(self, boxes_ext, obj_repr, obj_ctx, spatial_feats, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
