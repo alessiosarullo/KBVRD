@@ -41,8 +41,6 @@ class KBModel(GenericModel):
 
         self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
-        self.values_to_monitor = {}  # FIXME delete
-
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
