@@ -91,13 +91,13 @@ class ObjectContext(nn.Module):
 def compute_context(lstm, feats, im_ids, input_im_ids):
     # If I = #images, this is I x [N_i x feat_vec_dim], where N_i = #elements in image i
     feats_per_img = [feats[input_im_ids == im_id, :] for im_id in im_ids]
-    num_examples_per_img = [int((im_ids == im_id).sum().detach().cpu().item()) for im_id in im_ids.unique()]
+    num_examples_per_img = [int((input_im_ids == im_id).sum().detach().cpu().item()) for im_id in im_ids]
 
     feats_seq = nn.utils.rnn.pad_sequence(feats_per_img)  # this is max(N_i) x I x D
     recurrent_repr_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x 2 * hidden_state_dim
     assert len(num_examples_per_img) == recurrent_repr_seq.shape[1]
     rec_repr = torch.stack([recurrent_repr_seq[n, i, :] for i, num_ex in enumerate(num_examples_per_img) for n in range(num_ex)], dim=0)
-    assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2
+    assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2, (rec_repr.shape, feats.shape[0], lstm.hidden_size)
 
     # FIXME! This might not work well with padding (i.e., max(N_i)). The mean should only be computed across objects actually in the image.
     context_feats = recurrent_repr_seq.mean(dim=0)  # this is I x whatever
