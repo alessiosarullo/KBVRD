@@ -113,7 +113,7 @@ class HoiModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes,
-                                        obj_fc_dim=1024,
+                                        obj_fc_dim=vis_feat_dim,
                                         obj_rnn_emb_dim=vis_feat_dim,
                                         )
 
