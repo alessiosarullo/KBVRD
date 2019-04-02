@@ -112,14 +112,16 @@ class HoiModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes,
-                                        obj_fc_dim=vis_feat_dim,
-                                        obj_rnn_emb_dim=vis_feat_dim,
-                                        )
+        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+
+        self.post_lstm = nn.Linear(self.obj_branch.repr_dim, vis_feat_dim)
+        torch.nn.init.xavier_normal_(self.post_lstm.weight, gain=1.0)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -132,8 +134,12 @@ class HoiModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_obj_repr = obj_repr[hoi_infos[:, 2], :] + union_boxes_feats
-        hoi_logits = self.hoi_output_fc(hoi_obj_repr)
+        hoi_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :]) + union_boxes_feats
+        hoi_logits = self.hoi_output_fc(hoi_repr)
+
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
+            self.values_to_monitor[k] = v
 
         return obj_logits, hoi_logits
 
