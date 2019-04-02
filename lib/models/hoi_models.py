@@ -132,7 +132,7 @@ class HoiModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_obj_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :])
+        hoi_obj_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :]) + union_boxes_feats
         hoi_logits = self.hoi_output_fc(hoi_obj_repr)
 
         return obj_logits, hoi_logits
