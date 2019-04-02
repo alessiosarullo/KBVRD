@@ -112,7 +112,10 @@ class HoiModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes,
+                                        obj_fc_dim=1024,
+                                        obj_rnn_emb_dim=vis_feat_dim,
+                                        )
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
