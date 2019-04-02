@@ -53,6 +53,29 @@ class BaseModel(GenericModel):
         raise NotImplementedError()
 
 
+class ZeroModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zero'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.obj_output_fc = nn.Linear(self.visual_module.vis_feat_dim, self.dataset.num_object_classes)
+        self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_logits = self.obj_output_fc(box_feats)
+        hoi_logits = self.hoi_output_fc(box_feats[hoi_infos[:, 2], :])
+
+        return obj_logits, hoi_logits
+
 class ObjModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
