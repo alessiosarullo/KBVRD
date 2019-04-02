@@ -114,9 +114,6 @@ class HoiModel(GenericModel):
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
 
-        self.post_lstm = nn.Linear(self.obj_branch.repr_dim, vis_feat_dim)
-        torch.nn.init.xavier_normal_(self.post_lstm.weight, gain=1.0)
-
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
@@ -132,7 +129,7 @@ class HoiModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_obj_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :]) + union_boxes_feats
+        hoi_obj_repr = obj_repr[hoi_infos[:, 2], :] + union_boxes_feats
         hoi_logits = self.hoi_output_fc(hoi_obj_repr)
 
         return obj_logits, hoi_logits
