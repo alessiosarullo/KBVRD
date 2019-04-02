@@ -24,10 +24,7 @@ class BaseModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2),
-                                                     hidden_spatial_repr_dim=512,
-                                                     spatial_rnn_repr_dim=1024,
-                                                     )
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
                                                   self.dataset.num_object_classes +
                                                   self.spatial_context_branch.context_dim)
