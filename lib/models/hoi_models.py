@@ -41,7 +41,7 @@ class BaseModel(GenericModel):
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
         spatial_ctx, spatial_repr = self.spatial_context_branch(masks, im_ids, hoi_infos)
-        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, spatial_ctx, im_ids, box_im_ids)
+        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx)
 
         obj_logits = self.obj_output_fc(obj_repr)
         hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos,
@@ -51,6 +51,33 @@ class BaseModel(GenericModel):
 
     def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
+
+
+class ObjModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'obj'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.hoi_output_fc = nn.Linear(self.obj_branch.repr_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
+
+        obj_logits = self.obj_output_fc(obj_repr)
+        hoi_logits = self.hoi_output_fc(obj_repr[hoi_infos[:, 2], :])
+
+        return obj_logits, hoi_logits
 
 
 class SpatialModel(BaseModel):
