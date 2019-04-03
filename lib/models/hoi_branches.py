@@ -189,6 +189,8 @@ class MemHoiBranch(AbstractHOIBranch):
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         pred_word_embs = torch.from_numpy(word_embs.get_embeddings(dataset.predicates))
 
+        self.memory_mapping_fc = nn.Linear(visual_feats_dim, self.word_emb_dim)
+        torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)  # FIXME train this
         # self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
         #                                       nn.Sigmoid())
@@ -199,13 +201,13 @@ class MemHoiBranch(AbstractHOIBranch):
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
 
-        hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
-        memory_sim = hor_repr_norm @ self.memory_keys.t()
+        mem_hoi_repr = torch.nn.functional.normalize(self.memory_mapping_fc(hoi_repr))
+        mem_sim = mem_hoi_repr @ self.memory_keys.t()
         mem_att_entropy = 1 / 0.1  # FIXME magic constant. This could be predicted
-        memory_att = torch.nn.functional.softmax(mem_att_entropy * memory_sim, dim=1)
-        memory_repr = torch.nn.functional.normalize(memory_att @ self.memory_keys)
-        memory_output = self.memory_readout_fc(memory_repr)
-        hoi_repr = hoi_repr + memory_output
+        mem_att = torch.nn.functional.softmax(mem_att_entropy * mem_sim, dim=1)
+        mem_repr = torch.nn.functional.normalize(mem_att @ self.memory_keys)
+        mem_output = self.memory_readout_fc(mem_repr)
+        hoi_repr = hoi_repr + mem_output
 
         # if hoi_labels is not None:
         #     misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
