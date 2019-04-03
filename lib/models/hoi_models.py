@@ -186,9 +186,9 @@ class MemoryModel(GenericModel):
         hoi_repr, mem_att = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        if hoi_labels is not None:
-            misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
-            updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
-            self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
+        # if hoi_labels is not None:
+        #     misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
+        #     updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
+        #     self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
 
         return obj_logits, hoi_logits
