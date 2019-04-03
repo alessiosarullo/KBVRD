@@ -202,7 +202,7 @@ class MemHoiBranch(AbstractHOIBranch):
 
     @property
     def output_dim(self):
-        return self.word_emb_dim
+        return self.memory_output_size
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
