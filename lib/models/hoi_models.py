@@ -85,7 +85,7 @@ class HoiModel(GenericModel):
         self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, vis_feat_dim)
+        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -169,7 +169,7 @@ class KBModel(BaseModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = KBHOIBiasBranch(dataset, self.hoi_branch.output_dim)
+        self.hoi_refinement_branch = HoiPriorBranch(dataset, self.hoi_branch.output_dim)
 
     def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
@@ -335,9 +335,8 @@ class MemNMotifsHOIBranch(NMotifsHOIBranch):
         return hoi_repr
 
 
-class KBHOIBiasBranch(AbstractHOIBranch):
+class HoiPriorBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetInstanceSplit, hoi_repr_dim, **kwargs):
-        self.gc_repr_dim = 256
         super().__init__(**kwargs)
 
         # Freq bias
@@ -345,11 +344,12 @@ class KBHOIBiasBranch(AbstractHOIBranch):
         if cfg.model.use_int_freq:
             int_counts = get_counts(dataset=dataset)
             freqs.append(int_counts)
+        # Possibly add here other priors
 
         if freqs:
             self.bias_priors = nn.ModuleList()
             for fmat in freqs:
-                priors = np.log(fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True)) + 1e-3)  # FIXME magic constant
+                priors = fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True))
                 self.bias_priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=not cfg.model.train_prior))
 
             if cfg.model.prior_att:
@@ -357,16 +357,15 @@ class KBHOIBiasBranch(AbstractHOIBranch):
                                                             nn.Sigmoid())
             else:
                 self.prior_source_attention = None
-        else:
+        else:  # no actual refinement
             self.bias_priors = None
 
     def _forward(self, hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels=None):
+        if self.bias_priors:
+            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
 
-        obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
-        hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
-
-        if self.bias_priors is not None:
-            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).exp()
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0)
 
             if self.prior_source_attention is not None:
                 src_att = self.prior_source_attention(hoi_repr)
@@ -374,6 +373,5 @@ class KBHOIBiasBranch(AbstractHOIBranch):
                 self.values_to_monitor['hoi_attention'] = src_att.detach().cpu().numpy()
             else:
                 prior_contribution = priors.sum(dim=0)
-            hoi_logits += prior_contribution.log()
-
+            hoi_logits += prior_contribution.clamp(min=1e-3).log()  # FIXME magic constant
         return hoi_logits
