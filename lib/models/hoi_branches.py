@@ -192,13 +192,13 @@ class MemHoiBranch(AbstractHOIBranch):
         self.memory_mapping_fc = nn.Linear(visual_feats_dim, self.word_emb_dim)
         torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
 
-        # self.memory_att_temp = nn.Linear(visual_feats_dim, 1)
+        self.memory_att_temp_fc = nn.Linear(visual_feats_dim, 1)
 
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)
-        
-        # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
-        #                                        nn.ReLU())
-        # torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
+
+        self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
+                                               nn.ReLU())
+        torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
 
     @property
     def output_dim(self):
@@ -206,24 +206,20 @@ class MemHoiBranch(AbstractHOIBranch):
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
+        mem_hoi_repr = hoi_repr.detach()
 
-        mem_hoi_repr = torch.nn.functional.normalize(self.memory_mapping_fc(hoi_repr.detach()))
-        mem_sim = mem_hoi_repr @ self.memory_keys.t()
-        mem_att_entropy = 1 / 0.1  # FIXME magic constant. This could be predicted
-        mem_att = torch.nn.functional.softmax(mem_att_entropy * mem_sim, dim=1)
-        mem_repr = torch.nn.functional.normalize(mem_att @ self.memory_keys)
+        input_mem_repr = torch.nn.functional.normalize(self.memory_mapping_fc(mem_hoi_repr))
 
-        # mem_output = self.memory_readout_fc(mem_repr)
-        # hoi_repr = hoi_repr + mem_output
+        mem_sim = input_mem_repr @ self.memory_keys.t()
+        mem_att_temp = self.memory_att_temp_fc(mem_hoi_repr)
+        mem_att = torch.nn.functional.softmax(mem_att_temp * mem_sim, dim=1)
 
-        hoi_repr = mem_repr
+        mem_repr = mem_att @ self.memory_keys
 
-        # if hoi_labels is not None:
-        #     misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
-        #     updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
-        #     self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
+        mem_output = self.memory_readout_fc(mem_repr)
+        hoi_repr = hoi_repr + mem_output
 
-        return hoi_repr
+        return hoi_repr, mem_att
 
 
 class HoiPriorBranch(AbstractHOIBranch):

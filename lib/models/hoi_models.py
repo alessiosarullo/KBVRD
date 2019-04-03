@@ -154,6 +154,24 @@ class MemoryModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
+    def get_losses(self, x, **kwargs):
+        obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
+        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
+        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
+
+    def forward(self, x, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            if not inference:
+                return obj_output, hoi_output, box_labels, hoi_labels
+            else:
+                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
@@ -165,7 +183,12 @@ class MemoryModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
+        hoi_repr, mem_att = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
+
+        if hoi_labels is not None:
+            misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
+            updates = hoi_labels.t() @ (misses.view(-1, 1) * memory_repr)
+            self.memory_keys = torch.nn.normalize(self.memory_keys + updates.deatch())
 
         return obj_logits, hoi_logits
