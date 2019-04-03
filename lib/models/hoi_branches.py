@@ -188,7 +188,7 @@ class HoiPriorBranch(AbstractHOIBranch):
             obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
             hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
 
-            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0) + 1e-3  # FIXME magic constant
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).clamp(min=1e-3)  # FIXME magic constant
 
             if self.prior_source_attention is not None:
                 src_att = self.prior_source_attention(hoi_repr)
