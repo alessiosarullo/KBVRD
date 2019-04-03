@@ -33,8 +33,13 @@ class GenericModel(AbstractModel):
             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
             # Masks are floats at this point.
 
-            obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            if hoi_infos is not None:
+                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            else:
+                obj_output = hoi_output = None
+
             if not inference:
+                assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
                 return obj_output, hoi_output, box_labels, hoi_labels
             else:
                 return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
@@ -42,9 +47,10 @@ class GenericModel(AbstractModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
-    def _prepare_prediction(self, obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    @staticmethod
+    def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if hoi_infos is not None:
-            assert boxes_ext is not None
+            assert obj_output is not None and hoi_output is not None and boxes_ext is not None
             if cfg.program.predcls:
                 obj_prob = None  # this will be assigned later as the object label distribution
             else:
