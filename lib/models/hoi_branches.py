@@ -189,9 +189,12 @@ class MemHoiBranch(AbstractHOIBranch):
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         pred_word_embs = torch.from_numpy(word_embs.get_embeddings(dataset.predicates))
 
-        self.memory_mapping_fc = nn.Linear(visual_feats_dim, self.word_emb_dim)
-        torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
-        self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)  # FIXME train this
+        self.memory_mapping_fc = nn.Sequential(nn.Linear(visual_feats_dim, self.word_emb_dim * 2),
+                                               nn.ReLU(),
+                                               nn.Linear(self.word_emb_dim * 2, self.word_emb_dim))
+        torch.nn.init.xavier_normal_(self.memory_mapping_fc[0].weight, gain=nn.init.calculate_gain('relu'))
+        torch.nn.init.xavier_normal_(self.memory_mapping_fc[1].weight, gain=nn.init.calculate_gain('linear'))
+        self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)
         # self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
         #                                       nn.Sigmoid())
         self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
