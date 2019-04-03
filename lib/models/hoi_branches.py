@@ -201,7 +201,7 @@ class MemHoiBranch(AbstractHOIBranch):
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
 
-        mem_hoi_repr = torch.nn.functional.normalize(self.memory_mapping_fc(hoi_repr))
+        mem_hoi_repr = torch.nn.functional.normalize(self.memory_mapping_fc(hoi_repr.detach()))
         mem_sim = mem_hoi_repr @ self.memory_keys.t()
         mem_att_entropy = 1 / 0.1  # FIXME magic constant. This could be predicted
         mem_att = torch.nn.functional.softmax(mem_att_entropy * mem_sim, dim=1)
