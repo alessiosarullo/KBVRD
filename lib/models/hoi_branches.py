@@ -193,7 +193,7 @@ class MemHoiBranch(AbstractHOIBranch):
                                                nn.ReLU(),
                                                nn.Linear(self.word_emb_dim * 2, self.word_emb_dim))
         torch.nn.init.xavier_normal_(self.memory_mapping_fc[0].weight, gain=nn.init.calculate_gain('relu'))
-        torch.nn.init.xavier_normal_(self.memory_mapping_fc[1].weight, gain=nn.init.calculate_gain('linear'))
+        torch.nn.init.xavier_normal_(self.memory_mapping_fc[2].weight, gain=nn.init.calculate_gain('linear'))
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)
         # self.memory_attention = nn.Sequential(nn.Linear(self.hoi_repr_dim, 1),
         #                                       nn.Sigmoid())
