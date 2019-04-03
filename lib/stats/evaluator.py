@@ -83,49 +83,56 @@ class Evaluator:
         else:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-        if prediction.is_complete():
+        # Ground truth
+        num_gt_objs = gt_boxes.shape[0]
+        gt_hoi_mat = np.zeros([num_gt_objs, num_gt_objs, self.dataset.num_predicates])
+        for h, o, i in gt_hois:
+            gt_hoi_mat[h, o, i] = 1
+
+        num_gt_hois = gt_hois.shape[0]
+        hoi_labels = np.empty((num_gt_hois, self.dataset.num_predicates))
+        hoi_obj_labels = np.empty(num_gt_hois, dtype=np.int)
+        for i, (gh, go) in enumerate(gt_hois[:, :2]):
+            hoi_labels[i, :] = gt_hoi_mat[gh, go, :]
+            hoi_obj_labels[i] = gt_entry.gt_obj_classes[go]
+        assert np.all(np.any(hoi_labels, axis=1))
+
+        # Predictions
+        hoi_gt_pred_assignment = np.full(num_gt_hois, fill_value=-1, dtype=np.int)
+        # For unmatched pairs assume by default:
+        if default == 'zeros':  # All zeros
+            hoi_predictions = np.zeros((num_gt_hois, self.dataset.num_predicates))
+        elif default == 'fg':  # Uniform over foreground interactions
+            hoi_predictions = np.ones((num_gt_hois, self.dataset.num_predicates))
+            hoi_predictions /= (hoi_predictions.shape[1] - 1)
+            hoi_predictions[:, 0] = 0
+        elif default == 'bg':  # Delta at null interaction
+            hoi_predictions = np.zeros((num_gt_hois, self.dataset.num_predicates))
+            hoi_predictions[:, 0] = 1
+        else:
+            raise ValueError('Unknown value:', default)
+
+        if prediction.ho_pairs is not None:
+            assert all([v is not None for v in vars(prediction).values()])
+            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
+            assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.hoi_score_distributions.shape[0]
             assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
             predict_boxes = prediction.obj_boxes
             predict_ho_pairs = prediction.ho_pairs
             predict_hoi_scores = prediction.hoi_score_distributions
-
-            num_gt_objs = gt_boxes.shape[0]
             num_predict_objs = predict_boxes.shape[0]
-
-            gt_hoi_mat = np.zeros([num_gt_objs, num_gt_objs, self.dataset.num_predicates])
-            for h, o, i in gt_hois:
-                gt_hoi_mat[h, o, i] = 1
 
             predict_hoi_idx_mat = np.full([num_predict_objs, num_predict_objs], fill_value=-1, dtype=np.int)
             for pair_idx, (h, o) in enumerate(predict_ho_pairs):
                 predict_hoi_idx_mat[h, o] = pair_idx
 
-            assert gt_hois.shape[0] > 0
+            assert num_gt_hois > 0
             gt_pred_ious = compute_ious(gt_boxes, predict_boxes)
             gt_to_predict_box_match = np.argmax(gt_pred_ious, axis=1)
             gt_to_predict_box_match[~gt_pred_ious.any(axis=1)] = -1
 
-            hoi_labels = np.empty((gt_hois.shape[0], self.dataset.num_predicates), dtype=gt_hoi_mat.dtype)
-            hoi_obj_labels = np.empty(gt_hois.shape[0], dtype=np.int)
-            # For unmatched pairs assume by default:
-            if default == 'zeros':  # All zeros
-                hoi_predictions = np.zeros((gt_hois.shape[0], self.dataset.num_predicates))
-            elif default == 'fg':  # Uniform over foreground interactions
-                hoi_predictions = np.ones((gt_hois.shape[0], self.dataset.num_predicates))
-                hoi_predictions /= (hoi_predictions.shape[1] - 1)
-                hoi_predictions[:, 0] = 0
-            elif default == 'bg':  # Delta at null interaction
-                hoi_predictions = np.zeros((gt_hois.shape[0], self.dataset.num_predicates))
-                hoi_predictions[:, 0] = 1
-            else:
-                raise ValueError('Unknown value:', default)
-
-            hoi_gt_pred_assignment = np.full(gt_hois.shape[0], fill_value=-1, dtype=np.int)
             for i, (gh, go) in enumerate(gt_hois[:, :2]):
-                hoi_labels[i, :] = gt_hoi_mat[gh, go, :]
-                hoi_obj_labels[i] = gt_entry.gt_obj_classes[go]
-
                 ph, po = gt_to_predict_box_match[[gh, go]]
                 if ph != -1 and po != -1:
                     idx = predict_hoi_idx_mat[ph, po]
@@ -134,12 +141,8 @@ class Evaluator:
                         assert np.any(tmp_scores)
                         hoi_predictions[i, :] = tmp_scores
                         hoi_gt_pred_assignment[i] = idx
-            assert np.all(np.any(hoi_labels, axis=1))
         else:
-            hoi_obj_labels = np.zeros(0)
-            hoi_labels = np.zeros((0, self.dataset.num_predicates))
-            hoi_predictions = np.zeros((0, self.dataset.num_predicates))
-            hoi_gt_pred_assignment = np.zeros(0)
+            assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.hoi_score_distributions is None
 
         self.hoi_obj_labels.append(hoi_obj_labels)
         self.hoi_labels.append(hoi_labels)

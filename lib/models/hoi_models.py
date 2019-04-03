@@ -16,40 +16,6 @@ from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHig
 from lib.models.nmotifs.lincontext import sort_rois, PackedSequence
 
 
-class BaseModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        raise NotImplementedError()
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-
-        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
-        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
-                                                  self.dataset.num_object_classes +
-                                                  self.spatial_context_branch.context_dim)
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        spatial_ctx, spatial_repr = self.spatial_context_branch(masks, im_ids, hoi_infos)
-        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx)
-
-        obj_logits = self.obj_output_fc(obj_repr)
-        hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos,
-                                        box_labels, hoi_labels)
-
-        return obj_logits, hoi_logits
-
-    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        raise NotImplementedError()
-
-
 class ZeroModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
@@ -81,7 +47,8 @@ class ObjModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.obj_branch.repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
@@ -139,6 +106,40 @@ class HoiModel(GenericModel):
             self.values_to_monitor[k] = v
 
         return obj_logits, hoi_logits
+
+
+class BaseModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        raise NotImplementedError()
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+
+        self.spatial_context_branch = SpatialContext(input_dim=2 * (self.visual_module.mask_resolution ** 2))
+        self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim +
+                                                  self.dataset.num_object_classes +
+                                                  self.spatial_context_branch.context_dim)
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        spatial_ctx, spatial_repr = self.spatial_context_branch(masks, im_ids, hoi_infos)
+        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx)
+
+        obj_logits = self.obj_output_fc(obj_repr)
+        hoi_logits = self._compute_hois(boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos,
+                                        box_labels, hoi_labels)
+
+        return obj_logits, hoi_logits
+
+    def _compute_hois(self, boxes_ext, obj_repr, obj_ctx, spatial_repr, spatial_ctx, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        raise NotImplementedError()
 
 
 class SpatialModel(BaseModel):
