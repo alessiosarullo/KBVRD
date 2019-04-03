@@ -197,7 +197,7 @@ class MemHoiBranch(AbstractHOIBranch):
         torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        hoi_repr = self.post_lstm(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
+        hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
 
         hor_repr_norm = torch.nn.functional.normalize(hoi_repr)
         memory_sim = hor_repr_norm @ self.memory_keys.t()
