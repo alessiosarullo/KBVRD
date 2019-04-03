@@ -117,7 +117,63 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
         return hoi_repr
 
 
-class MemNMotifsHOIBranch(AbstractHOIBranch):
+class KBHoiBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        self.word_emb_dim = 300
+        self.kb_emb_dim = 1024
+        super().__init__(**kwargs)
+        # HOI object repr
+        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, visual_feats_dim)
+        torch.nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        self.pred_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=True)
+
+        w = torch.empty(dataset.num_predicates, self.kb_emb_dim)
+        nn.init.xavier_uniform_(w, gain=nn.init.calculate_gain('linear'))
+        self.pred_repr = torch.nn.Parameter(w, requires_grad=True)
+
+        self.emb_fc = nn.Sequential(nn.Linear(self.kb_emb_dim + self.word_emb_dim, self.kb_emb_dim + self.word_emb_dim),
+                                    nn.ReLU()
+                                    )
+        nn.init.xavier_normal_(self.emb_fc[0].weight, gain=nn.init.calculate_gain('relu'))
+
+        self.post_sim = nn.Linear(self.hoi_repr_dim + self.kb_emb_dim + self.word_emb_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.post_sim.weight, gain=nn.init.calculate_gain('linear'))
+        # torch.nn.init.normal_(self.post_sim.weight, mean=0, std=10 * math.sqrt(1.0 / self.hoi_repr_dim))
+        torch.nn.init.zeros_(self.post_sim.bias)
+
+        op_adj_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+        if cfg.model.use_imsitu:
+            imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
+            imsitu_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_int_freq:
+            int_counts = get_counts(dataset=dataset)
+            int_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        op_adj_mat = np.minimum(1, op_adj_mat)  # does not matter if the same information is present in different sources TODO try without?
+
+        assert np.any(op_adj_mat)
+        op_adj_mat /= np.maximum(1, np.sum(op_adj_mat, axis=1, keepdims=True))  # normalise
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
+
+    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None):
+        hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
+
+        obj_gc_repr = self.op_adj_mat @ self.emb_fc(torch.cat([self.pred_word_embs, self.pred_repr], dim=1))
+        if box_labels is not None:
+            hoi_obj_classes = box_labels[hoi_infos[:, 2]].detach()
+            hoi_repr = self.post_sim(torch.cat([hoi_repr, obj_gc_repr[hoi_obj_classes, :]], dim=1))
+        else:
+            hoi_obj_classes = boxes_ext[hoi_infos[:, 2], 5:].detach()
+            attended_obj_gc_repr = hoi_obj_classes @ obj_gc_repr
+            hoi_repr = self.post_sim(torch.cat([hoi_repr, attended_obj_gc_repr], dim=1))
+
+        return hoi_repr
+
+
+class MemHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset, **kwargs):
         self.word_emb_dim = 300
         super().__init__(**kwargs)
