@@ -191,11 +191,14 @@ class MemHoiBranch(AbstractHOIBranch):
 
         self.memory_mapping_fc = nn.Linear(visual_feats_dim, self.word_emb_dim)
         torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
+
         # self.memory_att_temp = nn.Linear(visual_feats_dim, 1)
+
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)
+        
         # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
         #                                        nn.ReLU())
-        torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
+        # torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
 
     @property
     def output_dim(self):
