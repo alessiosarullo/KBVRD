@@ -194,6 +194,7 @@ class MemHoiBranch(AbstractHOIBranch):
         #                                       nn.Sigmoid())
         self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
                                                nn.ReLU())
+        torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.post_lstm(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
