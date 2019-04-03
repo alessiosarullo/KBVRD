@@ -151,7 +151,7 @@ class MemoryModel(GenericModel):
         self.hoi_branch = MemHoiBranch(vis_feat_dim, self.obj_branch.repr_dim, dataset)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):

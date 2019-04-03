@@ -193,9 +193,13 @@ class MemHoiBranch(AbstractHOIBranch):
         torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
         # self.memory_att_temp = nn.Linear(visual_feats_dim, 1)
         self.memory_keys = torch.nn.Parameter(torch.nn.functional.normalize(pred_word_embs), requires_grad=False)
-        self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
-                                               nn.ReLU())
+        # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
+        #                                        nn.ReLU())
         torch.nn.init.xavier_normal_(self.memory_readout_fc[0].weight, gain=nn.init.calculate_gain('relu'))
+
+    @property
+    def output_dim(self):
+        return self.word_emb_dim
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
@@ -205,9 +209,11 @@ class MemHoiBranch(AbstractHOIBranch):
         mem_att_entropy = 1 / 0.1  # FIXME magic constant. This could be predicted
         mem_att = torch.nn.functional.softmax(mem_att_entropy * mem_sim, dim=1)
         mem_repr = torch.nn.functional.normalize(mem_att @ self.memory_keys)
-        mem_output = self.memory_readout_fc(mem_repr)
+
+        # mem_output = self.memory_readout_fc(mem_repr)
         # hoi_repr = hoi_repr + mem_output
-        hoi_repr = mem_output
+
+        hoi_repr = mem_repr
 
         # if hoi_labels is not None:
         #     misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
