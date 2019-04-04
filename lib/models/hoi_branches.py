@@ -197,7 +197,7 @@ class MemHoiBranch(AbstractHOIBranch):
 
         # self.memory_att_temp_fc = nn.Linear(visual_feats_dim, 1)
 
-        self.memory_keys = torch.nn.Parameter(memory, requires_grad=True)
+        self.memory_keys = torch.nn.Parameter(memory, requires_grad=False)
 
         # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
         #                                        nn.ReLU())
@@ -208,24 +208,29 @@ class MemHoiBranch(AbstractHOIBranch):
         return self.memory_output_size
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        # Memory is M x D
+
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
-        mem_hoi_repr = hoi_repr.detach()
+        mem_hoi_repr = hoi_repr.detach()  # H x F
 
         # input_mem_repr = self.memory_mapping_fc(mem_hoi_repr)
         # input_mem_repr = torch.nn.functional.normalize(input_mem_repr)
         input_mem_repr = mem_hoi_repr
 
-        mem_sim = input_mem_repr @ self.memory_keys.t()
+        mem_sim = input_mem_repr @ self.memory_keys.t()  # H x M
         # mem_att_temp = self.memory_att_temp_fc(mem_hoi_repr)
         mem_att_temp = 1
-        mem_att = torch.nn.functional.softmax(mem_att_temp * mem_sim, dim=1)
+        mem_att = torch.nn.functional.softmax(mem_att_temp * mem_sim, dim=1)  # H x M
 
-        mem_repr = mem_att @ self.memory_keys
+        mem_repr = mem_att @ self.memory_keys  # H x D
+
+        mem_update = mem_att.t() @ mem_hoi_repr.t()  # M x F
+        self.memory_keys = self.memory_keys + mem_update
 
         # mem_output = self.memory_readout_fc(mem_repr)
         mem_output = mem_repr
 
-        hoi_repr = hoi_repr + mem_output
+        hoi_repr = (hoi_repr + mem_output.detach()) / 2
 
         return hoi_repr, mem_att
 
