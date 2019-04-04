@@ -154,6 +154,8 @@ class MemoryModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
+        self.hoi_refinement_branch = HoiPriorBranch(dataset, self.hoi_branch.output_dim)
+
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
@@ -167,6 +169,7 @@ class MemoryModel(GenericModel):
 
         hoi_repr, mem_att = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         # if hoi_labels is not None:
         #     misses = 1 - hoi_labels[torch.arange(hoi_labels.shape[0]), memory_att.argmax(dim=1)]
