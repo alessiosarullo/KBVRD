@@ -198,7 +198,7 @@ class MemoryModel(GenericModel):
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         if mem_pred is not None:
-            mem_logits = mem_pred @ self.hoi_output_fc.weight.detach() + self.hoi_output_fc.bias.detach()
+            mem_logits = mem_pred @ self.hoi_output_fc.weight.t().detach() + self.hoi_output_fc.bias.detach()
         else:
             mem_logits = None
 
