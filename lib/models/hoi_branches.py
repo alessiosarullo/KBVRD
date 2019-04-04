@@ -225,7 +225,7 @@ class MemHoiBranch(AbstractHOIBranch):
         mem_repr = mem_att @ self.memory_keys  # H x F
 
         mem_update = mem_att.t() @ mem_hoi_repr  # M x F
-        self.memory_keys = self.memory_keys + mem_update
+        self.memory_keys = torch.nn.Parameter(self.memory_keys + mem_update)  # FIXME
 
         # mem_output = self.memory_readout_fc(mem_repr)
         mem_output = mem_repr
