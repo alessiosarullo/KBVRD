@@ -186,18 +186,20 @@ class MemHoiBranch(AbstractHOIBranch):
         torch.nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
         # Memory
-        # word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        # pred_word_embs = torch.from_numpy(word_embs.get_embeddings(dataset.predicates))
-        # memory = torch.nn.functional.normalize(pred_word_embs)
-        # self.memory_mapping_fc = nn.Linear(visual_feats_dim, memory.shape[1])
-        # torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        pred_word_embs = torch.from_numpy(word_embs.get_embeddings(dataset.predicates))
+        memory_keys = torch.nn.functional.normalize(pred_word_embs)
 
-        memory = torch.empty((dataset.num_predicates, visual_feats_dim))
-        torch.nn.init.xavier_normal_(memory, gain=1.0)
+        self.memory_mapping_fc = nn.Linear(visual_feats_dim, memory_keys.shape[1])
+        torch.nn.init.xavier_normal_(self.memory_mapping_fc.weight, gain=1.0)
+
+        memory_values = torch.empty((dataset.num_predicates, visual_feats_dim))
+        torch.nn.init.xavier_normal_(memory_values, gain=1.0)
 
         # self.memory_att_temp_fc = nn.Linear(visual_feats_dim, 1)
 
-        self.memory_keys = torch.nn.Parameter(memory, requires_grad=True)
+        self.memory_keys = torch.nn.Parameter(memory_keys, requires_grad=False)
+        self.memory_values = torch.nn.Parameter(memory_values, requires_grad=True)
 
         # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
         #                                        nn.ReLU())
@@ -213,24 +215,24 @@ class MemHoiBranch(AbstractHOIBranch):
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
         mem_hoi_repr = hoi_repr.detach()  # H x F
 
-        # input_mem_repr = self.memory_mapping_fc(mem_hoi_repr)
-        # input_mem_repr = torch.nn.functional.normalize(input_mem_repr)
-        input_mem_repr = mem_hoi_repr
+        input_mem_repr = self.memory_mapping_fc(mem_hoi_repr)
+        input_mem_repr = torch.nn.functional.normalize(input_mem_repr)
+        # input_mem_repr = mem_hoi_repr
 
         mem_sim = input_mem_repr @ self.memory_keys.t()  # H x M
         # mem_att_temp = self.memory_att_temp_fc(mem_hoi_repr)
         mem_att_temp = 1
         mem_att = torch.nn.functional.softmax(mem_att_temp * mem_sim, dim=1)  # H x M
 
-        mem_repr = mem_att @ self.memory_keys  # H x F
+        mem_repr = mem_att @ self.memory_values  # H x F
 
         # mem_output = self.memory_readout_fc(mem_repr)
         mem_output = mem_repr
 
-        hoi_repr = (hoi_repr + mem_output) / 2
+        hoi_repr = hoi_repr + mem_output
 
         if hoi_labels is not None:
-            mem_pred = hoi_labels @ self.memory_keys
+            mem_pred = hoi_labels @ self.memory_values
         else:
             mem_pred = None
 
