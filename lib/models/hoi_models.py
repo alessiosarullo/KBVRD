@@ -201,7 +201,7 @@ class MemoryModel(GenericModel):
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         if mem_pred is not None:
-            mem_logits = self.mem_output_fc(mem_pred)
+            mem_logits = self.hoi_output_fc(mem_pred)
         else:
             mem_logits = None
 
