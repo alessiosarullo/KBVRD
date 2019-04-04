@@ -193,7 +193,7 @@ class MemoryModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr, mem_pred = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels)
+        hoi_repr, mem_pred = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
