@@ -154,6 +154,9 @@ class MemoryModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
+        self.mem_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
         self.hoi_refinement_branch = HoiPriorBranch(dataset, self.hoi_branch.output_dim)
 
     def get_losses(self, x, **kwargs):
@@ -198,7 +201,7 @@ class MemoryModel(GenericModel):
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         if mem_pred is not None:
-            mem_logits = mem_pred @ self.hoi_output_fc.weight.t().detach() + self.hoi_output_fc.bias.detach()
+            mem_logits = self.mem_output_fc(mem_pred)
         else:
             mem_logits = None
 
