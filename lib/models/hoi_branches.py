@@ -197,7 +197,7 @@ class MemHoiBranch(AbstractHOIBranch):
 
         # self.memory_att_temp_fc = nn.Linear(visual_feats_dim, 1)
 
-        self.memory_keys = torch.nn.Parameter(memory, requires_grad=False)
+        self.memory_keys = torch.nn.Parameter(memory, requires_grad=True)
 
         # self.memory_readout_fc = nn.Sequential(nn.Linear(self.memory_repr_size, self.memory_output_size),
         #                                        nn.ReLU())
