@@ -224,15 +224,17 @@ class MemHoiBranch(AbstractHOIBranch):
 
         mem_repr = mem_att @ self.memory_keys  # H x F
 
-        mem_update = mem_att.t() @ mem_hoi_repr  # M x F
-        self.memory_keys = torch.nn.Parameter(self.memory_keys + mem_update)  # FIXME
-
         # mem_output = self.memory_readout_fc(mem_repr)
         mem_output = mem_repr
 
-        hoi_repr = (hoi_repr + mem_output.detach()) / 2
+        hoi_repr = (hoi_repr + mem_output) / 2
 
-        return hoi_repr, mem_att
+        if hoi_labels is not None:
+            mem_pred = hoi_labels @ self.memory_keys
+        else:
+            mem_pred = None
+
+        return hoi_repr, mem_pred
 
 
 class HoiPriorBranch(AbstractHOIBranch):
