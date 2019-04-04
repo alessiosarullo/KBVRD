@@ -172,7 +172,7 @@ class MemoryModel(GenericModel):
             if hoi_infos is not None:
                 obj_output, hoi_output, mem_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
             else:
-                obj_output = hoi_output = None
+                obj_output = hoi_output = mem_output = None
 
             if not inference:
                 assert obj_output is not None and hoi_output is not None and mem_output is not None \
