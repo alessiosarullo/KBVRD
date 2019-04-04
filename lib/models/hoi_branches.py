@@ -208,7 +208,7 @@ class MemHoiBranch(AbstractHOIBranch):
         return self.memory_output_size
 
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        # Memory is M x D
+        # Memory is M x F
 
         hoi_repr = self.hoi_obj_repr_fc(box_repr[hoi_infos[:, 2], :]) + union_boxes_feats
         mem_hoi_repr = hoi_repr.detach()  # H x F
@@ -222,9 +222,9 @@ class MemHoiBranch(AbstractHOIBranch):
         mem_att_temp = 1
         mem_att = torch.nn.functional.softmax(mem_att_temp * mem_sim, dim=1)  # H x M
 
-        mem_repr = mem_att @ self.memory_keys  # H x D
+        mem_repr = mem_att @ self.memory_keys  # H x F
 
-        mem_update = mem_att.t() @ mem_hoi_repr.t()  # M x F
+        mem_update = mem_att.t() @ mem_hoi_repr  # M x F
         self.memory_keys = self.memory_keys + mem_update
 
         # mem_output = self.memory_readout_fc(mem_repr)
