@@ -233,10 +233,11 @@ class MemHoiBranch(AbstractHOIBranch):
 
         if hoi_labels is not None:
             mem_pred = hoi_labels @ self.memory_values
+            margin = (1 - hoi_labels) @ mem_sim - hoi_labels @ mem_sim
         else:
-            mem_pred = None
+            mem_pred = margin = None
 
-        return hoi_repr, mem_pred
+        return hoi_repr, mem_pred, margin
 
 
 class HoiPriorBranch(AbstractHOIBranch):

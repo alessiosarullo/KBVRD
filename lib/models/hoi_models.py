@@ -160,10 +160,13 @@ class MemoryModel(GenericModel):
         self.hoi_refinement_branch = HoiPriorBranch(dataset, self.hoi_branch.output_dim)
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, mem_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
+        obj_output, hoi_output, mem_outputs, box_labels, hoi_labels = self(x, inference=False, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
+
+        mem_output, mem_margin = mem_outputs
         mem_loss = nn.functional.binary_cross_entropy_with_logits(mem_output, hoi_labels) * self.dataset.num_predicates
+        mem_margin_loss = (mem_margin + 0.1).clamp(min=0)  # FIXME magic constant
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'mem_loss': mem_loss}
 
     def forward(self, x, inference=True, **kwargs):
@@ -201,8 +204,8 @@ class MemoryModel(GenericModel):
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         if mem_pred is not None:
-            mem_logits = self.hoi_output_fc(mem_pred)
+            mem_output = self.mem_output_fc(mem_pred)
         else:
-            mem_logits = None
+            mem_output = None
 
-        return obj_logits, hoi_logits, mem_logits
+        return obj_logits, hoi_logits, mem_output
