@@ -185,7 +185,7 @@ class MemoryModel(GenericModel):
                        and box_labels is not None and hoi_labels is not None
                 return obj_output, hoi_output, mem_output, box_labels, hoi_labels
             else:
-                assert mem_output is None
+                assert all([n is None for n in mem_output])
                 return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
