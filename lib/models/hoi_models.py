@@ -166,7 +166,7 @@ class MemoryModel(GenericModel):
 
         mem_output, mem_margin = mem_outputs
         mem_loss = nn.functional.binary_cross_entropy_with_logits(mem_output, hoi_labels) * self.dataset.num_predicates
-        mem_margin_loss = (mem_margin + 0.1).clamp(min=0).mean()  # FIXME magic constant
+        mem_margin_loss = (mem_margin + 0.6).clamp(min=0).mean()  # FIXME magic constant
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'mem_loss': mem_loss, 'mem_marg_loss': mem_margin_loss}
 
     def forward(self, x, inference=True, **kwargs):

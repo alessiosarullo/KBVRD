@@ -235,7 +235,7 @@ class MemHoiBranch(AbstractHOIBranch):
             mem_pred = hoi_labels @ self.memory_values
 
             mem_sim_t = (input_mem_repr[:, None, :] * self.memory_keys[None, :, :]).sum(dim=2)  # H x M
-            margin_loss = ((1 - hoi_labels) * mem_sim_t - hoi_labels * mem_sim_t).sum(dim=1)
+            margin_loss = ((1 - hoi_labels) * mem_sim_t - hoi_labels * mem_sim_t).mean(dim=1)
         else:
             mem_pred = margin_loss = None
 
