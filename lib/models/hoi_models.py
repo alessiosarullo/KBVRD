@@ -167,7 +167,7 @@ class MemoryModel(GenericModel):
         mem_output, mem_margin = mem_outputs
         mem_loss = nn.functional.binary_cross_entropy_with_logits(mem_output, hoi_labels) * self.dataset.num_predicates
         mem_margin_loss = (mem_margin + 0.1).clamp(min=0)  # FIXME magic constant
-        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'mem_loss': mem_loss}
+        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'mem_loss': mem_loss, 'mem_marg_loss': mem_margin_loss}
 
     def forward(self, x, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -199,13 +199,11 @@ class MemoryModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr, mem_pred = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+        hoi_repr, mem_pred, margin_loss = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         if mem_pred is not None:
-            mem_output = self.mem_output_fc(mem_pred)
-        else:
-            mem_output = None
+            mem_pred = self.mem_output_fc(mem_pred)
 
-        return obj_logits, hoi_logits, mem_output
+        return obj_logits, hoi_logits, (mem_pred, margin_loss)

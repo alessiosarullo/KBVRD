@@ -239,7 +239,7 @@ class MemHoiBranch(AbstractHOIBranch):
         else:
             mem_pred = margin_loss = None
 
-        return hoi_repr, (mem_pred, margin_loss)
+        return hoi_repr, mem_pred, margin_loss
 
 
 class HoiPriorBranch(AbstractHOIBranch):
