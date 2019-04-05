@@ -173,6 +173,68 @@ class KBHoiBranch(AbstractHOIBranch):
         return hoi_repr
 
 
+class Mem2HoiBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, obj_repr_dim, dataset, **kwargs):
+        self.cells_per_type = 3
+        self.sim_thr = 0.6  # threshold over cosine similarity
+        super().__init__(**kwargs)
+        self.memory_repr_dim = visual_feats_dim
+
+        # HOI object repr
+        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.memory_repr_dim)
+        torch.nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
+
+        # Memory
+        memory_keys = torch.zeros((dataset.num_predicates, self.cells_per_type, self.memory_repr_dim))
+        self.memory_keys = torch.nn.Parameter(memory_keys, requires_grad=False)
+
+        memory_values = torch.zeros(memory_keys.shape)
+        self.memory_values = torch.nn.Parameter(memory_values, requires_grad=False)
+
+        self.cell_correlations = torch.zeros((memory_keys.shape[0], memory_keys.shape[1], memory_keys.shape[1]))
+
+    @property
+    def output_dim(self):
+        return self.memory_repr_dim
+
+    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        # Memory is M x N x F
+
+        ubf_norm = torch.nn.normalize(union_boxes_feats)
+        mem_sim = (ubf_norm[:, None, None, :] * self.memory_keys[None, :, :, :]).sum(dim=-1)  # H x M x N
+
+        best_type_per_hoi = mem_sim.max(dim=2).argmax(dim=1)
+        best_cell_per_hoi = mem_sim[:, best_type_per_hoi, :].argmax(dim=-1)
+
+        sim_per_hoi = mem_sim[:, best_type_per_hoi, best_cell_per_hoi]
+        mem_hits = (sim_per_hoi >= self.sim_thr)
+        print(mem_hits.detach().sum().cpu().item())
+
+        hoi_repr = torch.empty_like(union_boxes_feats)
+        hoi_repr[mem_hits, :] = self.memory_values[best_type_per_hoi, best_cell_per_hoi, :].detach()
+        hoi_repr[~mem_hits, :] = self.hoi_obj_repr_fc(box_repr[hoi_infos[~mem_hits, 2], :]) + union_boxes_feats[~mem_hits, :]
+
+        if hoi_labels is not None:
+            correlations = (mem_sim[:, :, :, None] * mem_sim[:, :, None, :]).mean(dim=0)
+            self.cell_correlations = (1 - 0.1) * self.cell_correlations + 0.1 * correlations  # FIXME magic constant
+
+            cells_to_update = self.cell_correlations.sum(dim=2).argmax(dim=1)  # update cell with max correlation
+
+            incorrect_hoi_inds = (1 - hoi_labels[:, best_type_per_hoi]).byte()
+            incorrect_hoi_labels_t = hoi_labels[incorrect_hoi_inds, :].t()
+
+            preds_to_update = incorrect_hoi_labels_t.any(dim=1)
+            incorrect_hoi_labels_t = incorrect_hoi_labels_t[preds_to_update, :]
+            num_ex_per_preds = incorrect_hoi_labels_t.sum(dim=1).clamp(min=1)
+
+            key_update_vec = incorrect_hoi_labels_t @ ubf_norm / num_ex_per_preds
+            self.memory_keys[preds_to_update, cells_to_update[preds_to_update], :] = key_update_vec
+            value_update_vec = incorrect_hoi_labels_t @ hoi_repr / num_ex_per_preds
+            self.memory_values[preds_to_update, cells_to_update[preds_to_update], :] = value_update_vec
+
+        return hoi_repr
+
+
 class MemHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset, **kwargs):
         self.word_emb_dim = 300
