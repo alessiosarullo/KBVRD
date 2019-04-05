@@ -204,7 +204,7 @@ class Mem2HoiBranch(AbstractHOIBranch):
         mem_sim = (ubf_norm[:, None, None, :] * self.memory_keys[None, :, :, :]).sum(dim=-1)  # H x M x N
 
         best_type_per_hoi = mem_sim.max(dim=2)[0].argmax(dim=1)
-        best_cell_per_hoi = mem_sim[:, best_type_per_hoi, :].argmax(dim=-1)
+        best_cell_per_hoi = mem_sim[torch.arange(0, best_type_per_hoi.shape[0]), best_type_per_hoi, :].argmax(dim=-1)
 
         sim_per_hoi = mem_sim[:, best_type_per_hoi, best_cell_per_hoi]
         mem_hits = (sim_per_hoi >= self.sim_thr)
