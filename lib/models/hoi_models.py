@@ -176,16 +176,16 @@ class MemoryModel(GenericModel):
             # Masks are floats at this point.
 
             if hoi_infos is not None:
-                obj_output, hoi_output, mem_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+                obj_output, hoi_output, mem_outputs = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
             else:
-                obj_output = hoi_output = mem_output = None
+                obj_output = hoi_output = mem_outputs = None
 
             if not inference:
-                assert obj_output is not None and hoi_output is not None and mem_output is not None \
+                assert obj_output is not None and hoi_output is not None and mem_outputs is not None \
                        and box_labels is not None and hoi_labels is not None
-                return obj_output, hoi_output, mem_output, box_labels, hoi_labels
+                return obj_output, hoi_output, mem_outputs, box_labels, hoi_labels
             else:
-                assert all([n is None for n in mem_output])
+                assert mem_outputs is None
                 return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
@@ -205,5 +205,9 @@ class MemoryModel(GenericModel):
 
         if mem_pred is not None:
             mem_pred = self.mem_output_fc(mem_pred)
+            mem_outputs = (mem_pred, margin_loss)
+        else:
+            assert mem_pred is None and margin_loss is None
+            mem_outputs = None
 
-        return obj_logits, hoi_logits, (mem_pred, margin_loss)
+        return obj_logits, hoi_logits, mem_outputs
