@@ -221,7 +221,7 @@ class Mem2HoiBranch(AbstractHOIBranch):
 
             cells_to_update = self.cell_correlations.sum(dim=2).argmax(dim=1)  # update cell with max correlation
 
-            incorrect_hoi_inds = (1 - hoi_labels[:, best_type_per_hoi]).byte()
+            incorrect_hoi_inds = (1 - hoi_labels[arange, best_type_per_hoi]).byte()
             incorrect_hoi_labels_t = hoi_labels[incorrect_hoi_inds, :].t()
 
             preds_to_update = incorrect_hoi_labels_t.any(dim=1)
