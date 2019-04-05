@@ -213,7 +213,8 @@ class Mem2HoiBranch(AbstractHOIBranch):
 
         hoi_repr = torch.empty_like(union_boxes_feats)
         hoi_repr[mem_hits, :] = self.memory_values[best_type_per_hoi[mem_hits], best_cell_per_hoi[mem_hits], :].detach()
-        hoi_repr[~mem_hits, :] = self.hoi_obj_repr_fc(box_repr[hoi_infos[~mem_hits, 2], :]) + union_boxes_feats[~mem_hits, :]
+        if not mem_hits.all():
+            hoi_repr[~mem_hits, :] = self.hoi_obj_repr_fc(box_repr[hoi_infos[~mem_hits, 2], :]) + union_boxes_feats[~mem_hits, :]
 
         if hoi_labels is not None:
             correlations = (mem_sim[:, :, :, None] * mem_sim[:, :, None, :]).mean(dim=0)
