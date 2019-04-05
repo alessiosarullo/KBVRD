@@ -209,7 +209,6 @@ class Mem2HoiBranch(AbstractHOIBranch):
 
         sim_per_hoi = mem_sim[arange, best_type_per_hoi, best_cell_per_hoi]
         mem_hits = (sim_per_hoi >= self.sim_thr)
-        print(mem_hits.detach().sum().cpu().item())
 
         hoi_repr = torch.empty_like(union_boxes_feats)
         hoi_repr[mem_hits, :] = self.memory_values[best_type_per_hoi[mem_hits], best_cell_per_hoi[mem_hits], :].detach()
