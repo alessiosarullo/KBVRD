@@ -200,7 +200,7 @@ class Mem2HoiBranch(AbstractHOIBranch):
     def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         # Memory is M x N x F
 
-        ubf_norm = torch.nn.normalize(union_boxes_feats)
+        ubf_norm = torch.nn.functional.normalize(union_boxes_feats)
         mem_sim = (ubf_norm[:, None, None, :] * self.memory_keys[None, :, :, :]).sum(dim=-1)  # H x M x N
 
         best_type_per_hoi = mem_sim.max(dim=2).argmax(dim=1)
