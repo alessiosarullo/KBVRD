@@ -226,7 +226,7 @@ class Mem2HoiBranch(AbstractHOIBranch):
 
             preds_to_update = incorrect_hoi_labels_t.byte().any(dim=1)
             incorrect_hoi_labels_t = incorrect_hoi_labels_t[preds_to_update, :]
-            num_ex_per_preds = incorrect_hoi_labels_t.sum(dim=1).clamp(min=1)
+            num_ex_per_preds = incorrect_hoi_labels_t.sum(dim=1, keepdim=True).clamp(min=1)
 
             key_update_vec = incorrect_hoi_labels_t @ ubf_norm[incorrect_hoi_inds, :] / num_ex_per_preds
             self.memory_keys[preds_to_update, cells_to_update[preds_to_update], :] = key_update_vec
