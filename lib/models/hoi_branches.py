@@ -217,7 +217,7 @@ class Mem2HoiBranch(AbstractHOIBranch):
 
         if hoi_labels is not None:
             correlations = (mem_sim[:, :, :, None] * mem_sim[:, :, None, :]).mean(dim=0)
-            self.cell_correlations = (1 - 0.1) * self.cell_correlations + 0.1 * correlations  # FIXME magic constant
+            self.cell_correlations = (1 - 0.1) * self.cell_correlations + 0.1 * correlations.cpu()  # FIXME magic constant, cpu()
 
             cells_to_update = self.cell_correlations.sum(dim=2).argmax(dim=1)  # update cell with max correlation
 
