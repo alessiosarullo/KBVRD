@@ -134,11 +134,11 @@ class KBHoiBranch(AbstractHOIBranch):
             op_adj_mats.append(np.minimum(1, int_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
 
         assert op_adj_mats
-        op_adj_mats = np.stack(op_adj_mats, axis=2)[:, :, :, None]
+        op_adj_mats = np.stack(op_adj_mats, axis=2)[:, :, :, None]  # O x P x S x 1
         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=False)
         self.op_conf_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=True)
 
-        op_repr = torch.empty(*(list(op_adj_mats.shape) + [self.kb_emb_dim]))
+        op_repr = torch.empty(list(op_adj_mats.shape) + [self.kb_emb_dim])  # O x P x S x F
         nn.init.xavier_normal_(op_repr, gain=1.0)
         self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
 
