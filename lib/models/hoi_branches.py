@@ -119,13 +119,9 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
 
 class KBHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        self.word_emb_dim = 300
         self.kb_emb_dim = 1024
-        self.hoi_repr_dim = 1024
         super().__init__(**kwargs)
         self.num_objects = dataset.num_object_classes
-        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, visual_feats_dim)
-        torch.nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
         op_adj_mats = []
         if cfg.model.use_imsitu:
@@ -149,11 +145,11 @@ class KBHoiBranch(AbstractHOIBranch):
         self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[0]),
                                      nn.Softmax(dim=1))
 
-        self.pred_att_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates)
+        self.pred_att_fc = nn.Linear(self.visual_feats_dim, dataset.num_predicates)
         torch.nn.init.xavier_normal_(self.pred_att_fc.weight, gain=1.0)
 
-        self.hoi_repr_fc = nn.Linear(visual_feats_dim + self.kb_emb_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=nn.init.calculate_gain('linear'))
+        self.hoi_repr_fc = nn.Linear(obj_repr_dim + self.kb_emb_dim, visual_feats_dim)
+        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
 
@@ -171,7 +167,7 @@ class KBHoiBranch(AbstractHOIBranch):
         hoi_ext_repr = (self.pred_att_fc(union_boxes_feats).unsqueeze(dim=-1) * ext_pred_repr).sum(dim=1)  # N x F
 
         hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]  # N x f
-        hoi_repr = self.hoi_repr_fc(torch.cat([hoi_obj_repr, hoi_ext_repr], dim=1))  # N x (F + f)
+        hoi_repr = union_boxes_feats + self.hoi_repr_fc(torch.cat([hoi_obj_repr, hoi_ext_repr], dim=1))  # N x (F + f)
 
         return hoi_repr
 
