@@ -143,7 +143,7 @@ class KBModel(GenericModel):
         for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
             self.values_to_monitor[k] = v
 
-        hoi_logits = src_weights @ torch.stack([vis_hoi_logits, int_hoi_logits], dim=0)
+        hoi_logits = (src_weights.t().unsqueeze(dim=2) * torch.stack([vis_hoi_logits, int_hoi_logits], dim=0)).sum(dim=0)
         self.values_to_monitor['src_att'] = src_weights
 
         return obj_logits, hoi_logits
