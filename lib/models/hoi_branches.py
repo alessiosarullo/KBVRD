@@ -119,7 +119,6 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
 
 class KBHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        self.kb_emb_dim = 1024
         super().__init__(**kwargs)
         self.num_objects = dataset.num_object_classes
 
@@ -138,39 +137,38 @@ class KBHoiBranch(AbstractHOIBranch):
         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=False)
         self.op_conf_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=True)
 
-        op_repr = torch.empty(list(op_adj_mats.shape[:-1]) + [self.kb_emb_dim])  # O x P x S x F
+        op_repr = torch.empty(list(op_adj_mats.shape[:-1]) + [visual_feats_dim])  # O x P x S x F
         nn.init.xavier_normal_(op_repr, gain=1.0)
         self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
         # print(op_adj_mats.shape, op_repr.shape)
 
         self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[2]),
                                      nn.Softmax(dim=1))
+        self.pred_att_fc = nn.Sequential(nn.Linear(visual_feats_dim, dataset.num_predicates),
+                                         nn.Softmax(dim=1))
+        # torch.nn.init.xavier_normal_(self.pred_att_fc[0].weight, gain=1.0)
 
-        self.pred_att_fc = nn.Linear(visual_feats_dim, dataset.num_predicates)
-        torch.nn.init.xavier_normal_(self.pred_att_fc.weight, gain=1.0)
-
-        self.hoi_repr_fc = nn.Linear(obj_repr_dim + self.kb_emb_dim, visual_feats_dim)
-        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=1.0)
+        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, visual_feats_dim)
+        nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
-
-        ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
-
         if box_labels is not None:
             box_predict = obj_repr.new_zeros((box_labels.shape[0], self.num_objects))
             box_predict[torch.arange(box_predict.shape[0]), box_labels] = 1
         else:
             box_predict = nn.functional.softmax(obj_logits, dim=1)
-        hoi_obj_predict = box_predict[hoi_infos[:, 2], :]
+        obj_att = box_predict[hoi_infos[:, 2], :]  # N x O
+        pred_att = self.pred_att_fc(union_boxes_feats)  # N x P
+        src_att = self.src_att(union_boxes_feats)  # N x S
 
-        ext_sources_pred_repr = (hoi_obj_predict.unsqueeze(dim=-1).unsqueeze(dim=-1).unsqueeze(dim=-1) *
-                                 ext_op_repr.unsqueeze(dim=0)).sum(dim=1)  # N x P x S x F
-        ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=2)  # N x P x F
+        batch_size = union_boxes_feats.shape[0]
+        att = obj_att.view(batch_size, -1, 1, 1) * pred_att.view(batch_size, 1, -1, 1) * src_att.view(batch_size, 1, 1, -1)  # N x O x P x S
 
-        hoi_ext_repr = (self.pred_att_fc(union_boxes_feats).unsqueeze(dim=-1) * ext_pred_repr).sum(dim=1)  # N x F
+        ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
+        hoi_ext_repr = (att.view(batch_size, -1) @ ext_op_repr.view(-1, ext_op_repr.shape[-1])).sum(dim=1)  # N x F
 
-        hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]  # N x f
-        hoi_repr = union_boxes_feats + self.hoi_repr_fc(torch.cat([hoi_obj_repr, hoi_ext_repr], dim=1))  # N x (F + f)
+        hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]
+        hoi_repr = union_boxes_feats + self.hoi_obj_repr_fc(hoi_obj_repr) + hoi_ext_repr
 
         return hoi_repr
 
