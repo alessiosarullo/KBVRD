@@ -89,7 +89,7 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
                 imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
                 imsitu_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-            if cfg.model.use_int_freq:
+            if cfg.model.use_ds:
                 int_counts = get_counts(dataset=dataset)
                 int_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
@@ -121,54 +121,57 @@ class KBHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
         self.word_emb_dim = 300
         self.kb_emb_dim = 1024
+        self.hoi_repr_dim = 1024
         super().__init__(**kwargs)
-        # HOI object repr
+        self.num_objects = dataset.num_object_classes
         self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, visual_feats_dim)
         torch.nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
-        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        self.pred_word_embs = torch.nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=True)
-
-        w = torch.empty(dataset.num_predicates, self.kb_emb_dim)
-        nn.init.xavier_uniform_(w, gain=nn.init.calculate_gain('linear'))
-        self.pred_repr = torch.nn.Parameter(w, requires_grad=True)
-
-        self.emb_fc = nn.Sequential(nn.Linear(self.kb_emb_dim + self.word_emb_dim, self.kb_emb_dim + self.word_emb_dim),
-                                    nn.ReLU()
-                                    )
-        nn.init.xavier_normal_(self.emb_fc[0].weight, gain=nn.init.calculate_gain('relu'))
-
-        self.post_sim = nn.Linear(self.hoi_repr_dim + self.kb_emb_dim + self.word_emb_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.post_sim.weight, gain=nn.init.calculate_gain('linear'))
-        # torch.nn.init.normal_(self.post_sim.weight, mean=0, std=10 * math.sqrt(1.0 / self.hoi_repr_dim))
-        torch.nn.init.zeros_(self.post_sim.bias)
-
-        op_adj_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+        op_adj_mats = []
         if cfg.model.use_imsitu:
             imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
             imsitu_counts[:, 0] = 0  # exclude null interaction
-            op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-        if cfg.model.use_int_freq:
+            op_adj_mats.append(np.minimum(1, imsitu_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_ds:
             int_counts = get_counts(dataset=dataset)
             int_counts[:, 0] = 0  # exclude null interaction
-            op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-        op_adj_mat = np.minimum(1, op_adj_mat)  # does not matter if the same information is present in different sources TODO try without?
+            op_adj_mats.append(np.minimum(1, int_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
 
-        assert np.any(op_adj_mat)
-        op_adj_mat /= np.maximum(1, np.sum(op_adj_mat, axis=1, keepdims=True))  # normalise
-        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)  # TODO check if training this helps
+        assert op_adj_mats
+        op_adj_mats = np.stack(op_adj_mats, axis=2)[:, :, :, None]
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=False)
+        self.op_conf_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=True)
 
-    def _forward(self, boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels=None):
-        hoi_repr = super()._forward(boxes_ext, box_repr, union_boxes_feats, hoi_infos, box_labels)
+        op_repr = torch.empty(*(list(op_adj_mats.shape) + [self.kb_emb_dim]))
+        nn.init.xavier_normal_(op_repr, gain=1.0)
+        self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
 
-        obj_gc_repr = self.op_adj_mat @ self.emb_fc(torch.cat([self.pred_word_embs, self.pred_repr], dim=1))
+        self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[0]),
+                                     nn.Softmax(dim=1))
+
+        self.pred_att_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates)
+        torch.nn.init.xavier_normal_(self.pred_att_fc.weight, gain=1.0)
+
+        self.hoi_repr_fc = nn.Linear(visual_feats_dim + self.kb_emb_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=nn.init.calculate_gain('linear'))
+
+    def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
+
+        ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
+
         if box_labels is not None:
-            hoi_obj_classes = box_labels[hoi_infos[:, 2]].detach()
-            hoi_repr = self.post_sim(torch.cat([hoi_repr, obj_gc_repr[hoi_obj_classes, :]], dim=1))
+            box_labels_onehot = obj_repr.new_zeros((box_labels.shape[0], self.num_objects))
+            box_labels_onehot[torch.arange(box_labels_onehot.shape[0]), box_labels] = 1
+            ext_sources_pred_repr = box_labels_onehot * ext_op_repr  # N x P x S x F
         else:
-            hoi_obj_classes = boxes_ext[hoi_infos[:, 2], 5:].detach()
-            attended_obj_gc_repr = hoi_obj_classes @ obj_gc_repr
-            hoi_repr = self.post_sim(torch.cat([hoi_repr, attended_obj_gc_repr], dim=1))
+            ext_sources_pred_repr = obj_logits.detach() * ext_op_repr  # N x P x S x F
+
+        ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=-1)  # N x P x F
+
+        hoi_ext_repr = (self.pred_att_fc(union_boxes_feats).unsqueeze(dim=-1) * ext_pred_repr).sum(dim=1)  # N x F
+
+        hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]  # N x f
+        hoi_repr = self.hoi_repr_fc(torch.cat([hoi_obj_repr, hoi_ext_repr], dim=1))  # N x (F + f)
 
         return hoi_repr
 
@@ -311,7 +314,7 @@ class HoiPriorBranch(AbstractHOIBranch):
 
         # Freq bias
         freqs = []
-        if cfg.model.use_int_freq:
+        if cfg.model.use_ds:
             int_counts = get_counts(dataset=dataset)
             freqs.append(int_counts)
         # Possibly add here other priors

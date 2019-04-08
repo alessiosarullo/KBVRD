@@ -169,7 +169,8 @@ class ModelConfig(BaseConfigs):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
-        self.use_int_freq = False
+        self.freq_bias = False
+        self.use_ds = False
         self.use_imsitu = False
         self.prior_att = False
         self.train_prior = False

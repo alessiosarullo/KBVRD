@@ -106,16 +106,9 @@ class KBModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        num_srcs = 2
         self.obj_branch = ObjectContext(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
 
-        self.entropy = 10
-        self.src_attention_fc = nn.Sequential(nn.Linear(self.visual_module.vis_feat_dim, num_srcs),
-                                              nn.Softmax(dim=1)
-                                              )
-
-        self.post_lstm = nn.Linear(self.obj_branch.repr_dim, self.visual_module.vis_feat_dim)
-        torch.nn.init.xavier_normal_(self.post_lstm.weight, gain=1.0)
+        self.hoi_branch = KBHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, dataset)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
@@ -130,21 +123,16 @@ class KBModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        src_weights = self.src_attention_fc(self.entropy * union_boxes_feats)
-
         obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :]) + union_boxes_feats
-        vis_hoi_logits = self.hoi_output_fc(hoi_repr)
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        int_hoi_logits = self.hoi_refinement_branch(torch.zeros_like(vis_hoi_logits), hoi_repr, boxes_ext, hoi_infos, box_labels)
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
         for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
             self.values_to_monitor[k] = v
-
-        hoi_logits = (src_weights.t().unsqueeze(dim=2) * torch.stack([vis_hoi_logits, int_hoi_logits], dim=0)).sum(dim=0)
-        self.values_to_monitor['src_att'] = src_weights
 
         return obj_logits, hoi_logits
 

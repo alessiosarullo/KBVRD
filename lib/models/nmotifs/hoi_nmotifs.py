@@ -30,7 +30,7 @@ class NMotifs(GenericModel):
 class NMotifsHOIBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim):
         super().__init__()
-        self.use_bias = cfg.model.use_int_freq
+        self.use_bias = cfg.model.use_ds
 
         self.context = LinearizedContext(classes=dataset.objects, visual_feat_dim=visual_feats_dim)
 
