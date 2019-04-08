@@ -89,7 +89,7 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
                 imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
                 imsitu_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-            if cfg.model.use_ds:
+            if cfg.model.freq_bias:
                 int_counts = get_counts(dataset=dataset)
                 int_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, int_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
@@ -311,7 +311,7 @@ class HoiPriorBranch(AbstractHOIBranch):
 
         # Freq bias
         freqs = []
-        if cfg.model.use_ds:
+        if cfg.model.freq_bias:
             int_counts = get_counts(dataset=dataset)
             freqs.append(int_counts)
         # Possibly add here other priors
