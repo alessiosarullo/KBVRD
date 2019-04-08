@@ -165,7 +165,7 @@ class KBHoiBranch(AbstractHOIBranch):
         att = obj_att.view(batch_size, -1, 1, 1) * pred_att.view(batch_size, 1, -1, 1) * src_att.view(batch_size, 1, 1, -1)  # N x O x P x S
 
         ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
-        hoi_ext_repr = (att.view(batch_size, -1) @ ext_op_repr.view(-1, ext_op_repr.shape[-1])).sum(dim=1)  # N x F
+        hoi_ext_repr = att.view(batch_size, -1) @ ext_op_repr.view(-1, ext_op_repr.shape[-1])  # N x F
 
         hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]
         hoi_repr = union_boxes_feats + self.hoi_obj_repr_fc(hoi_obj_repr) + hoi_ext_repr
