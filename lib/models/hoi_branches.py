@@ -159,9 +159,9 @@ class KBHoiBranch(AbstractHOIBranch):
         if box_labels is not None:
             box_labels_onehot = obj_repr.new_zeros((box_labels.shape[0], self.num_objects))
             box_labels_onehot[torch.arange(box_labels_onehot.shape[0]), box_labels] = 1
-            ext_sources_pred_repr = box_labels_onehot * ext_op_repr  # N x P x S x F
+            ext_sources_pred_repr = box_labels_onehot @ ext_op_repr  # N x P x S x F
         else:
-            ext_sources_pred_repr = obj_logits.detach() * ext_op_repr  # N x P x S x F
+            ext_sources_pred_repr = obj_logits.detach() @ ext_op_repr  # N x P x S x F
 
         ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=-1)  # N x P x F
 
