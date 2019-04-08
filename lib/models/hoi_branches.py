@@ -145,7 +145,7 @@ class KBHoiBranch(AbstractHOIBranch):
         self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[0]),
                                      nn.Softmax(dim=1))
 
-        self.pred_att_fc = nn.Linear(self.visual_feats_dim, dataset.num_predicates)
+        self.pred_att_fc = nn.Linear(visual_feats_dim, dataset.num_predicates)
         torch.nn.init.xavier_normal_(self.pred_att_fc.weight, gain=1.0)
 
         self.hoi_repr_fc = nn.Linear(obj_repr_dim + self.kb_emb_dim, visual_feats_dim)
