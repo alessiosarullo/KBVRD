@@ -143,7 +143,7 @@ class KBHoiBranch(AbstractHOIBranch):
         self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
         # print(op_adj_mats.shape, op_repr.shape)
 
-        self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[0]),
+        self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[2]),
                                      nn.Softmax(dim=1))
 
         self.pred_att_fc = nn.Linear(visual_feats_dim, dataset.num_predicates)
