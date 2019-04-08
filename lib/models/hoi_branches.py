@@ -157,12 +157,13 @@ class KBHoiBranch(AbstractHOIBranch):
         ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
 
         if box_labels is not None:
-            box_labels_onehot = obj_repr.new_zeros((box_labels.shape[0], self.num_objects))
-            box_labels_onehot[torch.arange(box_labels_onehot.shape[0]), box_labels] = 1
-            ext_sources_pred_repr = box_labels_onehot @ ext_op_repr  # N x P x S x F
+            box_predict = obj_repr.new_zeros((box_labels.shape[0], self.num_objects))
+            box_predict[torch.arange(box_predict.shape[0]), box_labels] = 1
         else:
-            ext_sources_pred_repr = obj_logits.detach() @ ext_op_repr  # N x P x S x F
+            box_predict = nn.functional.softmax(obj_logits, dim=1)
 
+        ext_sources_pred_repr = (box_predict.unsqueeze(dim=-1).unsqueeze(dim=-1).unsqueeze(dim=-1) *
+                                 ext_op_repr.unsqueeze(dim=0)).sum(dim=1)  # N x P x S x F
         ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=-1)  # N x P x F
 
         hoi_ext_repr = (self.pred_att_fc(union_boxes_feats).unsqueeze(dim=-1) * ext_pred_repr).sum(dim=1)  # N x F
