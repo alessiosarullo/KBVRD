@@ -138,9 +138,10 @@ class KBHoiBranch(AbstractHOIBranch):
         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=False)
         self.op_conf_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=True)
 
-        op_repr = torch.empty(list(op_adj_mats.shape) + [self.kb_emb_dim])  # O x P x S x F
+        op_repr = torch.empty(list(op_adj_mats.shape[:-1]) + [self.kb_emb_dim])  # O x P x S x F
         nn.init.xavier_normal_(op_repr, gain=1.0)
         self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
+        # print(op_adj_mats.shape, op_repr.shape)
 
         self.src_att = nn.Sequential(nn.Linear(visual_feats_dim, op_adj_mats.shape[0]),
                                      nn.Softmax(dim=1))
