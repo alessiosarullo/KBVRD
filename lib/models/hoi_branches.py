@@ -165,7 +165,7 @@ class KBHoiBranch(AbstractHOIBranch):
 
         ext_sources_pred_repr = (hoi_obj_predict.unsqueeze(dim=-1).unsqueeze(dim=-1).unsqueeze(dim=-1) *
                                  ext_op_repr.unsqueeze(dim=0)).sum(dim=1)  # N x P x S x F
-        ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=-1)  # N x P x F
+        ext_pred_repr = (self.src_att(union_boxes_feats).unsqueeze(dim=1).unsqueeze(dim=-1) * ext_sources_pred_repr).sum(dim=2)  # N x P x F
 
         hoi_ext_repr = (self.pred_att_fc(union_boxes_feats).unsqueeze(dim=-1) * ext_pred_repr).sum(dim=1)  # N x F
 
