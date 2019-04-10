@@ -90,7 +90,7 @@ class ObjectContext(nn.Module):
 
     @property
     def repr_dim(self):
-        return self.obj_fc_dim
+        return self.ctx_dim
 
 
 def compute_context(lstm, feats, im_ids, input_im_ids):
