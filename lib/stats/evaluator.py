@@ -87,20 +87,39 @@ class Evaluator:
             else:
                 return ('%{}d%%'.format(_p + 3)) % 100
 
+        lines = []
+        # Objects
+        gt_objs = self.dataset.obj_labels
+        gt_obj_hist = Counter(gt_objs)
+        num_gt_objs = sum(gt_obj_hist.values())
+        if sort:
+            obj_inds = [p for p, num in gt_obj_hist.most_common()]
+        else:
+            obj_inds = range(self.dataset.num_object_classes)
+
+        obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
+        for k, v in obj_metrics.items():
+            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[obj_inds]]) if v.size > 1 else ''
+            lines += ['%10s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str)]
+        lines += ['%11s %8s [%s]' % ('GT objects:', 'IDs', ' '.join(['%5d ' % i for i in obj_inds]))]
+        lines += ['%11s %8s [%s]' % ('', '%', ' '.join([_f(gt_obj_hist[i] / num_gt_objs, _p=2) for i in obj_inds]))]
+
+        # HOIs
         gt_hois = self.dataset.hois
         gt_hoi_hist = Counter(gt_hois[:, 1])
         num_gt_hois = sum(gt_hoi_hist.values())
         if sort:
-            inds = [p for p, num in gt_hoi_hist.most_common()]
+            hoi_inds = [p for p, num in gt_hoi_hist.most_common()]
         else:
-            inds = range(self.dataset.num_predicates)
+            hoi_inds = range(self.dataset.num_predicates)
 
-        lines = []
-        for k, v in self.metrics.items():
-            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[inds]]) if v.size > 1 else ''
+        hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+        for k, v in hoi_metrics.items():
+            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[hoi_inds]]) if v.size > 1 else ''
             lines += ['%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str)]
-        lines += ['%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in inds]))]
-        lines += ['%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in inds]))]
+        lines += ['%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in hoi_inds]))]
+        lines += ['%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in hoi_inds]))]
+
         printstr = '\n'.join(lines)
         print(printstr)
         return printstr
@@ -152,7 +171,7 @@ class Evaluator:
             for i, gobj in enumerate(gt_obj_classes):
                 p_obj_ind = gt_to_predict_box_match[i]
                 if p_obj_ind >= 0:
-                    obj_predictions[i, :] = predict_obj_scores[i, :]
+                    obj_predictions[i, :] = predict_obj_scores[p_obj_ind, :]
 
             if prediction.ho_pairs is not None:
                 assert all([v is not None for v in vars(prediction).values()])

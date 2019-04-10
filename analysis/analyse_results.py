@@ -62,8 +62,11 @@ def vrd_style_eval_count():
 
 def stats():
     base_argv = sys.argv
-    exps = ['output/hoi/2019-04-03_11-21-41_vanilla',
-            'output/kb/2019-04-09_11-47-18_ds-imsitu']
+    exps = [
+        # 'output/hoi/2019-04-03_11-21-41_vanilla',
+        'output/zero/2019-04-03_10-28-10_vanilla',
+        # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
+    ]
     true_pos = []
     pos = None
     for exp in exps:
@@ -76,11 +79,11 @@ def stats():
         hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
         stats = Evaluator.evaluate_predictions(hdtest, results)
-        stats.print_metrics()
+        stats.print_metrics(sort=True)
 
-        detector = get_all_models_by_name()[cfg.program.model](hdtrain)
-        ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
-        detector.load_state_dict(ckpt['state_dict'])
+        # detector = get_all_models_by_name()[cfg.program.model](hdtrain)
+        # ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
+        # detector.load_state_dict(ckpt['state_dict'])
 
         # op_adj_mat = detector.hoi_branch.op_adj_mat.squeeze(dim=-1).detach().numpy()
         # op_conf_mat = torch.sigmoid(detector.hoi_branch.op_conf_mat.squeeze(dim=-1).detach()).numpy()
@@ -103,7 +106,6 @@ def stats():
         # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
         # plt.show()
 
-        stats.print_metrics(sort=True)
 
         pred_thr = 0.5
         gt_hois = np.concatenate(stats.hoi_labels, axis=0)
