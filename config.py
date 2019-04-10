@@ -86,6 +86,10 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'ckpt.tar')
 
     @property
+    def watched_values_file(self):
+        return os.path.join(self.output_path, 'watched.tar')
+
+    @property
     def saved_model_file(self):
         return os.path.join(self.output_path, 'final.tar')
 
@@ -172,13 +176,16 @@ class ModelConfig(BaseConfigs):
         self.freq_bias = False
         self.use_ds = False
         self.use_imsitu = False
+        self.use_cnet = False
+
         self.prior_att = False
         self.train_prior = False
         self.kb_sim = False
-
         self.use_memory = False
 
         self.bn_momentum = 0.01
+
+        self.floss = False  # Focal loss
 
 
 class OptimizerConfig(BaseConfigs):
@@ -207,10 +214,12 @@ class Configs:
     opt = OptimizerConfig()
 
     @classmethod
-    def parse_args(cls, allow_required=True):
+    def parse_args(cls, allow_required=True, reset=False):
         args = sys.argv
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
+                if reset:
+                    v.__init__()
                 args = v.parse_args(args, allow_required=allow_required)
         if args[1:]:
             # Detectron configurations should not be changed.
@@ -271,7 +280,7 @@ class Configs:
             pickle.dump(cls.to_dict(), f)
 
     @classmethod
-    def load(cls, file_path=None, program=True, data=True, model=True, opt=True):
+    def load(cls, file_path=None, program=True, data=True, model=True, opt=True, reset=False):
         file_path = file_path or cls.program.config_file
         with open(file_path, 'rb') as f:
             d = pickle.load(f)

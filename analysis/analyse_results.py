@@ -8,31 +8,35 @@ from typing import Dict
 import cv2
 import matplotlib
 import numpy as np
+import torch
+from matplotlib import gridspec
 from matplotlib import pyplot as plt
 
-from analysis.utils import vis_one_image, plot_mat
+from analysis.utils import vis_one_image, plot_mat, heatmap, annotate_heatmap
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.utils import Minibatch
+from lib.dataset.utils import Minibatch, get_counts
+from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
+from scripts.utils import get_all_models_by_name
 
 matplotlib.use('Qt5Agg')
 
 
 def _setup_and_load():
-    cfg.parse_args(allow_required=False)
+    cfg.parse_args(allow_required=False, reset=True)
 
     with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
-    cfg.program.load_precomputed_feats = False
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-    return results, hds
+    # cfg.program.load_precomputed_feats = False
+    return results
 
 
 def vrd_style_eval_count():
-    results, hds = _setup_and_load()
+    results = _setup_and_load()
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     stats = Evaluator.evaluate_predictions(hds, results)
     stats.print_metrics()
 
@@ -56,15 +60,91 @@ def vrd_style_eval_count():
                                             for i, c in enumerate(hds.objects)]))
 
 
-def att():  # FIXME delete
-    results, hds = _setup_and_load()
+def stats():
+    base_argv = sys.argv
+    exps = ['output/hoi/2019-04-03_11-21-41_vanilla',
+            'output/kb/2019-04-09_11-47-18_ds-imsitu']
+    true_pos = []
+    pos = None
+    for exp in exps:
+        sys.argv = base_argv + ['--save_dir', exp]
+        print('=' * 100, '\n', sys.argv)
+
+        results = _setup_and_load()
+
+        hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
+        hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+
+        stats = Evaluator.evaluate_predictions(hdtest, results)
+        stats.print_metrics()
+
+        detector = get_all_models_by_name()[cfg.program.model](hdtrain)
+        ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
+        detector.load_state_dict(ckpt['state_dict'])
+
+        # op_adj_mat = detector.hoi_branch.op_adj_mat.squeeze(dim=-1).detach().numpy()
+        # op_conf_mat = torch.sigmoid(detector.hoi_branch.op_conf_mat.squeeze(dim=-1).detach()).numpy()
+        #
+        # ds_counts = get_counts(dataset=hdtrain)
+        # ds_counts[:, 0] = 0  # exclude null interaction
+        # ds = np.minimum(1, ds_counts)
+        # imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(hdtrain)
+        # imsitu_counts[:, 0] = 0  # exclude null interaction
+        # imsitu = np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+
+        # # Plot
+        # plt.figure(figsize=(16, 9))
+
+        # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
+        #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
+        # plot_mat(op_adj_mat[:, :, 1] / 3 + ds * 2 / 3, predicates, objects, axes=plt.subplot(gs[0, 0]))
+        # plot_mat(op_conf_mat[:, :, 1], predicates, objects, axes=plt.subplot(gs[0, 1]))
+        # plot_mat(op_adj_mat[:, :, 0] / 3 + imsitu * 2 / 3, predicates, objects, axes=plt.subplot(gs[1, 0]))
+        # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
+        # plt.show()
+
+        stats.print_metrics(sort=True)
+
+        pred_thr = 0.5
+        gt_hois = np.concatenate(stats.hoi_labels, axis=0)
+        gt_hoi_objs = np.concatenate(stats.hoi_obj_labels, axis=0)
+        predictions = np.concatenate(stats.hoi_predictions, axis=0)
+        assert gt_hois.shape[0] == gt_hoi_objs.shape[0] == predictions.shape[0] and gt_hois.shape[1] == predictions.shape[1] == hdtrain.num_predicates
+        tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
+        gt_counts = np.zeros_like(tps)
+        for gth, gto, ph in zip(gt_hois, gt_hoi_objs, predictions):
+            gth_inds = np.flatnonzero(gth)
+            tps[gto, gth_inds] += (ph[gth_inds] > pred_thr)
+            gt_counts[gto, gth_inds] += 1
+        assert np.all(tps <= gt_counts)
+        if pos is None:
+            pos = gt_counts
+        assert np.all(pos == gt_counts)
+        true_pos.append(tps)
+
+    obj_inds = np.argsort(pos.sum(axis=1))[::-1]
+    pred_inds = np.argsort(pos.sum(axis=0))[::-1]
+    true_pos = np.stack(true_pos, axis=2)
+
+    assert true_pos.shape[2] == 2
+    mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
+    mat = mat / 2 + 0.5
+    plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
+             x_inds=pred_inds, y_inds=obj_inds,
+             cbar=True, bin_colours=True, plot=False)
+    plt.show()
+
+
+def att():
+    results = _setup_and_load()
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     stats = Evaluator.evaluate_predictions(hds, results)
     stats.print_metrics()
 
-    with open('att.pkl', 'rb') as f:
-        vtm = pickle.load(f)  # type: Dict
-    assert len(vtm) == 1
-    im_att_orig = list(vtm.values())[0]
+    with open(cfg.program.watched_values_file, 'rb') as f:
+        watched_values = pickle.load(f)  # type: Dict
+    assert len(watched_values) == 1
+    im_att_orig = list(watched_values.values())[0]
 
     assert len(im_att_orig) == len(stats.hoi_labels) == len(stats.hoi_obj_labels) == len(stats.hoi_gt_pred_assignment)
     im_att = []
@@ -106,20 +186,9 @@ def att():  # FIXME delete
     plt.show()
 
 
-def count():
-    results, hds = _setup_and_load()
-    stats = Evaluator.evaluate_predictions(hds, results)
-    stats.print_metrics()
-
-    gt_hois = hds.hois
-    gt_hoi_hist = Counter(gt_hois[:, 1])
-    num_gt_hois = sum(gt_hoi_hist.values())
-    print('GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
-                                       for i, c in enumerate(hds.predicates)]))
-
-
 def vis_masks():
-    results, hds = _setup_and_load()
+    results = _setup_and_load()
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
@@ -158,9 +227,11 @@ def vis_masks():
 
 def main():
     funcs = {'vis': vis_masks,
-             'count': count,
              'att': att,
+             'stats': stats,
              }
+
+    sys.argv[1:] = ['stats', '--load_precomputed_feats']
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())
     namespace = parser.parse_known_args()

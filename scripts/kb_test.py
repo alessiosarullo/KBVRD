@@ -26,7 +26,7 @@ def main():
     imsitu_ke = ImSituKnowledgeExtractor()
     hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
 
-    imsitu_op_mat = imsitu_ke.extract_prior_matrix(hd)
+    imsitu_op_mat = imsitu_ke.extract_freq_matrix(hd)
     imsitu_prior = imsitu_op_mat.copy()
     # imsitu_prior = (imsitu_prior > 0).astype(imsitu_prior.dtype)
     imsitu_prior[:, 0] = 0

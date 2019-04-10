@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
-
 
 class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):

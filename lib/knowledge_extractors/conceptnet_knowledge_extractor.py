@@ -19,7 +19,7 @@ class ConceptnetKnowledgeExtractor:
 
         self.cache_paths_fn_format = os.path.join(cfg.program.cache_root, 'cnet_paths_len%d.pkl')
 
-    def get_prior_matrix(self, dataset, len_max_path=1):
+    def extract_freq_matrix(self, dataset, len_max_path=1):
         assert isinstance(dataset, (HicoDet,))
 
         # Compute paths
@@ -160,7 +160,7 @@ def main():
 
     cnet_ex = ConceptnetKnowledgeExtractor()
     dataset = HicoDet()
-    cnet_op_mat = cnet_ex.get_prior_matrix(dataset, len_max_path=1)
+    cnet_op_mat = cnet_ex.extract_freq_matrix(dataset, len_max_path=1)
 
     # Hico object-predicate matrix
     hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])

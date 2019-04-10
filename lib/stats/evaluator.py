@@ -55,7 +55,7 @@ class Evaluator:
         for metric, func in self.metric_functions.items():
             self.metrics[metric] = func(labels, predictions)
 
-    def print_metrics(self):
+    def print_metrics(self, sort=False):
         def _f(_x, _p):
             if _x < 1:
                 if _x > 0:
@@ -65,14 +65,23 @@ class Evaluator:
             else:
                 return ('%{}d%%'.format(_p + 3)) % 100
 
-        for k, v in self.metrics.items():
-            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v]) if v.size > 1 else ''
-            print('%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str))
         gt_hois = self.dataset.hois
         gt_hoi_hist = Counter(gt_hois[:, 1])
         num_gt_hois = sum(gt_hoi_hist.values())
-        print('%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in range(self.dataset.num_predicates)])))
-        print('%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in range(self.dataset.num_predicates)])))
+        if sort:
+            inds = [p for p, num in gt_hoi_hist.most_common()]
+        else:
+            inds = range(self.dataset.num_predicates)
+
+        lines = []
+        for k, v in self.metrics.items():
+            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[inds]]) if v.size > 1 else ''
+            lines += ['%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str)]
+        lines += ['%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in inds]))]
+        lines += ['%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in inds]))]
+        printstr = '\n'.join(lines)
+        print(printstr)
+        return printstr
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction, default='zeros'):
         # TODO docs

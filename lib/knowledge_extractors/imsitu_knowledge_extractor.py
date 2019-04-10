@@ -25,7 +25,7 @@ class ImSituKnowledgeExtractor:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_prior_matrix(self, dataset: HicoDetInstanceSplit):
+    def extract_freq_matrix(self, dataset: HicoDetInstanceSplit):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
@@ -190,7 +190,7 @@ class ImSituKnowledgeExtractor:
 def main():
     imsitu_ke = ImSituKnowledgeExtractor()
     hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
-    imsitu_op_mat = imsitu_ke.extract_prior_matrix(hd)
+    imsitu_op_mat = imsitu_ke.extract_freq_matrix(hd)
 
 
 if __name__ == '__main__':

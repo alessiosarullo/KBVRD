@@ -1,8 +1,4 @@
-import torch
-import torch.nn as nn
-
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.models.context_modules import SpatialContext, ObjectContext
+from lib.models.context_modules import ObjectContext
 from lib.models.generic_model import GenericModel
 from lib.models.hoi_branches import *
 
@@ -68,9 +64,7 @@ class HoiModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-
-        self.post_lstm = nn.Linear(self.obj_branch.repr_dim, vis_feat_dim)
-        torch.nn.init.xavier_normal_(self.post_lstm.weight, gain=1.0)
+        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(vis_feat_dim, dataset.num_predicates, bias=True)
@@ -89,7 +83,7 @@ class HoiModel(GenericModel):
 
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.post_lstm(obj_repr[hoi_infos[:, 2], :]) + union_boxes_feats
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
         hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
