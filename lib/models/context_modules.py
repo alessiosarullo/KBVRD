@@ -82,8 +82,7 @@ class ObjectContext(nn.Module):
             else:
                 object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
             object_context, rec_repr = compute_context(self.obj_ctx_bilstm, object_embeddings, unique_im_ids, box_im_ids)
-            # FIXME return rec_repr instead of pre recurrent representation
-            return object_context, object_embeddings
+            return object_context, rec_repr
 
     @property
     def ctx_dim(self):

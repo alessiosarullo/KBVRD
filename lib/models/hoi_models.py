@@ -65,6 +65,7 @@ class NoObjModel(GenericModel):
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, vis_feat_dim)
 
+        self.obj_output_fc = nn.Linear(vis_feat_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
@@ -75,7 +76,7 @@ class NoObjModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        obj_logits = boxes_ext[:, 5:]
+        obj_logits = self.obj_output_fc(box_feats)
 
         hoi_repr = self.hoi_branch(boxes_ext, box_feats, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
