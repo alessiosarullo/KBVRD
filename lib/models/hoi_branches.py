@@ -133,6 +133,10 @@ class SimpleHoiBranch(AbstractHOIBranch):
         self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
         nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
+    @property
+    def output_dim(self):
+        return self.hoi_repr_dim
+
     def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
         hoi_obj_repr = self.hoi_obj_repr_fc(obj_repr[hoi_infos[:, 2], :])
         # union_repr = union_boxes_feats
