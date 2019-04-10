@@ -9,13 +9,17 @@ from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import get_counts
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
+from lib.knowledge_extractors.conceptnet_knowledge_extractor import ConceptnetKnowledgeExtractor
 from lib.models.abstract_model import AbstractHOIBranch
-from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
-from lib.models.nmotifs.lincontext import sort_rois
 
 
 class NMotifsHOIBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_feat_dim, dataset, **kwargs):
+        # FIXME ugliness
+        from lib.models.highway_lstm_cuda.alternating_highway_lstm import AlternatingHighwayLSTM
+        from lib.models.nmotifs.lincontext import sort_rois
+        self.sort_rois = sort_rois
+
         self.word_emb_dim = 200
         self.edge_ctx_num_layers = 4
         self.rnn_hidden_dim = 256
@@ -48,7 +52,7 @@ class NMotifsHOIBranch(AbstractHOIBranch):
         # FIXME this doesn't use spatial context
         obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
         hoi_input_obj_repr = torch.cat((self.obj_word_embs(obj_classes), box_repr), dim=1)
-        perm, inv_perm, ls_transposed = sort_rois(self.order, box_im_ids, box_priors=boxes_ext[:, 1:5])
+        perm, inv_perm, ls_transposed = self.sort_rois(self.order, box_im_ids, box_priors=boxes_ext[:, 1:5])
         hoi_output_obj_repr = self.hoi_obj_birnn(PackedSequence(hoi_input_obj_repr[perm], ls_transposed))[0]
         hoi_output_obj_repr = hoi_output_obj_repr[inv_perm]
 
@@ -86,7 +90,7 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
 
             op_adj_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
             if cfg.model.use_imsitu:
-                imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
+                imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(dataset)
                 imsitu_counts[:, 0] = 0  # exclude null interaction
                 op_adj_mat += np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
             if cfg.model.freq_bias:
@@ -117,27 +121,53 @@ class KBNMotifsHOIBranch(NMotifsHOIBranch):
         return hoi_repr
 
 
+class SimpleHoiBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, obj_repr_dim, **kwargs):
+        # TODO docs and FIXME comments
+        self.hoi_repr_dim = 600
+        super().__init__(**kwargs)
+
+        self.union_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.union_repr_fc.weight, gain=1.0)
+
+        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
+        hoi_obj_repr = self.hoi_obj_repr_fc(obj_repr[hoi_infos[:, 2], :])
+        # union_repr = union_boxes_feats
+        union_repr = self.union_repr_fc(union_boxes_feats)
+        hoi_repr = union_repr + hoi_obj_repr
+        return hoi_repr
+
+
 class KBHoiBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        # TODO docs and FIXME comments
         super().__init__(**kwargs)
         self.num_objects = dataset.num_object_classes
+        self.hoi_repr_dim = visual_feats_dim
 
         op_adj_mats = []
+        if cfg.model.use_ds:
+            ds_counts = get_counts(dataset=dataset)
+            ds_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, ds_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
         if cfg.model.use_imsitu:
-            imsitu_counts = ImSituKnowledgeExtractor().extract_prior_matrix(dataset)
+            imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(dataset)
             imsitu_counts[:, 0] = 0  # exclude null interaction
             op_adj_mats.append(np.minimum(1, imsitu_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-        if cfg.model.use_ds:
-            int_counts = get_counts(dataset=dataset)
-            int_counts[:, 0] = 0  # exclude null interaction
-            op_adj_mats.append(np.minimum(1, int_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_cnet:
+            cnet_counts = ConceptnetKnowledgeExtractor().extract_freq_matrix(dataset=dataset)
+            cnet_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, cnet_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
 
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)[:, :, :, None]  # O x P x S x 1
         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=False)
         self.op_conf_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mats).float(), requires_grad=True)
 
-        op_repr = torch.empty(list(op_adj_mats.shape[:-1]) + [visual_feats_dim])  # O x P x S x F
+        op_repr = torch.empty(list(op_adj_mats.shape[:-1]) + [self.hoi_repr_dim])  # O x P x S x F
         nn.init.xavier_normal_(op_repr, gain=1.0)
         self.op_repr = torch.nn.Parameter(op_repr, requires_grad=True)
         # print(op_adj_mats.shape, op_repr.shape)
@@ -146,9 +176,11 @@ class KBHoiBranch(AbstractHOIBranch):
                                      nn.Softmax(dim=1))
         self.pred_att_fc = nn.Sequential(nn.Linear(visual_feats_dim, dataset.num_predicates),
                                          nn.Softmax(dim=1))
-        # torch.nn.init.xavier_normal_(self.pred_att_fc[0].weight, gain=1.0)
 
-        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, visual_feats_dim)
+        self.union_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.union_repr_fc.weight, gain=1.0)
+
+        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
         nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels=None):
@@ -164,7 +196,7 @@ class KBHoiBranch(AbstractHOIBranch):
         batch_size = union_boxes_feats.shape[0]
         att = obj_att.view(batch_size, -1, 1, 1) * pred_att.view(batch_size, 1, -1, 1) * src_att.view(batch_size, 1, 1, -1)  # N x O x P x S
 
-        ext_op_repr = self.op_adj_mat * torch.nn.functional.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
+        ext_op_repr = self.op_adj_mat * torch.sigmoid(self.op_conf_mat) * self.op_repr  # O x P x S x F
         hoi_ext_repr = att.view(batch_size, -1) @ ext_op_repr.view(-1, ext_op_repr.shape[-1])  # N x F
 
         hoi_obj_repr = obj_repr[hoi_infos[:, 2], :]

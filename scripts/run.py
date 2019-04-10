@@ -188,7 +188,7 @@ class Launcher:
         self.detector.eval()
         all_predictions = []
 
-        vtm = {}  # FIXME delete
+        watched_values = {}
 
         stats.epoch_tic()
         for batch_idx, batch in enumerate(data_loader):
@@ -197,8 +197,11 @@ class Launcher:
             all_predictions.append(vars(prediction))
             stats.batch_toc()
 
-            for k, v in self.detector.values_to_monitor.items():  # FIXME delete
-                vtm.setdefault(k, []).append(v)
+            try:
+                for k, v in self.detector.values_to_monitor.items():
+                    watched_values.setdefault(k, []).append(v)
+            except AttributeError:
+                pass
 
             if batch_idx % 20 == 0:
                 torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
@@ -210,8 +213,9 @@ class Launcher:
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
 
-        with open('att.pkl', 'wb') as f: # FIXME delete
-            pickle.dump(vtm, f)
+        if watched_values:
+            with open(cfg.program.watched_values_file, 'wb') as f:
+                pickle.dump(watched_values, f)
 
         stats.epoch_toc()
         return all_predictions
