@@ -59,16 +59,11 @@ class ObjectContext(nn.Module):
         # FIXME params
         # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.use_bn = False
-        self.obj_fc_dim = 1024
         self.obj_rnn_emb_dim = 1024
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
-        self.obj_emb_fc = nn.Sequential(*[
-            nn.Linear(input_dim, self.obj_fc_dim),
-            nn.ReLU(inplace=True),
-        ])
         self.obj_ctx_bilstm = nn.LSTM(
-            input_size=self.obj_fc_dim,
+            input_size=input_dim,
             hidden_size=self.obj_rnn_emb_dim,
             num_layers=1,  # if you want to use dropout the number of layers has to be greater than 1, since it's not added after the last one
             bidirectional=True)
@@ -78,9 +73,9 @@ class ObjectContext(nn.Module):
         with torch.set_grad_enabled(self.training):
             if spatial_ctx is not None:
                 spatial_ctx_rep = torch.cat([spatial_ctx[i, :].expand((box_im_ids == imid).sum(), -1) for i, imid in enumerate(unique_im_ids)], dim=0)
-                object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1))
+                object_embeddings = torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1)
             else:
-                object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
+                object_embeddings = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
             object_context, rec_repr = compute_context(self.obj_ctx_bilstm, object_embeddings, unique_im_ids, box_im_ids)
             return object_context, rec_repr
 
