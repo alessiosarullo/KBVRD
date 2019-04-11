@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import numpy as np
 
 class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):
@@ -101,9 +101,10 @@ def compute_context(lstm, feats, im_ids, input_im_ids):
     feats_seq = nn.utils.rnn.pad_sequence(feats_per_img)  # this is max(N_i) x I x D
     recurrent_repr_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x 2 * hidden_state_dim
     assert len(num_examples_per_img) == recurrent_repr_seq.shape[1]
-    rec_repr = torch.cat([recurrent_repr_seq[:num_ex, i, :] for i, num_ex in enumerate(num_examples_per_img)], dim=0)
+    rec_repr_per_img = [recurrent_repr_seq[:num_ex, i, :] for i, num_ex in enumerate(num_examples_per_img)]
+    rec_repr = torch.cat(rec_repr_per_img, dim=0)
     assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2, (rec_repr.shape, feats.shape[0], lstm.hidden_size)
 
-    context_feats = rec_repr.mean(dim=0)  # this is I x whatever
+    context_feats = recurrent_repr_seq.sum(dim=0) / torch.from_numpy(np.array(num_examples_per_img)).to(recurrent_repr_seq)  # this is I x whatever
     assert context_feats.shape[0] == len(im_ids)
     return context_feats, rec_repr
