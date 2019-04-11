@@ -1,6 +1,6 @@
-from lib.models.context_modules import ObjectContext
 from lib.models.generic_model import GenericModel
 from lib.models.hoi_branches import *
+from lib.models.obj_branches import *
 
 
 class ZeroModel(GenericModel):
@@ -92,7 +92,7 @@ class HoiModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
@@ -108,8 +108,7 @@ class HoiModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        obj_ctx, _, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
-
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)

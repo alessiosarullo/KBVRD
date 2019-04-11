@@ -1,6 +1,7 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+
 
 class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):
@@ -87,6 +88,31 @@ class ObjectContext(nn.Module):
     @property
     def ctx_dim(self):
         return 2 * self.obj_rnn_emb_dim  # 2 because of BiLSTM
+
+    @property
+    def repr_dim(self):
+        return self.obj_fc_dim
+
+
+class SimpleObjBranch(nn.Module):
+    def __init__(self, input_dim, **kwargs):
+        super().__init__()
+        self.obj_fc_dim = 512
+        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
+
+        self.obj_emb_fc = nn.Sequential(*[
+            nn.Linear(input_dim, self.obj_fc_dim),
+            nn.ReLU(inplace=True),
+        ])
+
+    def forward(self, boxes_ext, box_feats, unique_im_ids, box_im_ids, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
+            return object_embeddings
+
+    @property
+    def ctx_dim(self):
+        raise NotImplementedError()
 
     @property
     def repr_dim(self):
