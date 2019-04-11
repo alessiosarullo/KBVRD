@@ -95,18 +95,19 @@ class ObjectContext(nn.Module):
 
 
 def compute_context(lstm, feats, im_ids, input_im_ids):
-    # If I = #images, this is I x [N_i x feat_vec_dim], where N_i = #elements in image i
+    # If I = #images, this is I x [N_i x D], where N_i = #elements in image i
     feats_per_img = [feats[input_im_ids == im_id, :] for im_id in im_ids]
     num_examples_per_img = [int((input_im_ids == im_id).sum().detach().cpu().item()) for im_id in im_ids]
 
     feats_seq = nn.utils.rnn.pad_sequence(feats_per_img)  # this is max(N_i) x I x D
-    recurrent_repr_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x 2 * hidden_state_dim
+    recurrent_repr_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x H
     assert len(num_examples_per_img) == recurrent_repr_seq.shape[1]
     rec_repr_per_img = [recurrent_repr_seq[:num_ex, i, :] for i, num_ex in enumerate(num_examples_per_img)]
     rec_repr = torch.cat(rec_repr_per_img, dim=0)
     assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2, (rec_repr.shape, feats.shape[0], lstm.hidden_size)
 
     num_examples_per_img_torch = torch.from_numpy(np.array(num_examples_per_img)).to(recurrent_repr_seq).view(-1, 1)
-    context_feats = recurrent_repr_seq.sum(dim=0) / num_examples_per_img_torch  # this is I x whatever
+    context_feats = recurrent_repr_seq.sum(dim=0) / num_examples_per_img_torch  # this is I x H
     assert context_feats.shape[0] == len(im_ids)
+    context_feats = torch.cat([context_feats[i, :].expand(num_ex, -1) for i, num_ex in enumerate(num_examples_per_img)], dim=0)  # N x H
     return context_feats, rec_repr
