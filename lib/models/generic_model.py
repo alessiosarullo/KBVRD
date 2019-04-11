@@ -25,8 +25,14 @@ class GenericModel(AbstractModel):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
         if cfg.model.floss:
-            # TODO
-            raise NotImplementedError()
+            gamma = cfg.opt.gamma
+            s = hoi_output
+            t = hoi_labels
+            m = s.clamp(min=0)  # m = max(s, 0)
+            x = (-s.abs()).exp()
+            z = ((s >= 0) == t)
+            hoi_loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
+            hoi_loss = hoi_loss_mat.mean() * self.dataset.num_predicates
         else:
             hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}

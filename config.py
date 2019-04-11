@@ -200,6 +200,8 @@ class OptimizerConfig(BaseConfigs):
         self.num_epochs = 5
         self.batch_size = 8
 
+        self.gamma = 2
+
 
 class Configs:
     """
