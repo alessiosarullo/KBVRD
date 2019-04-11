@@ -105,6 +105,7 @@ def compute_context(lstm, feats, im_ids, input_im_ids):
     rec_repr = torch.cat(rec_repr_per_img, dim=0)
     assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2, (rec_repr.shape, feats.shape[0], lstm.hidden_size)
 
-    context_feats = recurrent_repr_seq.sum(dim=0) / torch.from_numpy(np.array(num_examples_per_img)).to(recurrent_repr_seq)  # this is I x whatever
+    num_examples_per_img_torch = torch.from_numpy(np.array(num_examples_per_img)).to(recurrent_repr_seq).view(-1, 1)
+    context_feats = recurrent_repr_seq.sum(dim=0) / num_examples_per_img_torch  # this is I x whatever
     assert context_feats.shape[0] == len(im_ids)
     return context_feats, rec_repr
