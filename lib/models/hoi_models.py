@@ -95,7 +95,7 @@ class HoiModel(GenericModel):
         self.obj_branch = ObjectContext(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.ctx_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
@@ -108,9 +108,9 @@ class HoiModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        obj_ctx, obj_rec_repr, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
+        obj_ctx, _, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
 
-        obj_logits = self.obj_output_fc(obj_rec_repr)
+        obj_logits = self.obj_output_fc(obj_repr)
 
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)

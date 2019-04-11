@@ -82,7 +82,6 @@ class ObjectContext(nn.Module):
             else:
                 object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
             object_context, rec_repr = compute_context(self.obj_ctx_bilstm, object_embeddings, unique_im_ids, box_im_ids)
-            object_embeddings = object_embeddings + object_context
             return object_context, rec_repr, object_embeddings
 
     @property

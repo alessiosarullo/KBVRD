@@ -63,8 +63,8 @@ def vrd_style_eval_count():
 def stats():
     base_argv = sys.argv
     exps = [
-        # 'output/hoi/2019-04-03_11-21-41_vanilla',
-        'output/zero/2019-04-03_10-28-10_vanilla',
+        'output/hoi/2019-04-03_11-21-41_vanilla',
+        # 'output/zero/2019-04-03_10-28-10_vanilla',
         # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
     ]
     true_pos = []
@@ -106,34 +106,60 @@ def stats():
         # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
         # plt.show()
 
-
         pred_thr = 0.5
         gt_hois = np.concatenate(stats.hoi_labels, axis=0)
+        bg_hois = gt_hois[:, 0] > 0
+        fg_hois = np.any(gt_hois[:, 1:], axis=1)
+        assert not np.any(bg_hois & fg_hois), np.flatnonzero(bg_hois & fg_hois)
         gt_hoi_objs = np.concatenate(stats.hoi_obj_labels, axis=0)
         predictions = np.concatenate(stats.hoi_predictions, axis=0)
         assert gt_hois.shape[0] == gt_hoi_objs.shape[0] == predictions.shape[0] and gt_hois.shape[1] == predictions.shape[1] == hdtrain.num_predicates
+
         tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
         gt_counts = np.zeros_like(tps)
+        confmat = np.zeros([hdtrain.num_predicates, hdtrain.num_predicates])
         for gth, gto, ph in zip(gt_hois, gt_hoi_objs, predictions):
             gth_inds = np.flatnonzero(gth)
             tps[gto, gth_inds] += (ph[gth_inds] > pred_thr)
             gt_counts[gto, gth_inds] += 1
+
+            gtset = set(gth_inds.tolist())
+            pset = set(np.flatnonzero(ph > pred_thr))
+            hits = np.array(sorted(gtset & pset))
+            unmatched = gtset - pset
+            mistaken_for = np.array(sorted(pset - gtset))
+            if hits.size > 0:
+                confmat[hits, hits] += 1
+            for u in unmatched:
+                if mistaken_for.size > 0:
+                    confmat[u, mistaken_for] += 1 / mistaken_for.size
+                else:
+                    confmat[u, :] += 1 / confmat.shape[1]  # FIXME
+
         assert np.all(tps <= gt_counts)
         if pos is None:
             pos = gt_counts
         assert np.all(pos == gt_counts)
         true_pos.append(tps)
 
+        assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))
+        confmat /= confmat.sum(axis=1, keepdims=True)
+
     obj_inds = np.argsort(pos.sum(axis=1))[::-1]
     pred_inds = np.argsort(pos.sum(axis=0))[::-1]
-    true_pos = np.stack(true_pos, axis=2)
 
-    assert true_pos.shape[2] == 2
-    mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
-    mat = mat / 2 + 0.5
-    plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
-             x_inds=pred_inds, y_inds=obj_inds,
-             cbar=True, bin_colours=True, plot=False)
+    plot_mat(confmat[:, pred_inds][pred_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.predicates[i] for i in pred_inds],
+             x_inds=pred_inds, y_inds=pred_inds,
+             cbar=True, bin_colours=False, plot=False, grid=False)
+
+    # true_pos = np.stack(true_pos, axis=2)
+    # assert true_pos.shape[2] == 2
+    # mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
+    # mat = mat / 2 + 0.5
+    # plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
+    #          x_inds=pred_inds, y_inds=obj_inds,
+    #          cbar=True, bin_colours=True, plot=False)
+
     plt.show()
 
 

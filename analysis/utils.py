@@ -118,7 +118,7 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
     return texts
 
 
-def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, axes=None, cbar=False, bin_colours=False, plot=True):
+def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, axes=None, cbar=False, bin_colours=False, grid=False, plot=True):
     lfsize = 8
     if axes is None:
         plt.figure(figsize=(16, 9))
@@ -164,7 +164,8 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, axes=None,
     ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='right', rotation_mode='anchor')
     ax.tick_params(axis='x', which='minor', top=True, labeltop=False, bottom=True, labelbottom=True, labelsize=lfsize)
 
-    ax.grid(which='major', color='k', linestyle='-', linewidth=1)
+    if grid:
+        ax.grid(which='major', color='k', linestyle='-', linewidth=1)
 
     plt.tight_layout()
     if plot:
