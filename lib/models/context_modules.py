@@ -49,7 +49,7 @@ class SpatialContext(nn.Module):
             ho_pair_masks = torch.cat([masks[sub_inds, :], masks[obj_inds, :]], dim=1)
             spatial_rels_feats = self.spatial_rels_fc(ho_pair_masks)
             spatial_context, rec_repr = compute_context(self.spatial_rel_ctx_bilstm, spatial_rels_feats, unique_im_ids, hoi_im_ids)
-            return spatial_context, rec_repr
+            return spatial_context, rec_repr, spatial_rels_feats
 
 
 class ObjectContext(nn.Module):
@@ -59,11 +59,16 @@ class ObjectContext(nn.Module):
         # FIXME params
         # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.use_bn = False
-        self.obj_rnn_emb_dim = 1024
+        self.obj_fc_dim = 512
+        self.obj_rnn_emb_dim = self.obj_fc_dim
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
+        self.obj_emb_fc = nn.Sequential(*[
+            nn.Linear(input_dim, self.obj_fc_dim),
+            nn.ReLU(inplace=True),
+        ])
         self.obj_ctx_bilstm = nn.LSTM(
-            input_size=input_dim,
+            input_size=self.obj_fc_dim,
             hidden_size=self.obj_rnn_emb_dim,
             num_layers=1,  # if you want to use dropout the number of layers has to be greater than 1, since it's not added after the last one
             bidirectional=True)
@@ -73,11 +78,11 @@ class ObjectContext(nn.Module):
         with torch.set_grad_enabled(self.training):
             if spatial_ctx is not None:
                 spatial_ctx_rep = torch.cat([spatial_ctx[i, :].expand((box_im_ids == imid).sum(), -1) for i, imid in enumerate(unique_im_ids)], dim=0)
-                object_embeddings = torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1)
+                object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:], spatial_ctx_rep], dim=1))
             else:
-                object_embeddings = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+                object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
             object_context, rec_repr = compute_context(self.obj_ctx_bilstm, object_embeddings, unique_im_ids, box_im_ids)
-            return object_context, rec_repr
+            return object_context, rec_repr, object_embeddings
 
     @property
     def ctx_dim(self):
@@ -85,7 +90,7 @@ class ObjectContext(nn.Module):
 
     @property
     def repr_dim(self):
-        return self.ctx_dim
+        return self.obj_fc_dim
 
 
 def compute_context(lstm, feats, im_ids, input_im_ids):
@@ -96,10 +101,9 @@ def compute_context(lstm, feats, im_ids, input_im_ids):
     feats_seq = nn.utils.rnn.pad_sequence(feats_per_img)  # this is max(N_i) x I x D
     recurrent_repr_seq = lstm(feats_seq)[0]  # output is max(N_i) x I x 2 * hidden_state_dim
     assert len(num_examples_per_img) == recurrent_repr_seq.shape[1]
-    rec_repr = torch.stack([recurrent_repr_seq[n, i, :] for i, num_ex in enumerate(num_examples_per_img) for n in range(num_ex)], dim=0)
+    rec_repr = torch.cat([recurrent_repr_seq[:num_ex, i, :] for i, num_ex in enumerate(num_examples_per_img)], dim=0)
     assert rec_repr.shape[0] == feats.shape[0] and rec_repr.shape[1] == lstm.hidden_size * 2, (rec_repr.shape, feats.shape[0], lstm.hidden_size)
 
-    # FIXME! This might not work well with padding (i.e., max(N_i)). The mean should only be computed across objects actually in the image.
-    context_feats = recurrent_repr_seq.mean(dim=0)  # this is I x whatever
+    context_feats = rec_repr.mean(dim=0)  # this is I x whatever
     assert context_feats.shape[0] == len(im_ids)
     return context_feats, rec_repr

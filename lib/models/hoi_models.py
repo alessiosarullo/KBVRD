@@ -108,7 +108,7 @@ class HoiModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        obj_ctx, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
+        obj_ctx, _, obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids, spatial_ctx=None)
 
         obj_logits = self.obj_output_fc(obj_repr)
 
