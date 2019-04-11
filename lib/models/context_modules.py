@@ -60,7 +60,7 @@ class ObjectContext(nn.Module):
         # FIXME? Since batches are fairly small due to memory constraint, BN might not be suitable. Maybe switch to GN?
         self.use_bn = False
         self.obj_fc_dim = 512
-        self.obj_rnn_emb_dim = self.obj_fc_dim
+        self.obj_rnn_emb_dim = self.obj_fc_dim / 2
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
         self.obj_emb_fc = nn.Sequential(*[
