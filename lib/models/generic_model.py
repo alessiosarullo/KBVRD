@@ -30,7 +30,7 @@ class GenericModel(AbstractModel):
             t = hoi_labels
             m = s.clamp(min=0)  # m = max(s, 0)
             x = (-s.abs()).exp()
-            z = ((s >= 0) == t)
+            z = ((s >= 0) == t.byte()).float()
             hoi_loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
             hoi_loss = hoi_loss_mat.mean() * self.dataset.num_predicates
         else:
