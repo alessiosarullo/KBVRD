@@ -10,15 +10,18 @@ class NNModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.d = torch.nn.Parameter(torch.empty(dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois), requires_grad=False)
-        self.l = torch.nn.Parameter(torch.empty(dataset.num_predicates, dataset.num_precomputed_hois), requires_grad=False)
+        feats = np.empty(dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois)
+        labels = np.empty(dataset.num_predicates, dataset.num_precomputed_hois)
         idx = 0
         for e in dataset:
             feats, labels = e.precomp_hoi_union_feats, e.precomp_hoi_labels
             assert feats.shape[0] == labels.shape[0]
             n = feats.shape[0]
-            self.d[:, idx:idx+n] = feats.t()
-            self.l[:, idx:idx + n] = labels.t()
+            feats[:, idx:idx + n] = feats.T
+            labels[:, idx:idx + n] = labels.T
+            idx += n
+        self.feats = torch.nn.Parameter(torch.from_numpy(feats), requires_grad=False)
+        self.labels = torch.nn.Parameter(torch.from_numpy(labels), requires_grad=False)
 
     def get_losses(self, x, **kwargs):
         raise NotImplementedError()
