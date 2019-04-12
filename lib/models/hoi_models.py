@@ -13,12 +13,13 @@ class PureMemModel(GenericModel):
         feats = np.empty((dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois))
         labels = np.empty((dataset.num_precomputed_hois, dataset.num_predicates))
         idx = 0
-        for e in dataset:
-            f, l = e.precomp_hoi_union_feats, e.precomp_hoi_labels
-            assert f.shape[0] == l.shape[0]
-            n = f.shape[0]
-            feats[:, idx:idx + n] = f.T
-            labels[idx:idx + n, :] = l
+        for i in range(dataset.num_images):
+            ex = dataset.get_entry(i)
+            ex_feats, ex_labels = ex.precomp_hoi_union_feats, ex.precomp_hoi_labels
+            assert ex_feats.shape[0] == ex_labels.shape[0]
+            n = ex_feats.shape[0]
+            feats[:, idx:idx + n] = ex_feats.T
+            labels[idx:idx + n, :] = ex_labels
             idx += n
         self.feats = torch.nn.Parameter(torch.from_numpy(feats), requires_grad=False)
         self.labels = torch.nn.Parameter(torch.from_numpy(labels), requires_grad=False)
