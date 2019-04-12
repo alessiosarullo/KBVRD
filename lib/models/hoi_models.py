@@ -1,24 +1,24 @@
-from lib.models.generic_model import GenericModel
+from lib.models.generic_model import GenericModel, Prediction
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
 
 
-class NNModel(GenericModel):
+class PureMemModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'nn'
+        return 'puremem'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         feats = np.empty((dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois))
-        labels = np.empty((dataset.num_predicates, dataset.num_precomputed_hois))
+        labels = np.empty((dataset.num_precomputed_hois, dataset.num_predicates))
         idx = 0
         for e in dataset:
             f, l = e.precomp_hoi_union_feats, e.precomp_hoi_labels
             assert f.shape[0] == l.shape[0]
             n = f.shape[0]
             feats[:, idx:idx + n] = f.T
-            labels[:, idx:idx + n] = l.T
+            labels[idx:idx + n, :] = l
             idx += n
         self.feats = torch.nn.Parameter(torch.from_numpy(feats), requires_grad=False)
         self.labels = torch.nn.Parameter(torch.from_numpy(labels), requires_grad=False)
@@ -33,14 +33,40 @@ class NNModel(GenericModel):
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
 
         if hoi_infos is not None:
-            obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            sim = union_boxes_feats @ self.feats
+            hoi_output = sim @ self.labels
         else:
-            obj_output = hoi_output = None
+            hoi_output = None
 
-        return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+        return self._prepare_prediction(None, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        raise NotImplementedError()
+    @staticmethod
+    def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+        assert obj_output is None
+        if hoi_infos is not None:
+            assert hoi_output is not None and boxes_ext is not None
+            obj_prob = None  # this will be assigned later as the object label distribution
+            hoi_probs = hoi_output
+            hoi_img_inds = hoi_infos[:, 0]
+            ho_pairs = hoi_infos[:, 1:]
+        else:
+            hoi_probs = ho_pairs = hoi_img_inds = None
+            obj_prob = None
+
+        if boxes_ext is not None:
+            boxes_ext = boxes_ext.cpu().numpy()
+            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+            if obj_prob is None:
+                obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
+        else:
+            obj_im_inds = obj_boxes = None
+        return Prediction(obj_im_inds=obj_im_inds,
+                          obj_boxes=obj_boxes,
+                          obj_scores=obj_prob,
+                          hoi_img_inds=hoi_img_inds,
+                          ho_pairs=ho_pairs,
+                          hoi_scores=hoi_probs)
 
 
 class ZeroModel(GenericModel):

@@ -104,6 +104,10 @@ class Launcher:
 
         try:
             cfg.save()
+            if cfg.opt.num_epochs == 0:
+                torch.save({'epoch': -1,
+                            'state_dict': self.detector.state_dict()},
+                           cfg.program.checkpoint_file)
             for epoch in range(cfg.opt.num_epochs):
                 print('Epoch %d start.' % epoch)
                 self.detector.train()
@@ -125,12 +129,11 @@ class Launcher:
         finally:
             training_stats.close_tensorboard_logger()
 
-        if cfg.opt.num_epochs > 0:
-            try:
-                os.remove(cfg.program.saved_model_file)
-            except FileNotFoundError:
-                pass
-            os.rename(cfg.program.checkpoint_file, cfg.program.saved_model_file)
+        try:
+            os.remove(cfg.program.saved_model_file)
+        except FileNotFoundError:
+            pass
+        os.rename(cfg.program.checkpoint_file, cfg.program.saved_model_file)
 
         # noinspection PyUnboundLocalVariable
         return all_predictions
