@@ -381,3 +381,79 @@ class HoiPriorBranch(AbstractHOIBranch):
                 prior_contribution = priors.sum(dim=0)
             hoi_logits += prior_contribution.log()
         return hoi_logits
+
+
+class HoiGCBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        # TODO docs and FIXME comments
+        self.hoi_repr_dim = 600
+        super().__init__(**kwargs)
+        self.num_objects = dataset.num_object_classes
+
+        op_adj_mats = []
+        if cfg.model.use_ds:
+            ds_counts = get_counts(dataset=dataset)
+            ds_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, ds_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_imsitu:
+            imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(dataset)
+            imsitu_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, imsitu_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_cnet:
+            cnet_counts = ConceptnetKnowledgeExtractor().extract_freq_matrix(dataset=dataset)
+            cnet_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, cnet_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+
+        assert op_adj_mats
+        op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
+        op_adj_mat = np.sum(op_adj_mats, axis=-1)  # O x P
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=True)
+
+        op_feats = torch.empty((dataset.num_object_classes, dataset.num_predicates, visual_feats_dim))
+        nn.init.xavier_uniform_(op_feats, gain=1.0)
+        op_pairs = torch.zeros((dataset.num_object_classes, dataset.num_predicates))
+        for i in range(dataset.num_images):
+            ex = dataset.get_entry(i)
+            hoi_l, obj_l = ex.precomp_hoi_labels, ex.precomp_box_labels
+            union_feats, infos = ex.precomp_hoi_union_feats, ex.precomp_hoi_infos
+            hoi_obj_l = obj_l[infos[:, 2]]
+            assert union_feats.shape[0] == hoi_l.shape[0] == hoi_obj_l.shape[0]
+            for ol, hl, uf in zip(hoi_obj_l, hoi_l, union_feats):
+                hl = np.flatnonzero(hl)
+                op_feats[ol, hl, :] += torch.from_numpy(uf.astype(np.float32, copy=False))
+                op_pairs[ol, hl] += 1
+        self.op_repr = torch.nn.Parameter(op_feats / op_pairs.clamp(min=1), requires_grad=True)
+        assert np.all(self.op_repr.shape[:-1] == self.op_adj_mat.shape[:-1])
+
+        self.hoi_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=1.0)
+        self.obj_readout_fc = nn.Linear(op_feats.shape[2], self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.obj_readout_fc.weight, gain=1.0)
+        self.pred_readout_fc = nn.Linear(op_feats.shape[2], self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.pred_readout_fc.weight, gain=1.0)
+
+    @property
+    def output_dim(self):
+        return self.hoi_repr_dim
+
+    def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        if box_labels is not None:
+            assert hoi_labels is not None
+            obj_prediction = union_box_feats.new_zeros((box_labels.shape[0], self.num_objects))
+            obj_prediction[torch.arange(obj_prediction.shape[0]), box_labels] = 1
+            hoi_prediction = hoi_labels
+        else:
+            assert hoi_labels is None
+            obj_prediction = nn.functional.softmax(obj_logits, dim=1)
+            hoi_prediction = torch.sigmoid(hoi_logits)
+
+        obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
+        pred_att = hoi_prediction  # N x P
+
+        op_repr = (self.op_adj_mat * self.op_repr)  # O x P x F
+        ext_obj_repr = self.obj_readout_fc(obj_att @ op_repr)
+        ext_pred_repr = self.pred_readout_fc(pred_att @ op_repr.t())
+
+        hoi_repr = union_box_feats + ext_obj_repr + ext_pred_repr
+
+        return hoi_repr
