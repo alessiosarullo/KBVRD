@@ -91,7 +91,6 @@ class Evaluator:
         print(printstr)
         return printstr
 
-
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
         # TODO docs
 

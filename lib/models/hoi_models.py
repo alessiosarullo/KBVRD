@@ -51,7 +51,7 @@ class PureMemModel(GenericModel):
         if hoi_infos is not None:
             assert hoi_output is not None and boxes_ext is not None
             obj_prob = None  # this will be assigned later as the object label distribution
-            hoi_probs = hoi_output
+            hoi_probs = hoi_output.cpu().numpy()
             hoi_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
