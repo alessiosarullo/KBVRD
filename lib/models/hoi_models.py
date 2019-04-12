@@ -18,7 +18,7 @@ class PureMemModel(GenericModel):
             ex_feats, ex_labels = ex.precomp_hoi_union_feats, ex.precomp_hoi_labels
             assert ex_feats.shape[0] == ex_labels.shape[0]
             n = ex_feats.shape[0]
-            feats[:, idx:idx + n] = ex_feats.T
+            feats[:, idx:idx + n] = (ex_feats / np.linalg.norm(ex_feats, axis=1, keepdims=True)).T
             labels[idx:idx + n, :] = ex_labels
             idx += n
         self.feats = torch.nn.Parameter(torch.from_numpy(feats), requires_grad=False)
@@ -41,7 +41,8 @@ class PureMemModel(GenericModel):
         return self._prepare_prediction(None, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        sim = union_boxes_feats @ self.feats
+        union_boxes_feats_norm = torch.nn.functional.normalize(union_boxes_feats)
+        sim = union_boxes_feats_norm @ self.feats
         hoi_output = sim @ self.labels
         return hoi_output
 
