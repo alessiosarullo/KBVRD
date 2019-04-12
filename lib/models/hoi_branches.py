@@ -454,7 +454,8 @@ class HoiGCBranch(AbstractHOIBranch):
         op_repr = (self.op_adj_mat * self.op_repr)  # O x P x F
         ext_obj_repr = self.obj_readout_fc(obj_att @ op_repr.mean(dim=1))
         ext_pred_repr = self.pred_readout_fc(pred_att @ op_repr.mean(dim=0))
+        union_repr = self.hoi_repr_fc(union_box_feats)
 
-        hoi_repr = union_box_feats + ext_obj_repr + ext_pred_repr
+        hoi_repr = union_repr + ext_obj_repr + ext_pred_repr
 
         return hoi_repr
