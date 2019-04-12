@@ -422,7 +422,7 @@ class HoiGCBranch(AbstractHOIBranch):
                 hl = np.flatnonzero(hl)
                 op_feats[ol, hl, :] += torch.from_numpy(uf.astype(np.float32, copy=False))
                 op_pairs[ol, hl] += 1
-        self.op_repr = torch.nn.Parameter(op_feats / op_pairs.clamp(min=1), requires_grad=True)
+        self.op_repr = torch.nn.Parameter(op_feats / op_pairs.clamp(min=1).unsqueeze(dim=2), requires_grad=True)
         assert np.all(self.op_repr.shape[:-1] == self.op_adj_mat.shape[:-1])
 
         self.hoi_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
