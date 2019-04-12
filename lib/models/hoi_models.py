@@ -3,6 +3,43 @@ from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
 
 
+class NNModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'nn'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(**kwargs)
+        self.d = torch.nn.Parameter(torch.empty(dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois), requires_grad=False)
+        self.l = torch.nn.Parameter(torch.empty(dataset.num_predicates, dataset.num_precomputed_hois), requires_grad=False)
+        idx = 0
+        for e in dataset:
+            feats, labels = e.precomp_hoi_union_feats, e.precomp_hoi_labels
+            assert feats.shape[0] == labels.shape[0]
+            n = feats.shape[0]
+            self.d[:, idx:idx+n] = feats.t()
+            self.l[:, idx:idx + n] = labels.t()
+
+    def get_losses(self, x, **kwargs):
+        raise NotImplementedError()
+
+    def forward(self, x, inference=True, **kwargs):
+        assert inference is True
+        assert not self.training
+
+        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
+
+        if hoi_infos is not None:
+            obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+        else:
+            obj_output = hoi_output = None
+
+        return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        raise NotImplementedError()
+
+
 class ZeroModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
@@ -269,3 +306,18 @@ class MemoryModel(GenericModel):
             mem_outputs = None
 
         return obj_logits, hoi_logits, mem_outputs
+
+
+def main():
+    import sys
+    from lib.dataset.hicodet import Splits
+    from scripts.utils import get_all_models_by_name
+
+    sys.argv += ['--model', 'nn']
+    cfg.parse_args(allow_required=False)
+    hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
+    detector = get_all_models_by_name()[cfg.program.model](hdtrain)
+
+
+if __name__ == '__main__':
+    main()

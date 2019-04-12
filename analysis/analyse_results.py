@@ -18,7 +18,7 @@ from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch, get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
-from lib.stats.evaluator import Evaluator
+from lib.stats.evaluator import Evaluator, MetricFormatter
 from scripts.utils import get_all_models_by_name
 
 matplotlib.use('Qt5Agg')
@@ -118,23 +118,25 @@ def stats():
         tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
         gt_counts = np.zeros_like(tps)
         confmat = np.zeros([hdtrain.num_predicates, hdtrain.num_predicates])
-        for gth, gto, ph in zip(gt_hois, gt_hoi_objs, predictions):
-            gth_inds = np.flatnonzero(gth)
-            tps[gto, gth_inds] += (ph[gth_inds] > pred_thr)
-            gt_counts[gto, gth_inds] += 1
+        confmat_norm_factor = np.zeros(hdtrain.num_predicates)
+        for gth_1hot, gto, ph_1hot in zip(gt_hois, gt_hoi_objs, predictions):
+            gthois = np.flatnonzero(gth_1hot)
+            tps[gto, gthois] += (ph_1hot[gthois] > pred_thr)
+            gt_counts[gto, gthois] += 1
 
-            gtset = set(gth_inds.tolist())
-            pset = set(np.flatnonzero(ph > pred_thr))
-            hits = np.array(sorted(gtset & pset))
-            unmatched = gtset - pset
-            mistaken_for = np.array(sorted(pset - gtset))
+            gthois = set(gthois.tolist())
+            phois = set(np.flatnonzero(ph_1hot > pred_thr))
+            hits = np.array(sorted(gthois & phois))
+            unmatched = gthois - phois
+            mistaken_for = np.array(sorted(phois - gthois))
             if hits.size > 0:
                 confmat[hits, hits] += 1
+                confmat_norm_factor[hits] += 1
             for u in unmatched:
                 if mistaken_for.size > 0:
-                    confmat[u, mistaken_for] += 1 / mistaken_for.size
-                else:
-                    confmat[u, :] += 1 / confmat.shape[1]  # FIXME
+                    confmat[u, mistaken_for] += 1
+                else:  # assign to no_interaction by default
+                    confmat[u, 0] += 1
 
         assert np.all(tps <= gt_counts)
         if pos is None:
@@ -142,11 +144,14 @@ def stats():
         assert np.all(pos == gt_counts)
         true_pos.append(tps)
 
-        assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))
+        # assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))  # This is not true because a HOI can be mistaken for several other ones
         confmat /= confmat.sum(axis=1, keepdims=True)
 
     obj_inds = np.argsort(pos.sum(axis=1))[::-1]
-    pred_inds = np.argsort(pos.sum(axis=0))[::-1]
+    # pred_inds = np.argsort(pos.sum(axis=0))[::-1]
+    pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
+
+    print(MetricFormatter().format_metric('01 loss', np.diag(confmat)[pred_inds]))
 
     plot_mat(confmat[:, pred_inds][pred_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.predicates[i] for i in pred_inds],
              x_inds=pred_inds, y_inds=pred_inds,

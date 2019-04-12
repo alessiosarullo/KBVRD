@@ -38,7 +38,7 @@ class HicoDetInstanceSplit(Dataset):
         self.predicates = [hicodet_driver.predicates[i] for i in predicate_inds]
         print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
 
-        ################# Initialize
+        # ################ Initialize
         self.human_class = self.objects.index('person')
 
         # Compute mappings to and from COCO
@@ -53,10 +53,10 @@ class HicoDetInstanceSplit(Dataset):
         assert len(self._im_boxes) == len(self._im_box_classes) == len(self._im_inters) == \
                len(self._annotations) == len(self.image_ids) == len(self._im_filenames)
 
-        ################# Data augmentation pipeline
+        # ################ Data augmentation pipeline
         pass  # You could add a data augmentation pipeline here.
 
-        ################# Possibly load precomputed features
+        # ################ Possibly load precomputed features
         if load_precomputed is None:
             load_precomputed = cfg.program.load_precomputed_feats
         if load_precomputed:
@@ -168,6 +168,12 @@ class HicoDetInstanceSplit(Dataset):
         if not self.has_precomputed:
             raise AttributeError('No precomputed visual features are present.')
         return self.pc_feats_file['box_feats'].shape[1]
+
+    @property
+    def num_precomputed_hois(self):
+        if not self.has_precomputed:
+            raise AttributeError('There is not precomputed data.')
+        return self.pc_feats_file['hoi_labels'].shape[0]
 
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}

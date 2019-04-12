@@ -78,51 +78,19 @@ class Evaluator:
             self.metrics[metric] = func(obj_labels, obj_predictions)
 
     def print_metrics(self, sort=False):
-        def _f(_x, _p):
-            if _x < 1:
-                if _x > 0:
-                    return ('%{}.{}f%%'.format(_p + 3, _p)) % (_x * 100)
-                else:
-                    return ('%{}.{}f%%'.format(_p + 3, 0)) % (_x * 100)
-            else:
-                return ('%{}d%%'.format(_p + 3)) % 100
-
+        mf = MetricFormatter()
         lines = []
-        # Objects
-        gt_objs = self.dataset.obj_labels
-        gt_obj_hist = Counter(gt_objs)
-        num_gt_objs = sum(gt_obj_hist.values())
-        if sort:
-            obj_inds = [p for p, num in gt_obj_hist.most_common()]
-        else:
-            obj_inds = range(self.dataset.num_object_classes)
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        for k, v in obj_metrics.items():
-            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[obj_inds]]) if v.size > 1 else ''
-            lines += ['%10s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str)]
-        lines += ['%11s %8s [%s]' % ('GT objects:', 'IDs', ' '.join(['%5d ' % i for i in obj_inds]))]
-        lines += ['%11s %8s [%s]' % ('', '%', ' '.join([_f(gt_obj_hist[i] / num_gt_objs, _p=2) for i in obj_inds]))]
-
-        # HOIs
-        gt_hois = self.dataset.hois
-        gt_hoi_hist = Counter(gt_hois[:, 1])
-        num_gt_hois = sum(gt_hoi_hist.values())
-        if sort:
-            hoi_inds = [p for p, num in gt_hoi_hist.most_common()]
-        else:
-            hoi_inds = range(self.dataset.num_predicates)
+        lines += mf.format_metric_and_gt_lines(self.dataset.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        for k, v in hoi_metrics.items():
-            per_class_str = ' @ [%s]' % ' '.join([_f(x, _p=2) for x in v[hoi_inds]]) if v.size > 1 else ''
-            lines += ['%7s: %s%s' % (k, _f(np.mean(v), _p=2), per_class_str)]
-        lines += ['%8s %8s [%s]' % ('GT HOIs:', 'IDs', ' '.join(['%5d ' % i for i in hoi_inds]))]
-        lines += ['%8s %8s [%s]' % ('', '%', ' '.join([_f(gt_hoi_hist[i] / num_gt_hois, _p=2) for i in hoi_inds]))]
+        lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         printstr = '\n'.join(lines)
         print(printstr)
         return printstr
+
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
         # TODO docs
@@ -207,3 +175,40 @@ class Evaluator:
         self.hoi_labels.append(hoi_labels)
         self.hoi_predictions.append(hoi_predictions)
         self.hoi_gt_pred_assignment.append(hoi_gt_pred_assignment)
+
+
+class MetricFormatter:
+    def __init__(self):
+        super().__init__()
+
+    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False):
+        lines = []
+        gt_label_hist = Counter(gt_labels)
+        num_gt_examples = sum(gt_label_hist.values())
+        if sort:
+            inds = [p for p, num in gt_label_hist.most_common()]
+        else:
+            inds = range(len(gt_label_hist))
+
+        for k, v in metrics.items():
+            lines += [self.format_metric(k, v[inds] if v.size > 1 else v, len(gt_str))]
+        format_str = '%{}s %8s [%s]'.format(len(gt_str) + 1)
+        lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]
+        lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in inds]))]
+        return lines
+
+    def format_metric(self, metric_name, data, metric_str_len=None):
+        metric_str_len = metric_str_len or len(metric_name)
+        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x) for x in data]) if data.size > 1 else ''
+        f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data)), per_class_str)
+        return f_str
+
+    @staticmethod
+    def _format_percentage(value, precision=2):
+        if value < 1:
+            if value > 0:
+                return ('%{}.{}f%%'.format(precision + 3, precision)) % (value * 100)
+            else:
+                return ('%{}.{}f%%'.format(precision + 3, 0)) % (value * 100)
+        else:
+            return ('%{}d%%'.format(precision + 3)) % 100
