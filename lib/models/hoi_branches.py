@@ -406,7 +406,7 @@ class HoiGCBranch(AbstractHOIBranch):
 
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
-        op_adj_mat = np.sum(op_adj_mats, axis=-1)  # O x P
+        op_adj_mat = np.sum(op_adj_mats, axis=2, keepdims=True)  # O x P x 1
         self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=True)
 
         op_feats = torch.empty((dataset.num_object_classes, dataset.num_predicates, visual_feats_dim))
