@@ -9,7 +9,7 @@ class NNModel(GenericModel):
         return 'nn'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(dataset, **kwargs)
         self.d = torch.nn.Parameter(torch.empty(dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois), requires_grad=False)
         self.l = torch.nn.Parameter(torch.empty(dataset.num_predicates, dataset.num_precomputed_hois), requires_grad=False)
         idx = 0
