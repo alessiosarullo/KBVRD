@@ -108,23 +108,26 @@ class Launcher:
                 torch.save({'epoch': -1,
                             'state_dict': self.detector.state_dict()},
                            cfg.program.checkpoint_file)
-            for epoch in range(cfg.opt.num_epochs):
-                print('Epoch %d start.' % epoch)
-                self.detector.train()
-                self.loss_epoch(epoch, train_loader, training_stats, optimizer)
-                torch.save({'epoch': epoch,
-                            'state_dict': self.detector.state_dict()},
-                           cfg.program.checkpoint_file)
-
                 self.detector.eval()
-                val_loss = self.loss_epoch(epoch, val_loader, val_stats)
-                scheduler.step(val_loss)
+                all_predictions = self.eval_epoch(None, test_loader, test_stats)
+            else:
+                for epoch in range(cfg.opt.num_epochs):
+                    print('Epoch %d start.' % epoch)
+                    self.detector.train()
+                    self.loss_epoch(epoch, train_loader, training_stats, optimizer)
+                    torch.save({'epoch': epoch,
+                                'state_dict': self.detector.state_dict()},
+                               cfg.program.checkpoint_file)
 
-                all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
+                    self.detector.eval()
+                    val_loss = self.loss_epoch(epoch, val_loader, val_stats)
+                    scheduler.step(val_loss)
 
-                if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
-                    print('Exiting training early.', flush=True)
-                    break
+                    all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
+
+                    if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
+                        print('Exiting training early.', flush=True)
+                        break
             Timer.get().print()
         finally:
             training_stats.close_tensorboard_logger()

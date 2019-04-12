@@ -344,6 +344,7 @@ def main():
     cfg.parse_args(allow_required=False)
     hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
     detector = get_all_models_by_name()[cfg.program.model](hdtrain)
+    detector.cuda()
 
 
 if __name__ == '__main__':
