@@ -42,7 +42,7 @@ class PureMemModel(GenericModel):
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         union_boxes_feats_norm = torch.nn.functional.normalize(union_boxes_feats)
-        sim = union_boxes_feats_norm @ self.feats
+        sim = torch.nn.functional.normalize(union_boxes_feats_norm @ self.feats)
         hoi_output = sim @ self.labels
         return hoi_output
 
