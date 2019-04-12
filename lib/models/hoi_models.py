@@ -10,8 +10,8 @@ class PureMemModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        feats = np.empty((dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois))
-        labels = np.empty((dataset.num_precomputed_hois, dataset.num_predicates))
+        feats = np.empty((dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois), dtype=np.float32)
+        labels = np.empty((dataset.num_precomputed_hois, dataset.num_predicates), dtype=np.float32)
         idx = 0
         for i in range(dataset.num_images):
             ex = dataset.get_entry(i)
@@ -34,12 +34,16 @@ class PureMemModel(GenericModel):
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
 
         if hoi_infos is not None:
-            sim = union_boxes_feats @ self.feats
-            hoi_output = sim @ self.labels
+            hoi_output = self._forward(None, None, None, union_boxes_feats, None)
         else:
             hoi_output = None
 
         return self._prepare_prediction(None, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        sim = union_boxes_feats @ self.feats
+        hoi_output = sim @ self.labels
+        return hoi_output
 
     @staticmethod
     def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
