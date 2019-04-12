@@ -10,8 +10,8 @@ class NNModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        feats = np.empty(dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois)
-        labels = np.empty(dataset.num_predicates, dataset.num_precomputed_hois)
+        feats = np.empty((dataset.precomputed_visual_feat_dim, dataset.num_precomputed_hois))
+        labels = np.empty((dataset.num_predicates, dataset.num_precomputed_hois))
         idx = 0
         for e in dataset:
             feats, labels = e.precomp_hoi_union_feats, e.precomp_hoi_labels
