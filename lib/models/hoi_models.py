@@ -14,11 +14,11 @@ class NNModel(GenericModel):
         labels = np.empty((dataset.num_predicates, dataset.num_precomputed_hois))
         idx = 0
         for e in dataset:
-            feats, labels = e.precomp_hoi_union_feats, e.precomp_hoi_labels
-            assert feats.shape[0] == labels.shape[0]
-            n = feats.shape[0]
-            feats[:, idx:idx + n] = feats.T
-            labels[:, idx:idx + n] = labels.T
+            f, l = e.precomp_hoi_union_feats, e.precomp_hoi_labels
+            assert f.shape[0] == l.shape[0]
+            n = f.shape[0]
+            feats[:, idx:idx + n] = f.T
+            labels[:, idx:idx + n] = l.T
             idx += n
         self.feats = torch.nn.Parameter(torch.from_numpy(feats), requires_grad=False)
         self.labels = torch.nn.Parameter(torch.from_numpy(labels), requires_grad=False)
