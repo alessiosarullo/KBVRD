@@ -309,11 +309,9 @@ class MemoryModel(GenericModel):
 
 
 def main():
-    import sys
     from lib.dataset.hicodet import Splits
     from scripts.utils import get_all_models_by_name
 
-    sys.argv += ['--model', 'nn']
     cfg.parse_args(allow_required=False)
     hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
     detector = get_all_models_by_name()[cfg.program.model](hdtrain)
