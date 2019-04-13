@@ -30,7 +30,7 @@ class HicoDetInstanceSplit(Dataset):
         self.flipping_prob = flipping_prob
 
         self._annotations = annotations
-        self.hicodet = hicodet_driver
+        self.hicodet = hicodet_driver  # type: HicoDetDriver
 
         object_inds = sorted(object_inds)
         predicate_inds = sorted(predicate_inds)

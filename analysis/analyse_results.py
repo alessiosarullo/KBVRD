@@ -18,7 +18,9 @@ from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch, get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
-from lib.stats.evaluator import Evaluator, MetricFormatter
+from lib.stats.evaluator import Evaluator as Evaluator_old, MetricFormatter
+from lib.stats.evaluator_HD import Evaluator as Evaluator_HD
+from lib.stats.evaluator_hd import Evaluator as Evaluator_hd
 from scripts.utils import get_all_models_by_name
 
 matplotlib.use('Qt5Agg')
@@ -34,36 +36,21 @@ def _setup_and_load():
     return results
 
 
-def vrd_style_eval_count():
+def evaluate():
+    sys.argv += ['--save_dir', 'output/hoi/2019-04-12_09-51-28_red-ored']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-    stats = Evaluator.evaluate_predictions(hds, results)
+
+    stats = Evaluator_old.evaluate_predictions(hds, results)
+    # stats = Evaluator_hd.evaluate_predictions(hds, results)
+    # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics()
-
-    gt_hois = hds.hois
-    gt_hoi_hist = Counter(gt_hois[:, 1])
-    num_gt_hois = sum(gt_hoi_hist.values())
-    assert num_gt_hois == gt_hois.shape[0]
-    num_pred_hois = stats.num_hoi_predictions_per_class
-    print('  GT HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * gt_hoi_hist[i] / num_gt_hois)
-                                         for i, c in enumerate(hds.predicates)]))
-    print('Pred HOIs: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_hois[i] / np.sum(num_pred_hois))
-                                         for i, c in enumerate(hds.predicates)]))
-
-    obj_class_hist = Counter(hds.obj_labels)
-    num_gt_obj_classes = sum(obj_class_hist.values())
-    assert num_gt_obj_classes == hds.obj_labels.shape[0]
-    num_pred_objs = stats.num_obj_predictions_per_class
-    print('  GT objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * obj_class_hist[i] / num_gt_obj_classes)
-                                            for i, c in enumerate(hds.objects)]))
-    print('Pred objects: [%s]' % ', '.join(['%s (%3.0f%%)' % (c.replace('_', ' ').strip(), 100 * num_pred_objs[i] / np.sum(num_pred_objs))
-                                            for i, c in enumerate(hds.objects)]))
 
 
 def stats():
     base_argv = sys.argv
     exps = [
-        'output/hoi/2019-04-03_11-21-41_vanilla',
+        'output/hoi/2019-04-12_09-51-28_red-ored',
         # 'output/zero/2019-04-03_10-28-10_vanilla',
         # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
     ]
@@ -78,7 +65,7 @@ def stats():
         hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
         hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
-        stats = Evaluator.evaluate_predictions(hdtest, results)
+        stats = Evaluator_old.evaluate_predictions(hdtest, results)  # type: Evaluator_old
         stats.print_metrics(sort=True)
 
         # detector = get_all_models_by_name()[cfg.program.model](hdtrain)
@@ -262,9 +249,10 @@ def main():
     funcs = {'vis': vis_masks,
              'att': att,
              'stats': stats,
+             'eval': evaluate,
              }
 
-    sys.argv[1:] = ['stats', '--load_precomputed_feats']
+    sys.argv[1:] = ['eval', '--load_precomputed_feats']
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())
     namespace = parser.parse_known_args()

@@ -1,6 +1,45 @@
 from lib.models.generic_model import GenericModel, Prediction
+from lib.bbox_utils import compute_ious
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
+
+
+class OracleModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'oracle'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+
+    def forward(self, x, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference=False)
+
+            if hoi_infos is not None:
+                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            else:
+                obj_output = hoi_output = None
+
+            if not inference:
+                assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
+                return obj_output, hoi_output, box_labels, hoi_labels
+            else:
+                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        gt_pred_ious = compute_ious(gt_boxes, boxes_ext[:, 1:5])
+        gt_to_predict_box_match = np.argmax(gt_pred_ious, axis=1)
+        gt_to_predict_box_match[~gt_pred_ious.any(axis=1)] = -1
+
+
+        return obj_logits, hoi_logits
 
 
 class PureMemModel(GenericModel):

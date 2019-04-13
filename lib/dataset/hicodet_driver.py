@@ -397,8 +397,16 @@ def print_num_objs():
     assert sum(occs) == num_interactions, num_interactions
 
 
+def load_mats():
+    data_dir = os.path.join('data', 'HICO-DET')
+    annobbox = loadmat(os.path.join(data_dir, 'anno_bbox.mat'), squeeze_me=True)
+    anno = loadmat(os.path.join(data_dir, 'anno.mat'), squeeze_me=True)
+    pass
+
+
 if __name__ == '__main__':
-    save_lists()
+    load_mats()
+    # save_lists()
     # print_num_preds()
     # print('=' * 100)
     # print_num_objs()

@@ -13,12 +13,9 @@ from lib.models.utils import Prediction
 class Evaluator:
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
-        self.filter_bg = False
         self.dataset = dataset
-        self.hoi_obj_labels = []
         self.hoi_labels = []
         self.hoi_predictions = []
-        self.hoi_gt_pred_assignment = []
 
         self.hoi_metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
                                      'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
@@ -63,6 +60,8 @@ class Evaluator:
         return printstr
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
+        # TODO docs
+
         if isinstance(gt_entry, Example):
             gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
@@ -104,22 +103,23 @@ class Evaluator:
         num_gt_hois = gt_hois.shape[0]
         num_predictions = predict_hoi_scores.shape[0]
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_ious_class_match = np.argmax(predict_obj_scores, axis=1)[:, None] == gt_obj_classes[None, :]
 
         unmatched_gt_hois = np.ones(num_gt_hois, dtype=bool)
         hoi_predictions = predict_hoi_scores.copy()
         hoi_labels = np.zeros((num_predictions, self.dataset.num_predicates))
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
-            gt_pair_ious = np.zeros(num_gt_hois)
-            for gtidx, (gh, go, gi) in enumerate(gt_hois):
-                iou_h = pred_gt_ious[ph, gh]
-                iou_o = pred_gt_ious[po, go]
-                if pred_gt_ious_class_match[ph, gh] and pred_gt_ious_class_match[po, go]:
+            for j in range(self.dataset.num_predicates):
+                gt_pair_ious = np.zeros(num_gt_hois)
+                for gtidx, (gh, go, gi) in enumerate(gt_hois):
+                    if gi != j:
+                        continue
+                    iou_h = pred_gt_ious[ph, gh]
+                    iou_o = pred_gt_ious[po, go]
                     gt_pair_ious[gtidx] = min(iou_h, iou_o)
-            if np.any(gt_pair_ious > self.iou_thresh):
-                gtidxs = (gt_pair_ious > self.iou_thresh)
-                hoi_labels[predict_idx, np.unique(gt_hois[gtidxs, 2])] = 1
-                unmatched_gt_hois[gtidxs] = False
+                if np.any(gt_pair_ious > self.iou_thresh):
+                    gtidx = np.argmax(gt_pair_ious > self.iou_thresh)
+                    hoi_labels[predict_idx, j] = 1
+                    unmatched_gt_hois[gtidx] = False
 
         num_unmatched_gt_hois = np.sum(unmatched_gt_hois)
         hoi_unmatched_labels = np.zeros((num_unmatched_gt_hois, self.dataset.num_predicates))
