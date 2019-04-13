@@ -1,4 +1,5 @@
 from lib.models.generic_model import GenericModel, Prediction
+from lib.dataset.utils import Splits
 from lib.bbox_utils import compute_ious
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
@@ -11,35 +12,58 @@ class OracleModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.fake = torch.nn.Parameter(torch.from_numpy(np.array([1.])), requires_grad=True)
+        self.iou_thresh = 0.5
+        self.split = Splits.TEST
 
     def forward(self, x, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference=False)
+        assert inference is True
+        assert not self.training
 
-            if hoi_infos is not None:
-                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
-            else:
-                obj_output = hoi_output = None
+        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, True)
+        im_scales = x.img_infos[:, 2].cpu().numpy()
 
-            if not inference:
-                assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
-                return obj_output, hoi_output, box_labels, hoi_labels
-            else:
-                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+        if hoi_infos is not None:
+            im_ids = np.unique(hoi_infos[:, 0])
+            assert im_ids.size == 1 and im_ids == 0
 
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+            gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False, ignore_precomputed=True)
 
-        gt_pred_ious = compute_ious(gt_boxes, boxes_ext[:, 1:5])
-        gt_to_predict_box_match = np.argmax(gt_pred_ious, axis=1)
-        gt_to_predict_box_match[~gt_pred_ious.any(axis=1)] = -1
+            boxes_ext_np = boxes_ext.detach().cpu().numpy()
+            predict_boxes = boxes_ext_np[:, 1:5]
+            gt_boxes = gt_entry.gt_boxes * im_scales[0]
+            pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
 
+            pred_gt_best_match = np.argmax(pred_gt_ious, axis=1)  # type: np.ndarray
+            box_labels = gt_entry.gt_obj_classes[pred_gt_best_match]  # assign the best match
+            obj_output = torch.from_numpy(self.visual_module.one_hot_obj_labels(box_labels))
 
-        return obj_logits, hoi_logits
+            pred_gt_ious_class_match = (box_labels[:, None] == gt_entry.gt_obj_classes[None, :])
+
+            predict_ho_pairs = hoi_infos[:, 1:]
+            gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
+
+            hoi_labels = np.zeros((predict_ho_pairs.shape[0], self.dataset.num_predicates))
+            for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
+                gt_pair_ious = np.zeros(gt_hois.shape[0])
+                for gtidx, (gh, go, gi) in enumerate(gt_hois):
+                    iou_h = pred_gt_ious[ph, gh]
+                    iou_o = pred_gt_ious[po, go]
+                    if pred_gt_ious_class_match[ph, gh] and pred_gt_ious_class_match[po, go]:
+                        gt_pair_ious[gtidx] = min(iou_h, iou_o)
+                if np.any(gt_pair_ious > self.iou_thresh):
+                    gtidxs = (gt_pair_ious > self.iou_thresh)
+                    hoi_labels[predict_idx, np.unique(gt_hois[gtidxs, 2])] = 1
+
+            hoi_output = torch.from_numpy(hoi_labels)
+        else:
+            obj_output = hoi_output = None
+
+        if not inference:
+            assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
+            return obj_output, hoi_output, box_labels, hoi_labels
+        else:
+            return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=im_scales)
 
 
 class PureMemModel(GenericModel):

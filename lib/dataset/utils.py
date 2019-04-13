@@ -179,12 +179,10 @@ class Minibatch:
 
     @classmethod
     def collate(cls, examples):
-        Timer.get('Collate').tic()
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
         minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-        Timer.get('Collate').toc()
         return minibatch
 
 

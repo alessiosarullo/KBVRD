@@ -130,12 +130,11 @@ class RunningStats:
         num_batches = len(self.data_loader)
         time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
-        time_to_collate = Timer.get('Collate', get_only=True).spent(average=True)
         try:
             time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
         except ValueError:
             time_for_stats = 0
-        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_to_collate + time_for_stats)
+        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_for_stats)
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
@@ -148,11 +147,10 @@ class RunningStats:
             else:
                 header = '{:s}. {:s}.'.format(self.split_str, batch_str.capitalize())
 
-        print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/collate, {:>5s}/stats.'.format(Timer.format(time_per_batch),
-                                                                                             Timer.format(time_to_load),
-                                                                                             Timer.format(time_to_collate),
-                                                                                             Timer.format(time_for_stats),
-                                                                                             ),
+        print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/stats.'.format(Timer.format(time_per_batch),
+                                                                             Timer.format(time_to_load),
+                                                                             Timer.format(time_for_stats),
+                                                                             ),
               'Current {:s}progress: {:>7s}/{:>7s} (estimated).'.format('epoch ' if epoch is not None else '',
                                                                         Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
                                                                         Timer.format(est_time_per_epoch)))
