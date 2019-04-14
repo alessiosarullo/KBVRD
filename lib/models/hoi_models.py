@@ -15,6 +15,7 @@ class OracleModel(GenericModel):
         self.fake = torch.nn.Parameter(torch.from_numpy(np.array([1.])), requires_grad=True)
         self.iou_thresh = 0.5
         self.split = Splits.TEST
+        self.perfect_detector = True
 
     def forward(self, x, inference=True, **kwargs):
         assert inference is True
@@ -22,23 +23,30 @@ class OracleModel(GenericModel):
 
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, True)
         im_scales = x.img_infos[:, 2].cpu().numpy()
+        gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False, ignore_precomputed=True)
+        gt_boxes = gt_entry.gt_boxes * im_scales[0]
+        gt_obj_classes = gt_entry.gt_obj_classes
+        if self.perfect_detector:
+            boxes_ext = torch.from_numpy(np.concatenate([np.zeros((gt_boxes.shape[0], 1)),
+                                                         gt_boxes,
+                                                         self.visual_module.one_hot_obj_labels(gt_obj_classes)
+                                                         ], axis=1))
+            hoi_infos = self.visual_module.get_all_pairs(boxes_ext[:, :5].detach().cpu().numpy(), gt_obj_classes)
+            if hoi_infos.size == 0:
+                hoi_infos = None
 
         if hoi_infos is not None:
             im_ids = np.unique(hoi_infos[:, 0])
             assert im_ids.size == 1 and im_ids == 0
 
-            gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False, ignore_precomputed=True)
-
-            boxes_ext_np = boxes_ext.detach().cpu().numpy()
-            predict_boxes = boxes_ext_np[:, 1:5]
-            gt_boxes = gt_entry.gt_boxes * im_scales[0]
+            predict_boxes = boxes_ext[:, 1:5].detach().cpu().numpy()
             pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
 
             pred_gt_best_match = np.argmax(pred_gt_ious, axis=1)  # type: np.ndarray
-            box_labels = gt_entry.gt_obj_classes[pred_gt_best_match]  # assign the best match
+            box_labels = gt_obj_classes[pred_gt_best_match]  # assign the best match
             obj_output = torch.from_numpy(self.visual_module.one_hot_obj_labels(box_labels))
 
-            pred_gt_ious_class_match = (box_labels[:, None] == gt_entry.gt_obj_classes[None, :])
+            pred_gt_ious_class_match = (box_labels[:, None] == gt_obj_classes[None, :])
 
             predict_ho_pairs = hoi_infos[:, 1:]
             gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]
@@ -57,13 +65,43 @@ class OracleModel(GenericModel):
 
             hoi_output = torch.from_numpy(hoi_labels)
         else:
-            obj_output = hoi_output = None
+            obj_output = hoi_output = boxes_ext = None
 
         if not inference:
             assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
             return obj_output, hoi_output, box_labels, hoi_labels
         else:
             return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=im_scales)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        raise NotImplementedError()
+
+    @staticmethod
+    def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+        if hoi_infos is not None:
+            assert obj_output is not None and hoi_output is not None and boxes_ext is not None
+            obj_prob = obj_output.cpu().numpy()
+            hoi_probs = hoi_output.cpu().numpy()
+            hoi_img_inds = hoi_infos[:, 0]
+            ho_pairs = hoi_infos[:, 1:]
+        else:
+            hoi_probs = ho_pairs = hoi_img_inds = None
+            obj_prob = None
+
+        if boxes_ext is not None:
+            boxes_ext = boxes_ext.cpu().numpy()
+            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+            if obj_prob is None:
+                obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
+        else:
+            obj_im_inds = obj_boxes = None
+        return Prediction(obj_im_inds=obj_im_inds,
+                          obj_boxes=obj_boxes,
+                          obj_scores=obj_prob,
+                          hoi_img_inds=hoi_img_inds,
+                          ho_pairs=ho_pairs,
+                          hoi_scores=hoi_probs)
 
 
 class PureMemModel(GenericModel):

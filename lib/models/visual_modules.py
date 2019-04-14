@@ -212,8 +212,8 @@ class VisualModule(nn.Module):
             block_img_mat = (boxes_ext[:, 0][:, None] == boxes_ext[:, 0][None, :])
             assert block_img_mat.shape[0] == block_img_mat.shape[1]
             possible_rels_mat = block_img_mat - np.eye(block_img_mat.shape[0])
-            possible_rels_mat[~human_box_inds, :] = 0
-            possible_rels_mat[:, human_box_inds] = 0
+            possible_rels_mat[~human_box_inds, :] = 0  # only from human
+            # possible_rels_mat[:, human_box_inds] = 0  # only to non-human
             hum_inds, obj_inds = np.where(possible_rels_mat)
 
             hoi_im_ids = boxes_ext[hum_inds, 0]

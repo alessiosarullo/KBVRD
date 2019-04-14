@@ -19,6 +19,7 @@ class Evaluator:
         self.hoi_labels = []
         self.hoi_predictions = []
         self.hoi_gt_pred_assignment = []
+        self.num_unmatched_gt_hois = 0
 
         self.hoi_metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
                                      'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
@@ -58,6 +59,16 @@ class Evaluator:
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
+        all_predictions = np.concatenate(self.hoi_predictions, axis=0)
+        all_labels = np.concatenate(self.hoi_labels, axis=0)
+        actual_predictions = np.any(all_predictions, axis=1)
+        actual_labels = np.any(all_labels, axis=1).sum()
+        lines += ['%30s: %6d.' % ('Num predicted HOIs', actual_predictions.sum())]
+        lines += ['%30s: %6d.' % ('Num unassigned predictions', np.all(all_labels == 0, axis=1).sum())]
+        lines += ['%30s: %6d.' % ('Num GT HOIs', actual_labels.sum())]
+        lines += ['%30s: %6d.' % ('Num unmatched GT HOIs', np.all(all_predictions == 0, axis=1).sum())]
+        lines += ['%30s: %6d.' % ('Num total', all_predictions.shape[0])]
+
         printstr = '\n'.join(lines)
         print(printstr)
         return printstr
@@ -77,6 +88,7 @@ class Evaluator:
 
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
+        predict_obj_scores = np.zeros((0, self.dataset.num_object_classes))
         predict_hoi_scores = np.zeros((0, self.dataset.num_predicates))
         if prediction.obj_boxes is not None:
             assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
