@@ -99,17 +99,17 @@ class Evaluator:
 
             if prediction.ho_pairs is not None:
                 assert all([v is not None for v in vars(prediction).values()])
-                assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.hoi_score_distributions.shape[0]
+                assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.action_score_distributions.shape[0]
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
-                predict_hoi_scores = prediction.hoi_score_distributions
+                predict_hoi_scores = prediction.action_score_distributions
 
                 # fg_hois = predict_hoi_scores[:, 0] < 0.5  # FIXME magic constant
                 # predict_hoi_scores = predict_hoi_scores[fg_hois, :]
                 # predict_ho_pairs = predict_ho_pairs[fg_hois, :]
             else:
-                assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.hoi_score_distributions is None
+                assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.action_score_distributions is None
         else:
             assert prediction.ho_pairs is None
 

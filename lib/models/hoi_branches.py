@@ -383,7 +383,63 @@ class HoiPriorBranch(AbstractHOIBranch):
         return hoi_logits
 
 
-class HoiGCBranch(AbstractHOIBranch):
+class HoiEmbsimBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        # TODO docs and FIXME comments
+        self.word_emb_dim = 300
+        self.hoi_repr_dim = 2 * self.word_emb_dim
+        super().__init__(**kwargs)
+        self.num_objects = dataset.num_object_classes
+
+        self.word_embs = WordEmbeddings(source='numberbatch', dim=self.word_emb_dim)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+        # self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embs.get_embeddings(dataset.objects)), freeze=True)
+
+        op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, None, :], [1, dataset.num_predicates, 1]),
+                                     np.tile(pred_word_embs[None, :, :], [dataset.num_object_classes, 1, 1])], axis=2)
+        self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=True)
+
+        self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
+                                               nn.ReLU,
+                                               nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+        nn.init.xavier_normal_(self.obj_vis_to_emb_fc[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.obj_vis_to_emb_fc[2].weight, gain=1.0)
+        self.pred_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
+                                                nn.ReLU,
+                                                nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+        nn.init.xavier_normal_(self.pred_vis_to_emb_fc[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.pred_vis_to_emb_fc[2].weight, gain=1.0)
+
+    @property
+    def output_dim(self):
+        return self.hoi_repr_dim
+
+    def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        if box_labels is not None:
+            assert hoi_labels is not None
+            obj_prediction = union_box_feats.new_zeros((box_labels.shape[0], self.num_objects))
+            obj_prediction[torch.arange(obj_prediction.shape[0]), box_labels] = 1
+            hoi_prediction = hoi_labels
+        else:
+            assert hoi_labels is None
+            obj_prediction = nn.functional.softmax(obj_logits, dim=1)
+            hoi_prediction = torch.sigmoid(hoi_logits)
+
+        obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
+        pred_att = hoi_prediction  # N x P
+
+        op_repr = (self.op_adj_mat * self.op_repr)  # O x P x F
+        ext_obj_repr = self.obj_vis_to_emb_fc(obj_att @ op_repr.mean(dim=1))
+        ext_pred_repr = self.pred_vis_to_emb_fc(pred_att @ op_repr.mean(dim=0))
+        union_repr = self.hoi_repr_fc(union_box_feats)
+
+        hoi_repr = union_repr + ext_obj_repr + ext_pred_repr
+
+        return hoi_repr
+
+
+class HoiMemGCBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.hoi_repr_dim = 600

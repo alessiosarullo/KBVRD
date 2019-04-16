@@ -37,12 +37,12 @@ def _setup_and_load():
 
 
 def evaluate():
-    sys.argv += ['--save_dir', 'output/hoi/2019-04-12_09-51-28_red-ored']
+    sys.argv += ['--save_dir', 'output/hoi/2019-04-14_11-38-03_vanilla']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
-    stats = Evaluator_old.evaluate_predictions(hds, results)
-    # stats = Evaluator_hd.evaluate_predictions(hds, results)
+    # stats = Evaluator_old.evaluate_predictions(hds, results)
+    stats = Evaluator_hd.evaluate_predictions(hds, results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics()
 

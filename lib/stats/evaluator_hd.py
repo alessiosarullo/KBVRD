@@ -13,9 +13,15 @@ from lib.models.utils import Prediction
 class Evaluator:
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
+        self.filter_bg = False
+        self.filter_unknown_pairs = True
+
         self.dataset = dataset
+        self.hoi_obj_labels = []
         self.hoi_labels = []
         self.hoi_predictions = []
+        self.hoi_gt_pred_assignment = []
+        self.num_unmatched_gt_hois = 0
 
         self.hoi_metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
                                      'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
@@ -25,6 +31,20 @@ class Evaluator:
                                      'M-prc': lambda labels, predictions: precision_score(labels, (predictions > 0.5), average=None),
                                      }
         self.metrics = {}  # type: Dict[str, np.ndarray]
+
+        self.known_pairs = self.get_known_pairs()
+
+    def get_known_pairs(self):
+        known_pairs = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=bool)
+        num_interactions = len(self.dataset.hicodet.interactions)
+        for iid in range(num_interactions):
+            obj_id = self.dataset.hicodet.get_object_index(iid)
+            pred_id = self.dataset.hicodet.get_predicate_index(iid)
+            known_pairs[obj_id, pred_id] = 1
+        assert np.sum(known_pairs) == 600, np.sum(known_pairs)
+
+        known_pairs = known_pairs.reshape(-1)
+        return known_pairs
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
@@ -40,6 +60,7 @@ class Evaluator:
         return evaluator  # type: Evaluator
 
     def compute_metrics(self):
+        print(sum([x.shape[0] for x in self.hoi_labels]))
         hoi_labels = np.concatenate(self.hoi_labels, axis=0)
         hoi_predictions = np.concatenate(self.hoi_predictions, axis=0)
         for metric, func in self.hoi_metric_functions.items():
@@ -55,13 +76,21 @@ class Evaluator:
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
+        all_predictions = np.concatenate(self.hoi_predictions, axis=0)
+        all_labels = np.concatenate(self.hoi_labels, axis=0)
+        actual_predictions = np.any(all_predictions, axis=1)
+        actual_labels = np.any(all_labels, axis=1).sum()
+        lines += ['%30s: %6d.' % ('Num predicted HOIs', actual_predictions.sum())]
+        lines += ['%30s: %6d.' % ('Num unassigned predictions', np.all(all_labels == 0, axis=1).sum())]
+        lines += ['%30s: %6d.' % ('Num GT HOIs', actual_labels.sum())]
+        lines += ['%30s: %6d.' % ('Num unmatched GT HOIs', np.all(all_predictions == 0, axis=1).sum())]
+        lines += ['%30s: %6d.' % ('Num total', all_predictions.shape[0])]
+
         printstr = '\n'.join(lines)
         print(printstr)
         return printstr
 
     def process_prediction(self, gt_entry: Example, prediction: Prediction):
-        # TODO docs
-
         if isinstance(gt_entry, Example):
             gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
@@ -69,14 +98,16 @@ class Evaluator:
         else:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-        # Ground truth
-        num_gt_objs = gt_boxes.shape[0]
-        obj_labels = np.zeros([num_gt_objs, self.dataset.num_object_classes])
-        obj_labels[np.arange(obj_labels.shape[0]), gt_obj_classes] = 1
+        num_possible_hois = self.dataset.num_object_classes * self.dataset.num_predicates
+
+        # # Ground truth objects
+        # num_gt_objs = gt_boxes.shape[0]
+        # obj_labels = np.zeros([num_gt_objs, self.dataset.num_object_classes])
+        # obj_labels[np.arange(obj_labels.shape[0]), gt_obj_classes] = 1
 
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
-        predict_hoi_scores = np.zeros((0, self.dataset.num_predicates))
+        predict_hoi_scores = np.zeros((0, num_possible_hois))
         if prediction.obj_boxes is not None:
             assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
             assert prediction.obj_im_inds is not None and prediction.obj_boxes is not None and prediction.obj_scores is not None
@@ -86,17 +117,20 @@ class Evaluator:
 
             if prediction.ho_pairs is not None:
                 assert all([v is not None for v in vars(prediction).values()])
-                assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.hoi_score_distributions.shape[0]
+                assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.action_score_distributions.shape[0]
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
-                predict_hoi_scores = prediction.hoi_score_distributions
+                predict_action_scores = prediction.action_score_distributions
+                predict_hoi_obj_scores = predict_obj_scores[predict_ho_pairs[:, 1], :]
+                predict_hoi_scores = (predict_hoi_obj_scores[:, None, :] * predict_action_scores[:, :, None]).reshape(predict_ho_pairs.shape[0], -1)
+                assert predict_hoi_scores.shape[1] == num_possible_hois
 
-                # fg_hois = predict_hoi_scores[:, 0] < 0.5  # FIXME magic constant
-                # predict_hoi_scores = predict_hoi_scores[fg_hois, :]
+                # fg_hois = predict_action_scores[:, 0] < 0.5  # FIXME magic constant
+                # predict_action_scores = predict_action_scores[fg_hois, :]
                 # predict_ho_pairs = predict_ho_pairs[fg_hois, :]
             else:
-                assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.hoi_score_distributions is None
+                assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.action_score_distributions is None
         else:
             assert prediction.ho_pairs is None
 
@@ -105,32 +139,38 @@ class Evaluator:
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
 
         unmatched_gt_hois = np.ones(num_gt_hois, dtype=bool)
-        hoi_predictions = predict_hoi_scores.copy()
-        hoi_labels = np.zeros((num_predictions, self.dataset.num_predicates))
+        hoi_predictions = predict_hoi_scores
+        hoi_labels = np.zeros((num_predictions, num_possible_hois))
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
-            for j in range(self.dataset.num_predicates):
-                gt_pair_ious = np.zeros(num_gt_hois)
-                for gtidx, (gh, go, gi) in enumerate(gt_hois):
-                    if gi != j:
-                        continue
-                    iou_h = pred_gt_ious[ph, gh]
-                    iou_o = pred_gt_ious[po, go]
-                    gt_pair_ious[gtidx] = min(iou_h, iou_o)
-                if np.any(gt_pair_ious > self.iou_thresh):
-                    gtidx = np.argmax(gt_pair_ious > self.iou_thresh)
-                    hoi_labels[predict_idx, j] = 1
-                    unmatched_gt_hois[gtidx] = False
+            gt_pair_ious = np.zeros(num_gt_hois)
+            for gtidx, (gh, go, gi) in enumerate(gt_hois):
+                iou_h = pred_gt_ious[ph, gh]
+                iou_o = pred_gt_ious[po, go]
+                gt_pair_ious[gtidx] = min(iou_h, iou_o)
+            if np.any(gt_pair_ious > self.iou_thresh):
+                gtidxs = (gt_pair_ious > self.iou_thresh)
+                gt_op_hoi_labels = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+                gt_op_hoi_labels[gt_obj_classes[gt_hois[gtidxs, 1]], gt_hois[gtidxs, 2]] = 1
+                hoi_labels[predict_idx, :] = gt_op_hoi_labels.reshape(-1)
+                unmatched_gt_hois[gtidxs] = False
 
         num_unmatched_gt_hois = np.sum(unmatched_gt_hois)
-        hoi_unmatched_labels = np.zeros((num_unmatched_gt_hois, self.dataset.num_predicates))
-        hoi_unmatched_labels[np.arange(num_unmatched_gt_hois), gt_hois[unmatched_gt_hois, 2]] = 1
+        if num_unmatched_gt_hois > 0:
+            hoi_unmatched_labels = np.zeros((num_unmatched_gt_hois, self.dataset.num_object_classes, self.dataset.num_predicates))
+            hoi_unmatched_labels[np.arange(num_unmatched_gt_hois), gt_obj_classes[gt_hois[unmatched_gt_hois, 1]], gt_hois[unmatched_gt_hois, 2]] = 1
+            hoi_unmatched_labels = hoi_unmatched_labels.reshape(hoi_unmatched_labels.shape[0], -1)
+        else:
+            hoi_unmatched_labels = np.zeros((num_unmatched_gt_hois, num_possible_hois))
 
         # Add unassigned predictions
         hoi_labels = np.concatenate([hoi_labels, hoi_unmatched_labels], axis=0)
-        hoi_predictions = np.concatenate([hoi_predictions, np.zeros((num_unmatched_gt_hois, self.dataset.num_predicates))], axis=0)
+        hoi_predictions = np.concatenate([hoi_predictions, np.zeros((num_unmatched_gt_hois, hoi_predictions.shape[1]))], axis=0)
 
-        self.hoi_labels.append(hoi_labels)
-        self.hoi_predictions.append(hoi_predictions)
+        if self.filter_unknown_pairs:
+            hoi_labels = hoi_labels[:, self.known_pairs]
+            hoi_predictions = hoi_predictions[:, self.known_pairs]
+        self.hoi_labels.append(hoi_labels.astype(np.float32))
+        self.hoi_predictions.append(hoi_predictions.astype(np.float32))
 
 
 class MetricFormatter:

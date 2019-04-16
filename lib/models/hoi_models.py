@@ -419,10 +419,11 @@ class MemoryModel(HoiModel):
 
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
+        hoi_logits_dt = hoi_logits.detach()
 
-        hoi_ref_repr = hoi_repr + self.hoi_refinement_branch(hoi_logits.detach(), obj_logits.detach(), union_boxes_feats, hoi_infos,
+        hoi_ref_repr = self.hoi_refinement_branch(hoi_logits_dt, obj_logits.detach(), union_boxes_feats, hoi_infos,
                                                              box_labels, hoi_labels)
-        hoi_ref_logits = self.hoi_ref_output_fc(hoi_ref_repr)
+        hoi_ref_logits = hoi_logits_dt + self.hoi_ref_output_fc(hoi_ref_repr)
 
         return obj_logits, hoi_logits, hoi_ref_logits
 
