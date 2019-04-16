@@ -398,7 +398,7 @@ class HoiEmbsimBranch(AbstractHOIBranch):
 
         op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, None, :], [1, dataset.num_predicates, 1]),
                                      np.tile(pred_word_embs[None, :, :], [dataset.num_object_classes, 1, 1])], axis=2)
-        self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=True)
+        self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=False)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
                                                nn.ReLU,

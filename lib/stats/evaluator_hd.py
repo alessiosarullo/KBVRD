@@ -23,28 +23,32 @@ class Evaluator:
         self.hoi_gt_pred_assignment = []
         self.num_unmatched_gt_hois = 0
 
-        self.hoi_metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
-                                     'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
-                                     'u-rec': lambda labels, predictions: recall_score(labels, (predictions > 0.5), average='micro'),
-                                     'M-rec': lambda labels, predictions: recall_score(labels, (predictions > 0.5), average=None),
-                                     'u-prc': lambda labels, predictions: precision_score(labels, (predictions > 0.5), average='micro'),
-                                     'M-prc': lambda labels, predictions: precision_score(labels, (predictions > 0.5), average=None),
-                                     }
+        self.hoi_metric_functions = {
+            'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
+            'M-rec': lambda labels, predictions: recall_score(labels, (predictions > 0.5)),
+            'M-prc': lambda labels, predictions: precision_score(labels, (predictions > 0.5)),
+        }
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
-        self.known_pairs = self.get_known_pairs()
+        self.known_pairs, self.num_interactions = self.get_known_pairs()
 
     def get_known_pairs(self):
         known_pairs = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=bool)
-        num_interactions = len(self.dataset.hicodet.interactions)
-        for iid in range(num_interactions):
+        for iid in range(len(self.dataset.hicodet.interactions)):
             obj_id = self.dataset.hicodet.get_object_index(iid)
             pred_id = self.dataset.hicodet.get_predicate_index(iid)
             known_pairs[obj_id, pred_id] = 1
         assert np.sum(known_pairs) == 600, np.sum(known_pairs)
 
-        known_pairs = known_pairs.reshape(-1)
-        return known_pairs
+        num_occurrences = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=np.int)
+        for h, i, o in self.dataset.hois:
+            num_occurrences[o, i] += 1
+        assert np.sum(num_occurrences > 0) == 600
+
+        known_pairs = np.flatnonzero(known_pairs.reshape(-1))
+        num_interactions = num_occurrences.reshape(-1)[known_pairs]
+        assert num_interactions.sum() == num_occurrences.sum()
+        return known_pairs, num_interactions
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
@@ -56,28 +60,31 @@ class Evaluator:
             prediction = Prediction.from_dict(res)
             evaluator.process_prediction(ex, prediction)
 
+        evaluator.hoi_labels = np.concatenate(evaluator.hoi_labels, axis=0)
+        evaluator.hoi_predictions = np.concatenate(evaluator.hoi_predictions, axis=0)
         evaluator.compute_metrics()
         return evaluator  # type: Evaluator
 
     def compute_metrics(self):
-        print(sum([x.shape[0] for x in self.hoi_labels]))
-        hoi_labels = np.concatenate(self.hoi_labels, axis=0)
-        hoi_predictions = np.concatenate(self.hoi_predictions, axis=0)
-        for metric, func in self.hoi_metric_functions.items():
-            self.metrics[metric] = func(hoi_labels, hoi_predictions)
+        for metric_name, func in self.hoi_metric_functions.items():
+            metric = np.zeros(self.known_pairs.size)
+            for j in range(self.known_pairs.size):
+                metric[j] = func(self.hoi_labels[:, j], self.hoi_predictions[:, j])
+            self.metrics[metric_name] = metric
 
     def print_metrics(self, sort=False):
         mf = MetricFormatter()
         lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
+        lines += mf.format_metric_and_gt_lines(gt_label_hist=Counter(self.dataset.obj_labels), metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        lines += mf.format_metric_and_gt_lines(gt_label_hist=Counter({i: n for i, n in enumerate(self.num_interactions)}),
+                                               metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
-        all_predictions = np.concatenate(self.hoi_predictions, axis=0)
-        all_labels = np.concatenate(self.hoi_labels, axis=0)
+        all_predictions = self.hoi_predictions
+        all_labels = self.hoi_labels
         actual_predictions = np.any(all_predictions, axis=1)
         actual_labels = np.any(all_labels, axis=1).sum()
         lines += ['%30s: %6d.' % ('Num predicted HOIs', actual_predictions.sum())]
@@ -123,7 +130,7 @@ class Evaluator:
                 predict_ho_pairs = prediction.ho_pairs
                 predict_action_scores = prediction.action_score_distributions
                 predict_hoi_obj_scores = predict_obj_scores[predict_ho_pairs[:, 1], :]
-                predict_hoi_scores = (predict_hoi_obj_scores[:, None, :] * predict_action_scores[:, :, None]).reshape(predict_ho_pairs.shape[0], -1)
+                predict_hoi_scores = (predict_hoi_obj_scores[:, :, None] * predict_action_scores[:, None, :]).reshape(predict_ho_pairs.shape[0], -1)
                 assert predict_hoi_scores.shape[1] == num_possible_hois
 
                 # fg_hois = predict_action_scores[:, 0] < 0.5  # FIXME magic constant
@@ -177,9 +184,8 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False):
+    def format_metric_and_gt_lines(self, gt_label_hist, metrics, gt_str, sort=False):
         lines = []
-        gt_label_hist = Counter(gt_labels)
         num_gt_examples = sum(gt_label_hist.values())
         if sort:
             inds = [p for p, num in gt_label_hist.most_common()]
@@ -187,6 +193,7 @@ class MetricFormatter:
             inds = range(len(gt_label_hist))
 
         for k, v in metrics.items():
+            assert (len(inds) == v.size) or v.size == 1
             lines += [self.format_metric(k, v[inds] if v.size > 1 else v, len(gt_str))]
         format_str = '%{}s %8s [%s]'.format(len(gt_str) + 1)
         lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]
