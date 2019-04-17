@@ -306,10 +306,10 @@ class EmbsimModel(GenericModel):
         # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
         # self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
-        self.hoi_branch = nn.Linear(self.visual_module.vis_feat_dim, self.hoi_repr_dim)
+        self.hoi_branch = nn.Linear(self.visual_module.vis_feat_dim, 600)
         nn.init.xavier_normal_(self.hoi_branch.weight, gain=1.0)
 
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        self.hoi_output_fc = nn.Linear(600, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
         self.hoi_refinement_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
