@@ -305,7 +305,10 @@ class EmbsimModel(GenericModel):
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
-        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+        # self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+        self.hoi_branch = nn.Linear(self.visual_module.visual_feats_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.hoi_branch.weight, gain=1.0)
+
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
@@ -320,9 +323,10 @@ class EmbsimModel(GenericModel):
 
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        # hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        hoi_repr = self.hoi_branch(union_boxes_feats)
         hoi_logits = self.hoi_output_fc(hoi_repr)
-
+        
         hoi_logits2, hoi_obj_logits = self.hoi_refinement_branch(union_boxes_feats, box_feats, hoi_infos)
 
         obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
