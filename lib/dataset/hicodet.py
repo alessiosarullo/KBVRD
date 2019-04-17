@@ -190,7 +190,7 @@ class HicoDetInstanceSplit(Dataset):
                     curr_num_obj_boxes = int(sum([b.shape[0] for b in im_obj_boxes]))
 
                     # Interaction
-                    pred_class = predicate_index[self.hicodet.interactions[interaction['id']]['pred']]
+                    pred_class = predicate_index[self.hicodet.interaction_list[interaction['id']]['pred']]
                     new_inters = interaction['conn']
                     new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
                                            np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
@@ -204,7 +204,7 @@ class HicoDetInstanceSplit(Dataset):
                     # Object
                     obj_boxes = interaction['obj_bbox']
                     im_obj_boxes.append(obj_boxes)
-                    obj_class = object_index[self.hicodet.interactions[interaction['id']]['obj']]
+                    obj_class = object_index[self.hicodet.interaction_list[interaction['id']]['obj']]
                     im_obj_box_classes.append(np.full(obj_boxes.shape[0], fill_value=obj_class, dtype=np.int))
 
             if im_hum_boxes:

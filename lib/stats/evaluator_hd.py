@@ -34,7 +34,7 @@ class Evaluator:
 
     def get_known_pairs(self):
         known_pairs = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=bool)
-        for iid in range(len(self.dataset.hicodet.interactions)):
+        for iid in range(len(self.dataset.hicodet.interaction_list)):
             obj_id = self.dataset.hicodet.get_object_index(iid)
             pred_id = self.dataset.hicodet.get_predicate_index(iid)
             known_pairs[obj_id, pred_id] = 1

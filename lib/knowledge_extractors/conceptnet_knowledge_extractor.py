@@ -164,7 +164,7 @@ def main():
 
     # Hico object-predicate matrix
     hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
-    for i in range(len(dataset.interactions)):
+    for i in range(len(dataset.interaction_list)):
         hico_op_mat[dataset.get_object_index(i), dataset.get_predicate_index(i)] = 1
     plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
 

@@ -67,7 +67,7 @@ class HicoDet:
         self.predicate_dict = pred_dict
 
         # Derived
-        self._objects = sorted(set([inter['obj'] for inter in self.interactions]))
+        self._objects = sorted(set([inter['obj'] for inter in self.interaction_list]))
         self._predicates = list(self.predicate_dict.keys())
         self._obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
         self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}
@@ -99,7 +99,7 @@ class HicoDet:
 
         print(ann['img_size'])
         inter = ann['interactions'][1]
-        print(self.interactions[inter['id']]['pred'], self.interactions[inter['id']]['obj'])
+        print(self.interaction_list[inter['id']]['pred'], self.interaction_list[inter['id']]['obj'])
         for field in inter.keys():
             print(field, inter[field])
         for k in ['hum_bbox', 'obj_bbox']:
@@ -118,8 +118,12 @@ class HicoDet:
         return self.split_data[split]['img_dir']
 
     @property
-    def interactions(self) -> List:
+    def interaction_list(self) -> List:
         return self._interaction_list
+
+    @property
+    def interactions(self) -> np.ndarray:
+        return np.array([[self._pred_index(inter['pred'], self._obj_class_index(inter['obj']))] for inter in self._interaction_list])
 
     @property
     def predicates(self) -> List:
@@ -134,10 +138,10 @@ class HicoDet:
         return self._obj_class_index['person']
 
     def get_predicate_index(self, interaction_id):
-        return self._pred_index[self.interactions[interaction_id]['pred']]
+        return self._pred_index[self.interaction_list[interaction_id]['pred']]
 
     def get_object_index(self, interaction_id):
-        return self._obj_class_index[self.interactions[interaction_id]['obj']]
+        return self._obj_class_index[self.interaction_list[interaction_id]['obj']]
 
     def get_occurrences(self, interaction, split=Splits.TRAIN):
         """
@@ -157,7 +161,7 @@ class HicoDet:
 
         occurrences = 0
         for s in splits:
-            for i, inter in enumerate(self.interactions):
+            for i, inter in enumerate(self.interaction_list):
                 if inter['pred'] == interaction[0] and inter['obj'] == interaction[1]:
                     occurrences += self.split_data[s]['inter_occurrences'][i]
         return occurrences
@@ -165,7 +169,7 @@ class HicoDet:
     def sanity_check(self):
         train_dir = self.split_data[Splits.TRAIN]['img_dir']
         test_dir = self.split_data[Splits.TEST]['img_dir']
-        assert len(self.interactions) == 600
+        assert len(self.interaction_list) == 600
         assert len(self.wn_predicate_dict) == 119
         assert len(self.predicate_dict) == 117
         assert len([name for name in os.listdir(train_dir) if os.path.isfile(os.path.join(train_dir, name))]) == 38118
@@ -370,7 +374,7 @@ def save_lists():
 
     path_file = os.path.join(hd.data_dir, 'interactions.txt')
     with open(path_file, 'w') as f:
-        f.write('\n'.join(['%-20s %s' % (inter['pred'], inter['obj']) for inter in hd.interactions]))
+        f.write('\n'.join(['%-20s %s' % (inter['pred'], inter['obj']) for inter in hd.interaction_list]))
 
 
 def print_num_preds():

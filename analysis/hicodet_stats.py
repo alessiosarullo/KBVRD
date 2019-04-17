@@ -11,7 +11,7 @@ def main():
     obj_to_idx = {o: i for i, o in enumerate(hd.objects)}
 
     op_mat = np.zeros([len(obj_to_idx), len(pred_to_idx)])
-    for inter in hd.interactions:
+    for inter in hd.interaction_list:
         op_mat[obj_to_idx[inter['obj']], pred_to_idx[inter['pred']]] = 1
     pred_labels = hd.predicates
     obj_labels = hd.objects

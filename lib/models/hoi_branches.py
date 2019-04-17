@@ -392,14 +392,24 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.num_predicates = dataset.num_predicates
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects).T  # F x O
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates).T  # F x P
-        # self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embs.get_embeddings(dataset.objects)), freeze=True)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, :, None], [1, 1, self.num_predicates]),
-                                     np.tile(pred_word_embs[:, None, :], [1, self.num_objects, 1])], axis=0)  # F x O x P
-        op_emb_mat = op_emb_mat.reshape(op_emb_mat.shape[0], -1)  # F x O*P
-        self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=False)
+        interactions = dataset.hicodet.interactions  # each is [p, o]
+        interaction_embs = np.concatenate([pred_word_embs[interactions[:, 0]],
+                                           obj_word_embs[interactions[:, 1]]], axis=1)
+        num_interactions = interactions.shape[0]
+        assert num_interactions == 600
+        interactions_to_obj = np.zeros(num_interactions, dataset.num_object_classes)
+        interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
+        interactions_to_obj /= np.maximum(1, interactions_to_obj.sum(axis=0, keepdims=True))
+        interactions_to_preds = np.zeros(num_interactions, dataset.num_predicates)
+        interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
+        interactions_to_preds /= np.maximum(1, interactions_to_preds.sum(axis=0, keepdims=True))
+
+        self.interaction_embs = nn.Parameter(torch.from_numpy(interaction_embs.T), requires_grad=False)
+        self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj), requires_grad=False)
+        self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
@@ -423,11 +433,11 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         pred_embs = self.pred_vis_to_emb_fc(union_box_feats)
 
         op_embs = torch.cat([obj_embs[hoi_infos[:, 2], :], pred_embs], dim=1)
-        op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.op_emb_mat.unsqueeze(dim=0))
+        op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.interaction_embs.unsqueeze(dim=0))
         op_sims = op_sims.view(-1, self.num_objects, self.num_predicates)
 
-        hoi_obj_logits = op_sims.mean(dim=2)
-        hoi_logits = op_sims.mean(dim=1)
+        hoi_obj_logits = op_sims @ self.interactions_to_obj
+        hoi_logits = op_sims @ self.interactions_to_preds
 
         return hoi_logits, hoi_obj_logits
 
