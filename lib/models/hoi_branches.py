@@ -408,8 +408,8 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         interactions_to_preds /= np.maximum(1, interactions_to_preds.sum(axis=0, keepdims=True))
 
         self.interaction_embs = nn.Parameter(torch.from_numpy(interaction_embs.T), requires_grad=False)
-        self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj), requires_grad=False)
-        self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds), requires_grad=False)
+        self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj).float(), requires_grad=False)
+        self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds).float(), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
