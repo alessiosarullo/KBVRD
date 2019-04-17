@@ -397,7 +397,7 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         # self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embs.get_embeddings(dataset.objects)), freeze=True)
 
         op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, :, None], [1, 1, self.num_predicates]),
-                                     np.tile(pred_word_embs[:, None, :], [1, self.num_objects, 1])], axis=2)  # F x O x P
+                                     np.tile(pred_word_embs[:, None, :], [1, self.num_objects, 1])], axis=0)  # F x O x P
         op_emb_mat = op_emb_mat.reshape(op_emb_mat.shape[0], -1)  # F x O*P
         self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
@@ -426,10 +426,10 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.op_emb_mat.unsqueeze(dim=0))
         op_sims = op_sims.view(-1, self.num_objects, self.num_predicates)
 
-        obj_logits = op_sims.mean(dim=2)
+        hoi_obj_logits = op_sims.mean(dim=2)
         hoi_logits = op_sims.mean(dim=1)
 
-        return hoi_logits, obj_logits
+        return hoi_logits, hoi_obj_logits
 
 
 class HoiMemGCBranch(AbstractHOIBranch):
