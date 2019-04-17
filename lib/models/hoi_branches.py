@@ -434,7 +434,6 @@ class HoiEmbsimBranch(AbstractHOIBranch):
 
         op_embs = torch.cat([obj_embs[hoi_infos[:, 2], :], pred_embs], dim=1)
         op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.interaction_embs.unsqueeze(dim=0))
-        op_sims = op_sims.view(-1, self.num_objects, self.num_predicates)
 
         hoi_obj_logits = op_sims @ self.interactions_to_obj
         hoi_logits = op_sims @ self.interactions_to_preds
