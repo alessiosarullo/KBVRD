@@ -400,10 +400,10 @@ class HoiEmbsimBranch(AbstractHOIBranch):
                                            obj_word_embs[interactions[:, 1]]], axis=1)
         num_interactions = interactions.shape[0]
         assert num_interactions == 600
-        interactions_to_obj = np.zeros(num_interactions, dataset.num_object_classes)
+        interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
         interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
         interactions_to_obj /= np.maximum(1, interactions_to_obj.sum(axis=0, keepdims=True))
-        interactions_to_preds = np.zeros(num_interactions, dataset.num_predicates)
+        interactions_to_preds = np.zeros((num_interactions, dataset.num_predicates))
         interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
         interactions_to_preds /= np.maximum(1, interactions_to_preds.sum(axis=0, keepdims=True))
 
