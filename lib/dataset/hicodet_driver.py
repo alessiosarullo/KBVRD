@@ -123,7 +123,7 @@ class HicoDet:
 
     @property
     def interactions(self) -> np.ndarray:
-        return np.array([[self._pred_index(inter['pred'], self._obj_class_index(inter['obj']))] for inter in self._interaction_list])
+        return np.array([[self._pred_index[inter['pred']], self._obj_class_index[inter['obj']]] for inter in self._interaction_list])
 
     @property
     def predicates(self) -> List:
