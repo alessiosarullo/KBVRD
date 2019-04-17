@@ -294,6 +294,20 @@ class HoiModel(GenericModel):
         return obj_logits, hoi_logits
 
 
+class EmbsimModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'embsim'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.hoi_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        hoi_logits, obj_logits = self.hoi_branch(union_boxes_feats, box_feats, hoi_infos)
+        return obj_logits, hoi_logits
+
+
 class KBModel(GenericModel):
     @classmethod
     def get_cline_name(cls):

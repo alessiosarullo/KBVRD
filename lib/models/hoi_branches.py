@@ -387,18 +387,20 @@ class HoiEmbsimBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
-        self.hoi_repr_dim = 2 * self.word_emb_dim
         super().__init__(**kwargs)
         self.num_objects = dataset.num_object_classes
+        self.num_predicates = dataset.num_predicates
 
         self.word_embs = WordEmbeddings(source='numberbatch', dim=self.word_emb_dim)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects).T  # F x O
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates).T  # F x P
         # self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embs.get_embeddings(dataset.objects)), freeze=True)
 
-        op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, None, :], [1, dataset.num_predicates, 1]),
-                                     np.tile(pred_word_embs[None, :, :], [dataset.num_object_classes, 1, 1])], axis=2)
+        op_emb_mat = np.concatenate([np.tile(obj_word_embs[:, :, None], [1, 1, self.num_predicates]),
+                                     np.tile(pred_word_embs[:, None, :], [1, self.num_objects, 1])], axis=2)  # F x O x P
+        op_emb_mat = op_emb_mat.reshape(op_emb_mat.shape[0], -1)  # F x O*P
         self.op_emb_mat = nn.Parameter(torch.from_numpy(op_emb_mat), requires_grad=False)
+        self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
                                                nn.ReLU,
@@ -411,32 +413,23 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[2].weight, gain=1.0)
 
-    @property
-    def output_dim(self):
-        return self.hoi_repr_dim
+        # self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+        # self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        # torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-    def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        if box_labels is not None:
-            assert hoi_labels is not None
-            obj_prediction = union_box_feats.new_zeros((box_labels.shape[0], self.num_objects))
-            obj_prediction[torch.arange(obj_prediction.shape[0]), box_labels] = 1
-            hoi_prediction = hoi_labels
-        else:
-            assert hoi_labels is None
-            obj_prediction = nn.functional.softmax(obj_logits, dim=1)
-            hoi_prediction = torch.sigmoid(hoi_logits)
+    def _forward(self, union_box_feats, box_feats, hoi_infos):
+        obj_embs = self.obj_vis_to_emb_fc(box_feats)
+        pred_embs = self.pred_vis_to_emb_fc(union_box_feats)
 
-        obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
-        pred_att = hoi_prediction  # N x P
+        op_embs = torch.cat([obj_embs[:, hoi_infos[:, 2]], pred_embs], dim=1)
+        op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.op_emb_mat.unsqueeze(dim=0))
+        op_sims = op_sims.view(-1, self.num_objects, self.num_predicates)
 
-        op_repr = (self.op_adj_mat * self.op_repr)  # O x P x F
-        ext_obj_repr = self.obj_vis_to_emb_fc(obj_att @ op_repr.mean(dim=1))
-        ext_pred_repr = self.pred_vis_to_emb_fc(pred_att @ op_repr.mean(dim=0))
-        union_repr = self.hoi_repr_fc(union_box_feats)
+        obj_logits = op_sims.mean(dim=2)
+        hoi_logits = op_sims.mean(dim=1)
 
-        hoi_repr = union_repr + ext_obj_repr + ext_pred_repr
-
-        return hoi_repr
+        return hoi_logits, obj_logits
 
 
 class HoiMemGCBranch(AbstractHOIBranch):
