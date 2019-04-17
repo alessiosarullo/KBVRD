@@ -403,12 +403,12 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
-                                               nn.ReLU,
+                                               nn.ReLU(),
                                                nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
         nn.init.xavier_normal_(self.obj_vis_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.obj_vis_to_emb_fc[2].weight, gain=1.0)
         self.pred_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
-                                                nn.ReLU,
+                                                nn.ReLU(),
                                                 nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[2].weight, gain=1.0)
