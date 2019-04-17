@@ -323,12 +323,14 @@ class EmbsimModel(GenericModel):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        _, hoi_obj_logits = self.hoi_refinement_branch(union_boxes_feats, box_feats, hoi_infos)
+        hoi_logits2, hoi_obj_logits = self.hoi_refinement_branch(union_boxes_feats, box_feats, hoi_infos)
 
         obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
         obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
         obj_logits_hoi = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
         obj_logits = obj_logits + obj_logits_hoi
+
+        hoi_logits = hoi_logits + hoi_logits2
 
         return obj_logits, hoi_logits
 
