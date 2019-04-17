@@ -422,7 +422,7 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         obj_embs = self.obj_vis_to_emb_fc(box_feats)
         pred_embs = self.pred_vis_to_emb_fc(union_box_feats)
 
-        op_embs = torch.cat([obj_embs[:, hoi_infos[:, 2]], pred_embs], dim=1)
+        op_embs = torch.cat([obj_embs[hoi_infos[:, 2], :], pred_embs], dim=1)
         op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.op_emb_mat.unsqueeze(dim=0))
         op_sims = op_sims.view(-1, self.num_objects, self.num_predicates)
 
