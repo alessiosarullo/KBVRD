@@ -391,7 +391,8 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
-        self.word_embs = WordEmbeddings(source='numberbatch', dim=self.word_emb_dim)
+        self.word_embs = WordEmbeddings(source='numberbatch', #dim=self.word_emb_dim
+                                        )
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects).T  # F x O
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates).T  # F x P
         # self.obj_word_embs = torch.nn.Embedding.from_pretrained(torch.from_numpy(self.word_embs.get_embeddings(dataset.objects)), freeze=True)
