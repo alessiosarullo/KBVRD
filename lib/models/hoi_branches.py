@@ -205,20 +205,20 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
         output_dim = 1024
         appearance_dim = 300
         spatial_dim = 400
-        self.vis_to_app_mlps = {k: nn.Linear(visual_feats_dim, appearance_dim) for k in ['sub', 'obj']}
+        self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(visual_feats_dim, appearance_dim) for k in ['sub', 'obj']})
         self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
                                          nn.Linear(spatial_dim, spatial_dim))
-        self.app_to_repr_mlps = {k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
-                                                  nn.ReLU(),
-                                                  nn.Dropout(p=0.5),
-                                                  nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']}
+        self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
+                                                                nn.ReLU(),
+                                                                nn.Dropout(p=0.5),
+                                                                nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']})
         self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
                                                       nn.ReLU(),
                                                       nn.Dropout(p=0.5),
                                                       nn.Linear(output_dim, output_dim))
-        self.wemb_to_repr_mlps = {k: nn.Sequential(nn.Linear(self.word_emb_dim, output_dim),
-                                                   nn.ReLU(),
-                                                   nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']}
+        self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_emb_dim, output_dim),
+                                                                 nn.ReLU(),
+                                                                 nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']})
 
     def _forward(self, boxes_ext, box_feats, hoi_infos):
         boxes = boxes_ext[:, 1:5]
