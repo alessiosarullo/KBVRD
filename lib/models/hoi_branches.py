@@ -326,12 +326,12 @@ class HoiMemGCBranch(AbstractHOIBranch):
         adj_joint_att = joint_att * self.op_adj_mat.unsqueeze(dim=0)  # N x O x P
 
         op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs).unsqueeze(dim=0)  # 1 x O x P x F
-        att_obj_repr = torch.matmul(adj_joint_att.unsqueeze(dim=2), op_repr).squeeze(dim=2)
-        att_pred_repr = torch.matmul(adj_joint_att.permute(0, 2, 1).unsqueeze(dim=2), op_repr.permute(0, 2, 1, 3)).squeeze(dim=2)
+        att_obj_repr = torch.matmul(adj_joint_att.unsqueeze(dim=2), op_repr).squeeze(dim=2)  # N x O x F
+        att_pred_repr = torch.matmul(adj_joint_att.permute(0, 2, 1).unsqueeze(dim=2), op_repr.permute(0, 2, 1, 3)).squeeze(dim=2)  # N x P x F
 
-        new_obj_logits = self.obj_output_mlp(att_obj_repr).squeeze(dim=2)
-        assert new_obj_logits.shape[0] == obj_logits.shape[0] and new_obj_logits.shape[1] == obj_logits.shape[1]
+        new_hoi_obj_logits = self.obj_output_mlp(att_obj_repr).squeeze(dim=2)
+        assert new_hoi_obj_logits.shape[0] == hoi_logits.shape[0] and new_hoi_obj_logits.shape[1] == obj_logits.shape[1]
         new_hoi_logits = self.pred_output_mlp(att_pred_repr).squeeze(dim=2)
         assert new_hoi_logits.shape[0] == hoi_logits.shape[0] and new_hoi_logits.shape[1] == hoi_logits.shape[1]
 
-        return new_obj_logits, new_hoi_logits
+        return new_hoi_obj_logits, new_hoi_logits
