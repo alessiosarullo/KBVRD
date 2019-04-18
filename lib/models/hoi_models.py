@@ -298,6 +298,9 @@ class ExtModel(HoiModel):
         obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
         obj_logits = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
 
+        obj_logits = obj_logits + obj_logits_raw
+        hoi_logits = hoi_logits + hoi_logits_raw
+
         return obj_logits, hoi_logits
 
 
