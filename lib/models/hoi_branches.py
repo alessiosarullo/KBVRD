@@ -323,7 +323,7 @@ class HoiMemGCBranch(AbstractHOIBranch):
         obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
         pred_att = hoi_prediction  # N x P
         joint_att = obj_att.unsqueeze(dim=2) * pred_att.unsqueeze(dim=1)  # N x O x P
-        adj_joint_att = joint_att.unsqueeze * self.op_adj_mat.unsqueeze(dim=0)  # N x O x P
+        adj_joint_att = joint_att * self.op_adj_mat.unsqueeze(dim=0)  # N x O x P
 
         op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs).unsqueeze(dim=0)  # 1 x O x P x F
         att_obj_repr = torch.matmul(adj_joint_att.unsqueeze(dim=2), op_repr).squeeze(dim=2)
