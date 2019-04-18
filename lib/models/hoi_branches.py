@@ -253,7 +253,6 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
 
 class HoiMemGCBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        # TODO docs and FIXME comments
         self.word_emb_dim = 300
         super().__init__(**kwargs)
 
@@ -278,7 +277,7 @@ class HoiMemGCBranch(AbstractHOIBranch):
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
         op_adj_mat = np.sum(op_adj_mats, axis=2, keepdims=True)  # O x P x 1
-        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=True).clamp(min=1e-2)
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float().clamp(min=1e-2), requires_grad=True)
 
         self.op_embs = torch.nn.Parameter(torch.from_numpy(obj_word_embs[:, None, :] + pred_word_embs[None, :, :]).float(), requires_grad=False)
 
@@ -306,10 +305,6 @@ class HoiMemGCBranch(AbstractHOIBranch):
                                             nn.Linear(self.word_emb_dim, 1))
         nn.init.xavier_normal_(self.obj_output_mlp[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.obj_output_mlp[2].weight, gain=1.0)
-
-    @property
-    def output_dim(self):
-        return self.hoi_repr_dim
 
     def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos):
         obj_prediction = torch.sigmoid(obj_logits)
