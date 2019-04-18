@@ -278,6 +278,29 @@ class EmbsimModel(GenericModel):
         return obj_logits, hoi_logits
 
 
+class ExtModel(HoiModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'ext'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.ext_branch = HoiMemGCBranch(self.visual_module.vis_feat_dim, dataset)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        obj_logits_raw, hoi_logits_raw = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+
+        hoi_obj_logits, hoi_logits = self.ext_branch(hoi_logits_raw, obj_logits_raw, union_boxes_feats, hoi_infos)
+
+        obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
+        obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
+        obj_logits = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
+
+        return obj_logits, hoi_logits
+
+
 class PeyreModel(GenericModel):
     @classmethod
     def get_cline_name(cls):

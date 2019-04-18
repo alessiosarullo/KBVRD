@@ -254,9 +254,12 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
 class HoiMemGCBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
-        self.hoi_repr_dim = 600
+        self.word_emb_dim = 300
         super().__init__(**kwargs)
-        self.num_objects = dataset.num_object_classes
+
+        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
         op_adj_mats = []
         if cfg.model.use_ds:
@@ -274,56 +277,52 @@ class HoiMemGCBranch(AbstractHOIBranch):
 
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
-        op_adj_mat = np.sum(op_adj_mats, axis=2, keepdims=True)  # O x P x 1
-        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=True)
+        op_adj_mat = np.sum(op_adj_mats, axis=2)  # O x P
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=True).clamp(min=1e-2)
 
-        op_feats = torch.empty((dataset.num_object_classes, dataset.num_predicates, visual_feats_dim))
-        nn.init.xavier_uniform_(op_feats, gain=1.0)
-        op_pairs = torch.zeros((dataset.num_object_classes, dataset.num_predicates))
-        for i in range(dataset.num_images):
-            ex = dataset.get_entry(i)
-            hoi_l, obj_l = ex.precomp_hoi_labels, ex.precomp_box_labels
-            union_feats, infos = ex.precomp_hoi_union_feats, ex.precomp_hoi_infos
-            hoi_obj_l = obj_l[infos[:, 2]]
-            assert union_feats.shape[0] == hoi_l.shape[0] == hoi_obj_l.shape[0]
-            for ol, hl, uf in zip(hoi_obj_l, hoi_l, union_feats):
-                hl = np.flatnonzero(hl)
-                op_feats[ol, hl, :] += torch.from_numpy(uf.astype(np.float32, copy=False))
-                op_pairs[ol, hl] += 1
-        self.op_repr = torch.nn.Parameter(op_feats / op_pairs.clamp(min=1).unsqueeze(dim=2), requires_grad=True)
-        assert self.op_repr.shape[0] == self.op_adj_mat.shape[0], (self.op_repr.shape, self.op_adj_mat.shape)
-        assert self.op_repr.shape[1] == self.op_adj_mat.shape[1], (self.op_repr.shape, self.op_adj_mat.shape)
+        self.op_embs = torch.nn.Parameter(torch.from_numpy(obj_word_embs[:, None, :] + pred_word_embs[None, :, :]).float(), requires_grad=False)
 
-        self.hoi_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.hoi_repr_fc.weight, gain=1.0)
-        self.obj_readout_fc = nn.Linear(op_feats.shape[2], self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.obj_readout_fc.weight, gain=1.0)
-        self.pred_readout_fc = nn.Linear(op_feats.shape[2], self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.pred_readout_fc.weight, gain=1.0)
+        # self.obj_prob_fc = nn.Sequential(nn.Linear(dataset.num_object_classes, dataset.num_object_classes),
+        #                                  torch.Sigmoid())
+        # nn.init.xavier_normal_(self.obj_prob_fc[0].weight, gain=1.0)
+        # self.hoi_prob_fc = nn.Sequential(nn.Linear(dataset.num_predicates, dataset.num_predicates),
+        #                                  torch.Sigmoid())
+        # nn.init.xavier_normal_(self.hoi_prob_fc[0].weight, gain=1.0)
+
+        self.emb_readout_mlp = nn.Sequential(nn.Linear(self.op_embs.shape[2], self.word_emb_dim),
+                                             nn.ReLU(),
+                                             nn.Linear(self.word_emb_dim, self.word_emb_dim))
+        nn.init.xavier_normal_(self.emb_readout_mlp[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.emb_readout_mlp[2].weight, gain=1.0)
+
+        self.pred_output_mlp = nn.Sequential(nn.Linear(self.word_emb_dim, self.word_emb_dim),
+                                             nn.ReLU(),
+                                             nn.Linear(self.word_emb_dim, 1))
+        nn.init.xavier_normal_(self.pred_output_mlp[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.pred_output_mlp[2].weight, gain=1.0)
+
+        self.obj_output_mlp = nn.Sequential(nn.Linear(self.word_emb_dim, self.word_emb_dim),
+                                            nn.ReLU(),
+                                            nn.Linear(self.word_emb_dim, 1))
+        nn.init.xavier_normal_(self.obj_output_mlp[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.obj_output_mlp[2].weight, gain=1.0)
 
     @property
     def output_dim(self):
         return self.hoi_repr_dim
 
-    def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        if box_labels is not None:
-            assert hoi_labels is not None
-            obj_prediction = union_box_feats.new_zeros((box_labels.shape[0], self.num_objects))
-            obj_prediction[torch.arange(obj_prediction.shape[0]), box_labels] = 1
-            hoi_prediction = hoi_labels
-        else:
-            assert hoi_labels is None
-            obj_prediction = nn.functional.softmax(obj_logits, dim=1)
-            hoi_prediction = torch.sigmoid(hoi_logits)
+    def _forward(self, hoi_logits, obj_logits, union_box_feats, hoi_infos):
+        obj_prediction = torch.sigmoid(obj_logits)
+        hoi_prediction = torch.sigmoid(hoi_logits)
 
         obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
         pred_att = hoi_prediction  # N x P
+        joint_att = obj_att.unsqueeze(dim=2) * pred_att.unsqueeze(dim=1)  # N x O x P
 
-        op_repr = (self.op_adj_mat * self.op_repr)  # O x P x F
-        ext_obj_repr = self.obj_readout_fc(obj_att @ op_repr.mean(dim=1))
-        ext_pred_repr = self.pred_readout_fc(pred_att @ op_repr.mean(dim=0))
-        union_repr = self.hoi_repr_fc(union_box_feats)
+        op_repr = self.op_adj_mat * self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs)  # O x P x F
+        att_op_repr = joint_att.unsqueeze(dim=3) * op_repr.unsqueeze(dim=0)  # N x O x P x F
 
-        hoi_repr = union_repr + ext_obj_repr + ext_pred_repr
+        obj_logits = self.obj_output_mlp(att_op_repr.sum(dim=2)).squeeze(dim=2)
+        hoi_logits = self.pred_output_mlp(att_op_repr.sum(dim=1)).squeeze(dim=2)
 
-        return hoi_repr
+        return obj_logits, hoi_logits
