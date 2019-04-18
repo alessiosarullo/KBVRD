@@ -277,17 +277,18 @@ class HoiMemGCBranch(AbstractHOIBranch):
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
         op_adj_mat = np.sum(op_adj_mats, axis=2)  # O x P
-        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float().clamp(min=1e-2), requires_grad=True)
+        # self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float().clamp(min=1e-2), requires_grad=True)
 
-        # num_interactions = (op_adj_mat > 0).sum()
-        # interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
-        # interactions_to_obj[np.arange(num_interactions), np.where(op_adj_mat)[0]] = 1
-        # # interactions_to_obj /= np.maximum(1, interactions_to_obj.sum(axis=0, keepdims=True))
-        # interactions_to_preds = np.zeros((num_interactions, dataset.num_predicates))
-        # interactions_to_preds[np.arange(num_interactions), np.where(op_adj_mat)[1]] = 1
-        # # interactions_to_preds /= np.maximum(1, interactions_to_preds.sum(axis=0, keepdims=True))
-        # self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj).float(), requires_grad=False)
-        # self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds).float(), requires_grad=False)
+        self.interactions = nn.Parameter(torch.from_numpy(np.flatnonzero(op_adj_mat.reshape(-1))).long(), requires_grad=False)
+        num_interactions = (op_adj_mat > 0).sum()
+        interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
+        interactions_to_obj[np.arange(num_interactions), np.where(op_adj_mat)[0]] = 1
+        # interactions_to_obj /= np.maximum(1, interactions_to_obj.sum(axis=0, keepdims=True))
+        interactions_to_preds = np.zeros((num_interactions, dataset.num_predicates))
+        interactions_to_preds[np.arange(num_interactions), np.where(op_adj_mat)[1]] = 1
+        # interactions_to_preds /= np.maximum(1, interactions_to_preds.sum(axis=0, keepdims=True))
+        self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj).float(), requires_grad=False)
+        self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds).float(), requires_grad=False)
 
         self.op_embs = torch.nn.Parameter(torch.from_numpy(obj_word_embs[:, None, :] + pred_word_embs[None, :, :]).float(), requires_grad=False)
 
@@ -323,11 +324,18 @@ class HoiMemGCBranch(AbstractHOIBranch):
         obj_att = obj_prediction[hoi_infos[:, 2], :]  # N x O
         pred_att = hoi_prediction  # N x P
         joint_att = obj_att.unsqueeze(dim=2) * pred_att.unsqueeze(dim=1)  # N x O x P
-        adj_joint_att = joint_att * self.op_adj_mat.unsqueeze(dim=0)  # N x O x P
 
-        op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs).unsqueeze(dim=0)  # 1 x O x P x F
-        att_obj_repr = torch.matmul(adj_joint_att.unsqueeze(dim=2), op_repr).squeeze(dim=2)  # N x O x F
-        att_pred_repr = torch.matmul(adj_joint_att.permute(0, 2, 1).unsqueeze(dim=2), op_repr.permute(0, 2, 1, 3)).squeeze(dim=2)  # N x P x F
+        adj_joint_att = joint_att.view(joint_att.shape[0], -1)[:, self.interactions]  # N x M
+        op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])[self.interactions, :]).unsqueeze(dim=0)  # 1 x M x F
+        att_op_repr = (adj_joint_att.unsqueeze(dim=2) * op_repr).permute(0, 2, 1)  # N x F x M
+
+        att_obj_repr = (att_op_repr @ self.interactions_to_obj).permute(0, 2, 1)  # N x O x F
+        att_pred_repr = (att_op_repr @ self.interactions_to_preds).permute(0, 2, 1)  # N x P x F
+
+        # adj_joint_att = joint_att * self.op_adj_mat.unsqueeze(dim=0)  # N x O x P
+        # op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs).unsqueeze(dim=0)  # 1 x O x P x F
+        # att_obj_repr = torch.matmul(adj_joint_att.unsqueeze(dim=2), op_repr).squeeze(dim=2)  # N x O x F
+        # att_pred_repr = torch.matmul(adj_joint_att.permute(0, 2, 1).unsqueeze(dim=2), op_repr.permute(0, 2, 1, 3)).squeeze(dim=2)  # N x P x F
 
         new_hoi_obj_logits = self.obj_output_mlp(att_obj_repr).squeeze(dim=2)
         assert new_hoi_obj_logits.shape[0] == hoi_logits.shape[0] and new_hoi_obj_logits.shape[1] == obj_logits.shape[1]
