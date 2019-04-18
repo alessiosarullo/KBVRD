@@ -289,8 +289,9 @@ class PeyreModel(GenericModel):
 
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
-        box_labels = self.visual_module.one_hot_obj_labels(box_labels)
-        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels) * self.dataset.num_object_classes
+        box_labels_1hot = box_labels.new_zeros((box_labels.shape[0], self.dataset.num_object_classes))
+        box_labels_1hot[torch.arange(box_labels_1hot.shape[0]), box_labels] = 1
+        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels_1hot) * self.dataset.num_object_classes
         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
