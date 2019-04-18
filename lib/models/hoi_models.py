@@ -285,52 +285,18 @@ class PeyreModel(HoiModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.hoi_branch = PeyreEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
 
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, hoi_ref_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
-        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels)* self.dataset.num_object_classes
         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
-        hoi_ref_loss = nn.functional.binary_cross_entropy_with_logits(hoi_ref_output, hoi_labels) * self.dataset.num_predicates
-        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'hoi_ref_loss': hoi_ref_loss}
-
-    def forward(self, x, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
-            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-            # Masks are floats at this point.
-
-            if hoi_infos is not None:
-                obj_output, hoi_output, hoi_ref_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
-                                                                       hoi_labels)
-            else:
-                obj_output = hoi_output = hoi_ref_output = None
-
-            if not inference:
-                assert obj_output is not None and hoi_output is not None and hoi_ref_output is not None \
-                       and box_labels is not None and hoi_labels is not None
-                return obj_output, hoi_output, hoi_ref_output, box_labels, hoi_labels
-            else:
-                return self._prepare_prediction(obj_output, hoi_ref_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
+        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
-        obj_logits = self.obj_output_fc(obj_repr)
-
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
-        hoi_logits = self.hoi_output_fc(hoi_repr)
-        hoi_logits_dt = hoi_logits.detach()
-
-        hoi_ref_repr = self.hoi_refinement_branch(hoi_logits_dt, obj_logits.detach(), union_boxes_feats, hoi_infos,
-                                                             box_labels, hoi_labels)
-        hoi_ref_logits = hoi_logits_dt + self.hoi_ref_output_fc(hoi_ref_repr)
-
-        return obj_logits, hoi_logits, hoi_ref_logits
+        # hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos)
+        return obj_logits, hoi_logits
 
 
 def main():
