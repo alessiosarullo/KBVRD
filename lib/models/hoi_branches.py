@@ -319,8 +319,9 @@ class HoiMemGCBranch(AbstractHOIBranch):
         pred_att = hoi_prediction  # N x P
         joint_att = obj_att.unsqueeze(dim=2) * pred_att.unsqueeze(dim=1)  # N x O x P
 
-        op_repr = self.op_adj_mat * self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs)  # O x P x F
-        att_op_repr = joint_att.unsqueeze(dim=3) * op_repr.unsqueeze(dim=0)  # N x O x P x F
+        op_repr = self.emb_readout_mlp(self.op_embs.view(-1, self.op_embs.shape[2])).view_as(self.op_embs)  # O x P x F
+        adj_op_repr = self.op_adj_mat * op_repr  # O x P x F
+        att_op_repr = joint_att.unsqueeze(dim=3) * adj_op_repr.unsqueeze(dim=0)  # N x O x P x F
 
         obj_logits = self.obj_output_mlp(att_op_repr.sum(dim=2)).squeeze(dim=2)
         hoi_logits = self.pred_output_mlp(att_op_repr.sum(dim=1)).squeeze(dim=2)
