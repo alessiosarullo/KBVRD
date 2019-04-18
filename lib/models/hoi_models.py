@@ -278,7 +278,7 @@ class EmbsimModel(GenericModel):
         return obj_logits, hoi_logits
 
 
-class PeyreModel(HoiModel):
+class PeyreModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'peyre'
@@ -288,8 +288,8 @@ class PeyreModel(HoiModel):
         self.hoi_branch = PeyreEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, hoi_ref_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
-        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels)* self.dataset.num_object_classes
+        obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
+        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels) * self.dataset.num_object_classes
         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
