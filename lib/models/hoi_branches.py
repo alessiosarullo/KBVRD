@@ -271,7 +271,7 @@ class HoiMemGCBranch(AbstractHOIBranch):
             imsitu_counts[:, 0] = 0  # exclude null interaction
             op_adj_mats.append(np.minimum(1, imsitu_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
         if cfg.model.use_cnet:
-            cnet_counts = ConceptnetKnowledgeExtractor().extract_freq_matrix(dataset=dataset)
+            cnet_counts = ConceptnetKnowledgeExtractor().extract_freq_matrix(dataset=dataset.hicodet)
             cnet_counts[:, 0] = 0  # exclude null interaction
             op_adj_mats.append(np.minimum(1, cnet_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
 
