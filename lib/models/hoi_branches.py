@@ -277,7 +277,7 @@ class HoiMemGCBranch(AbstractHOIBranch):
         assert op_adj_mats
         op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
         op_adj_mat = np.sum(op_adj_mats, axis=2)  # O x P
-        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat[:, :, None]).float().clamp(min=1e-2), requires_grad=True)
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float().clamp(min=1e-2), requires_grad=True)
 
         # num_interactions = (op_adj_mat > 0).sum()
         # interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
