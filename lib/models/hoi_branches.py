@@ -235,10 +235,11 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
         hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
         spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info, hoi_obj_spatial_info], dim=1))
 
-        hoi_hum_appearance = self.vis_to_app_mlps['sub'](box_feats[hoi_hum_inds, :])
-        hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats[hoi_obj_inds, :])
+        hoi_hum_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
+        obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
+        hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
 
-        obj_repr = self.app_to_repr_mlps['obj'](box_feats)
+        obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
         pred_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
 
         obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
