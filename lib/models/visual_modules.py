@@ -153,6 +153,8 @@ class VisualModule(nn.Module):
         return boxes_ext, box_labels
 
     def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels):
+        bg_ratio = cfg.opt.hoi_bg_ratio
+
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
         predict_box_im_ids = boxes_ext[:, 0]
@@ -185,17 +187,27 @@ class VisualModule(nn.Module):
                         if from_predict_ind != to_predict_ind:
                             hoi_labels_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
 
-            ho_pairs_i = np.where(hoi_labels_i.any(axis=2))
-            hoi_infos_i = np.stack([np.full(ho_pairs_i[0].shape[0], fill_value=im_id),
-                                    ho_pairs_i[0] + num_box_seen,
-                                    ho_pairs_i[1] + num_box_seen], axis=1)
+            ho_fg_mask = hoi_labels_i[:, :, 1:].any(axis=2)
+            assert not np.any(hoi_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
+            ho_bg_mask = ~ho_fg_mask
+            hoi_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
+
+            ho_fg_pairs_i = np.stack(np.where(ho_fg_mask), axis=1)
+            ho_bg_pairs_i = np.stack(np.where(ho_bg_mask), axis=1)
+            bg_inds = np.random.permutation(ho_bg_pairs_i.shape[0])[:(ho_fg_pairs_i.shape[0] * bg_ratio)]
+            ho_bg_pairs_i = ho_bg_pairs_i[bg_inds, :]
+
+            ho_pairs_i = np.concatenate([ho_fg_pairs_i, ho_bg_pairs_i], axis=0)
+            hoi_infos_i = np.stack([np.full(ho_pairs_i.shape[0], fill_value=im_id),
+                                    ho_pairs_i[:, 0] + num_box_seen,
+                                    ho_pairs_i[:, 1] + num_box_seen], axis=1)
             if hoi_infos_i.shape[0] == 0:  # since GT boxes are added to predicted ones during training this cannot be empty
                 print(gt_boxes_i)
                 print(predict_boxes_i)
                 print(gt_box_classes_i)
                 print(predict_box_labels_i)
                 raise RuntimeError
-            hois_infos_and_labels.append(np.concatenate([hoi_infos_i, hoi_labels_i[ho_pairs_i]], axis=1))
+            hois_infos_and_labels.append(np.concatenate([hoi_infos_i, hoi_labels_i[ho_pairs_i[:, 0], ho_pairs_i[:, 1]]], axis=1))
             num_box_seen += num_predict_boxes_i
 
         hois_infos_and_labels = np.concatenate(hois_infos_and_labels, axis=0)

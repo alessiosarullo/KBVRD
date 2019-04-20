@@ -17,7 +17,7 @@ def save_feats():
     flipping = False
 
     sys.argv += ['--model', 'base', '--save_dir', 'fake']  # fake required arguments
-    sys.argv += ['--batch_size', str(batch_size), '--val_ratio', '0']
+    sys.argv += ['--img_batch_size', str(batch_size), '--val_ratio', '0']
     cfg.parse_args()
 
     train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping))

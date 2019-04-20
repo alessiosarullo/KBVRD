@@ -199,7 +199,8 @@ class OptimizerConfig(BaseConfigs):
 
         self.num_epochs = 5
         self.img_batch_size = 8
-        self.hoi_batch_size = 128
+        self.hoi_batch_size = 64
+        self.hoi_bg_ratio = 3
 
         self.gamma = 2
 
