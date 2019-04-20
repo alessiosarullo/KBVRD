@@ -24,7 +24,10 @@ def save_feats():
     assert Splits.VAL not in HicoDetInstanceSplit._splits
 
     vm = VisualModule(dataset=train_split)
-    vm.cuda()
+    if torch.cuda.is_available():
+        vm.cuda()
+    else:
+        print('!!!!!!!!!!!!!!!!! Running on CPU!')
     vm.eval()
     for split, hds in [(Splits.TRAIN, train_split),
                        (Splits.TEST, test_split),
