@@ -107,7 +107,8 @@ class HicoDetInstanceSplit(Dataset):
             obj_inds = obj_inds or cfg.data.obj_inds
             pred_inds = pred_inds or cfg.data.pred_inds
 
-            annotations, image_ids, object_inds, predicate_inds = compute_annotations(split, cls._hicodet_driver, im_inds, obj_inds, pred_inds)
+            annotations, image_ids, object_inds, predicate_inds = compute_annotations(split, cls._hicodet_driver, im_inds, obj_inds, pred_inds,
+                                                                                      filter_bg_only=split == Splits.TRAIN)
             assert len(annotations) == len(image_ids)
 
             # Split train/val if needed
