@@ -198,7 +198,8 @@ class OptimizerConfig(BaseConfigs):
         self.grad_clip = 5.0
 
         self.num_epochs = 5
-        self.batch_size = 8
+        self.img_batch_size = 8
+        self.hoi_batch_size = 128
 
         self.gamma = 2
 

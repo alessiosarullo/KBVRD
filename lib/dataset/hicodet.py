@@ -231,23 +231,39 @@ class HicoDetInstanceSplit(Dataset):
                 im_without_visible_interactions.append(i)
         return boxes, box_classes, interactions, im_without_visible_interactions, im_filenames
 
-    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
+    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, use_hoi_batches=False, **kwargs):
         if shuffle is None:
             shuffle = True if self.split == Splits.TRAIN else False
         batch_size = batch_size * num_gpus
         if self.split == Splits.TEST and batch_size > 1:
-            print('Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
+            print('! Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
             batch_size = 1
-        data_loader = torch.utils.data.DataLoader(
-            dataset=self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            collate_fn=lambda x: Minibatch.collate(x),
-            drop_last=drop_last,
-            # pin_memory=True,  # disable this in case of freezes
-            **kwargs,
-        )
+        if use_hoi_batches:
+            if not self.has_precomputed or self.split == Splits.TEST:
+                print('! HOI batches are only supported during training or validation using precomputed features. Using image batches instead.')
+                use_hoi_batches = False
+
+        if use_hoi_batches:
+            assert self.has_precomputed and self.split != Splits.TEST
+            data_loader = torch.utils.data.DataLoader(
+                dataset=self,
+                batch_sampler=BalancedImgSampler(self, batch_size, drop_last, shuffle),
+                num_workers=num_workers,
+                collate_fn=lambda x: Minibatch.collate(x),
+                # pin_memory=True,  # disable this in case of freezes
+                **kwargs,
+            )
+        else:
+            data_loader = torch.utils.data.DataLoader(
+                dataset=self,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=num_workers,
+                collate_fn=lambda x: Minibatch.collate(x),
+                drop_last=drop_last,
+                # pin_memory=True,  # disable this in case of freezes
+                **kwargs,
+            )
         return data_loader
 
     def get_entry(self, idx, read_img=True, ignore_precomputed=False):
@@ -389,6 +405,47 @@ class HicoDetInstanceSplit(Dataset):
 
     def __len__(self):
         return self.num_images
+
+
+class BalancedImgSampler(torch.utils.data.BatchSampler):
+    def __init__(self, dataset: HicoDetInstanceSplit, hoi_batch_size, drop_last, shuffle):
+        sampler = torch.utils.data.RandomSampler(dataset) if shuffle else torch.utils.data.SequentialSampler(dataset)
+        super().__init__(sampler, hoi_batch_size, drop_last)
+
+        self.hoi_batch_size = self.batch_size
+        assert dataset.has_precomputed
+
+        self.num_hois_per_img_idx = []
+        for idx in self.sampler:
+            img_id = dataset.image_ids[idx]
+            pc_im_idx = dataset.im_id_to_pc_im_idx[img_id]
+            img_hoi_inds = np.flatnonzero(dataset.pc_hoi_im_inds == pc_im_idx)
+            self.num_hois_per_img_idx.append(img_hoi_inds.size)
+
+        self.batches = self.get_all_batches()
+
+    def __iter__(self):
+        for batch in self.batches:
+            yield batch
+        self.batches = self.get_all_batches()
+
+    def get_all_batches(self):
+        batches = []
+        batch = []
+        num_hois_in_batch = 0
+        for idx in self.sampler:
+            batch.append(idx)
+            num_hois_in_batch += self.num_hois_per_img_idx[idx]
+            if num_hois_in_batch == self.hoi_batch_size:
+                batches.append(batch)
+                batch = []
+                num_hois_in_batch = 0
+        if len(batch) > 0 and not self.drop_last:
+            batches.append(batch)
+        return batches
+
+    def __len__(self):
+        return len(self.batches)
 
 
 def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, filter_invisible=True):

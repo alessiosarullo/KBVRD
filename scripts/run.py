@@ -94,8 +94,11 @@ class Launcher:
 
         optimizer, scheduler = self.get_optim()
 
-        train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size)
-        val_loader = self.val_split.get_loader(batch_size=cfg.opt.batch_size if not cfg.program.model.startswith('nmotifs') else 1)  # FIXME?
+        train_loader = self.train_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
+        if cfg.program.model.startswith('nmotifs'):
+            val_loader = self.val_split.get_loader(batch_size=1)
+        else:
+            val_loader = self.val_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
         test_loader = self.test_split.get_loader(batch_size=1)
 
         training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
