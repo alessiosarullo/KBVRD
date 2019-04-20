@@ -134,7 +134,7 @@ class RunningStats:
             time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
         except ValueError:
             time_for_stats = 0
-        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_size + time_for_stats)
+        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_sampler.batch_size + time_for_stats)
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
