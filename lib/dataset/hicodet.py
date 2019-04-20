@@ -449,7 +449,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         return len(self.batches)
 
 
-def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, filter_invisible=True, filter_bg_only=True):
+def compute_annotations(split, hicodet_driver: HicoDetDriver, im_inds, obj_inds, pred_inds, filter_invisible=True, filter_bg_only=True):
     # Set annotations and image index
     annotations = hicodet_driver.split_data[split if split == Splits.TEST else Splits.TRAIN]['annotations']
     image_ids = im_inds or list(range(len(annotations)))
@@ -504,15 +504,16 @@ def compute_annotations(split, hicodet_driver, im_inds, obj_inds, pred_inds, fil
 
     # Filter images with invisible annotations
     if filter_invisible or filter_bg_only:
-        vis_im_inds, annotations = [], []
+        vis_im_inds, new_annotations = [], []
         for i, ann in enumerate(annotations):
             for inter in ann['interactions']:
                 visible = not inter['invis']
                 foreground = hicodet_driver.get_predicate_index(inter['id']) != hicodet_driver._pred_index[hicodet_driver.null_interaction]
                 if (not filter_invisible or visible) and (not filter_bg_only or foreground):
                     vis_im_inds.append(i)
-                    annotations.append(ann)
+                    new_annotations.append(ann)
                     break
+        annotations = new_annotations
         num_old_images, num_new_images = len(image_ids), len(vis_im_inds)
         if num_new_images < num_old_images:
             print('Images have been discarded due to not having visible interactions or only having background ones. '
