@@ -436,7 +436,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         for idx in self.sampler:
             batch.append(idx)
             num_hois_in_batch += self.num_hois_per_img_idx[idx]
-            if num_hois_in_batch == self.hoi_batch_size:
+            if num_hois_in_batch >= self.hoi_batch_size:
                 batches.append(batch)
                 batch = []
                 num_hois_in_batch = 0

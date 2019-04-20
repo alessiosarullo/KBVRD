@@ -236,9 +236,47 @@ class Launcher:
         return all_predictions
 
 
+def debug():
+    cfg.parse_args()
+    if cfg.program.load_train_output:
+        cfg.load()
+    cfg.print()
+
+    # seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
+    # random.seed(seed)
+    # np.random.seed(seed)
+    # torch.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
+    # print('RNG seed:', seed)
+
+    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
+    val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
+    test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+
+    print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    train_loader = train_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
+    if cfg.program.model.startswith('nmotifs'):
+        val_loader = val_split.get_loader(batch_size=1)
+    else:
+        val_loader = val_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
+    test_loader = test_split.get_loader(batch_size=1)
+
+    for epoch in range(cfg.opt.num_epochs):
+        print('Epoch %d start.' % epoch)
+        epoch_loss = 0
+        for batch_idx, batch in enumerate(train_loader):
+            pass
+        epoch_loss /= len(train_loader)
+
+    print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    exit(0)
+
+
 def main():
     Launcher().run()
 
 
 if __name__ == '__main__':
+    # debug()
     main()
