@@ -73,7 +73,7 @@ class GenericModel(AbstractModel):
         s = logits
         t = labels
         u = self.class_pos_weights
-        v = self.class_neg_weights[labels, :]
+        v = self.class_neg_weights[labels, :]  # FIXME
 
         le = ((-m).exp() + (s - m).exp()).log()
 

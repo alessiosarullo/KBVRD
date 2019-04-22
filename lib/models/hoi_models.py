@@ -253,6 +253,7 @@ class EmbsimModel(GenericModel):
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
         self.hoi_refinement_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
+        self.hoi_prior_branch = HoiPriorBranch(dataset, self.visual_module.vis_feat_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -274,6 +275,8 @@ class EmbsimModel(GenericModel):
         obj_logits = obj_logits + obj_logits_hoi
 
         hoi_logits = hoi_logits + hoi_logits2
+
+        hoi_logits = self.hoi_prior_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
 
         return obj_logits, hoi_logits
 
