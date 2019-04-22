@@ -59,6 +59,8 @@ class WordEmbeddings:
         fails = []
         replacements = {}
         for i, word in enumerate(words):
+            if not word.startswith('_'):
+                word = word.replace('_', ' ').strip()
             emb = self.embedding(word, none_on_miss=True)
             if emb is None and retry and not word.startswith('_'):
                 tokens = word.replace('_', ' ').strip().split(' ')
