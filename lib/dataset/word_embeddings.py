@@ -53,7 +53,7 @@ class WordEmbeddings:
                 return np.zeros_like(self._embeddings[0, :])
         return self._embeddings[idx, :]
 
-    def get_embeddings(self, words, retry=False):
+    def get_embeddings(self, words, retry='first'):
         # vectors = np.random.standard_normal((len(words), self.dim))  # This is what they do in NeuralMotifs, but I'm not sure it's a good idea.
         vectors = np.zeros((len(words), self.dim))
         fails = []
