@@ -186,6 +186,7 @@ class ModelConfig(BaseConfigs):
         self.bn_momentum = 0.01
 
         self.floss = False  # Focal loss
+        self.csloss = False  # Cost sensitive loss
 
 
 class OptimizerConfig(BaseConfigs):

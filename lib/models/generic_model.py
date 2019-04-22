@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from collections import Counter
+
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Minibatch
@@ -21,21 +23,72 @@ class GenericModel(AbstractModel):
         self.dataset = dataset
         self.visual_module = VisualModule(dataset, **kwargs)
 
+        if cfg.model.csloss:
+            prcls_hist = Counter(dataset.hois[:, 1])
+            prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
+            num_predicate_classes = prcls_hist.size()
+            assert num_predicate_classes == dataset.num_predicates
+            cost_matrix = np.maximum(1, np.log2(prcls_hist[None, :] / prcls_hist[:, None]))
+            assert not np.any(np.isnan(cost_matrix))
+            cost_matrix[np.arange(num_predicate_classes), np.arange(num_predicate_classes)] = 0
+
+            tot_num_preds = sum(prcls_hist)
+            tot_other_preds = tot_num_preds - prcls_hist
+            expected_class_cost = (cost_matrix.dot(prcls_hist)) / tot_other_preds
+
+            self.class_pos_weights = torch.nn.Parameter(torch.from_numpy(expected_class_cost).view(1, -1), requires_grad=False)
+            self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
+
     def get_losses(self, x, **kwargs):
         obj_output, hoi_output, box_labels, hoi_labels = self(x, inference=False, **kwargs)
         obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
         if cfg.model.floss:
-            gamma = cfg.opt.gamma
-            s = hoi_output
-            t = hoi_labels
-            m = s.clamp(min=0)  # m = max(s, 0)
-            x = (-s.abs()).exp()
-            z = ((s >= 0) == t.byte()).float()
-            hoi_loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
-            hoi_loss = hoi_loss_mat.mean() * self.dataset.num_predicates
+            hoi_loss = self.focal_loss(logits=hoi_output, labels=hoi_labels)
+        elif cfg.model.csloss:
+            hoi_loss = self.weighted_binary_cross_entropy_with_logits(logits=hoi_output, labels=hoi_labels)
         else:
             hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
+
+    def focal_loss(self, logits, labels):
+        gamma = cfg.opt.gamma
+        s = logits
+        t = labels
+        m = s.clamp(min=0)  # m = max(s, 0)
+        x = (-s.abs()).exp()
+        z = ((s >= 0) == t.byte()).float()
+        loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
+        loss = loss_mat.mean() * self.dataset.num_predicates
+        return loss
+
+    def weighted_binary_cross_entropy_with_logits(self, logits, labels, num_rels=None):
+        if num_rels is None:
+            num_rels = self.dataset.num_predicates
+        if not (labels.size() == logits.size()):
+            raise ValueError("Target size ({}) must be the same as input size ({})".format(labels.size(), logits.size()))
+
+        # Binary cross entropy with the addition of two sets of class weights. One set is used for positive examples the other one is used for
+        # negative examples.
+        m = logits.clamp(min=0)
+        s = logits
+        t = labels
+        u = self.class_pos_weights
+        v = self.class_neg_weights[labels, :]
+
+        le = ((-m).exp() + (s - m).exp()).log()
+
+        # Trust
+        if u is not None and v is not None:
+            loss = v * m - t * (v * m + u * (s - m)) + ((1 - t) * v + u * t) * le
+        elif u is not None and v is None:
+            loss = m - t * (m + u * (s - m)) + (1 - t + u * t) * le
+        elif u is None and v is not None:
+            loss = v * m - t * (v * m + s - m) + ((1 - t) * v + t) * le
+        else:
+            loss = nn.functional.binary_cross_entropy_with_logits(logits, labels)
+
+        loss = loss.mean() * num_rels  # The average is computed over everything (classes and examples), instead of only over examples. This fixes it.
+        return loss
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
