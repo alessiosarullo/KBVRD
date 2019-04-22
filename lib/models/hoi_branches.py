@@ -251,6 +251,69 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
         return obj_logits, hoi_logits
 
 
+class HoiExtBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(**kwargs)
+
+        op_adj_mats = []
+        if cfg.model.use_ds:
+            ds_counts = get_counts(dataset=dataset)
+            ds_counts[:, 0] = 0  # exclude null interaction
+            op_adj_mats.append(np.minimum(1, ds_counts))  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+        if cfg.model.use_imsitu:
+            imsitu_counts, imsitu_objects, imsitu_predicates = ImSituKnowledgeExtractor().extract_freq_matrix(dataset, return_known_mask=True)
+            assert not np.any(imsitu_counts[~imsitu_objects, :]) and not np.any(imsitu_counts[:, ~imsitu_predicates])
+            imsitu_counts[imsitu_counts == 0] = -1
+            imsitu_counts[~imsitu_objects, :] = 0
+            imsitu_counts[:, ~imsitu_predicates] = 0
+            op_adj_mats.append(np.minimum(1, imsitu_counts))  # -1 if pair is not present, 0 if obj/pred is unknown to the KB, 1 if pair is present
+
+        assert op_adj_mats
+        op_adj_mats = np.stack(op_adj_mats, axis=2)  # O x P x S
+        op_adj_mat = np.sum(op_adj_mats, axis=2)  # O x P
+        self.op_adj_mat = torch.nn.Parameter(torch.from_numpy(op_adj_mat).float(), requires_grad=False)
+
+        # self.hoi_obj_readout_mlp = nn.Sequential(nn.Linear(dataset.num_object_classes, dataset.num_object_classes),
+        #                                          nn.ReLU())
+        # nn.init.xavier_normal_(self.hoi_obj_readout_mlp[0].weight, gain=nn.init.calculate_gain('relu'))
+
+        # spatial_dim = 64
+        # self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
+        #                                  nn.ReLU(),
+        #                                  nn.Linear(spatial_dim, spatial_dim))
+        # nn.init.xavier_normal_(self.spatial_mlp[0].weight, gain=nn.init.calculate_gain('relu'))
+        # nn.init.xavier_normal_(self.spatial_mlp[2].weight, gain=1.0)
+
+        self.hoi_ref_mlp = nn.Sequential(nn.Linear(dataset.num_object_classes, dataset.num_predicates),
+                                         nn.ReLU())
+        nn.init.xavier_normal_(self.hoi_ref_mlp[0].weight, gain=nn.init.calculate_gain('relu'))
+
+    def _forward(self, hoi_logits, obj_logits, boxes_ext, hoi_infos):
+        boxes = boxes_ext[:, 1:5]
+        hoi_hum_inds = hoi_infos[:, 1]
+        hoi_obj_inds = hoi_infos[:, 2]
+        # union_boxes = torch.cat([
+        #     torch.min(boxes[:, :2][hoi_hum_inds], boxes[:, :2][hoi_obj_inds]),
+        #     torch.max(boxes[:, 2:][hoi_hum_inds], boxes[:, 2:][hoi_obj_inds]),
+        # ], dim=1)
+        #
+        # union_areas = (union_boxes[:, 2:] - union_boxes[:, :2]).prod(dim=1, keepdim=True)
+        # union_origin = union_boxes[:, :2].repeat(1, 2)
+        # hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
+        # hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
+        # spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info, hoi_obj_spatial_info], dim=1))
+
+        hoi_obj_logits = obj_logits[hoi_obj_inds, :].detach()
+        # hoi_ref_obj_att = self.hoi_obj_readout_mlp(hoi_obj_logits) @ self.op_adj_mat
+        hoi_ref_obj_att = hoi_obj_logits @ self.op_adj_mat
+        # hoi_ref_logits = hoi_ref_obj_att * self.hoi_ref_mlp(torch.cat([hoi_obj_logits, spatial_info], dim=1))
+        hoi_ref_logits = hoi_ref_obj_att * self.hoi_ref_mlp(hoi_obj_logits)
+
+        new_hoi_logits = hoi_logits + hoi_ref_logits
+
+        return new_hoi_logits
+
+
 class HoiMemGCBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         self.word_emb_dim = 300

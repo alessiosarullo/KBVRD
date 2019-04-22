@@ -156,7 +156,7 @@ class Launcher:
             if optimizer is not None:
                 if batch_idx % cfg.program.log_interval == 0:
                     stats.log_stats(self.curr_train_iter, verbose=verbose,
-                                    lr=optimizer.param_groups[0]['lr'])  # TODO lr for each parameter group
+                                    lr=optimizer.param_groups[0]['lr'], epoch=epoch_idx, batch=batch_idx)  # TODO lr for each parameter group
                 self.curr_train_iter += 1
             else:
                 if verbose:

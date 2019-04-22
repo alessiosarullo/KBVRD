@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 
+import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib import gridspec
 
@@ -13,6 +14,7 @@ from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.dataset.utils import get_counts
 
+matplotlib.use('Qt5Agg')
 
 def main():
     np.random.seed(3)
@@ -26,7 +28,7 @@ def main():
     imsitu_ke = ImSituKnowledgeExtractor()
     hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
 
-    imsitu_op_mat = imsitu_ke.extract_freq_matrix(hd)
+    imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
     imsitu_prior = imsitu_op_mat.copy()
     # imsitu_prior = (imsitu_prior > 0).astype(imsitu_prior.dtype)
     imsitu_prior[:, 0] = 0
@@ -128,7 +130,9 @@ def main():
         # plot_mat(prior_sum, predicates, objects, axes=plt.subplot(gs[1, 1]))
         # plt.show()
 
-        plot_mat((prior_sum > 0).astype(np.float), predicates, objects)
+        plot_mat(imsitu_prior, predicates, objects)
+        known_mask = known_objects[:, None] & known_predicates[None, :]
+        plot_mat(known_mask.astype(np.float), predicates, objects)
         plt.show()
 
 

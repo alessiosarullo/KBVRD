@@ -81,7 +81,7 @@ class RunningStats:
         for name, value in output_dict.get('watch', {}).items():
             self.values_to_watch.setdefault(name, History(self.history_window)).append(value.item())
 
-    def log_stats(self, curr_iter, verbose=False, **kwargs):
+    def log_stats(self, curr_iter, verbose=False, epoch=None, batch=None, **kwargs):
         """Log the tracked statistics."""
         Timer.get(self.epoch_str, 'Stats').tic()
 
@@ -91,6 +91,9 @@ class RunningStats:
                  }
         for k, v in kwargs.items():
             stats[k] = v
+
+        if verbose:
+            self.print_times(epoch, batch, curr_iter)
 
         for k, v in self.smoothed_losses.items():
             loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
@@ -132,9 +135,14 @@ class RunningStats:
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         try:
             time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
-        except ValueError:
+        except (ValueError, ZeroDivisionError):
             time_for_stats = 0
-        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * self.data_loader.batch_sampler.batch_size + time_for_stats)
+
+        avg_num_imgs_per_batch = self.data_loader.batch_size
+        if avg_num_imgs_per_batch is None:
+            batches = self.data_loader.batch_sampler.batches
+            avg_num_imgs_per_batch = sum([len(b) for b in batches]) / len(batches)
+        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * avg_num_imgs_per_batch + time_for_stats)
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''

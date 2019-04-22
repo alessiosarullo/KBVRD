@@ -25,7 +25,7 @@ class ImSituKnowledgeExtractor:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_freq_matrix(self, dataset: HicoDetInstanceSplit):
+    def extract_freq_matrix(self, dataset: HicoDetInstanceSplit, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
@@ -73,7 +73,16 @@ class ImSituKnowledgeExtractor:
         # Object-predicate matrix
         op_mat = np.array([[matching_dobjs_count_per_pred.get(pred, {}).get(obj, 0) for obj in dataset.objects]
                            for pred in dataset.predicates], dtype=np.float).T
-        return op_mat
+        if return_known_mask:
+            imsitu_nouns = {g for noun in self.imsitu.nouns.values() for g in noun['gloss']}
+            known_objects = np.array([obj in imsitu_nouns for obj in dataset.objects], dtype=bool)
+            known_predicates = np.array([pred in pred_verb_matches.keys() for pred in dataset.predicates], dtype=bool)
+            known_mask = known_objects[:, None] & known_predicates[None, :]
+            assert known_mask.shape == op_mat.shape
+            assert np.all(known_mask[op_mat > 0])
+            return op_mat, known_objects, known_predicates
+        else:
+            return op_mat
 
     def get_dobj_tokens_in_verb_abstracts(self):
         try:
@@ -190,7 +199,7 @@ class ImSituKnowledgeExtractor:
 def main():
     imsitu_ke = ImSituKnowledgeExtractor()
     hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
-    imsitu_op_mat = imsitu_ke.extract_freq_matrix(hd)
+    imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
 
 
 if __name__ == '__main__':
