@@ -132,6 +132,45 @@ class HoiPriorBranch(AbstractHOIBranch):
         return hoi_logits
 
 
+class HoiFreqFilterBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetInstanceSplit, hoi_repr_dim, **kwargs):
+        super().__init__(**kwargs)
+
+        # Freq bias
+        freqs = []
+        int_counts = get_counts(dataset=dataset)
+        freqs.append(int_counts)
+        # Possibly add here other priors
+
+        assert freqs
+        self.bias_priors = nn.ModuleList()
+        for fmat in freqs:
+            priors = fmat / np.maximum(1, np.sum(fmat, axis=1, keepdims=True))
+            self.bias_priors.append(torch.nn.Embedding.from_pretrained(torch.from_numpy(priors).float(), freeze=not cfg.model.train_prior))
+
+        if cfg.model.prior_att:
+            self.prior_source_attention = nn.Sequential(nn.Linear(hoi_repr_dim, len(self.bias_priors)),
+                                                        nn.Sigmoid())
+        else:
+            self.prior_source_attention = None
+
+    def _forward(self, hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels=None):
+        if self.bias_priors:
+            obj_classes = box_labels if box_labels is not None else torch.argmax(boxes_ext[:, 5:], dim=1)
+            hoi_obj_classes = obj_classes[hoi_infos[:, 2]].detach()
+
+            priors = torch.stack([prior(hoi_obj_classes) for prior in self.bias_priors], dim=0).clamp(min=1e-3)  # FIXME magic constant
+
+            if self.prior_source_attention is not None:
+                src_att = self.prior_source_attention(hoi_repr)
+                prior_contribution = (src_att.t().unsqueeze(dim=2) * priors).sum(dim=0)
+                self.values_to_monitor['hoi_attention'] = src_att.detach().cpu().numpy()
+            else:
+                prior_contribution = priors.sum(dim=0)
+            hoi_logits += prior_contribution.log()
+        return hoi_logits
+
+
 class HoiEmbsimBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments

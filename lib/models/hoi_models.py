@@ -324,8 +324,46 @@ class InterModel(GenericModel):
                           obj_scores=obj_prob,
                           hoi_img_inds=hoi_img_inds,
                           ho_pairs=ho_pairs,
-                          action_scores=None,
-                          hoi_scores=hoi_probs)
+                          hoi_scores=hoi_probs,
+                          use_actions=False)
+
+
+class FilterModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'filter'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+
+        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
+
+        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
+            self.values_to_monitor[k] = v
+
+        return obj_logits, hoi_logits
 
 
 class EmbsimModel(GenericModel):
