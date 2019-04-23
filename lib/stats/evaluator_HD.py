@@ -115,13 +115,16 @@ class Evaluator:
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
-                predict_action_scores = prediction.action_score_distributions
-                predict_obj_scores_per_ho_pair = predict_obj_scores[predict_ho_pairs[:, 1], :]
-
                 predict_ho_boxes = np.concatenate([predict_boxes[predict_ho_pairs[:, 0], :], predict_boxes[predict_ho_pairs[:, 1], :]], axis=1)
-                predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.inter_to_op_pair.shape[0]])
-                for iid, (oid, pid) in enumerate(self.inter_to_op_pair):
-                    predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
+                try:
+                    predict_hoi_scores = prediction.hoi_scores
+                except AttributeError:
+                    predict_action_scores = prediction.action_score_distributions
+                    predict_obj_scores_per_ho_pair = predict_obj_scores[predict_ho_pairs[:, 1], :]
+
+                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.inter_to_op_pair.shape[0]])
+                    for iid, (oid, pid) in enumerate(self.inter_to_op_pair):
+                        predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
 
             else:
                 assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.action_score_distributions is None

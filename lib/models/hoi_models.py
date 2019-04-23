@@ -273,8 +273,8 @@ class InterModel(GenericModel):
                 assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
                 new_hoi_labels = torch.zeros((hoi_labels.shape[0], self.num_interactions)).to(hoi_labels)
                 for i in range(hoi_labels.shape[0]):
-                    obj_label = box_labels[hoi_infos[i, 2]]
-                    action_labels = hoi_labels[i, :]
+                    obj_label = box_labels[hoi_infos[i, 2]].long()
+                    action_labels = hoi_labels[i, :].long()
                     new_hoi_labels[i, self.interactions[obj_label, action_labels]] = 1
 
                 return obj_output, hoi_output, box_labels, hoi_labels
