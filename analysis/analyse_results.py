@@ -23,8 +23,10 @@ from lib.stats.evaluator_HD import Evaluator as Evaluator_HD
 from lib.stats.evaluator_hd import Evaluator as Evaluator_hd
 from scripts.utils import get_all_models_by_name
 
-matplotlib.use('Qt5Agg')
-
+try:
+    matplotlib.use('Qt5Agg')
+except:
+    pass
 
 def _setup_and_load():
     cfg.parse_args(allow_required=False, reset=True)
