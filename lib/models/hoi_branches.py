@@ -232,7 +232,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.gc_fc2 = nn.Sequential(nn.Linear(gc_dims[0], gc_dims[1]),
                                     nn.ReLU())
 
-        vis_dim = 512
+        # vis_dim = 512
+        vis_dim = gc_dims[-1]
         self.hoi_obj_fc = nn.Linear(obj_repr_dim, vis_dim)
         nn.init.xavier_normal_(self.hoi_obj_fc.weight, gain=1.0)
         self.hoi_union_fc = nn.Linear(visual_feats_dim, vis_dim)
@@ -258,11 +259,12 @@ class KatoGCNBranch(AbstractHOIBranch):
 
         z_a = self.gc_fc2(self.adj_an @ z_n) + self.gc_fc2(self.adj_av @ z_v)
 
-        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
-                                               z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
-                                              dim=2))
-        assert hoi_logits.shape[2] == 1
-        hoi_logits = hoi_logits.squeeze(dim=2)  # this are over the interactions
+        hoi_logits = nn.functional.cosine_similarity(hoi_repr, z_a.t(), dim=1)
+        # hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
+        #                                        z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
+        #                                       dim=2))
+        # assert hoi_logits.shape[2] == 1
+        # hoi_logits = hoi_logits.squeeze(dim=2)  # this are over the interactions
 
         action_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_preds.unsqueeze(dim=0)).max(dim=1)[0]  # over actions
         hoi_obj_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_obj.unsqueeze(dim=0)).max(dim=1)[0]  # over objects
