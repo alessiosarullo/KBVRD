@@ -32,19 +32,24 @@ class Evaluator:
         self.known_pairs, self.num_interactions = self.get_known_pairs()
 
     def get_known_pairs(self):
-        known_pairs = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=bool)
-        for iid in range(len(self.dataset.hicodet.interaction_list)):
-            obj_id = self.dataset.hicodet.get_object_index(iid)
-            pred_id = self.dataset.hicodet.get_predicate_index(iid)
-            known_pairs[obj_id, pred_id] = 1
-        assert np.sum(known_pairs) == 600, np.sum(known_pairs)
+        interactions = self.dataset.hicodet.interactions
+
+        inter_mapping = np.full((self.dataset.num_object_classes, self.dataset.num_predicates), fill_value=-1, dtype=np.int)
+        inter_mapping[interactions[:, 1], interactions[:, 0]] = np.arange(interactions.shape[0])
+        assert np.sum(inter_mapping >= 0) == 600, np.sum(inter_mapping >= 0)
 
         num_occurrences = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates), dtype=np.int)
         for h, i, o in self.dataset.hois:
             num_occurrences[o, i] += 1
         assert np.sum(num_occurrences > 0) == 600
 
-        known_pairs = np.flatnonzero(known_pairs.reshape(-1))
+        inter_mapping = inter_mapping.reshape(-1)
+        known_pairs = np.flatnonzero(inter_mapping >= 0)
+        assert known_pairs.size == 600
+        assert np.all(inter_mapping[known_pairs] >= 0)
+        inds = np.argsort(inter_mapping[known_pairs])
+        known_pairs = known_pairs[inds]
+
         num_interactions = num_occurrences.reshape(-1)[known_pairs]
         assert num_interactions.sum() == num_occurrences.sum()
         return known_pairs, num_interactions

@@ -66,8 +66,8 @@ def evaluate():
     # results = new_results
 
     # stats = Evaluator_old.evaluate_predictions(hds, results)
-    # stats = Evaluator_hd.evaluate_predictions(hds, results)
-    stats = Evaluator_HD.evaluate_predictions(hds, results)
+    stats = Evaluator_hd.evaluate_predictions(hds, results)
+    # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 
 
