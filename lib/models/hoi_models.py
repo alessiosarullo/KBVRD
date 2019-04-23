@@ -276,7 +276,7 @@ class InterModel(GenericModel):
                     obj_label = box_labels[hoi_infos[i, 2]].long()
                     action_labels = hoi_labels[i, :].long()
                     new_hoi_labels[i, self.interactions[obj_label, action_labels]] = 1
-
+                hoi_labels = new_hoi_labels
                 return obj_output, hoi_output, box_labels, hoi_labels
             else:
                 return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
