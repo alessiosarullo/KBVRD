@@ -14,7 +14,6 @@ class Evaluator:
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
         self.filter_bg = False
-        self.filter_unknown_pairs = True
 
         self.dataset = dataset
         self.hoi_obj_labels = []
@@ -129,12 +128,13 @@ class Evaluator:
 
                 predict_ho_pairs = prediction.ho_pairs
                 try:
-                    predict_hoi_scores = prediction.hoi_scores
+                    predict_hoi_scores = np.zeros((prediction.hoi_scores.shape[0], num_possible_hois))
+                    predict_hoi_scores[:, self.known_pairs] = prediction.hoi_scores
                 except AttributeError:
                     predict_action_scores = prediction.action_score_distributions
                     predict_hoi_obj_scores = predict_obj_scores[predict_ho_pairs[:, 1], :]
                     predict_hoi_scores = (predict_hoi_obj_scores[:, :, None] * predict_action_scores[:, None, :])
-                    predict_hoi_scores  = predict_hoi_scores.reshape(predict_ho_pairs.shape[0], -1)
+                    predict_hoi_scores = predict_hoi_scores.reshape(predict_ho_pairs.shape[0], -1)
                 assert predict_hoi_scores.shape[1] == num_possible_hois
 
                 # fg_hois = predict_action_scores[:, 0] < 0.5  # FIXME magic constant
@@ -177,9 +177,8 @@ class Evaluator:
         hoi_labels = np.concatenate([hoi_labels, hoi_unmatched_labels], axis=0)
         hoi_predictions = np.concatenate([hoi_predictions, np.zeros((num_unmatched_gt_hois, hoi_predictions.shape[1]))], axis=0)
 
-        if self.filter_unknown_pairs:
-            hoi_labels = hoi_labels[:, self.known_pairs]
-            hoi_predictions = hoi_predictions[:, self.known_pairs]
+        hoi_labels = hoi_labels[:, self.known_pairs]
+        hoi_predictions = hoi_predictions[:, self.known_pairs]
         self.hoi_labels.append(hoi_labels.astype(np.float32))
         self.hoi_predictions.append(hoi_predictions.astype(np.float32))
 
