@@ -46,12 +46,12 @@ def evaluate():
     # Filter results
     new_results = []
     num_filtered = 0
-    filter_thr = 0.3
+    filter_thr = 0.5
     for res in results:
         prediction = Prediction.from_dict(res)
         if prediction.action_score_distributions is not None:
             keep = np.any(prediction.action_score_distributions >= filter_thr, axis=1)
-            num_filtered += prediction.action_score_distributions.shape[0] - (~keep.sum())
+            num_filtered += (~keep).sum()
             if np.any(keep):
                 prediction.hoi_img_inds = prediction.hoi_img_inds[keep]
                 prediction.ho_pairs = prediction.ho_pairs[keep, :]
