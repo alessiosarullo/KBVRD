@@ -242,6 +242,9 @@ class KatoGCNBranch(AbstractHOIBranch):
                                        nn.ReLU(),
                                        nn.Dropout(p=0.5),
                                        nn.Linear(512, 200),
+                                       nn.ReLU(),
+                                       nn.Dropout(p=0.5),
+                                       nn.Linear(200, 1),
                                        nn.Sigmoid())
 
     def _forward(self, obj_repr, union_boxes_feats, hoi_infos):
