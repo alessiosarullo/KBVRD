@@ -190,6 +190,79 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         return hoi_logits, hoi_obj_logits
 
 
+class KatoGCNBranch(AbstractHOIBranch):
+    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(**kwargs)
+
+        interactions = dataset.hicodet.interactions  # each is [p, o]
+        num_interactions = interactions.shape[0]
+        assert num_interactions == 600
+        interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
+        interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
+        interactions_to_preds = np.zeros((num_interactions, dataset.num_predicates))
+        interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
+        self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj).float(), requires_grad=False)
+        self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds).float(), requires_grad=False)
+
+        adj_av = torch.from_numpy(interactions_to_preds)
+        adj_an = torch.from_numpy(interactions_to_obj)
+        adj_nn = torch.eye(dataset.num_object_classes)
+        adj_vv = torch.eye(dataset.num_predicates)
+
+        # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
+        # this, but the paper is not clear at all.
+        self.adj_vv = nn.Parameter(adj_vv, requires_grad=False)
+        self.adj_nn = nn.Parameter(adj_nn, requires_grad=False)
+        self.adj_an = (1 / torch.diag(adj_an.sum(dim=1)).sqrt()) @ adj_an @ (1 / torch.diag(adj_an.sum(dim=0)).sqrt())
+        self.adj_av = (1 / torch.diag(adj_av.sum(dim=1)).sqrt()) @ adj_av @ (1 / torch.diag(adj_av.sum(dim=0)).sqrt())
+
+        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+
+        self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+        self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+
+        gc_dims = [512, 200]
+        self.gc_fc1 = nn.Sequential(nn.Linear(self.word_emb_dim, gc_dims[0]),
+                                    nn.ReLU())
+        self.gc_fc2 = nn.Sequential(nn.Linear(gc_dims[0], gc_dims[1]),
+                                    nn.ReLU())
+
+        vis_dim = 512
+        self.hoi_obj_fc = nn.Linear(visual_feats_dim, vis_dim)
+        nn.init.xavier_normal_(self.hoi_obj_fc.weight, gain=1.0)
+        self.hoi_union_fc = nn.Linear(visual_feats_dim, vis_dim)
+        nn.init.xavier_normal_(self.hoi_union_fc.weight, gain=1.0)
+
+        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[1] + vis_dim, 512),
+                                       nn.ReLU(),
+                                       nn.Dropout(p=0.5),
+                                       nn.Linear(512, 200),
+                                       nn.Sigmoid())
+
+    def _forward(self, obj_repr, union_boxes_feats, hoi_infos):
+        hoi_obj_repr = self.hoi_obj_fc(obj_repr[hoi_infos[:, 2], :])
+        union_repr = self.hoi_union_fc(union_boxes_feats)
+        hoi_repr = union_repr + hoi_obj_repr
+
+        # WTF. What they wrote in their paper does not seem to make sense. This is what I managed to come up with.
+        z_n = self.gc_fc1(self.adj_nn @ self.z_n)
+        z_v = self.gc_fc1(self.adj_vv @ self.z_v)
+
+        z_a = self.gc_fc2(self.adj_an @ z_n) + self.gc_fc2(self.adj_av @ z_v)
+
+        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1), z_a.unsqueeze(dim=0)], dim=2))
+        assert hoi_logits.shape[2] == 1
+        hoi_logits.squeeze_(dim=2)  # this are over the interactions
+
+        action_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_preds.unsqueeze(dim=0)).max(dim=1)  # over actions
+        hoi_obj_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_obj.unsqueeze(dim=0)).max(dim=1)  # over objects
+
+        return hoi_obj_logits, action_logits
+
+
 class PeyreEmbsimBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
         self.word_emb_dim = 300

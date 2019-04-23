@@ -352,6 +352,38 @@ class RefModel(HoiModel):
         return obj_logits, hoi_logits, hoi_ref_logits
 
 
+class KatoModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'kato'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+
+        self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, dataset)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        hoi_obj_logits, hoi_logits = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
+
+        # No update for now
+        # obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
+        # obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
+        # obj_logits = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
+
+        return obj_logits, hoi_logits
+
+
 class PeyreModel(GenericModel):
     @classmethod
     def get_cline_name(cls):

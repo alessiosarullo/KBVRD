@@ -25,8 +25,9 @@ from scripts.utils import get_all_models_by_name
 
 try:
     matplotlib.use('Qt5Agg')
-except:
+except ImportError:
     pass
+
 
 def _setup_and_load():
     cfg.parse_args(allow_required=False, reset=True)
