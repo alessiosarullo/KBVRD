@@ -138,4 +138,4 @@ class GenericModel(AbstractModel):
                           obj_scores=obj_prob,
                           hoi_img_inds=hoi_img_inds,
                           ho_pairs=ho_pairs,
-                          hoi_scores=hoi_probs)
+                          action_scores=hoi_probs)

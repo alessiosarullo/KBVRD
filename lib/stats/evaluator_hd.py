@@ -128,9 +128,13 @@ class Evaluator:
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
-                predict_action_scores = prediction.action_score_distributions
-                predict_hoi_obj_scores = predict_obj_scores[predict_ho_pairs[:, 1], :]
-                predict_hoi_scores = (predict_hoi_obj_scores[:, :, None] * predict_action_scores[:, None, :]).reshape(predict_ho_pairs.shape[0], -1)
+                try:
+                    predict_hoi_scores = prediction.hoi_scores
+                except AttributeError:
+                    predict_action_scores = prediction.action_score_distributions
+                    predict_hoi_obj_scores = predict_obj_scores[predict_ho_pairs[:, 1], :]
+                    predict_hoi_scores = (predict_hoi_obj_scores[:, :, None] * predict_action_scores[:, None, :])
+                    predict_hoi_scores  = predict_hoi_scores.reshape(predict_ho_pairs.shape[0], -1)
                 assert predict_hoi_scores.shape[1] == num_possible_hois
 
                 # fg_hois = predict_action_scores[:, 0] < 0.5  # FIXME magic constant

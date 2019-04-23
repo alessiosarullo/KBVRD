@@ -100,7 +100,7 @@ def main():
                                     obj_scores=[],
                                     hoi_img_inds=np.array([im_idx]),
                                     ho_pairs=ex.gt_hois[:, [0, 2]],
-                                    hoi_scores=hoi_scores)
+                                    action_scores=hoi_scores)
             all_predictions.append(vars(prediction))
             if im_idx % 20 == 0:
                 torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
