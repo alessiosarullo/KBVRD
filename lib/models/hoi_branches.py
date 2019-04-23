@@ -264,8 +264,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         assert hoi_logits.shape[2] == 1
         hoi_logits.squeeze_(dim=2)  # this are over the interactions
 
-        action_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_preds.unsqueeze(dim=0)).max(dim=1)  # over actions
-        hoi_obj_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_obj.unsqueeze(dim=0)).max(dim=1)  # over objects
+        action_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_preds.unsqueeze(dim=0)).max(dim=1)[0]  # over actions
+        hoi_obj_logits = (hoi_logits.unsqueeze(dim=2) * self.interactions_to_obj.unsqueeze(dim=0)).max(dim=1)[0]  # over objects
 
         return hoi_obj_logits, action_logits
 
