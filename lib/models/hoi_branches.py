@@ -144,7 +144,7 @@ class HoiFreqRefBranch(AbstractHOIBranch):
 
         assert freqs
         known_inter = np.stack([np.maximum(1, fmat) for fmat in freqs], axis=2).any(axis=2)
-        self.known_inter = nn.Parameter(torch.from_numpy(known_inter).float().clamp(min=1e-3), requires_grad=False)
+        self.known_inter = nn.Parameter(torch.from_numpy(known_inter.astype(np.float)).clamp(min=1e-3), requires_grad=False)
 
     def _forward(self, action_logits, obj_logits, hoi_infos):
         obj_scores = torch.nn.functional.softmax(obj_logits, dim=1)
