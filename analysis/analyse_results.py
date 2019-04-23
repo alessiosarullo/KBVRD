@@ -46,7 +46,7 @@ def evaluate():
     # Filter results
     new_results = []
     num_filtered = 0
-    filter_thr = 0.5
+    filter_thr = 0.3
     for res in results:
         prediction = Prediction.from_dict(res)
         if prediction.action_score_distributions is not None:
@@ -62,6 +62,7 @@ def evaluate():
                 prediction.action_score_distributions = None
         new_results.append(vars(prediction))
     print('Filtered:', num_filtered)
+    results = new_results
 
     stats = Evaluator_old.evaluate_predictions(hds, results)
     # stats = Evaluator_hd.evaluate_predictions(hds, results)
