@@ -409,8 +409,8 @@ def load_mats():
 
 
 if __name__ == '__main__':
-    load_mats()
-    # save_lists()
+    # load_mats()
+    save_lists()
     # print_num_preds()
     # print('=' * 100)
     # print_num_objs()

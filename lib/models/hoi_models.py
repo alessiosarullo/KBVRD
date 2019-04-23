@@ -339,11 +339,43 @@ class FilterModel(GenericModel):
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
+        self.fg_fc = nn.Linear(vis_feat_dim, 1)
+        nn.init.xavier_normal_(self.fg_fc.weight, gain=1.0)
+
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
+    def get_losses(self, x, **kwargs):
+        obj_output, hoi_output, fg_scores, box_labels, hoi_labels = self(x, inference=False, **kwargs)
+        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
+        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
+        fg_loss = nn.functional.binary_cross_entropy_with_logits(fg_scores, (hoi_labels[:, 1:] > 0).any(dim=1, keepdim=True).float())
+        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss, 'fg_loss': fg_loss}
+
+    def forward(self, x, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            if hoi_infos is not None:
+                obj_output, hoi_output, fg_scores = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            else:
+                obj_output = hoi_output = fg_scores = None
+
+            if not inference:
+                assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
+                return obj_output, hoi_output, fg_scores, box_labels, hoi_labels
+            else:
+                if fg_scores is not None:
+                    fg = (fg_scores >= 0.5).squeeze(dim=1)
+                    if fg.any():
+                        hoi_infos = hoi_infos[fg, :]
+                        hoi_output = hoi_output[fg, :]
+                    else:
+                        hoi_infos = hoi_output = None
+                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -355,15 +387,12 @@ class FilterModel(GenericModel):
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
-
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        hoi_logits = self.hoi_refinement_branch(hoi_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
-        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
-            self.values_to_monitor[k] = v
+        fg_scores = self.fg_fc(union_boxes_feats)
 
-        return obj_logits, hoi_logits
+        return obj_logits, hoi_logits, fg_scores
 
 
 class EmbsimModel(GenericModel):
