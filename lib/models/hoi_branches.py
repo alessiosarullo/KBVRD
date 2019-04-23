@@ -205,10 +205,10 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.interactions_to_obj = nn.Parameter(torch.from_numpy(interactions_to_obj).float(), requires_grad=False)
         self.interactions_to_preds = nn.Parameter(torch.from_numpy(interactions_to_preds).float(), requires_grad=False)
 
-        adj_av = torch.from_numpy(interactions_to_preds)
-        adj_an = torch.from_numpy(interactions_to_obj)
-        adj_nn = torch.eye(dataset.num_object_classes)
-        adj_vv = torch.eye(dataset.num_predicates)
+        adj_av = torch.from_numpy(interactions_to_preds).float()
+        adj_an = torch.from_numpy(interactions_to_obj).float()
+        adj_nn = torch.eye(dataset.num_object_classes).float()
+        adj_vv = torch.eye(dataset.num_predicates).float()
 
         # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
         # this, but the paper is not clear at all.
@@ -221,8 +221,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects, retry='last')
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='first')
 
-        self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-        self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=False)
+        self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
 
         gc_dims = [512, 200]
         self.gc_fc1 = nn.Sequential(nn.Linear(self.word_emb_dim, gc_dims[0]),
