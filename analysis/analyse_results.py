@@ -37,12 +37,32 @@ def _setup_and_load():
 
 
 def evaluate():
-    sys.argv += ['--save_dir', 'output/hoi/2019-04-14_11-38-03_vanilla']
+    sys.argv += ['--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
-    # stats = Evaluator_old.evaluate_predictions(hds, results)
-    stats = Evaluator_hd.evaluate_predictions(hds, results)
+    # Filter results
+    new_results = []
+    num_filtered = 0
+    filter_thr = 0.5
+    for res in results:
+        prediction = Prediction.from_dict(res)
+        if prediction.action_score_distributions is not None:
+            keep = np.any(prediction.action_score_distributions >= filter_thr, axis=1)
+            num_filtered += prediction.action_score_distributions.shape[0] - keep.sum()
+            if np.any(keep):
+                prediction.hoi_img_inds = prediction.hoi_img_inds[keep]
+                prediction.ho_pairs = prediction.ho_pairs[keep, :]
+                prediction.action_score_distributions = prediction.action_score_distributions[keep, :]
+            else:
+                prediction.hoi_img_inds = None
+                prediction.ho_pairs = None
+                prediction.action_score_distributions = None
+        new_results.append(vars(prediction))
+    print('Filtered:', num_filtered)
+
+    stats = Evaluator_old.evaluate_predictions(hds, results)
+    # stats = Evaluator_hd.evaluate_predictions(hds, results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 
