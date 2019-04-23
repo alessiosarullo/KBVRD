@@ -254,7 +254,7 @@ class InterModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.num_interactions, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.interactions = torch.full((dataset.num_object_classes, dataset.num_predicates), fill_value=-1)
+        self.interactions = torch.full((dataset.num_object_classes, dataset.num_predicates), fill_value=-1).long()
         interactions = dataset.hicodet.interactions
         self.interactions[interactions[:, 1], interactions[:, 0]] = torch.arange(self.num_interactions)
 
