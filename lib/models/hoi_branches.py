@@ -218,8 +218,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.adj_av = (1 / torch.diag(adj_av.sum(dim=1)).sqrt()) @ adj_av @ (1 / torch.diag(adj_av.sum(dim=0)).sqrt())
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects, retry='last')
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='first')
 
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
