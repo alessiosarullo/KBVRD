@@ -155,7 +155,11 @@ class HoiFreqRefBranch(AbstractHOIBranch):
         hoi_scores_biased = hoi_scores * self.known_inter.unsqueeze(dim=0)
 
         action_logits = action_logits + hoi_scores_biased.sum(dim=1).log()
-        obj_logits = obj_logits + hoi_scores_biased.sum(dim=2).log()
+
+        obj_to_hoi_matrix = hoi_scores_biased.new_zeros(obj_logits.shape[0], hoi_infos.shape[0])
+        obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
+        obj_logits_hoi = obj_to_hoi_matrix @ hoi_scores_biased.sum(dim=2).log() / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
+        obj_logits = obj_logits + obj_logits_hoi
 
         return obj_logits, action_logits
 
