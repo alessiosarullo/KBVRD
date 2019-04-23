@@ -40,34 +40,34 @@ def _setup_and_load():
 
 
 def evaluate():
-    sys.argv += ['--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
+    sys.argv += ['--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
-    # Filter results
-    new_results = []
-    num_filtered = 0
-    filter_thr = 0.5
-    for res in results:
-        prediction = Prediction.from_dict(res)
-        if prediction.action_score_distributions is not None:
-            keep = np.any(prediction.action_score_distributions >= filter_thr, axis=1)
-            num_filtered += (~keep).sum()
-            if np.any(keep):
-                prediction.hoi_img_inds = prediction.hoi_img_inds[keep]
-                prediction.ho_pairs = prediction.ho_pairs[keep, :]
-                prediction.action_score_distributions = prediction.action_score_distributions[keep, :]
-            else:
-                prediction.hoi_img_inds = None
-                prediction.ho_pairs = None
-                prediction.action_score_distributions = None
-        new_results.append(vars(prediction))
-    print('Filtered:', num_filtered)
-    results = new_results
+    # # Filter results
+    # new_results = []
+    # num_filtered = 0
+    # filter_thr = 0.5
+    # for res in results:
+    #     prediction = Prediction.from_dict(res)
+    #     if prediction.action_score_distributions is not None:
+    #         keep = np.any(prediction.action_score_distributions >= filter_thr, axis=1)
+    #         num_filtered += (~keep).sum()
+    #         if np.any(keep):
+    #             prediction.hoi_img_inds = prediction.hoi_img_inds[keep]
+    #             prediction.ho_pairs = prediction.ho_pairs[keep, :]
+    #             prediction.action_score_distributions = prediction.action_score_distributions[keep, :]
+    #         else:
+    #             prediction.hoi_img_inds = None
+    #             prediction.ho_pairs = None
+    #             prediction.action_score_distributions = None
+    #     new_results.append(vars(prediction))
+    # print('Filtered:', num_filtered)
+    # results = new_results
 
-    stats = Evaluator_old.evaluate_predictions(hds, results)
+    # stats = Evaluator_old.evaluate_predictions(hds, results)
     # stats = Evaluator_hd.evaluate_predictions(hds, results)
-    # stats = Evaluator_HD.evaluate_predictions(hds, results)
+    stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 
 
@@ -179,57 +179,6 @@ def stats():
     plt.show()
 
 
-def att():
-    results = _setup_and_load()
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-    stats = Evaluator.evaluate_predictions(hds, results)
-    stats.print_metrics()
-
-    with open(cfg.program.watched_values_file, 'rb') as f:
-        watched_values = pickle.load(f)  # type: Dict
-    assert len(watched_values) == 1
-    im_att_orig = list(watched_values.values())[0]
-
-    assert len(im_att_orig) == len(stats.hoi_labels) == len(stats.hoi_obj_labels) == len(stats.hoi_gt_pred_assignment)
-    im_att = []
-    for iv, igt2p in zip(im_att_orig, stats.hoi_gt_pred_assignment):
-        if igt2p.size > 0:
-            x = np.array([iv[gt2p, :] if gt2p >= 0 else [0] for gt2p in igt2p])
-            im_att.append(x)
-    att = np.concatenate(im_att, axis=0)
-    hoi_labels = np.concatenate(stats.hoi_labels, axis=0)
-    hoi_obj_labels = np.concatenate(stats.hoi_obj_labels, axis=0).astype(np.int)
-    assert att.shape[0] == hoi_labels.shape[0] == hoi_obj_labels.shape[0]
-
-    mat = np.zeros((hds.num_object_classes, hds.num_predicates, 1))
-    mat2 = np.zeros((hds.num_object_classes, hds.num_predicates))
-    for i in range(att.shape[0]):
-        pred_att = att[i, :]
-        obj = hoi_obj_labels[i]
-        pred = np.flatnonzero(hoi_labels[i, :])
-        for p in pred:
-            mat[obj, p, :] += pred_att
-            mat2[obj, p] += 1
-    # assert np.sum(mat2 > 0) == 600, np.sum(mat2 > 0)  # FIXME it's 599, one is missing
-
-    mat = mat / np.maximum(1, mat2[:, :, None])
-
-    # msum = np.sum(mat, axis=2)
-    # msum[msum == 0] = 1
-    # mat = mat / msum[:, :, None]
-    # mat = mat.reshape(-1, mat.shape[2]).T
-
-    mat = mat.squeeze(axis=2)
-
-    # plt.figure(figsize=(16, 9))
-    # ax = plt.gca()
-    # ax.matshow(mat, cmap=plt.get_cmap('jet'), vmin=0, vmax=1)
-    # plt.show()
-
-    plot_mat(mat, hds.predicates, hds.objects)
-    plt.show()
-
-
 def vis_masks():
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
@@ -271,7 +220,6 @@ def vis_masks():
 
 def main():
     funcs = {'vis': vis_masks,
-             'att': att,
              'stats': stats,
              'eval': evaluate,
              }

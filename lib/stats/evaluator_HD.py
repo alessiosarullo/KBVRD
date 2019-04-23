@@ -25,15 +25,14 @@ class Evaluator:
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
     def parse_interactions(self):
-        num_interactions = len(self.dataset.hicodet.interaction_list)
+        interactions = self.dataset.hicodet.interactions
+        num_interactions = interactions.shape[0]
+
         op_pair_to_inter = np.full([self.dataset.num_object_classes, self.dataset.num_predicates], fill_value=-1, dtype=np.int)
-        inter_to_op_pair = np.empty([num_interactions, 2], dtype=np.int)
-        for iid in range(num_interactions):
-            obj_id = self.dataset.hicodet.get_object_index(iid)
-            pred_id = self.dataset.hicodet.get_predicate_index(iid)
-            op_pair_to_inter[obj_id, pred_id] = iid
-            inter_to_op_pair[iid, :] = [obj_id, pred_id]
-        assert np.sum(op_pair_to_inter >= 0) == 600, np.sum(op_pair_to_inter >= 0)
+        op_pair_to_inter[interactions[:, 1], interactions[:, 0]] = np.arange(num_interactions)
+
+        inter_to_op_pair = interactions[:, [1, 0]]
+
         return op_pair_to_inter, inter_to_op_pair
 
     @property
@@ -111,7 +110,7 @@ class Evaluator:
 
             if prediction.ho_pairs is not None:
                 assert all([v is not None for v in vars(prediction).values()])
-                assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.action_score_distributions.shape[0]
+                # assert prediction.hoi_img_inds.shape[0] == prediction.ho_pairs.shape[0] == prediction.action_score_distributions.shape[0]
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
@@ -126,8 +125,8 @@ class Evaluator:
                     for iid, (oid, pid) in enumerate(self.inter_to_op_pair):
                         predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
 
-            else:
-                assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.action_score_distributions is None
+            # else:
+            #     assert prediction.hoi_img_inds is None and prediction.ho_pairs is None and prediction.action_score_distributions is None
         else:
             assert prediction.ho_pairs is None
 
