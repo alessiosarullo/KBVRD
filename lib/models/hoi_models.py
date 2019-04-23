@@ -362,7 +362,7 @@ class KatoModel(GenericModel):
         self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
 
-        self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, dataset)
+        self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, dataset)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()

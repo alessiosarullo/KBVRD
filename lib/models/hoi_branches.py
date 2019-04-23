@@ -191,7 +191,7 @@ class HoiEmbsimBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
         self.word_emb_dim = 300
         super().__init__(**kwargs)
 
@@ -231,7 +231,7 @@ class KatoGCNBranch(AbstractHOIBranch):
                                     nn.ReLU())
 
         vis_dim = 512
-        self.hoi_obj_fc = nn.Linear(visual_feats_dim, vis_dim)
+        self.hoi_obj_fc = nn.Linear(obj_repr_dim, vis_dim)
         nn.init.xavier_normal_(self.hoi_obj_fc.weight, gain=1.0)
         self.hoi_union_fc = nn.Linear(visual_feats_dim, vis_dim)
         nn.init.xavier_normal_(self.hoi_union_fc.weight, gain=1.0)
