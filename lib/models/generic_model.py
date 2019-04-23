@@ -47,7 +47,7 @@ class GenericModel(AbstractModel):
         elif cfg.model.csloss:
             hoi_loss = self.weighted_binary_cross_entropy_with_logits(logits=hoi_output, labels=hoi_labels)
         else:
-            hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * self.dataset.num_predicates
+            hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
         return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
 
     def focal_loss(self, logits, labels):
