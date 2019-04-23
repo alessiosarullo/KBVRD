@@ -324,6 +324,7 @@ class InterModel(GenericModel):
                           obj_scores=obj_prob,
                           hoi_img_inds=hoi_img_inds,
                           ho_pairs=ho_pairs,
+                          action_scores=None,
                           hoi_scores=hoi_probs)
 
 
