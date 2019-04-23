@@ -245,12 +245,41 @@ class InterModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
+        self.num_interactions = dataset.hicodet.interactions.shape[0]
+
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.hicodet.interactions.shape[0], bias=True)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.num_interactions, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
+        self.interactions = torch.full((dataset.num_object_classes, dataset.num_predicates), fill_value=-1)
+        interactions = dataset.hicodet.interactions
+        self.interactions[interactions[:, 1], interactions[:, 0]] = torch.arange(self.num_interactions)
+
+    def forward(self, x, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, hoi_labels = self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            if hoi_infos is not None:
+                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, hoi_labels)
+            else:
+                obj_output = hoi_output = None
+
+            if not inference:
+                assert obj_output is not None and hoi_output is not None and box_labels is not None and hoi_labels is not None
+                new_hoi_labels = torch.zeros((hoi_labels.shape[0], self.num_interactions)).to(hoi_labels)
+                for i in range(hoi_labels.shape[0]):
+                    obj_label = box_labels[hoi_infos[i, 2]]
+                    action_labels = hoi_labels[i, :]
+                    new_hoi_labels[i, self.interactions[obj_label, action_labels]] = 1
+
+                return obj_output, hoi_output, box_labels, hoi_labels
+            else:
+                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
