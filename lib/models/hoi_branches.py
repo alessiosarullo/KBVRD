@@ -255,7 +255,9 @@ class KatoGCNBranch(AbstractHOIBranch):
 
         z_a = self.gc_fc2(self.adj_an @ z_n) + self.gc_fc2(self.adj_av @ z_v)
 
-        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1), z_a.unsqueeze(dim=0)], dim=2))
+        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
+                                               z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
+                                              dim=2))
         assert hoi_logits.shape[2] == 1
         hoi_logits.squeeze_(dim=2)  # this are over the interactions
 
