@@ -93,7 +93,7 @@ class Evaluator:
 
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
 
-            gt_hoi_classes = self.op_pair_to_inter[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_entry.gt_obj_classes[:, 2]]
+            gt_hoi_classes = self.op_pair_to_inter[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
             assert np.all(gt_hoi_classes) >= 0
 
             gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
