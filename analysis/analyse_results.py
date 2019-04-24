@@ -231,8 +231,8 @@ def main():
              'eval': evaluate,
              }
 
-    # sys.argv[1:] = ['eval', '--load_precomputed_feats']
-    sys.argv[1:] = ['vis', '--load_precomputed_feats']
+    sys.argv[1:] = ['eval', '--load_precomputed_feats']
+    # sys.argv[1:] = ['vis', '--load_precomputed_feats']
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())
     namespace = parser.parse_known_args()
