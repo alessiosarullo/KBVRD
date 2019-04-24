@@ -13,13 +13,10 @@ from lib.models.utils import Prediction
 class Evaluator:
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
-        self.filter_bg = False
         self.dataset = dataset
-        self.hoi_obj_labels = []
         self.hoi_labels = []
         self.hoi_predictions = []
-        self.hoi_gt_pred_assignment = []
-        self.num_unmatched_gt_hois = 0
+        self.unmatched_gt_hois = []
 
         self.hoi_metric_functions = {'u-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average='micro'),
                                      'M-mAP': lambda labels, predictions: average_precision_score(labels, predictions, average=None),
@@ -143,6 +140,7 @@ class Evaluator:
 
         self.hoi_labels.append(hoi_labels)
         self.hoi_predictions.append(hoi_predictions)
+        self.unmatched_gt_hois.append(unmatched_gt_hois)
 
 
 class MetricFormatter:

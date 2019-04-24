@@ -524,21 +524,43 @@ def compute_annotations(split, hicodet_driver: HicoDetDriver, im_inds, obj_inds,
     return annotations, image_ids, final_objects_inds, final_pred_inds
 
 
+def find_interaction():
+    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=cfg.data.flip_prob)
+
+    action = 'ride'
+    obj = 'bicycle'
+    try:
+        p_idx = hd.hicodet._pred_index[action]
+        o_idx = hd.hicodet._obj_class_index[obj]
+        # inter_idx = np.flatnonzero(np.all(hd.interactions == np.array([p_idx, o_idx], dtype=np.int), axis=1))
+        # if inter_idx.size == 0:
+        #     raise KeyError()
+        # assert inter_idx.size == 1
+
+        po = np.array([p_idx, o_idx], dtype=np.int)
+        ims = []
+        for i, (box_classes, inters) in enumerate(zip(hd._im_box_classes, hd._im_inters)):
+            im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
+            assert np.all(im_hois[:, 0] == hd.human_class)
+            if np.any(np.all(im_hois[:, 1:] == po, axis=1)):
+                ims.append(i)
+                print(hd._im_filenames[i])
+    except KeyError:
+        print('Not found.')
+
+
 def main():
-    import sys
-    sys.argv += ['--model', 'base', '--save_dir', 'fake']
-    cfg.parse_args()
-
-    hd = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
-    for im_i, hois in enumerate(hd._im_inters):
-        # u_hois, counts = np.unique(hois[:, [0, 2]], return_counts=True)
-
-        hh_inter = np.any(hois[:, 0] == hois[:, 2])
-        counts = np.sum(hh_inter)
-
-        if np.any(counts > 1):
-            print(im_i, np.sum(counts > 1))
+    # import sys
+    # sys.argv += ['--model', 'base', '--save_dir', 'fake']
+    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=cfg.data.flip_prob)
+    for i, (box_classes, inters) in enumerate(zip(hd._im_box_classes, hd._im_inters)):
+        hois = np.stack([inters[:, 1], box_classes[inters[:, 2]]], axis=1)
+        hois = np.unique(hois, axis=0)
+        if hois.shape[0] > 3 and np.unique(hois[:, 1]).size > 1:
+            print(hd._im_filenames[i], ', '.join(['%s %s' % (hd.hicodet.predicates[p], hd.hicodet.objects[o]) for p, o in hois]))
 
 
 if __name__ == '__main__':
+    cfg.parse_args(allow_required=False)
     main()
+    # find_interaction()

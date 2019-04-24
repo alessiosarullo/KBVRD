@@ -239,13 +239,14 @@ def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=N
                     alpha=0.5)
                 ax.add_patch(polygon)
 
-    for ub in union_boxes:
-        ax.add_patch(
-            plt.Rectangle((ub[0], ub[1]),
-                          ub[2] - ub[0],
-                          ub[3] - ub[1],
-                          fill=False, edgecolor='r',
-                          linewidth=0.3, alpha=box_alpha))
+    if union_boxes is not None:
+        for ub in union_boxes:
+            ax.add_patch(
+                plt.Rectangle((ub[0], ub[1]),
+                              ub[2] - ub[0],
+                              ub[3] - ub[1],
+                              fill=False, edgecolor='r',
+                              linewidth=0.3, alpha=box_alpha))
 
     if output_file_path is None:
         plt.show()
