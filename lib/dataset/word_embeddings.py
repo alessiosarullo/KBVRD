@@ -160,9 +160,9 @@ class WordEmbeddings:
 
 
 def main():
-    we = WordEmbeddings(source='glove')
-    print(we.vocabulary[:50])
-    print(we._embeddings[:5, :5])
+    we = WordEmbeddings(source='glove', normalize=True, dim=200)
+    e = we.get_embeddings(['ride', 'chair', 'bike'])
+    print(e[0].dot(e[1]), e[0].dot(e[2]))
 
 
 if __name__ == '__main__':

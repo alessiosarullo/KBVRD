@@ -25,6 +25,8 @@ from scripts.utils import get_all_models_by_name
 
 try:
     matplotlib.use('Qt5Agg')
+    sys.argv[1:] = ['eval', '--load_precomputed_feats', '--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
+    # sys.argv[1:] = ['vis', '--load_precomputed_feats', '--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
 except ImportError:
     pass
 
@@ -40,7 +42,6 @@ def _setup_and_load():
 
 
 def evaluate():
-    # sys.argv += ['--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
@@ -65,8 +66,8 @@ def evaluate():
     # print('Filtered:', num_filtered)
     # results = new_results
 
-    stats = Evaluator_old.evaluate_predictions(hds, results)
-    # stats = Evaluator_hd.evaluate_predictions(hds, results)
+    # stats = Evaluator_old.evaluate_predictions(hds, results)
+    stats = Evaluator_hd.evaluate_predictions(hds, results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 
@@ -180,7 +181,6 @@ def stats():
 
 
 def vis_masks():
-    sys.argv += ['--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
@@ -230,9 +230,7 @@ def main():
              'stats': stats,
              'eval': evaluate,
              }
-
-    # sys.argv[1:] = ['eval', '--load_precomputed_feats']
-    # sys.argv[1:] = ['vis', '--load_precomputed_feats']
+    print(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())
     namespace = parser.parse_known_args()
