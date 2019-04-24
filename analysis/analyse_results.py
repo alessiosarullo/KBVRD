@@ -40,7 +40,7 @@ def _setup_and_load():
 
 
 def evaluate():
-    sys.argv += ['--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
+    # sys.argv += ['--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
@@ -231,7 +231,7 @@ def main():
              'eval': evaluate,
              }
 
-    sys.argv[1:] = ['eval', '--load_precomputed_feats']
+    # sys.argv[1:] = ['eval', '--load_precomputed_feats']
     # sys.argv[1:] = ['vis', '--load_precomputed_feats']
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())
