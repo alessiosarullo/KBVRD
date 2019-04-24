@@ -148,7 +148,7 @@ class Evaluator:
         """
         Equivalent to VOCevaldet_bboxpair in the original MATLAB code.
         """
-        gt_assigned = np.zeros_like(self.gt_count, dtype=bool)
+        gt_assigned = np.zeros(self.gt_count, dtype=bool)
         inds = np.argsort(predicted_conf_scores)[::-1]
         pred_gt_ho_assignment = pred_gt_ho_assignment[inds]
 
