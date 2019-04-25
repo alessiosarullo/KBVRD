@@ -16,7 +16,6 @@ class Evaluator:
         self.op_pair_to_inter, self.inter_to_op_pair = self.parse_interactions()
 
         self.gt_hoi_classes = []
-        self.gt_ho_ids = []
         self.predict_hoi_scores = []
         self.pred_gt_ho_assignment = []
 
@@ -54,17 +53,17 @@ class Evaluator:
 
     def compute_metrics(self):
         gt_hoi_classes = np.concatenate(self.gt_hoi_classes, axis=0)
-        gt_ho_ids = np.concatenate(self.gt_ho_ids, axis=0)
-        assert self.gt_count == gt_ho_ids.shape[0] and np.all(gt_ho_ids == np.arange(self.gt_count))
+        assert self.gt_count == gt_hoi_classes.shape[0]
         predict_hoi_scores = np.concatenate(self.predict_hoi_scores, axis=0)
         pred_gt_ho_assignment = np.concatenate(self.pred_gt_ho_assignment, axis=0)
+
+        gt_hoi_classes_count = Counter(gt_hoi_classes.tolist())
 
         ap = np.zeros(self.num_interactions)
         recall = np.zeros(self.num_interactions)
         for j in range(self.num_interactions):
-            gt_inter_inds = (gt_hoi_classes == j)
             # FIXME this uses all pairs for every interaction, which will drive precision down. Maybe threshold by score?
-            rec_j, prec_j, ap_j = self.eval_interactions(predict_hoi_scores[:, j], pred_gt_ho_assignment, gt_inter_inds.sum())
+            rec_j, prec_j, ap_j = self.eval_interactions(predict_hoi_scores[:, j], pred_gt_ho_assignment, gt_hoi_classes_count[j])
             ap[j] = ap_j
             if rec_j.size > 0:
                 recall[j] = rec_j[-1]
@@ -140,7 +139,6 @@ class Evaluator:
                 pred_gt_assignment[predict_idx] = gt_ho_ids[np.argmax(gt_pair_ious)]
 
         self.gt_hoi_classes.append(gt_hoi_classes)
-        self.gt_ho_ids.append(gt_ho_ids)
         self.predict_hoi_scores.append(predict_hoi_scores)
         self.pred_gt_ho_assignment.append(pred_gt_assignment)
 

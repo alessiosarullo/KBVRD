@@ -13,6 +13,11 @@ except ImportError:
 def main():
     files = ['analysis/output/plots/run_hoi_2019-04-22_17-04-13_b64_tboard_Test-tag-M-mAP.csv',
              'analysis/output/plots/run_embsim_2019-04-22_19-53-50_vanilla_tboard_Test-tag-M-mAP.csv']
+
+    font = {'family': 'normal',
+            'size': 18}
+    matplotlib.rc('font', **font)
+
     ax = plt.gca()
     for f in files:
         d = np.loadtxt(f, skiprows=1, delimiter=',')
@@ -21,6 +26,7 @@ def main():
     ax.set_ylabel('Mean average precision')
     ax.set_xlabel('Epoch')
     plt.legend(['Baseline', 'w/ knowledge'])
+    plt.tight_layout()
     plt.show()
 
 
