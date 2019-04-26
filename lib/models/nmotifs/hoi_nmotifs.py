@@ -22,7 +22,7 @@ class NMotifs(GenericModel):
         super().__init__(dataset, **kwargs)
         self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
 
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels):
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         obj_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos, union_boxes_feats, box_labels)
         return obj_logits, hoi_logits
 
