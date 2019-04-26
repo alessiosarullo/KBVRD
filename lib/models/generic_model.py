@@ -93,8 +93,10 @@ class GenericModel(AbstractModel):
             # Masks are floats at this point.
 
             if hoi_infos is not None:
-                obj_output, action_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
-                                                                      action_labels)
+                obj_output, action_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
+                                                          action_labels, hoi_labels)
+                # obj_output, action_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
+                #                                                       action_labels)
             else:
                 obj_output = action_output = hoi_output = None
 
