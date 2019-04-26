@@ -24,17 +24,14 @@ class Evaluator:
 
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
-    @classmethod
-    def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
-        assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
+    def evaluate_predictions(self, predictions: List[Dict], **kwargs):
+        assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
-        evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
-            ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
-            evaluator.process_prediction(i, ex, prediction)
-        evaluator.compute_metrics()
-        return evaluator  # type: Evaluator
+            self.process_prediction(i, ex, prediction)
+        self.compute_metrics()
 
     def compute_metrics(self):
         gt_hoi_classes = np.concatenate(self.gt_hoi_classes, axis=0)

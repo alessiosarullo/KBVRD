@@ -43,140 +43,119 @@ def _setup_and_load():
 def evaluate():
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-
-    # # Filter results
-    # new_results = []
-    # num_filtered = 0
-    # filter_thr = 0.5
-    # for res in results:
-    #     prediction = Prediction.from_dict(res)
-    #     if prediction.action_score_distributions is not None:
-    #         keep = np.any(prediction.action_score_distributions >= filter_thr, axis=1)
-    #         num_filtered += (~keep).sum()
-    #         if np.any(keep):
-    #             prediction.ho_img_inds = prediction.ho_img_inds[keep]
-    #             prediction.ho_pairs = prediction.ho_pairs[keep, :]
-    #             prediction.action_score_distributions = prediction.action_score_distributions[keep, :]
-    #         else:
-    #             prediction.ho_img_inds = None
-    #             prediction.ho_pairs = None
-    #             prediction.action_score_distributions = None
-    #     new_results.append(vars(prediction))
-    # print('Filtered:', num_filtered)
-    # results = new_results
-
-    # stats = Evaluator_old.evaluate_predictions(hds, results)
-    stats = Evaluator.evaluate_predictions(hds, results)
+    evaluator = Evaluator(dataset=hds, hoi_score_thr=None, num_hoi_thr=None)
+    stats = evaluator.evaluate_predictions(results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 
 
-def stats():
-    base_argv = sys.argv
-    exps = [
-        'output/hoi/2019-04-12_09-51-28_red-ored',
-        # 'output/zero/2019-04-03_10-28-10_vanilla',
-        # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
-    ]
-    true_pos = []
-    pos = None
-    for exp in exps:
-        sys.argv = base_argv + ['--save_dir', exp]
-        print('=' * 100, '\n', sys.argv)
-
-        results = _setup_and_load()
-
-        hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
-        hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-
-        stats = Evaluator_old.evaluate_predictions(hdtest, results)  # type: Evaluator_old
-        stats.print_metrics(sort=True)
-
-        # detector = get_all_models_by_name()[cfg.program.model](hdtrain)
-        # ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
-        # detector.load_state_dict(ckpt['state_dict'])
-
-        # op_adj_mat = detector.hoi_branch.op_adj_mat.squeeze(dim=-1).detach().numpy()
-        # op_conf_mat = torch.sigmoid(detector.hoi_branch.op_conf_mat.squeeze(dim=-1).detach()).numpy()
-        #
-        # ds_counts = get_counts(dataset=hdtrain)
-        # ds_counts[:, 0] = 0  # exclude null interaction
-        # ds = np.minimum(1, ds_counts)
-        # imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(hdtrain)
-        # imsitu_counts[:, 0] = 0  # exclude null interaction
-        # imsitu = np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-
-        # # Plot
-        # plt.figure(figsize=(16, 9))
-
-        # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
-        #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
-        # plot_mat(op_adj_mat[:, :, 1] / 3 + ds * 2 / 3, predicates, objects, axes=plt.subplot(gs[0, 0]))
-        # plot_mat(op_conf_mat[:, :, 1], predicates, objects, axes=plt.subplot(gs[0, 1]))
-        # plot_mat(op_adj_mat[:, :, 0] / 3 + imsitu * 2 / 3, predicates, objects, axes=plt.subplot(gs[1, 0]))
-        # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
-        # plt.show()
-
-        pred_thr = 0.5
-        gt_hois = np.concatenate(stats.hoi_labels, axis=0)
-        bg_hois = gt_hois[:, 0] > 0
-        fg_hois = np.any(gt_hois[:, 1:], axis=1)
-        assert not np.any(bg_hois & fg_hois), np.flatnonzero(bg_hois & fg_hois)
-        gt_hoi_objs = np.concatenate(stats.hoi_obj_labels, axis=0)
-        predictions = np.concatenate(stats.hoi_predictions, axis=0)
-        assert gt_hois.shape[0] == gt_hoi_objs.shape[0] == predictions.shape[0] and gt_hois.shape[1] == predictions.shape[1] == hdtrain.num_predicates
-
-        tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
-        gt_counts = np.zeros_like(tps)
-        confmat = np.zeros([hdtrain.num_predicates, hdtrain.num_predicates])
-        confmat_norm_factor = np.zeros(hdtrain.num_predicates)
-        for gth_1hot, gto, ph_1hot in zip(gt_hois, gt_hoi_objs, predictions):
-            gthois = np.flatnonzero(gth_1hot)
-            tps[gto, gthois] += (ph_1hot[gthois] > pred_thr)
-            gt_counts[gto, gthois] += 1
-
-            gthois = set(gthois.tolist())
-            phois = set(np.flatnonzero(ph_1hot > pred_thr))
-            hits = np.array(sorted(gthois & phois))
-            unmatched = gthois - phois
-            mistaken_for = np.array(sorted(phois - gthois))
-            if hits.size > 0:
-                confmat[hits, hits] += 1
-                confmat_norm_factor[hits] += 1
-            for u in unmatched:
-                if mistaken_for.size > 0:
-                    confmat[u, mistaken_for] += 1
-                else:  # assign to no_interaction by default
-                    confmat[u, 0] += 1
-
-        assert np.all(tps <= gt_counts)
-        if pos is None:
-            pos = gt_counts
-        assert np.all(pos == gt_counts)
-        true_pos.append(tps)
-
-        # assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))  # This is not true because a HOI can be mistaken for several other ones
-        confmat /= confmat.sum(axis=1, keepdims=True)
-
-    obj_inds = np.argsort(pos.sum(axis=1))[::-1]
-    # pred_inds = np.argsort(pos.sum(axis=0))[::-1]
-    pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
-
-    print(MetricFormatter().format_metric('01 loss', np.diag(confmat)[pred_inds]))
-
-    plot_mat(confmat[:, pred_inds][pred_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.predicates[i] for i in pred_inds],
-             x_inds=pred_inds, y_inds=pred_inds,
-             cbar=True, bin_colours=False, plot=False, grid=False)
-
-    # true_pos = np.stack(true_pos, axis=2)
-    # assert true_pos.shape[2] == 2
-    # mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
-    # mat = mat / 2 + 0.5
-    # plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
-    #          x_inds=pred_inds, y_inds=obj_inds,
-    #          cbar=True, bin_colours=True, plot=False)
-
-    plt.show()
+# def stats():
+#     base_argv = sys.argv
+#     exps = [
+#         'output/hoi/2019-04-12_09-51-28_red-ored',
+#         # 'output/zero/2019-04-03_10-28-10_vanilla',
+#         # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
+#     ]
+#     true_pos = []
+#     pos = None
+#     for exp in exps:
+#         sys.argv = base_argv + ['--save_dir', exp]
+#         print('=' * 100, '\n', sys.argv)
+#
+#         results = _setup_and_load()
+#
+#         hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
+#         hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+#
+#         stats = Evaluator_old.evaluate_predictions(hdtest, results)  # type: Evaluator_old
+#         stats.print_metrics(sort=True)
+#
+#         # detector = get_all_models_by_name()[cfg.program.model](hdtrain)
+#         # ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
+#         # detector.load_state_dict(ckpt['state_dict'])
+#
+#         # op_adj_mat = detector.hoi_branch.op_adj_mat.squeeze(dim=-1).detach().numpy()
+#         # op_conf_mat = torch.sigmoid(detector.hoi_branch.op_conf_mat.squeeze(dim=-1).detach()).numpy()
+#         #
+#         # ds_counts = get_counts(dataset=hdtrain)
+#         # ds_counts[:, 0] = 0  # exclude null interaction
+#         # ds = np.minimum(1, ds_counts)
+#         # imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(hdtrain)
+#         # imsitu_counts[:, 0] = 0  # exclude null interaction
+#         # imsitu = np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
+#
+#         # # Plot
+#         # plt.figure(figsize=(16, 9))
+#
+#         # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
+#         #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
+#         # plot_mat(op_adj_mat[:, :, 1] / 3 + ds * 2 / 3, predicates, objects, axes=plt.subplot(gs[0, 0]))
+#         # plot_mat(op_conf_mat[:, :, 1], predicates, objects, axes=plt.subplot(gs[0, 1]))
+#         # plot_mat(op_adj_mat[:, :, 0] / 3 + imsitu * 2 / 3, predicates, objects, axes=plt.subplot(gs[1, 0]))
+#         # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
+#         # plt.show()
+#
+#         pred_thr = 0.5
+#         gt_hois = np.concatenate(stats.hoi_labels, axis=0)
+#         bg_hois = gt_hois[:, 0] > 0
+#         fg_hois = np.any(gt_hois[:, 1:], axis=1)
+#         assert not np.any(bg_hois & fg_hois), np.flatnonzero(bg_hois & fg_hois)
+#         gt_hoi_objs = np.concatenate(stats.hoi_obj_labels, axis=0)
+#         predictions = np.concatenate(stats.hoi_predictions, axis=0)
+#         assert gt_hois.shape[0] == gt_hoi_objs.shape[0] == predictions.shape[0] and  \
+#               gt_hois.shape[1] == predictions.shape[1] == hdtrain.num_predicates
+#
+#         tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
+#         gt_counts = np.zeros_like(tps)
+#         confmat = np.zeros([hdtrain.num_predicates, hdtrain.num_predicates])
+#         confmat_norm_factor = np.zeros(hdtrain.num_predicates)
+#         for gth_1hot, gto, ph_1hot in zip(gt_hois, gt_hoi_objs, predictions):
+#             gthois = np.flatnonzero(gth_1hot)
+#             tps[gto, gthois] += (ph_1hot[gthois] > pred_thr)
+#             gt_counts[gto, gthois] += 1
+#
+#             gthois = set(gthois.tolist())
+#             phois = set(np.flatnonzero(ph_1hot > pred_thr))
+#             hits = np.array(sorted(gthois & phois))
+#             unmatched = gthois - phois
+#             mistaken_for = np.array(sorted(phois - gthois))
+#             if hits.size > 0:
+#                 confmat[hits, hits] += 1
+#                 confmat_norm_factor[hits] += 1
+#             for u in unmatched:
+#                 if mistaken_for.size > 0:
+#                     confmat[u, mistaken_for] += 1
+#                 else:  # assign to no_interaction by default
+#                     confmat[u, 0] += 1
+#
+#         assert np.all(tps <= gt_counts)
+#         if pos is None:
+#             pos = gt_counts
+#         assert np.all(pos == gt_counts)
+#         true_pos.append(tps)
+#
+#         # assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))  # This is not true because a HOI can be mistaken for several other ones
+#         confmat /= confmat.sum(axis=1, keepdims=True)
+#
+#     obj_inds = np.argsort(pos.sum(axis=1))[::-1]
+#     # pred_inds = np.argsort(pos.sum(axis=0))[::-1]
+#     pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
+#
+#     print(MetricFormatter().format_metric('01 loss', np.diag(confmat)[pred_inds]))
+#
+#     plot_mat(confmat[:, pred_inds][pred_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.predicates[i] for i in pred_inds],
+#              x_inds=pred_inds, y_inds=pred_inds,
+#              cbar=True, bin_colours=False, plot=False, grid=False)
+#
+#     # true_pos = np.stack(true_pos, axis=2)
+#     # assert true_pos.shape[2] == 2
+#     # mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
+#     # mat = mat / 2 + 0.5
+#     # plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
+#     #          x_inds=pred_inds, y_inds=obj_inds,
+#     #          cbar=True, bin_colours=True, plot=False)
+#
+#     plt.show()
 
 
 def vis_masks():
@@ -226,7 +205,6 @@ def vis_masks():
 
 def main():
     funcs = {'vis': vis_masks,
-             'stats': stats,
              'eval': evaluate,
              }
     print(sys.argv)
