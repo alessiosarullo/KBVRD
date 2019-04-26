@@ -117,13 +117,16 @@ class GenericModel(AbstractModel):
     @staticmethod
     def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if hoi_infos is not None:
-            assert obj_output is not None and action_output is not None and boxes_ext is not None
+            assert obj_output is not None and boxes_ext is not None
+            assert action_output is not None or hoi_output is not None
             if cfg.program.predcls:
                 obj_prob = None  # this will be assigned later as the object label distribution
             else:
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-            action_probs = torch.sigmoid(action_output).cpu().numpy()
-            hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
+            if action_output is not None:
+                action_probs = torch.sigmoid(action_output).cpu().numpy()
+            if hoi_output is not None:
+                hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
             ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
