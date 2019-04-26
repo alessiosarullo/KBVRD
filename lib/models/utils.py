@@ -17,6 +17,5 @@ class Prediction:
         if 'hoi_img_inds' in prediction_dict.keys():  # FIXME legacy, remove
             prediction_dict['ho_img_inds'] = prediction_dict['hoi_img_inds']
             del prediction_dict['hoi_img_inds']
-        assert set(vars(p).keys()) == set(prediction_dict.keys())
         p.__dict__.update(prediction_dict)
         return p
