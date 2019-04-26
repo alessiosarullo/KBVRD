@@ -93,7 +93,7 @@ class VisualModule(nn.Module):
     def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
         # Requires everything Numpy
         box_labels_per_pair_np = box_labels[ho_infos[:, 2]].astype(np.int)
-        hoi_labels_np = np.zeros((action_labels.shape[0], self.dataset.num_interactions))
+        hoi_labels_np = np.zeros((action_labels.shape[0], self.dataset.num_interactions), dtype=np.float32)
         for i in range(action_labels.shape[0]):
             a_inds = np.flatnonzero(action_labels[i, :])
             inter_inds = self.dataset.op_pair_to_interaction[np.full_like(a_inds, fill_value=box_labels_per_pair_np[i]), a_inds]
