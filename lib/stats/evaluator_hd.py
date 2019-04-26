@@ -47,7 +47,7 @@ class Evaluator:
             ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
             evaluator.process_prediction(i, ex, prediction)
-
+        print('Prediction processed. Computing metrics.')
         evaluator.compute_metrics()
         return evaluator  # type: Evaluator
 
@@ -63,7 +63,7 @@ class Evaluator:
         recall = np.zeros(self.num_interactions)
         for j in range(self.num_interactions):
             # FIXME this uses all pairs for every interaction, which will drive precision down. Maybe threshold by score?
-            rec_j, prec_j, ap_j = self.eval_interactions(predict_hoi_scores[:, j], pred_gt_ho_assignment, gt_hoi_classes_count[j])
+            rec_j, prec_j, ap_j = self.eval_interactions(predict_hoi_scores[:, j], pred_gt_ho_assignment[:, j], gt_hoi_classes_count[j])
             ap[j] = ap_j
             if rec_j.size > 0:
                 recall[j] = rec_j[-1]
@@ -127,8 +127,7 @@ class Evaluator:
             assert prediction.ho_pairs is None
 
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_assignment = np.full(predict_hoi_scores.shape[0], fill_value=-1, dtype=np.int)
-
+        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.num_interactions), fill_value=-1, dtype=np.int)
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
             gt_pair_ious = np.zeros(num_gt_hois)
             for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
@@ -136,11 +135,17 @@ class Evaluator:
                 iou_o = pred_gt_ious[po, go]
                 gt_pair_ious[gtidx] = min(iou_h, iou_o)
             if np.any(gt_pair_ious >= self.iou_thresh):
-                pred_gt_assignment[predict_idx] = gt_ho_ids[np.argmax(gt_pair_ious)]
+                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.num_interactions))
+                gt_pair_ious_per_hoi[np.arange(num_gt_hois), gt_hoi_classes] = gt_pair_ious
+                gt_assignments = gt_pair_ious_per_hoi.argmax(axis=0)[np.any(gt_pair_ious_per_hoi >= self.iou_thresh, axis=0)]
+                gt_hoi_assignments = gt_hoi_classes[gt_assignments]
+                assert np.unique(gt_assignments).size == gt_assignments.size
+                assert np.unique(gt_hoi_assignments).size == gt_hoi_assignments.size
+                pred_gt_assignment_per_hoi[predict_idx, gt_hoi_assignments] = gt_ho_ids[gt_assignments]
 
         self.gt_hoi_classes.append(gt_hoi_classes)
         self.predict_hoi_scores.append(predict_hoi_scores)
-        self.pred_gt_ho_assignment.append(pred_gt_assignment)
+        self.pred_gt_ho_assignment.append(pred_gt_assignment_per_hoi)
 
     def eval_interactions(self, predicted_conf_scores, pred_gt_ho_assignment, num_hoi_gt_positives):
         """
