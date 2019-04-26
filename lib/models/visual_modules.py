@@ -96,7 +96,8 @@ class VisualModule(nn.Module):
         hoi_labels_np = np.zeros((action_labels.shape[0], self.dataset.num_interactions))
         for i in range(action_labels.shape[0]):
             a_inds = np.flatnonzero(action_labels[i, :])
-            inter_inds = self.dataset.interactions[a_inds, np.full_like(a_inds, fill_value=box_labels_per_pair_np[i])]
+            inter_inds = self.dataset.op_pair_to_interaction[np.full_like(a_inds, fill_value=box_labels_per_pair_np[i]), a_inds]
+            assert np.all(inter_inds >= 0)
             hoi_labels_np[i, inter_inds] = 1
         return hoi_labels_np
 
