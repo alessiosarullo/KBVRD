@@ -82,10 +82,10 @@ class OracleModel(GenericModel):
             assert obj_output is not None and hoi_output is not None and boxes_ext is not None
             obj_prob = obj_output.cpu().numpy()
             hoi_probs = hoi_output.cpu().numpy()
-            hoi_img_inds = hoi_infos[:, 0]
+            ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            hoi_probs = ho_pairs = hoi_img_inds = None
+            hoi_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -99,7 +99,7 @@ class OracleModel(GenericModel):
         return Prediction(obj_im_inds=obj_im_inds,
                           obj_boxes=obj_boxes,
                           obj_scores=obj_prob,
-                          hoi_img_inds=hoi_img_inds,
+                          ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
                           action_scores=hoi_probs)
 
@@ -154,10 +154,10 @@ class PureMemModel(GenericModel):
             assert hoi_output is not None and boxes_ext is not None
             obj_prob = None  # this will be assigned later as the object label distribution
             hoi_probs = hoi_output.cpu().numpy()
-            hoi_img_inds = hoi_infos[:, 0]
+            ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            hoi_probs = ho_pairs = hoi_img_inds = None
+            hoi_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -171,7 +171,7 @@ class PureMemModel(GenericModel):
         return Prediction(obj_im_inds=obj_im_inds,
                           obj_boxes=obj_boxes,
                           obj_scores=obj_prob,
-                          hoi_img_inds=hoi_img_inds,
+                          ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
                           action_scores=hoi_probs)
 
@@ -305,10 +305,10 @@ class InterModel(GenericModel):
             else:
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
             hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
-            hoi_img_inds = hoi_infos[:, 0]
+            ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            hoi_probs = ho_pairs = hoi_img_inds = None
+            hoi_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -322,7 +322,7 @@ class InterModel(GenericModel):
         return Prediction(obj_im_inds=obj_im_inds,
                           obj_boxes=obj_boxes,
                           obj_scores=obj_prob,
-                          hoi_img_inds=hoi_img_inds,
+                          ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
                           hoi_scores=hoi_probs,
                           use_actions=False)

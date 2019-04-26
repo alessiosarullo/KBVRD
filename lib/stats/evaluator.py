@@ -10,8 +10,11 @@ from lib.models.utils import Prediction
 
 
 class Evaluator:
-    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
+    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         self.iou_thresh = iou_thresh
+        self.hoi_score_thr = hoi_score_thr
+        self.num_hoi_thr = num_hoi_thr
+
         self.dataset = dataset
         self.op_pair_to_inter, self.inter_to_op_pair = self.parse_interactions()
 
@@ -63,7 +66,16 @@ class Evaluator:
         recall = np.zeros(self.num_interactions)
         for j in range(self.num_interactions):
             # FIXME this uses all pairs for every interaction, which will drive precision down. Maybe threshold by score?
-            rec_j, prec_j, ap_j = self.eval_interactions(predict_hoi_scores[:, j], pred_gt_ho_assignment[:, j], gt_hoi_classes_count[j])
+            p_hoi_scores = predict_hoi_scores[:, j]
+            p_gt_ho_assignment = pred_gt_ho_assignment[:, j]
+            if self.hoi_score_thr is not None:
+                inds = (p_hoi_scores >= self.hoi_score_thr)
+                p_hoi_scores = p_hoi_scores[inds]
+                p_gt_ho_assignment = p_gt_ho_assignment[inds]
+            if self.num_hoi_thr is not None:
+                p_hoi_scores = p_hoi_scores[:self.num_hoi_thr]
+                p_gt_ho_assignment = p_gt_ho_assignment[:self.num_hoi_thr]
+            rec_j, prec_j, ap_j = self.eval_interactions(p_hoi_scores, p_gt_ho_assignment, gt_hoi_classes_count[j])
             ap[j] = ap_j
             if rec_j.size > 0:
                 recall[j] = rec_j[-1]
@@ -111,7 +123,7 @@ class Evaluator:
 
             if prediction.ho_pairs is not None:
                 assert all([v is not None for v in vars(prediction).values()])
-                assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.hoi_img_inds)) == 1
+                assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.ho_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
                 try:
@@ -148,13 +160,11 @@ class Evaluator:
         self.pred_gt_ho_assignment.append(pred_gt_assignment_per_hoi)
 
     def eval_interactions(self, predicted_conf_scores, pred_gtid_assignment, num_hoi_gt_positives):
-        gt_assigned = np.zeros(self.gt_count, dtype=bool)
         inds = np.argsort(predicted_conf_scores)[::-1]
         pred_gtid_assignment = pred_gtid_assignment[inds]
 
         num_predictions = predicted_conf_scores.shape[0]
         tp = np.zeros(num_predictions)
-        fp = np.zeros(num_predictions)
 
         matched_gt_inds, highest_scoring_pred_idx_per_gt_ind = np.unique(pred_gtid_assignment, return_index=True)
         if matched_gt_inds[0] == -1:
@@ -163,16 +173,6 @@ class Evaluator:
         tp[highest_scoring_pred_idx_per_gt_ind] = 1
         fp = 1 - tp
         assert np.all(fp[pred_gtid_assignment < 0] == 1)
-
-        # for d, idx_matching_gt in enumerate(pred_gtid_assignment):
-        #     if idx_matching_gt >= 0:
-        #         if not gt_assigned[idx_matching_gt]:
-        #             tp[d] = 1
-        #             gt_assigned[idx_matching_gt] = True
-        #         else:
-        #             fp[d] = 1  # false positive (multiple detection)
-        #     else:
-        #         fp[d] = 1
 
         # compute precision/recall
         fp = np.cumsum(fp)

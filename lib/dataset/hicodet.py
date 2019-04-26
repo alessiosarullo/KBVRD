@@ -88,7 +88,7 @@ class HicoDetInstanceSplit(Dataset):
                 self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
 
             self.obj_class_inds = np.array(object_inds, dtype=np.int)
-            self.hoi_class_inds = np.array(predicate_inds, dtype=np.int)
+            self.action_class_inds = np.array(predicate_inds, dtype=np.int)
             self.box_ext_class_inds = np.concatenate([np.arange(5), 5 + self.obj_class_inds])
         else:
             self.pc_feats_file = None
@@ -353,7 +353,7 @@ class HicoDetInstanceSplit(Dataset):
 
                     if precomp_hoi_labels is not None:
                         assert precomp_box_labels is not None and box_inds is not None
-                        precomp_hoi_labels = precomp_hoi_labels[:, self.hoi_class_inds]
+                        precomp_hoi_labels = precomp_hoi_labels[:, self.action_class_inds]
 
                         # Remap HOIs box indices
                         precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]

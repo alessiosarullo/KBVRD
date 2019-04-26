@@ -119,10 +119,10 @@ class GenericModel(AbstractModel):
             else:
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
             hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
-            hoi_img_inds = hoi_infos[:, 0]
+            ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            hoi_probs = ho_pairs = hoi_img_inds = None
+            hoi_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -136,6 +136,6 @@ class GenericModel(AbstractModel):
         return Prediction(obj_im_inds=obj_im_inds,
                           obj_boxes=obj_boxes,
                           obj_scores=obj_prob,
-                          hoi_img_inds=hoi_img_inds,
+                          ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
                           action_scores=hoi_probs)

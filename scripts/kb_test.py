@@ -98,7 +98,7 @@ def main():
             prediction = Prediction(obj_im_inds=np.array([im_idx]),
                                     obj_boxes=ex.gt_boxes,
                                     obj_scores=[],
-                                    hoi_img_inds=np.array([im_idx]),
+                                    ho_img_inds=np.array([im_idx]),
                                     ho_pairs=ex.gt_hois[:, [0, 2]],
                                     action_scores=hoi_scores)
             all_predictions.append(vars(prediction))
