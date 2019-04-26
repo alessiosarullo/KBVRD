@@ -72,11 +72,11 @@ class Minibatch:
         self.pc_boxes_ext = []
         self.pc_box_feats = []
         self.pc_masks = []
-        self.pc_hoi_infos = []
-        self.pc_hoi_union_boxes = []
-        self.pc_hoi_union_feats = []
+        self.pc_ho_infos = []
+        self.pc_ho_union_boxes = []
+        self.pc_ho_union_feats = []
         self.pc_box_labels = []
-        self.pc_hoi_labels = []
+        self.pc_action_labels = []
 
     def append(self, ex: Example):
         im_id_in_batch = len(self.img_infos)
@@ -106,11 +106,11 @@ class Minibatch:
                     num_boxes = sum([boxes.shape[0] for boxes in self.pc_boxes_ext[:-1]])
                     hoi_infos[:, 0] = im_id_in_batch
                     hoi_infos[:, 1:] += num_boxes
-                    self.pc_hoi_infos += [hoi_infos]
-                    self.pc_hoi_union_boxes += [ex.precomp_hoi_union_boxes]
-                    self.pc_hoi_union_feats += [ex.precomp_hoi_union_feats]
+                    self.pc_ho_infos += [hoi_infos]
+                    self.pc_ho_union_boxes += [ex.precomp_hoi_union_boxes]
+                    self.pc_ho_union_feats += [ex.precomp_hoi_union_feats]
 
-                    self.pc_hoi_labels += [ex.precomp_hoi_labels]
+                    self.pc_action_labels += [ex.precomp_hoi_labels]
         else:
             self.imgs += [ex.image]
             self.gt_boxes += [ex.gt_boxes * ex.scale]
@@ -135,7 +135,7 @@ class Minibatch:
                     self.__dict__[k] = np.concatenate(v, axis=0)
 
             assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
-            assert self.pc_hoi_infos.shape[0] == self.pc_hoi_union_boxes.shape[0] == self.pc_hoi_union_feats.shape[0]
+            assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0] == self.pc_ho_union_feats.shape[0]
 
             img_infos = np.stack(self.img_infos, axis=0)
             img_infos[:, 0] = max(img_infos[:, 0])
@@ -144,17 +144,17 @@ class Minibatch:
 
             if self.pc_box_labels[0] is None:
                 assert all([l is None for l in self.pc_box_labels])
-                assert all([l is None for l in self.pc_hoi_labels])
-                self.pc_box_labels = self.pc_hoi_labels = None
+                assert all([l is None for l in self.pc_action_labels])
+                self.pc_box_labels = self.pc_action_labels = None
             else:
                 assert all([l is not None for l in self.pc_box_labels])
-                assert all([l is not None for l in self.pc_hoi_labels])
-                assert len(self.pc_box_labels) == len(self.pc_hoi_labels) == self.img_infos.shape[0], \
-                    (len(self.pc_box_labels), len(self.pc_hoi_labels), self.img_infos.shape[0])
+                assert all([l is not None for l in self.pc_action_labels])
+                assert len(self.pc_box_labels) == len(self.pc_action_labels) == self.img_infos.shape[0], \
+                    (len(self.pc_box_labels), len(self.pc_action_labels), self.img_infos.shape[0])
                 self.pc_box_labels = np.concatenate(self.pc_box_labels, axis=0)
-                self.pc_hoi_labels = np.concatenate(self.pc_hoi_labels, axis=0)
+                self.pc_action_labels = np.concatenate(self.pc_action_labels, axis=0)
                 assert self.pc_boxes_ext.shape[0] == self.pc_box_labels.shape[0]
-                assert self.pc_hoi_infos.shape[0] == self.pc_hoi_labels.shape[0]
+                assert self.pc_ho_infos.shape[0] == self.pc_action_labels.shape[0]
         else:
             assert all([len(v) > 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
             assert all([len(v) == 0 for k, v in self.__dict__.items() if k.startswith('pc_')])

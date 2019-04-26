@@ -157,8 +157,12 @@ class Evaluator:
         fp = np.zeros(num_predictions)
 
         matched_gt_inds, highest_scoring_pred_idx_per_gt_ind = np.unique(pred_gtid_assignment, return_index=True)
+        if matched_gt_inds[0] == -1:
+            matched_gt_inds = matched_gt_inds[1:]
+            highest_scoring_pred_idx_per_gt_ind = highest_scoring_pred_idx_per_gt_ind[1:]
         tp[highest_scoring_pred_idx_per_gt_ind] = 1
         fp = 1 - tp
+        assert np.all(fp[pred_gtid_assignment < 0] == 1)
 
         # for d, idx_matching_gt in enumerate(pred_gtid_assignment):
         #     if idx_matching_gt >= 0:
