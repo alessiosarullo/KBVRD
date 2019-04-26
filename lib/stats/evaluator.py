@@ -101,7 +101,6 @@ class Evaluator:
             predict_boxes = prediction.obj_boxes
 
             if prediction.ho_pairs is not None:
-                assert all([v is not None for v in vars(prediction).values()])
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.ho_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
