@@ -113,9 +113,8 @@ class Evaluator:
 
                 predict_ho_pairs = prediction.ho_pairs
                 predict_ho_boxes = np.concatenate([predict_boxes[predict_ho_pairs[:, 0], :], predict_boxes[predict_ho_pairs[:, 1], :]], axis=1)
-                try:
-                    predict_hoi_scores = prediction.hoi_scores
-                except AttributeError:
+                predict_hoi_scores = prediction.hoi_scores
+                if predict_hoi_scores is None:
                     predict_action_scores = prediction.action_score_distributions
                     predict_obj_scores_per_ho_pair = predict_obj_scores[predict_ho_pairs[:, 1], :]
 
