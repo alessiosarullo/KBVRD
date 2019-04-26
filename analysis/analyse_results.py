@@ -18,9 +18,8 @@ from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.utils import Minibatch, get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
-from lib.stats.evaluator import Evaluator as Evaluator_old, MetricFormatter
 from lib.stats.evaluator_HD import Evaluator as Evaluator_HD
-from lib.stats.evaluator_hd import Evaluator as Evaluator_hd
+from lib.stats.evaluator import Evaluator, MetricFormatter
 from scripts.utils import get_all_models_by_name
 
 try:
@@ -68,7 +67,7 @@ def evaluate():
     # results = new_results
 
     # stats = Evaluator_old.evaluate_predictions(hds, results)
-    stats = Evaluator_hd.evaluate_predictions(hds, results)
+    stats = Evaluator.evaluate_predictions(hds, results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     stats.print_metrics(sort=True)
 

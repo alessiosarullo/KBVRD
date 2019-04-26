@@ -11,7 +11,7 @@ class BaseConfigs:
         for k, v in vars(self).items():
             self._add_argument(parser, k, v, allow_required=allow_required)
         namespace = parser.parse_known_args(args)
-        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})  # TODO use defaults instead of the not None check
+        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
         self._postprocess_args()
         return namespace[1]
 
