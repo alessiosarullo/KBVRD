@@ -31,12 +31,12 @@ class VisualModule(nn.Module):
             self.mask_resolution = cfg.model.mask_resolution
             self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
-    def forward(self, batch: Minibatch, mode_inference, **kwargs):
+    def forward(self, batch: Minibatch, inference, **kwargs):
         # TODO docs
         # `ho_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
         if self._precomputed:
             boxes_ext_np = batch.pc_boxes_ext
-            if mode_inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
+            if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
                 return None, None, None, None, None, None, None, None
 
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -46,34 +46,44 @@ class VisualModule(nn.Module):
             ho_infos = batch.pc_ho_infos
 
             if ho_infos.shape[0] == 0:
-                assert mode_inference and not cfg.program.predcls
+                assert inference and not cfg.program.predcls
                 return boxes_ext, box_feats, masks, None, None, None, None, None
             ho_infos = ho_infos.astype(np.int, copy=False)
 
             if batch.pc_box_labels is None:
                 assert batch.pc_action_labels is None
-                box_labels = hoi_labels = None
+                box_labels = action_labels = None
             else:
-                box_labels = torch.tensor(batch.pc_box_labels, device=device)
-                hoi_labels = torch.tensor(batch.pc_action_labels, device=device)
+                box_labels_np = batch.pc_box_labels
+                action_labels_np = batch.pc_action_labels
+
+                box_labels_per_pair_np = box_labels_np[ho_infos[:, 2]]
+                hoi_labels_np = np.zeros((action_labels_np.shape[0], self.dataset.num_interactions))
+                for i in range(action_labels_np.shape[0]):
+                    a_inds = np.flatnonzero(action_labels_np[i, :])
+                    inters = self.dataset.interactions[a_inds, np.full_like(a_inds, fill_value=box_labels_per_pair_np[i])]
+                    hoi_labels_np[i, inters] = 1
+
+                box_labels = torch.tensor(box_labels_np, device=device)
+                action_labels = torch.tensor(action_labels_np, device=device)
 
             # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
             hoi_union_boxes = batch.pc_ho_union_boxes
             hoi_union_boxes_feats = torch.tensor(batch.pc_ho_union_feats, device=device)
-            return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, hoi_labels
+            return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels
         else:
             with torch.set_grad_enabled(self.training):
                 boxes_ext_np, feat_map = self.mask_rcnn(batch)
                 # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
-                if mode_inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
+                if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
                     return None, None, None, None, None, None, None, None
 
-                boxes_ext_np, box_feats, masks, ho_infos, box_labels, hoi_labels = self.process_boxes(batch, mode_inference, feat_map, boxes_ext_np)
+                boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels = self.process_boxes(batch, inference, feat_map, boxes_ext_np)
 
                 boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
 
                 if ho_infos.shape[0] == 0:
-                    assert mode_inference and not cfg.program.predcls
+                    assert inference and not cfg.program.predcls
                     return boxes_ext, box_feats, masks, None, None, None, None, None
                 ho_infos = ho_infos.astype(np.int, copy=False)
 
@@ -81,7 +91,7 @@ class VisualModule(nn.Module):
                 hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_infos[:, 1:])
                 hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
                 assert ho_infos.shape[0] == hoi_union_boxes_feats.shape[0]
-                return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, hoi_labels
+                return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels
 
     def process_boxes(self, batch, predict, feat_map, boxes_ext_np):
         if not predict:

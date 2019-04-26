@@ -122,7 +122,7 @@ class HicoDet:
         return self._interaction_list
 
     @property
-    def interactions(self) -> np.ndarray:
+    def interactions(self) -> np.ndarray:  # [p, o]
         return np.array([[self._pred_index[inter['pred']], self._obj_class_index[inter['obj']]] for inter in self._interaction_list])
 
     @property

@@ -82,7 +82,7 @@ class Evaluator:
         lines += mf.format_metric_and_gt_lines(self.dataset.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.dataset.hoi_triplets[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         printstr = '\n'.join(lines)
         print(printstr)

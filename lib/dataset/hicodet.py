@@ -36,10 +36,13 @@ class HicoDetInstanceSplit(Dataset):
         predicate_inds = sorted(predicate_inds)
         self.objects = [hicodet_driver.objects[i] for i in object_inds]
         self.predicates = [hicodet_driver.predicates[i] for i in predicate_inds]
-        print('Flipping is %s.' % (('enabled with probability %.2f' % flipping_prob) if flipping_prob > 0 else 'disabled'))
+        if flipping_prob > 0:
+            print('Flipping is enabled with probability %.2f.' % flipping_prob)
 
         # ################ Initialize
         self.human_class = self.objects.index('person')
+        self.op_pair_to_interaction = np.full([self.num_object_classes, self.num_predicates], fill_value=-1, dtype=np.int)
+        self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
         # Compute mappings to and from COCO
         coco_obj_to_idx = {c.replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
@@ -138,6 +141,10 @@ class HicoDetInstanceSplit(Dataset):
         return len(self.predicates)
 
     @property
+    def num_interactions(self):
+        return self.interactions.shape[0]
+
+    @property
     def num_images(self):
         return len(self.image_ids)
 
@@ -147,7 +154,7 @@ class HicoDetInstanceSplit(Dataset):
         return self.hicodet.get_img_dir(split)
 
     @property
-    def hois(self):
+    def hoi_triplets(self):
         # Each is (human, interaction, object)
         hois = []
         for box_classes, inters in zip(self._im_box_classes, self._im_inters):
@@ -155,6 +162,10 @@ class HicoDetInstanceSplit(Dataset):
             assert np.all(im_hois[:, 0] == self.human_class)
             hois.append(im_hois)
         return np.concatenate(hois, axis=0)
+
+    @property
+    def interactions(self):
+        return self.hicodet.interactions
 
     @property
     def obj_labels(self):

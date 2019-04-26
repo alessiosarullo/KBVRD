@@ -24,7 +24,7 @@ class GenericModel(AbstractModel):
         self.visual_module = VisualModule(dataset, **kwargs)
 
         if cfg.model.csloss:
-            prcls_hist = Counter(dataset.hois[:, 1])
+            prcls_hist = Counter(dataset.hoi_triplets[:, 1])
             prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
             num_predicate_classes = prcls_hist.size
             assert num_predicate_classes == dataset.num_predicates

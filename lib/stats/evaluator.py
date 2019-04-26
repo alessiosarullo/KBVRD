@@ -16,30 +16,13 @@ class Evaluator:
         self.num_hoi_thr = num_hoi_thr
 
         self.dataset = dataset
-        self.op_pair_to_inter, self.inter_to_op_pair = self.parse_interactions()
 
         self.gt_hoi_classes = []
         self.predict_hoi_scores = []
         self.pred_gt_ho_assignment = []
-
         self.gt_count = 0
 
         self.metrics = {}  # type: Dict[str, np.ndarray]
-
-    def parse_interactions(self):
-        interactions = self.dataset.hicodet.interactions
-        num_interactions = interactions.shape[0]
-
-        op_pair_to_inter = np.full([self.dataset.num_object_classes, self.dataset.num_predicates], fill_value=-1, dtype=np.int)
-        op_pair_to_inter[interactions[:, 1], interactions[:, 0]] = np.arange(num_interactions)
-
-        inter_to_op_pair = interactions[:, [1, 0]]
-
-        return op_pair_to_inter, inter_to_op_pair
-
-    @property
-    def num_interactions(self):
-        return self.inter_to_op_pair.shape[0]
 
     @classmethod
     def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
@@ -62,9 +45,9 @@ class Evaluator:
 
         gt_hoi_classes_count = Counter(gt_hoi_classes.tolist())
 
-        ap = np.zeros(self.num_interactions)
-        recall = np.zeros(self.num_interactions)
-        for j in range(self.num_interactions):
+        ap = np.zeros(self.dataset.num_interactions)
+        recall = np.zeros(self.dataset.num_interactions)
+        for j in range(self.dataset.num_interactions):
             # FIXME this uses all pairs for every interaction, which will drive precision down. Maybe threshold by score?
             p_hoi_scores = predict_hoi_scores[:, j]
             p_gt_ho_assignment = pred_gt_ho_assignment[:, j]
@@ -91,7 +74,7 @@ class Evaluator:
         lines += mf.format_metric_and_gt_lines(self.dataset.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset.hois[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.dataset.hoi_triplets[:, 1], metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         printstr = '\n'.join(lines)
         print(printstr)
@@ -104,7 +87,7 @@ class Evaluator:
 
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
 
-            gt_hoi_classes = self.op_pair_to_inter[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
+            gt_hoi_classes = self.dataset.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
             assert np.all(gt_hoi_classes) >= 0
 
             gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
@@ -112,7 +95,7 @@ class Evaluator:
         else:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-        predict_hoi_scores = np.zeros([0, self.inter_to_op_pair.shape[0]])
+        predict_hoi_scores = np.zeros([0, self.dataset.num_interactions])
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
         if prediction.obj_boxes is not None:
@@ -132,14 +115,14 @@ class Evaluator:
                     predict_action_scores = prediction.action_score_distributions
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
-                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.inter_to_op_pair.shape[0]])
-                    for iid, (oid, pid) in enumerate(self.inter_to_op_pair):
+                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.dataset.num_interactions])
+                    for iid, (pid, oid) in enumerate(self.dataset.interactions):
                         predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
         else:
             assert prediction.ho_pairs is None
 
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.num_interactions), fill_value=-1, dtype=np.int)
+        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.dataset.num_interactions), fill_value=-1, dtype=np.int)
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
             gt_pair_ious = np.zeros(num_gt_hois)
             for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
@@ -147,7 +130,7 @@ class Evaluator:
                 iou_o = pred_gt_ious[po, go]
                 gt_pair_ious[gtidx] = min(iou_h, iou_o)
             if np.any(gt_pair_ious >= self.iou_thresh):
-                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.num_interactions))
+                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.dataset.num_interactions))
                 gt_pair_ious_per_hoi[np.arange(num_gt_hois), gt_hoi_classes] = gt_pair_ious
                 gt_assignments = gt_pair_ious_per_hoi.argmax(axis=0)[np.any(gt_pair_ious_per_hoi >= self.iou_thresh, axis=0)]
                 gt_hoi_assignments = gt_hoi_classes[gt_assignments]
