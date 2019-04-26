@@ -34,10 +34,12 @@ class VisualModule(nn.Module):
     def forward(self, batch: Minibatch, inference, **kwargs):
         # TODO docs
         # `ho_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+        # FIXME the returns here are horrible
+
         if self._precomputed:
             boxes_ext_np = batch.pc_boxes_ext
             if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
-                return None, None, None, None, None, None, None, None
+                return None, None, None, None, None, None, None, None, None
 
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             boxes_ext = torch.tensor(boxes_ext_np, device=device)
@@ -47,51 +49,56 @@ class VisualModule(nn.Module):
 
             if ho_infos.shape[0] == 0:
                 assert inference and not cfg.program.predcls
-                return boxes_ext, box_feats, masks, None, None, None, None, None
+                return boxes_ext, box_feats, masks, None, None, None, None, None, None
             ho_infos = ho_infos.astype(np.int, copy=False)
 
             if batch.pc_box_labels is None:
                 assert batch.pc_action_labels is None
-                box_labels = action_labels = None
+                box_labels = action_labels = hoi_labels = None
             else:
                 box_labels_np = batch.pc_box_labels
                 action_labels_np = batch.pc_action_labels
-
-                box_labels_per_pair_np = box_labels_np[ho_infos[:, 2]]
-                hoi_labels_np = np.zeros((action_labels_np.shape[0], self.dataset.num_interactions))
-                for i in range(action_labels_np.shape[0]):
-                    a_inds = np.flatnonzero(action_labels_np[i, :])
-                    inters = self.dataset.interactions[a_inds, np.full_like(a_inds, fill_value=box_labels_per_pair_np[i])]
-                    hoi_labels_np[i, inters] = 1
+                hoi_labels_np = self.action_labels_to_hoi_labels(box_labels_np, action_labels_np, ho_infos)
 
                 box_labels = torch.tensor(box_labels_np, device=device)
                 action_labels = torch.tensor(action_labels_np, device=device)
+                hoi_labels = torch.tensor(hoi_labels_np, device=device)
 
             # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
             hoi_union_boxes = batch.pc_ho_union_boxes
             hoi_union_boxes_feats = torch.tensor(batch.pc_ho_union_feats, device=device)
-            return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels
+            return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels, hoi_labels
         else:
             with torch.set_grad_enabled(self.training):
                 boxes_ext_np, feat_map = self.mask_rcnn(batch)
                 # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
                 if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
-                    return None, None, None, None, None, None, None, None
+                    return None, None, None, None, None, None, None, None, None
 
-                boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels = self.process_boxes(batch, inference, feat_map, boxes_ext_np)
-
+                boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels, hoi_labels = self.process_boxes(batch, inference, feat_map,
+                                                                                                                     boxes_ext_np)
                 boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
 
                 if ho_infos.shape[0] == 0:
                     assert inference and not cfg.program.predcls
-                    return boxes_ext, box_feats, masks, None, None, None, None, None
+                    return boxes_ext, box_feats, masks, None, None, None, None, None, None
                 ho_infos = ho_infos.astype(np.int, copy=False)
 
                 # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
                 hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_infos[:, 1:])
                 hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
                 assert ho_infos.shape[0] == hoi_union_boxes_feats.shape[0]
-                return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels
+                return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels, hoi_labels
+
+    def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
+        # Requires everything Numpy
+        box_labels_per_pair_np = box_labels[ho_infos[:, 2]].astype(np.int)
+        hoi_labels_np = np.zeros((action_labels.shape[0], self.dataset.num_interactions))
+        for i in range(action_labels.shape[0]):
+            a_inds = np.flatnonzero(action_labels[i, :])
+            inter_inds = self.dataset.interactions[a_inds, np.full_like(a_inds, fill_value=box_labels_per_pair_np[i])]
+            hoi_labels_np[i, inter_inds] = 1
+        return hoi_labels_np
 
     def process_boxes(self, batch, predict, feat_map, boxes_ext_np):
         if not predict:
@@ -100,11 +107,13 @@ class VisualModule(nn.Module):
 
             # FIXME match with GT boxes is done twice
             boxes_ext_np, box_classes = self.box_gt_assignment(batch, boxes_ext_np)
-            ho_infos, hoi_labels = self.hoi_gt_assignments(batch, boxes_ext_np, box_classes)
-            assert ho_infos.shape[0] == hoi_labels.shape[0]
+            ho_infos, action_labels = self.hoi_gt_assignments(batch, boxes_ext_np, box_classes)
+            hoi_labels_np = self.action_labels_to_hoi_labels(box_classes, action_labels, ho_infos)
 
             box_labels = torch.tensor(box_classes, device=feat_map.device)
-            hoi_labels = torch.tensor(hoi_labels, device=feat_map.device)
+            action_labels = torch.tensor(action_labels, device=feat_map.device)
+            hoi_labels = torch.tensor(hoi_labels_np, device=feat_map.device)
+            assert ho_infos.shape[0] == action_labels.shape[0] == hoi_labels.shape[0]
             assert box_labels.shape[0] == boxes_ext_np.shape[0]
         else:
             if cfg.program.predcls:
@@ -127,13 +136,13 @@ class VisualModule(nn.Module):
             box_classes = box_classes[inds]
 
             ho_infos = self.get_all_pairs(boxes_ext_np, box_classes)
-            box_labels = hoi_labels = None
+            box_labels = action_labels = hoi_labels = None
 
         masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
         box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, :5])
         assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
 
-        return boxes_ext_np, box_feats, masks, ho_infos, box_labels, hoi_labels
+        return boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels, hoi_labels
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext):
         gt_rois = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)
@@ -190,17 +199,17 @@ class VisualModule(nn.Module):
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
             predict_gt_match_i = (predict_box_labels_i[:, None] == gt_box_classes_i[None, :]) & (iou_predict_to_gt_i >= self.gt_iou_thr)
 
-            hoi_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
+            action_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
             for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
                 for from_predict_ind in np.flatnonzero(predict_gt_match_i[:, from_gt_ind]):
                     for to_predict_ind in np.flatnonzero(predict_gt_match_i[:, to_gt_ind]):
                         if from_predict_ind != to_predict_ind:
-                            hoi_labels_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
+                            action_labels_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
 
-            ho_fg_mask = hoi_labels_i[:, :, 1:].any(axis=2)
-            assert not np.any(hoi_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
+            ho_fg_mask = action_labels_i[:, :, 1:].any(axis=2)
+            assert not np.any(action_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
             ho_bg_mask = ~ho_fg_mask
-            hoi_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
+            action_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
 
             ho_fg_pairs_i = np.stack(np.where(ho_fg_mask), axis=1)
             ho_bg_pairs_i = np.stack(np.where(ho_bg_mask), axis=1)
@@ -217,7 +226,7 @@ class VisualModule(nn.Module):
                 print(gt_box_classes_i)
                 print(predict_box_labels_i)
                 raise RuntimeError
-            ho_infos_and_action_labels.append(np.concatenate([ho_infos_i, hoi_labels_i[ho_pairs_i[:, 0], ho_pairs_i[:, 1]]], axis=1))
+            ho_infos_and_action_labels.append(np.concatenate([ho_infos_i, action_labels_i[ho_pairs_i[:, 0], ho_pairs_i[:, 1]]], axis=1))
             num_box_seen += num_predict_boxes_i
 
         ho_infos_and_action_labels = np.concatenate(ho_infos_and_action_labels, axis=0)
@@ -267,7 +276,7 @@ def main():
 
     sys.argv += ['--model', 'base', '--save_dir', 'fake']  # fake required arguments
     cfg.parse_args()
-    output_dir = os.path.join('analysis', 'output', 'tmp', 'pre' if cfg.program.load_precomputed_feats else 'e2e')
+    output_dir = os.path.join('analysis', 'output', 'tmp', 'e2e' if cfg.program.recompute_visual else 'pre')
     os.makedirs(output_dir, exist_ok=True)
 
     seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -293,8 +302,7 @@ def main():
         batch = batch  # type: Minibatch
         assert len(batch.other_ex_data) == 1
 
-        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, box_labels, hoi_labels = vm(batch,
-                                                                                                           mode_inference=split == Splits.TEST)
+        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, _, _ = vm(batch, mode_inference=split == Splits.TEST)
 
         im_fn = batch.other_ex_data[0]['fn']
         im = cv2.imread(os.path.join(hds.img_dir, im_fn))

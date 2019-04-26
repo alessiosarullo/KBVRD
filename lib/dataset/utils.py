@@ -44,7 +44,7 @@ class Example:
             self.precomp_hoi_union_feats = None
 
             self.precomp_box_labels = None
-            self.precomp_hoi_labels = None
+            self.precomp_action_labels = None
         else:
             self.image = None
             self.gt_boxes = None
@@ -110,7 +110,7 @@ class Minibatch:
                     self.pc_ho_union_boxes += [ex.precomp_hoi_union_boxes]
                     self.pc_ho_union_feats += [ex.precomp_hoi_union_feats]
 
-                    self.pc_action_labels += [ex.precomp_hoi_labels]
+                    self.pc_action_labels += [ex.precomp_action_labels]
         else:
             self.imgs += [ex.image]
             self.gt_boxes += [ex.gt_boxes * ex.scale]

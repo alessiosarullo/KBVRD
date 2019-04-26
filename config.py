@@ -45,7 +45,7 @@ class ProgramConfig(BaseConfigs):
         self.predcls = False
 
         self.model = None
-        self.load_precomputed_feats = False
+        self.recompute_visual = False
 
         self.save_dir = ''
 
@@ -313,7 +313,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'nmotifs', '--load_precomputed_feats', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5', '--predcls']
+    sys.argv += ['--sync', '--model', 'nmotifs', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5', '--predcls']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()

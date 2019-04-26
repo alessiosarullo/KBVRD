@@ -61,7 +61,7 @@ class HicoDetInstanceSplit(Dataset):
 
         # ################ Possibly load precomputed features
         if load_precomputed is None:
-            load_precomputed = cfg.program.load_precomputed_feats
+            load_precomputed = not cfg.program.recompute_visual
         if load_precomputed:
             assert self.flipping_prob == 0  # TODO? extract features for flipped image
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
@@ -278,7 +278,7 @@ class HicoDetInstanceSplit(Dataset):
             )
         return data_loader
 
-    def get_entry(self, idx, read_img=True, ignore_precomputed=False):
+    def get_entry(self, idx, read_img=True, ignore_precomputed=False) -> Example:
         # Read the image
 
         img_fn = self._im_filenames[idx]
@@ -394,7 +394,7 @@ class HicoDetInstanceSplit(Dataset):
                         assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
 
                     assert np.all(precomp_hoi_infos >= 0)
-                    entry.precomp_hoi_labels = precomp_hoi_labels
+                    entry.precomp_action_labels = precomp_hoi_labels
                     entry.precomp_hoi_infos = precomp_hoi_infos
                     entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
                     entry.precomp_hoi_union_feats = precomp_hoi_union_feats
@@ -405,8 +405,8 @@ class HicoDetInstanceSplit(Dataset):
                 entry.precomp_box_feats = precomp_box_feats
                 entry.precomp_masks = precomp_masks
                 entry.precomp_box_labels = precomp_box_labels
-            assert (entry.precomp_box_labels is None and entry.precomp_hoi_labels is None) or \
-                   (entry.precomp_box_labels is not None and entry.precomp_hoi_labels is not None)
+            assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
+                   (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
         return entry
 
     def __getitem__(self, idx):

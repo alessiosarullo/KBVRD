@@ -24,9 +24,9 @@ from scripts.utils import get_all_models_by_name
 
 try:
     matplotlib.use('Qt5Agg')
-    # sys.argv[1:] = ['eval', '--load_precomputed_feats', '--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
-    sys.argv[1:] = ['eval', '--load_precomputed_feats', '--save_dir', 'output/hoi/2019-04-22_16-06-15_dbatch-32']
-    # sys.argv[1:] = ['vis', '--load_precomputed_feats', '--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
+    # sys.argv[1:] = ['eval', '--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/hoi/2019-04-22_16-06-15_dbatch-32']
+    # sys.argv[1:] = ['vis', '--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
 except ImportError:
     pass
 
@@ -37,7 +37,6 @@ def _setup_and_load():
     with open(cfg.program.result_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
-    # cfg.program.load_precomputed_feats = False
     return results
 
 
