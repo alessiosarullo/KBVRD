@@ -40,10 +40,16 @@ class GenericModel(AbstractModel):
             self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, box_labels, action_labels = self(x, inference=False, **kwargs)
-        obj_loss = nn.functional.cross_entropy(obj_output, box_labels)
-        action_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, action_labels) * hoi_output.shape[1]
-        return {'object_loss': obj_loss, 'action_loss': action_loss}
+        obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels = self(x, inference=False, **kwargs)
+        losses = {}
+        if obj_output is not None:
+            losses['object_loss'] = nn.functional.cross_entropy(obj_output, box_labels)
+        if action_output is not None:
+            losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
+        if hoi_output is not None:
+            losses['hoi_loss'] = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
+        assert losses
+        return losses
 
     # def focal_loss(self, logits, labels):
     #     gamma = cfg.opt.gamma
@@ -93,17 +99,14 @@ class GenericModel(AbstractModel):
             # Masks are floats at this point.
 
             if hoi_infos is not None:
-                obj_output, action_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
-                                                          action_labels, hoi_labels)
-                # obj_output, action_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
-                #                                                       action_labels)
+                obj_output, action_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
+                                                                      action_labels)
             else:
                 obj_output = action_output = hoi_output = None
 
             if not inference:
-                # TODO add hoi_output and hoi_labels
-                assert all([x is not None for x in (obj_output, action_output, box_labels, action_labels)])
-                return obj_output, action_output, box_labels, action_labels
+                assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
+                return obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels
             else:
                 return self._prepare_prediction(obj_output, action_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
 
@@ -111,7 +114,7 @@ class GenericModel(AbstractModel):
         raise NotImplementedError()
 
     @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if hoi_infos is not None:
             assert obj_output is not None and action_output is not None and boxes_ext is not None
             if cfg.program.predcls:
@@ -119,10 +122,11 @@ class GenericModel(AbstractModel):
             else:
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
             action_probs = torch.sigmoid(action_output).cpu().numpy()
+            hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
             ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            action_probs = ho_pairs = ho_img_inds = None
+            action_probs = hoi_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -138,4 +142,5 @@ class GenericModel(AbstractModel):
                           obj_scores=obj_prob,
                           ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
-                          action_scores=action_probs)
+                          action_scores=action_probs,
+                          hoi_scores=hoi_probs)

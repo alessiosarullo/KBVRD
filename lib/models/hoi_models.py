@@ -21,7 +21,7 @@ class OracleModel(GenericModel):
         assert inference is True
         assert not self.training
 
-        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels = self.visual_module(x, True)
+        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = self.visual_module(x, True)
         im_scales = x.img_infos[:, 2].cpu().numpy()
         gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False, ignore_precomputed=True)
         gt_boxes = gt_entry.gt_boxes * im_scales[0]
@@ -63,29 +63,29 @@ class OracleModel(GenericModel):
                     gtidxs = (gt_pair_ious > self.iou_thresh)
                     action_labels[predict_idx, np.unique(gt_hois[gtidxs, 2])] = 1
 
-            hoi_output = torch.from_numpy(action_labels)
+            action_output = torch.from_numpy(action_labels)
         else:
-            obj_output = hoi_output = boxes_ext = None
+            obj_output = action_output = boxes_ext = None
 
         if not inference:
-            assert obj_output is not None and hoi_output is not None and box_labels is not None and action_labels is not None
-            return obj_output, hoi_output, box_labels, action_labels
+            assert obj_output is not None and action_output is not None and box_labels is not None and action_labels is not None
+            return obj_output, action_output, box_labels, action_labels
         else:
-            return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=im_scales)
+            return self._prepare_prediction(obj_output, action_output, hoi_infos, boxes_ext, im_scales=im_scales)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
     @staticmethod
-    def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if hoi_infos is not None:
-            assert obj_output is not None and hoi_output is not None and boxes_ext is not None
+            assert obj_output is not None and action_output is not None and boxes_ext is not None
             obj_prob = obj_output.cpu().numpy()
-            hoi_probs = hoi_output.cpu().numpy()
+            action_probs = action_output.cpu().numpy()
             ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
         else:
-            hoi_probs = ho_pairs = ho_img_inds = None
+            action_probs = ho_pairs = ho_img_inds = None
             obj_prob = None
 
         if boxes_ext is not None:
@@ -101,37 +101,13 @@ class OracleModel(GenericModel):
                           obj_scores=obj_prob,
                           ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
-                          action_scores=hoi_probs)
+                          action_scores=action_probs)
 
 
-class ZeroModel(GenericModel):
+class ActionOnlyModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zero'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.obj_output_fc = nn.Linear(self.visual_module.vis_feat_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.visual_module.vis_feat_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_logits = self.obj_output_fc(box_feats)
-        action_logits = self.hoi_output_fc(box_feats[hoi_infos[:, 2], :])
-
-        return obj_logits, action_logits
-
-
-class BaseModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'base'
+        return 'actonly'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
@@ -140,7 +116,40 @@ class BaseModel(GenericModel):
         self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        self.action_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
+
+        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        hoi_repr = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(hoi_repr)
+
+        return obj_logits, action_logits, None
+
+
+class HoiOnlyModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'hoionly'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_interactions, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
         self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
@@ -155,104 +164,10 @@ class BaseModel(GenericModel):
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
-        action_logits = self.hoi_output_fc(hoi_repr)
-
-        action_logits = self.hoi_refinement_branch(action_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
-        for k, v in self.hoi_refinement_branch.values_to_monitor.items():  # FIXME delete
-            self.values_to_monitor[k] = v
-
-        return obj_logits, action_logits
-
-
-class InterModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'inter'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-        self.num_interactions = dataset.hicodet.interactions.shape[0]
-
-        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
-
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, self.num_interactions, bias=True)
-        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
-
-        self.interactions = torch.full((dataset.num_object_classes, dataset.num_predicates), fill_value=-1).long()
-        interactions = dataset.hicodet.interactions
-        self.interactions[interactions[:, 1], interactions[:, 0]] = torch.arange(self.num_interactions)
-
-    def forward(self, x, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels = self.visual_module(x, inference)
-            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-            # Masks are floats at this point.
-
-            if hoi_infos is not None:
-                obj_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, action_labels)
-            else:
-                obj_output = hoi_output = None
-
-            if not inference:
-                assert obj_output is not None and hoi_output is not None and box_labels is not None and action_labels is not None
-                hoi_labels = torch.zeros((action_labels.shape[0], self.num_interactions)).to(action_labels)
-                for i in range(action_labels.shape[0]):
-                    obj_label = box_labels[hoi_infos[i, 2]].long()
-                    action_labels = action_labels[i, :].long()
-                    hoi_labels[i, self.interactions[obj_label, action_labels]] = 1
-                return obj_output, hoi_output, box_labels, hoi_labels
-            else:
-                return self._prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales=x.img_infos[:, 2].cpu().numpy())
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
-        obj_logits = self.obj_output_fc(obj_repr)
-
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        hoi_repr = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
         hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        return obj_logits, hoi_logits
-
-    @staticmethod
-    def _prepare_prediction(obj_output, hoi_output, hoi_infos, boxes_ext, im_scales):
-        if hoi_infos is not None:
-            assert obj_output is not None and hoi_output is not None and boxes_ext is not None
-            if cfg.program.predcls:
-                obj_prob = None  # this will be assigned later as the object label distribution
-            else:
-                obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-            hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
-            ho_img_inds = hoi_infos[:, 0]
-            ho_pairs = hoi_infos[:, 1:]
-        else:
-            hoi_probs = ho_pairs = ho_img_inds = None
-            obj_prob = None
-
-        if boxes_ext is not None:
-            boxes_ext = boxes_ext.cpu().numpy()
-            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-            if obj_prob is None:
-                obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
-        else:
-            obj_im_inds = obj_boxes = None
-        return Prediction(obj_im_inds=obj_im_inds,
-                          obj_boxes=obj_boxes,
-                          obj_scores=obj_prob,
-                          ho_img_inds=ho_img_inds,
-                          ho_pairs=ho_pairs,
-                          hoi_scores=hoi_probs,
-                          use_actions=False)
+        return obj_logits, None, hoi_logits
 
 
 class EmbsimModel(GenericModel):

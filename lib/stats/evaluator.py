@@ -33,7 +33,6 @@ class Evaluator:
             ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
             evaluator.process_prediction(i, ex, prediction)
-        print('Prediction processed. Computing metrics.')
         evaluator.compute_metrics()
         return evaluator  # type: Evaluator
 
@@ -109,9 +108,9 @@ class Evaluator:
                 assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.ho_img_inds)) == 1
 
                 predict_ho_pairs = prediction.ho_pairs
-                try:
-                    predict_hoi_scores = prediction.hoi_scores
-                except AttributeError:
+                predict_hoi_scores = prediction.hoi_scores
+                if predict_hoi_scores is None:
+                    assert prediction.action_score_distributions is not None
                     predict_action_scores = prediction.action_score_distributions
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
