@@ -173,7 +173,7 @@ class HoiOnlyModel(GenericModel):
 class EmbsimModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'embsim'
+        return 'embsimact'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
@@ -185,8 +185,7 @@ class EmbsimModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
-        self.hoi_prior_branch = HoiPriorBranch(dataset, self.visual_module.vis_feat_dim)
+        self.hoi_embsim_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -200,16 +199,14 @@ class EmbsimModel(GenericModel):
         hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
         action_logits = self.hoi_output_fc(hoi_repr)
 
-        action_logits2, hoi_obj_logits = self.hoi_refinement_branch(union_boxes_feats, box_feats, hoi_infos)
+        action_logits_emb, hoi_obj_logits = self.hoi_embsim_branch(union_boxes_feats, box_feats, hoi_infos)
 
         obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
         obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
         obj_logits_hoi = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
         obj_logits = obj_logits + obj_logits_hoi
 
-        action_logits = action_logits + action_logits2
-
-        action_logits = self.hoi_prior_branch(action_logits, hoi_repr, boxes_ext, hoi_infos, box_labels)
+        action_logits = action_logits + action_logits_emb
 
         return obj_logits, action_logits
 

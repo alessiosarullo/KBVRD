@@ -75,7 +75,9 @@ class RunningStats:
         for loss_name, loss in output_dict.get('losses', {}).items():
             self.smoothed_losses.setdefault(loss_name, History(self.history_window)).append(loss.item())
         for metric_name, metric in output_dict.get('metrics', {}).items():
-            self.smoothed_metrics.setdefault(metric_name, History(window_size=None)).append(metric.item())
+            v = metric.item()
+            print(v, len(self.smoothed_metrics.get(metric_name, {})))
+            self.smoothed_metrics.setdefault(metric_name, History(window_size=None)).append(v)
         for name, value in output_dict.get('hist', {}).items():
             self.histograms.setdefault(name, deque(maxlen=self.history_window)).append(value)
         for name, value in output_dict.get('watch', {}).items():
