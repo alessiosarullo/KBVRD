@@ -34,7 +34,7 @@ class SimpleHoiBranch(AbstractHOIBranch):
         return self.hoi_repr_dim
 
     def _forward(self, obj_repr, union_boxes_feats, hoi_infos):
-        hoi_subj_repr = self.hoi_subj_repr_fc(obj_repr[hoi_infos[:, 0], :])
+        hoi_subj_repr = self.hoi_subj_repr_fc(obj_repr[hoi_infos[:, 1], :])
         hoi_obj_repr = self.hoi_obj_repr_fc(obj_repr[hoi_infos[:, 2], :])
         union_repr = self.union_repr_fc(union_boxes_feats)
         hoi_repr = union_repr + hoi_subj_repr + hoi_obj_repr
