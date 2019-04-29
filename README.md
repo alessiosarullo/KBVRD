@@ -62,3 +62,8 @@
     ```
     PATH="/usr/local/cuda/bin:${PATH}" ./make.sh 
     ```
+    
+1) If you are using Word2Vec:
+    ```
+    conda install gensim
+    ```

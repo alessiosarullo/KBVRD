@@ -24,6 +24,9 @@ class WordEmbeddings:
                                   'src_file': 'glove.6B.%dd.txt',
                                   'default_dim': 300,
                                   },
+                        'word2vec': {'parser': self.parse_word2vec,
+                                     'src_file': 'GoogleNews-vectors-negative300.bin',
+                                     },
                         }
 
         self.source = source
@@ -158,9 +161,27 @@ class WordEmbeddings:
 
         return embedding_mat, vocabulary
 
+    @staticmethod
+    def parse_word2vec(src_file):
+        """
+        `model`'s parameters are:
+            - vectors [ndarray]: N x vector_size vector of embeddings. N = 3 billion.
+            - vocab [dict(str, Vocab)]: keys are words (the same in `index2word`). Values are objects that have two attributes: 'count' and
+                'index'. Seems like, for some reason, count + index = len(`vocab`), always. Don't understand what they're supposed to represent.
+            - vector_size [int]: it's 300.
+            - index2word [list(str)]: list of words.
+            - vectors_norm [None]: don't know why it's None. I guess it's here for caching reasons.
+        """
+        import gensim
+        model = gensim.models.KeyedVectors.load_word2vec_format(src_file, binary=True)
+        embedding_mat = model.vectors
+        vocabulary = model.index2word
+        return embedding_mat, vocabulary
+
 
 def main():
-    we = WordEmbeddings(source='glove', normalize=True, dim=200)
+    # we = WordEmbeddings(source='glove', normalize=True, dim=200)
+    we = WordEmbeddings(source='word2vec', normalize=True)
     e = we.get_embeddings(['ride', 'chair', 'bike'])
     print(e[0].dot(e[1]), e[0].dot(e[2]))
 
