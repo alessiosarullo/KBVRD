@@ -74,6 +74,7 @@ class HicoDet:
         assert len(self._pred_index) == len(self._predicates)
         assert len(self._obj_class_index) == len(self._objects)
         assert self._pred_index[self.null_interaction] == 0
+        self._interactions = np.array([[self._pred_index[inter['pred']], self._obj_class_index[inter['obj']]] for inter in self._interaction_list])
 
         # Statistics
         self.compute_stats()
@@ -123,7 +124,7 @@ class HicoDet:
 
     @property
     def interactions(self) -> np.ndarray:  # [p, o]
-        return np.array([[self._pred_index[inter['pred']], self._obj_class_index[inter['obj']]] for inter in self._interaction_list])
+        return self._interactions
 
     @property
     def predicates(self) -> List:

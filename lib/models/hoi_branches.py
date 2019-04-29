@@ -90,26 +90,14 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
-        # FIXME this is not normalised!
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        interactions = dataset.hicodet.interactions  # each is [p, o]
+        interactions = dataset.interactions  # each is [p, o]
         hoi_embs = np.concatenate([pred_word_embs[interactions[:, 0]],
                                    obj_word_embs[interactions[:, 1]]], axis=1)
-        num_interactions = interactions.shape[0]
-        assert num_interactions == 600
-        hoi_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
-        hoi_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-        hoi_to_obj /= np.maximum(1, hoi_to_obj.sum(axis=0, keepdims=True))
-        hoi_to_actions = np.zeros((num_interactions, dataset.num_predicates))
-        hoi_to_actions[np.arange(num_interactions), interactions[:, 0]] = 1
-        hoi_to_actions /= np.maximum(1, hoi_to_actions.sum(axis=0, keepdims=True))
-
         self.hoi_embs = nn.Parameter(torch.from_numpy(hoi_embs.T), requires_grad=False)
-        self.hoi_to_obj = nn.Parameter(torch.from_numpy(hoi_to_obj).float(), requires_grad=False)
-        self.hoi_to_preds = nn.Parameter(torch.from_numpy(hoi_to_actions).float(), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
         self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
@@ -123,22 +111,12 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.pred_vis_to_emb_fc[2].weight, gain=1.0)
 
-        # self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
-        # self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
-        # torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
-
     def _forward(self, union_box_feats, box_feats, hoi_infos):
-        obj_embs = self.obj_vis_to_emb_fc(box_feats)
-        pred_embs = self.pred_vis_to_emb_fc(union_box_feats)
-
-        op_embs = torch.cat([pred_embs, obj_embs[hoi_infos[:, 2], :]], dim=1)
-        op_sims = self.op_cossim(op_embs.unsqueeze(dim=2), self.hoi_embs.unsqueeze(dim=0))
-
-        hoi_obj_logits = op_sims @ self.hoi_to_obj
-        action_logits = op_sims @ self.hoi_to_preds
-
-        return action_logits, hoi_obj_logits
+        obj_repr = self.obj_vis_to_emb_fc(box_feats)
+        pred_repr = self.pred_vis_to_emb_fc(union_box_feats)
+        op_repr = torch.cat([pred_repr, obj_repr[hoi_infos[:, 2], :]], dim=1)
+        hoi_logits = self.op_cossim(op_repr.unsqueeze(dim=2), self.hoi_embs.unsqueeze(dim=0))
+        return hoi_logits
 
 
 class KatoGCNBranch(AbstractHOIBranch):

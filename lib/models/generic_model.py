@@ -118,11 +118,9 @@ class GenericModel(AbstractModel):
     def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         obj_prob = action_probs = hoi_probs = ho_pairs = ho_img_inds = None
         if hoi_infos is not None:
-            assert obj_output is not None and boxes_ext is not None
+            assert boxes_ext is not None
             assert action_output is not None or hoi_output is not None
-            if cfg.program.predcls:
-                obj_prob = None  # this will be assigned later as the object label distribution
-            else:
+            if not cfg.program.predcls and obj_output is not None:
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
             if action_output is not None:
                 action_probs = torch.sigmoid(action_output).cpu().numpy()
@@ -135,7 +133,8 @@ class GenericModel(AbstractModel):
             boxes_ext = boxes_ext.cpu().numpy()
             obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
             obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-            if obj_prob is None:
+            if cfg.program.predcls:
+                assert obj_prob is None
                 obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
         else:
             obj_im_inds = obj_boxes = None

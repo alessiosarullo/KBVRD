@@ -162,6 +162,9 @@ class Launcher:
                 if verbose:
                     stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
+            if batch_idx % 500 == 0:
+                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+
         if optimizer is None:
             stats.log_stats(self.curr_train_iter, epoch_idx)
         epoch_loss /= len(data_loader)
