@@ -149,7 +149,9 @@ class Launcher:
         epoch_loss = 0
         for batch_idx, batch in enumerate(data_loader):
             stats.batch_tic()
-            epoch_loss += self.loss_batch(batch, stats, optimizer)
+            batch_loss = self.loss_batch(batch, stats, optimizer)
+            if optimizer is None:
+                epoch_loss += batch_loss.detach()
             stats.batch_toc()
 
             verbose = (batch_idx % (cfg.program.print_interval * (100 if optimizer is None else 1)) == 0)
@@ -162,7 +164,7 @@ class Launcher:
                 if verbose:
                     stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
-            torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+            # torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
 
         if optimizer is None:
             stats.log_stats(self.curr_train_iter, epoch_idx)

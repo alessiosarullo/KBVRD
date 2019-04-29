@@ -321,13 +321,16 @@ class PeyreModel(GenericModel):
                 return (hoi_subj_logits, hoi_subj_labels), (hoi_obj_logits, hoi_obj_labels), (hoi_act_logits, action_labels), (hoi_logits, hoi_labels)
             else:
                 im_scales = x.img_infos[:, 2].cpu().numpy()
-                hoi_output = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
-                for iid, (pid, oid) in enumerate(self.dataset.interactions):
-                    hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
-                    hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
-                    hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
-                    hoi_prob = torch.sigmoid(hoi_logits[:, iid])
-                    hoi_output[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
+                if hoi_logits is None:
+                    hoi_output = None
+                else:
+                    hoi_output = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
+                    for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                        hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
+                        hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
+                        hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
+                        hoi_prob = torch.sigmoid(hoi_logits[:, iid])
+                        hoi_output[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
                 return self._prepare_prediction(None, None, hoi_output, hoi_infos, boxes_ext, im_scales)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
