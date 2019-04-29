@@ -90,6 +90,7 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
+        # FIXME this is not normalised!
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
@@ -224,22 +225,30 @@ class KatoGCNBranch(AbstractHOIBranch):
 
 class PeyreEmbsimBranch(AbstractHOIBranch):
     def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        self.word_emb_dim = 300
         super().__init__(**kwargs)
 
-        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        self.word_embs = WordEmbeddings(source='word2vec')
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
+        interactions = dataset.hicodet.interactions  # each is [p, o]
+        person_word_emb = np.tile(obj_word_embs[dataset.human_class], reps=[interactions.shape[0], 1])
+        hoi_embs = np.concatenate([person_word_emb,
+                                   pred_word_embs[interactions[:, 0]],
+                                   obj_word_embs[interactions[:, 1]]], axis=1)
+
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
 
-        output_dim = 1024
         appearance_dim = 300
-        spatial_dim = 400
         self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(visual_feats_dim, appearance_dim) for k in ['sub', 'obj']})
+
+        spatial_dim = 400
         self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
                                          nn.Linear(spatial_dim, spatial_dim))
+
+        output_dim = 1024
         self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
                                                                 nn.ReLU(),
                                                                 nn.Dropout(p=0.5),
@@ -248,9 +257,17 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
                                                       nn.ReLU(),
                                                       nn.Dropout(p=0.5),
                                                       nn.Linear(output_dim, output_dim))
-        self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_emb_dim, output_dim),
+        self.app_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
+                                                    nn.ReLU(),
+                                                    nn.Dropout(p=0.5),
+                                                    nn.Linear(output_dim, output_dim))
+
+        self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_embs.dim, output_dim),
                                                                  nn.ReLU(),
                                                                  nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']})
+        self.wemb_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(3 * self.word_embs.dim, output_dim),
+                                                     nn.ReLU(),
+                                                     nn.Linear(output_dim, output_dim))
 
     def _forward(self, boxes_ext, box_feats, hoi_infos):
         boxes = boxes_ext[:, 1:5]
@@ -268,16 +285,26 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
         spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info, hoi_obj_spatial_info], dim=1))
 
         hoi_hum_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
-        obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
         hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
 
-        obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
-        pred_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_subj_repr = self.app_to_repr_mlps['sub'](hoi_hum_appearance)
+        hoi_subj_repr = torch.nn.functional.normalize(hoi_subj_repr)
+        hoi_subj_emb = self.wemb_to_repr_mlps['sub'](self.obj_word_embs)
+        hoi_subj_logits = hoi_subj_repr @ hoi_subj_emb.t()
 
-        obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
-        pred_emb = self.wemb_to_repr_mlps['pred'](self.pred_word_embs)
+        hoi_obj_repr = self.app_to_repr_mlps['obj'](hoi_obj_appearance)
+        hoi_obj_repr = torch.nn.functional.normalize(hoi_obj_repr)
+        hoi_obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
+        hoi_obj_logits = hoi_obj_repr @ hoi_obj_emb.t()
 
-        obj_logits = obj_repr @ obj_emb.t()
-        hoi_logits = pred_repr @ pred_emb.t()
+        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_act_repr = torch.nn.functional.normalize(hoi_act_repr)
+        hoi_act_emb = self.wemb_to_repr_mlps['pred'](self.pred_word_embs)
+        hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
 
-        return obj_logits, hoi_logits
+        hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_repr = torch.nn.functional.normalize(hoi_repr)
+        hoi_emb = self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs)
+        hoi_logits = hoi_repr @ hoi_emb.t()
+
+        return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits

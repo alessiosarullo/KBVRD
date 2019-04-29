@@ -240,7 +240,6 @@ class KatoModel(GenericModel):
 
 
 class PeyreModel(GenericModel):
-    # FIXME
     @classmethod
     def get_cline_name(cls):
         return 'peyre'
@@ -250,17 +249,86 @@ class PeyreModel(GenericModel):
         self.hoi_branch = PeyreEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
 
     def get_losses(self, x, **kwargs):
-        obj_output, hoi_output, box_labels, action_labels = self(x, inference=False, **kwargs)
-        box_labels_1hot = box_labels.new_zeros((box_labels.shape[0], self.dataset.num_object_classes)).float()
-        box_labels_1hot[torch.arange(box_labels_1hot.shape[0]), box_labels] = 1
-        obj_loss = nn.functional.binary_cross_entropy_with_logits(obj_output, box_labels_1hot) * self.dataset.num_object_classes
-        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_output, action_labels) * self.dataset.num_predicates
-        return {'object_loss': obj_loss, 'hoi_loss': hoi_loss}
+        y = self(x, inference=False, **kwargs)
+
+        hoi_subj_logits, hoi_subj_labels = y[0]
+        subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
+        subj_labels_1hot[torch.arange(subj_labels_1hot.shape[0]), hoi_subj_labels] = 1
+        hoi_subj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot) * self.dataset.num_object_classes
+
+        hoi_obj_logits, hoi_obj_labels = y[1]
+        obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
+        obj_labels_1hot[torch.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
+        hoi_obj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_obj_logits, obj_labels_1hot) * self.dataset.num_object_classes
+
+        hoi_act_logits, action_labels = y[2]
+        act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels) * self.dataset.num_predicates
+
+        hoi_logits, hoi_labels = y[3]
+        hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_logits, hoi_labels) * self.dataset.num_interactions
+
+        return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
+
+    def forward(self, x, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = \
+                self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            if hoi_infos is not None:
+                logits = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, action_labels)
+                hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = logits
+            else:
+                hoi_subj_logits = hoi_obj_logits = hoi_act_logits = hoi_logits = None
+
+            if not inference:
+                assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
+
+                hoi_subj_labels = box_labels[hoi_infos[:, 1]]
+                assert torch.unique(hoi_subj_labels).item() == self.dataset.human_class, hoi_subj_labels
+
+                hoi_obj_labels = box_labels[hoi_infos[:, 2]]
+                return (hoi_subj_logits, hoi_subj_labels), (hoi_obj_logits, hoi_obj_labels), (hoi_act_logits, action_labels), (hoi_logits, hoi_labels)
+            else:
+                im_scales = x.img_infos[:, 2].cpu().numpy()
+                hoi_output = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
+                for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                    hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
+                    hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
+                    hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
+                    hoi_prob = torch.sigmoid(hoi_logits[:, iid])
+                    hoi_output[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
+                return self._prepare_prediction(None, None, hoi_output, hoi_infos, boxes_ext, im_scales)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        # hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        obj_logits, action_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos)
-        return obj_logits, action_logits
+        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos)
+        return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
+
+    @staticmethod
+    def _prepare_prediction(obj_output, action_output, hoi_probs, hoi_infos, boxes_ext, im_scales):
+        assert obj_output is None and action_output is None
+
+        ho_pairs = ho_img_inds = None
+        if hoi_infos is not None:
+            assert boxes_ext is not None
+            assert hoi_probs is not None
+            ho_img_inds = hoi_infos[:, 0]
+            ho_pairs = hoi_infos[:, 1:]
+
+        if boxes_ext is not None:
+            boxes_ext = boxes_ext.cpu().numpy()
+            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+        else:
+            obj_im_inds = obj_boxes = None
+        return Prediction(obj_im_inds=obj_im_inds,
+                          obj_boxes=obj_boxes,
+                          obj_scores=None,
+                          ho_img_inds=ho_img_inds,
+                          ho_pairs=ho_pairs,
+                          action_scores=None,
+                          hoi_scores=hoi_probs)
 
 
 def main():

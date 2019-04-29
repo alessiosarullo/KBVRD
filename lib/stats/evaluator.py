@@ -95,8 +95,7 @@ class Evaluator:
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
         if prediction.obj_boxes is not None:
-            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
-            assert prediction.obj_im_inds is not None and prediction.obj_boxes is not None and prediction.obj_scores is not None
+            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0]
 
             predict_boxes = prediction.obj_boxes
 
@@ -106,6 +105,7 @@ class Evaluator:
                 predict_ho_pairs = prediction.ho_pairs
                 predict_hoi_scores = prediction.hoi_scores
                 if predict_hoi_scores is None:
+                    assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_score_distributions is not None
                     predict_action_scores = prediction.action_score_distributions
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
