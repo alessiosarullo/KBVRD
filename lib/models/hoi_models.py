@@ -208,7 +208,7 @@ class EmbsimModel(GenericModel):
 
         action_logits = action_logits + action_logits_emb
 
-        return obj_logits, action_logits
+        return obj_logits, action_logits, None
 
 
 class KatoModel(GenericModel):
