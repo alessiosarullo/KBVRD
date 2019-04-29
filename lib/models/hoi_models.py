@@ -196,7 +196,7 @@ class EmbsimModel(GenericModel):
 
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
-        hoi_repr = self.hoi_branch(boxes_ext, obj_repr, union_boxes_feats, hoi_infos, obj_logits, box_labels)
+        hoi_repr = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
         action_logits = self.hoi_output_fc(hoi_repr)
 
         action_logits_emb, hoi_obj_logits = self.hoi_embsim_branch(union_boxes_feats, box_feats, hoi_infos)
