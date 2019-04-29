@@ -260,27 +260,30 @@ class PeyreEmbsimBranch(AbstractHOIBranch):
         union_origin = union_boxes[:, :2].repeat(1, 2)
         hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
         hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
-        spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info, hoi_obj_spatial_info], dim=1))
+        spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
 
-        hoi_hum_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
-        hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
+        subj_appearance = self.vis_to_app_mlps['sub'](box_feats)
+        subj_repr = self.app_to_repr_mlps['sub'](subj_appearance)
+        subj_repr = torch.nn.functional.normalize(subj_repr)
+        subj_emb = self.wemb_to_repr_mlps['sub'](self.obj_word_embs)
+        subj_logits = subj_repr @ subj_emb.t()
+        hoi_subj_logits = subj_logits[hoi_hum_inds, :]
 
-        hoi_subj_repr = self.app_to_repr_mlps['sub'](hoi_hum_appearance)
-        hoi_subj_repr = torch.nn.functional.normalize(hoi_subj_repr)
-        hoi_subj_emb = self.wemb_to_repr_mlps['sub'](self.obj_word_embs)
-        hoi_subj_logits = hoi_subj_repr @ hoi_subj_emb.t()
+        obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
+        obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
+        obj_repr = torch.nn.functional.normalize(obj_repr)
+        obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
+        obj_logits = obj_repr @ obj_emb.t()
+        hoi_obj_logits = obj_logits[hoi_obj_inds, :]
 
-        hoi_obj_repr = self.app_to_repr_mlps['obj'](hoi_obj_appearance)
-        hoi_obj_repr = torch.nn.functional.normalize(hoi_obj_repr)
-        hoi_obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
-        hoi_obj_logits = hoi_obj_repr @ hoi_obj_emb.t()
-
-        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_subj_appearance = subj_appearance[hoi_hum_inds, :]
+        hoi_obj_appearance = obj_appearance[hoi_obj_inds, :]
+        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
         hoi_act_repr = torch.nn.functional.normalize(hoi_act_repr)
         hoi_act_emb = self.wemb_to_repr_mlps['pred'](self.pred_word_embs)
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
 
-        hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_hum_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
         hoi_repr = torch.nn.functional.normalize(hoi_repr)
         hoi_emb = self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs)
         hoi_logits = hoi_repr @ hoi_emb.t()
