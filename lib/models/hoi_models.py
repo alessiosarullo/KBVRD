@@ -286,7 +286,7 @@ class PeyreModel(GenericModel):
                 assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
 
                 hoi_subj_labels = box_labels[hoi_infos[:, 1]]
-                assert torch.unique(hoi_subj_labels).item() == self.dataset.human_class, hoi_subj_labels
+                # assert torch.unique(hoi_subj_labels).shape[0] == 1, hoi_subj_labels  # Doesn't work because of negative sampling. FIXME?
 
                 hoi_obj_labels = box_labels[hoi_infos[:, 2]]
                 return (hoi_subj_logits, hoi_subj_labels), (hoi_obj_logits, hoi_obj_labels), (hoi_act_logits, action_labels), (hoi_logits, hoi_labels)
