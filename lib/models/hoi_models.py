@@ -210,6 +210,17 @@ class EmbsimModel(ActionOnlyModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)  # FIXME magic constant
+        self.hoi_branch = SimpleHoiBranch(self.act_branch.output_dim, self.obj_branch.repr_dim, hoi_repr_dim=1024)  # FIXME magic constant
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.act_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+        self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_interactions, bias=True)
+        torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
+
         self.hoi_embsim_branch = HoiEmbsimBranch(self.act_branch.output_dim, self.obj_branch.repr_dim, dataset)
 
         # hoi_to_obj = np.zeros((dataset.num_interactions, dataset.num_object_classes))
@@ -233,11 +244,14 @@ class EmbsimModel(ActionOnlyModel):
         obj_logits = self.obj_output_fc(obj_repr)
 
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
-        action_logits = self.action_output_fc(act_repr)
+        act_logits = self.act_output_fc(act_repr)
 
-        hoi_logits = self.hoi_embsim_branch(act_repr, obj_repr, hoi_infos)
+        hoi_repr = self.hoi_branch(obj_repr, act_repr, hoi_infos)
+        hoi_logits = self.hoi_output_fc(hoi_repr)
 
-        return obj_logits, action_logits, hoi_logits
+        hoi_logits = hoi_logits + self.hoi_embsim_branch(act_repr, obj_repr, hoi_infos)
+
+        return obj_logits, act_logits, hoi_logits
 
 
 class EmbsimHoiModel(HoiOnlyModel):
