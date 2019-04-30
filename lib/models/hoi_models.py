@@ -113,13 +113,11 @@ class ActionOnlyModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
-        self.action_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_predicates, bias=True)
+        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
-
-        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -131,7 +129,7 @@ class ActionOnlyModel(GenericModel):
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
+        hoi_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
         action_logits = self.action_output_fc(hoi_repr)
 
         return obj_logits, action_logits, None
@@ -152,8 +150,6 @@ class HoiOnlyModel(GenericModel):
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_interactions, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
-        self.hoi_refinement_branch = HoiPriorBranch(dataset, vis_feat_dim)
-
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
@@ -170,42 +166,41 @@ class HoiOnlyModel(GenericModel):
         return obj_logits, None, hoi_logits
 
 
-class EmbsimActModel(ActionOnlyModel):
+class EmbsimModel(ActionOnlyModel):
     @classmethod
     def get_cline_name(cls):
-        return 'embsimact'
+        return 'embsim'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_embsim_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
+        self.hoi_embsim_branch = HoiEmbsimBranch(self.act_branch.output_dim, dataset)
 
-        hoi_to_obj = np.zeros((dataset.num_interactions, dataset.num_object_classes))
-        hoi_to_obj[np.arange(dataset.num_interactions), dataset.interactions[:, 1]] = 1
-        hoi_to_obj /= np.maximum(1, hoi_to_obj.sum(axis=0, keepdims=True))
-        self.hoi_to_obj = nn.Parameter(torch.from_numpy(hoi_to_obj).float(), requires_grad=False)
-
-        hoi_to_actions = np.zeros((dataset.num_interactions, dataset.num_predicates))
-        hoi_to_actions[np.arange(dataset.num_interactions), dataset.interactions[:, 0]] = 1
-        hoi_to_actions /= np.maximum(1, hoi_to_actions.sum(axis=0, keepdims=True))
-        self.hoi_to_preds = nn.Parameter(torch.from_numpy(hoi_to_actions).float(), requires_grad=False)
+        # hoi_to_obj = np.zeros((dataset.num_interactions, dataset.num_object_classes))
+        # hoi_to_obj[np.arange(dataset.num_interactions), dataset.interactions[:, 1]] = 1
+        # hoi_to_obj /= np.maximum(1, hoi_to_obj.sum(axis=0, keepdims=True))
+        # self.hoi_to_obj = nn.Parameter(torch.from_numpy(hoi_to_obj).float(), requires_grad=False)
+        #
+        # hoi_to_actions = np.zeros((dataset.num_interactions, dataset.num_predicates))
+        # hoi_to_actions[np.arange(dataset.num_interactions), dataset.interactions[:, 0]] = 1
+        # hoi_to_actions /= np.maximum(1, hoi_to_actions.sum(axis=0, keepdims=True))
+        # self.hoi_to_preds = nn.Parameter(torch.from_numpy(hoi_to_actions).float(), requires_grad=False)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        obj_logits, action_logits, _ = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, action_labels,
-                                                        hoi_labels)
-
+        box_im_ids = boxes_ext[:, 0].long()
         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        hoi_logits = self.hoi_embsim_branch(union_boxes_feats, box_feats, hoi_infos)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        hoi_obj_logits = hoi_logits @ self.hoi_to_obj
-        obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
-        obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
-        obj_logits_hoi = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
-        obj_logits = obj_logits + obj_logits_hoi
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
 
-        action_logits_emb = hoi_logits @ self.hoi_to_preds
-        action_logits = action_logits + action_logits_emb
+        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(act_repr)
 
-        return obj_logits, action_logits, None
+        hoi_logits = self.hoi_embsim_branch(act_repr, obj_repr, hoi_infos)
+
+        return obj_logits, action_logits, hoi_logits
 
 
 class EmbsimHoiModel(HoiOnlyModel):

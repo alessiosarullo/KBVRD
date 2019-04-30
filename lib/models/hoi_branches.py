@@ -83,7 +83,7 @@ class HoiPriorBranch(AbstractHOIBranch):
 
 
 class HoiEmbsimBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
         super().__init__(**kwargs)
@@ -100,20 +100,20 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.hoi_embs = nn.Parameter(torch.from_numpy(hoi_embs.T), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
-        self.obj_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
-                                               nn.ReLU(),
-                                               nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
-        nn.init.xavier_normal_(self.obj_vis_to_emb_fc[0].weight, gain=1.0)
-        nn.init.xavier_normal_(self.obj_vis_to_emb_fc[2].weight, gain=1.0)
-        self.pred_vis_to_emb_fc = nn.Sequential(nn.Linear(visual_feats_dim, 2 * self.word_emb_dim),
-                                                nn.ReLU(),
-                                                nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
-        nn.init.xavier_normal_(self.pred_vis_to_emb_fc[0].weight, gain=1.0)
-        nn.init.xavier_normal_(self.pred_vis_to_emb_fc[2].weight, gain=1.0)
+        self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(input_dim, 2 * self.word_emb_dim),
+                                                 nn.ReLU(),
+                                                 nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+        nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.obj_input_to_emb_fc[2].weight, gain=1.0)
+        self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(input_dim, 2 * self.word_emb_dim),
+                                                  nn.ReLU(),
+                                                  nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+        nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
+        nn.init.xavier_normal_(self.pred_input_to_emb_fc[2].weight, gain=1.0)
 
-    def _forward(self, union_box_feats, box_feats, hoi_infos):
-        obj_repr = self.obj_vis_to_emb_fc(box_feats)
-        pred_repr = self.pred_vis_to_emb_fc(union_box_feats)
+    def _forward(self, hoi_feats, obj_feats, hoi_infos):
+        obj_repr = self.obj_input_to_emb_fc(obj_feats)
+        pred_repr = self.pred_input_to_emb_fc(hoi_feats)
         op_repr = torch.cat([pred_repr, obj_repr[hoi_infos[:, 2], :]], dim=1)
         hoi_logits = self.op_cossim(op_repr.unsqueeze(dim=2), self.hoi_embs.unsqueeze(dim=0))
         return hoi_logits
