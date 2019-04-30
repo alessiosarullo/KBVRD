@@ -120,7 +120,7 @@ best_epoch = 0
 for epoch in range(args.epochs):
     loss_values.append(train(epoch))
 
-    torch.save(model.state_dict(), '{}.pkl'.format(epoch))
+    torch.save(model.state_dict(), 'pyGAT/exp/{}.pkl'.format(epoch))
     if loss_values[-1] < best:
         best = loss_values[-1]
         best_epoch = epoch
@@ -131,13 +131,13 @@ for epoch in range(args.epochs):
     if bad_counter == args.patience:
         break
 
-    files = glob.glob('*.pkl')
+    files = glob.glob('pyGAT/exp/*.pkl')
     for file in files:
         epoch_nb = int(file.split('.')[0])
         if epoch_nb < best_epoch:
             os.remove(file)
 
-files = glob.glob('*.pkl')
+files = glob.glob('pyGAT/exp/*.pkl')
 for file in files:
     epoch_nb = int(file.split('.')[0])
     if epoch_nb > best_epoch:
@@ -148,7 +148,7 @@ print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
 # Restore best model
 print('Loading {}th epoch'.format(best_epoch))
-model.load_state_dict(torch.load('{}.pkl'.format(best_epoch)))
+model.load_state_dict(torch.load('pyGAT/exp/{}.pkl'.format(best_epoch)))
 
 # Testing
 compute_test()
