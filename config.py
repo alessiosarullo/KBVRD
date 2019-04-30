@@ -12,7 +12,7 @@ class BaseConfigs:
             self._add_argument(parser, k, v, allow_required=allow_required)
         namespace = parser.parse_known_args(args)
         self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
-        self._postprocess_args()
+        self._postprocess_args(allow_required)
         return namespace[1]
 
     def _add_argument(self, parser, param_name, param_value, allow_required=True):
@@ -24,7 +24,7 @@ class BaseConfigs:
                 parser_kwargs['type'] = type(param_value)
             parser.add_argument('--%s' % param_name, **parser_kwargs)
 
-    def _postprocess_args(self):
+    def _postprocess_args(self, allow_required):
         pass
 
     def __str__(self):
@@ -105,14 +105,14 @@ class ProgramConfig(BaseConfigs):
     def load_train_output(self):
         return os.path.exists(self.saved_model_file)
 
-    def _postprocess_args(self):
+    def _postprocess_args(self, allow_required):
         self.save_dir = self.save_dir.rstrip('/')
         if '/' in self.save_dir:
             old_save_dir = self.save_dir
             self.save_dir = old_save_dir.split('/')[-1]
             self.model = self.model or old_save_dir.split('/')[-2]
             assert old_save_dir == self.output_path
-        if self.model is None:
+        if allow_required and self.model is None:
             raise ValueError('A model is required.')
 
     def _add_argument(self, parser, param_name, param_value, allow_required=True):

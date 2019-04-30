@@ -249,38 +249,6 @@ class EmbsimActModel(ActionOnlyModel):
         return obj_logits, act_logits, None
 
 
-class EmbsimHoiModel(HoiOnlyModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'embsimhoi'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.hoi_embsim_branch = HoiEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
-
-        hoi_to_obj = np.zeros((dataset.num_interactions, dataset.num_object_classes))
-        hoi_to_obj[np.arange(dataset.num_interactions), dataset.interactions[:, 1]] = 1
-        hoi_to_obj /= np.maximum(1, hoi_to_obj.sum(axis=0, keepdims=True))
-        self.hoi_to_obj = nn.Parameter(torch.from_numpy(hoi_to_obj).float(), requires_grad=False)
-
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        obj_logits, _, hoi_logits = super()._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, action_labels,
-                                                     hoi_labels)
-
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        hoi_logits_emb = self.hoi_embsim_branch(union_boxes_feats, box_feats, hoi_infos)
-
-        hoi_obj_logits = hoi_logits_emb @ self.hoi_to_obj
-        obj_to_hoi_matrix = hoi_obj_logits.new_zeros(boxes_ext.shape[0], hoi_infos.shape[0])
-        obj_to_hoi_matrix[hoi_infos[:, 2], torch.arange(hoi_infos.shape[0])] = 1
-        obj_logits_hoi = obj_to_hoi_matrix @ hoi_obj_logits / (obj_to_hoi_matrix.sum(dim=1, keepdim=True).clamp(min=1))
-        obj_logits = obj_logits + obj_logits_hoi
-
-        hoi_logits = hoi_logits + hoi_logits_emb
-
-        return obj_logits, None, hoi_logits
-
-
 class KatoModel(GenericModel):
     # FIXME?
     @classmethod
