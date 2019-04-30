@@ -210,7 +210,7 @@ class EmbsimModel(ActionOnlyModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_embsim_branch = HoiEmbsimBranch(self.act_branch.output_dim, self.obj_branch.output_dim, dataset)
+        self.hoi_embsim_branch = HoiEmbsimBranch(self.act_branch.output_dim, self.obj_branch.repr_dim, dataset)
 
         # hoi_to_obj = np.zeros((dataset.num_interactions, dataset.num_object_classes))
         # hoi_to_obj[np.arange(dataset.num_interactions), dataset.interactions[:, 1]] = 1
