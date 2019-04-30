@@ -100,16 +100,21 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.hoi_embs = nn.Parameter(torch.from_numpy(hoi_embs.T), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
-        self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
-                                                 nn.ReLU(),
-                                                 nn.Linear(self.word_emb_dim, self.word_emb_dim))
-        nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
-        nn.init.xavier_normal_(self.obj_input_to_emb_fc[2].weight, gain=1.0)
-        self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(pred_input_dim, self.word_emb_dim),
-                                                  nn.ReLU(),
-                                                  nn.Linear(self.word_emb_dim, self.word_emb_dim))
-        nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
-        nn.init.xavier_normal_(self.pred_input_to_emb_fc[2].weight, gain=1.0)
+        self.obj_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
+        nn.init.xavier_normal_(self.obj_input_to_emb_fc.weight, gain=1.0)
+        self.pred_input_to_emb_fc = nn.Linear(pred_input_dim, self.word_emb_dim)
+        nn.init.xavier_normal_(self.pred_input_to_emb_fc.weight, gain=1.0)
+
+        # self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
+        #                                          nn.ReLU(),
+        #                                          nn.Linear(self.word_emb_dim, self.word_emb_dim))
+        # nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
+        # nn.init.xavier_normal_(self.obj_input_to_emb_fc[2].weight, gain=1.0)
+        # self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(pred_input_dim, self.word_emb_dim),
+        #                                           nn.ReLU(),
+        #                                           nn.Linear(self.word_emb_dim, self.word_emb_dim))
+        # nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
+        # nn.init.xavier_normal_(self.pred_input_to_emb_fc[2].weight, gain=1.0)
 
     def _forward(self, hoi_feats, obj_feats, hoi_infos):
         obj_repr = self.obj_input_to_emb_fc(obj_feats)
