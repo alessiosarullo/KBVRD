@@ -15,19 +15,19 @@ from lib.models.abstract_model import AbstractHOIBranch
 
 
 class SimpleHoiBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, obj_repr_dim, **kwargs):
+    def __init__(self, input_feats_dim, obj_repr_dim, **kwargs):
         # TODO docs and FIXME comments
         self.hoi_repr_dim = 600
         super().__init__(**kwargs)
 
-        self.union_repr_fc = nn.Linear(visual_feats_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.union_repr_fc.weight, gain=1.0)
+        self.hoi_subj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.hoi_subj_repr_fc.weight, gain=1.0)
 
         self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
         nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
 
-        self.hoi_subj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.hoi_subj_repr_fc.weight, gain=1.0)
+        self.union_repr_fc = nn.Linear(input_feats_dim, self.hoi_repr_dim)
+        nn.init.xavier_normal_(self.union_repr_fc.weight, gain=1.0)
 
     @property
     def output_dim(self):
@@ -83,7 +83,7 @@ class HoiPriorBranch(AbstractHOIBranch):
 
 
 class HoiEmbsimBranch(AbstractHOIBranch):
-    def __init__(self, input_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
         super().__init__(**kwargs)
@@ -100,14 +100,14 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         self.hoi_embs = nn.Parameter(torch.from_numpy(hoi_embs.T), requires_grad=False)
         self.op_cossim = torch.nn.CosineSimilarity(dim=1)
 
-        self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(input_dim, 2 * self.word_emb_dim),
+        self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
                                                  nn.ReLU(),
-                                                 nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+                                                 nn.Linear(self.word_emb_dim, self.word_emb_dim))
         nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.obj_input_to_emb_fc[2].weight, gain=1.0)
-        self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(input_dim, 2 * self.word_emb_dim),
+        self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(pred_input_dim, self.word_emb_dim),
                                                   nn.ReLU(),
-                                                  nn.Linear(2 * self.word_emb_dim, self.word_emb_dim))
+                                                  nn.Linear(self.word_emb_dim, self.word_emb_dim))
         nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
         nn.init.xavier_normal_(self.pred_input_to_emb_fc[2].weight, gain=1.0)
 
