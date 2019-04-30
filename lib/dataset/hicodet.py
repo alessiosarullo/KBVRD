@@ -156,12 +156,12 @@ class HicoDetInstanceSplit(Dataset):
     @property
     def hoi_triplets(self):
         # Each is (human, interaction, object)
-        hois = []
+        hoi_triplets = []
         for box_classes, inters in zip(self._im_box_classes, self._im_inters):
             im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
             assert np.all(im_hois[:, 0] == self.human_class)
-            hois.append(im_hois)
-        return np.concatenate(hois, axis=0)
+            hoi_triplets.append(im_hois)
+        return np.concatenate(hoi_triplets, axis=0)
 
     @property
     def interactions(self):

@@ -112,13 +112,15 @@ class ProgramConfig(BaseConfigs):
             self.save_dir = old_save_dir.split('/')[-1]
             self.model = self.model or old_save_dir.split('/')[-2]
             assert old_save_dir == self.output_path
+        if self.model is None:
+            raise ValueError('A model is required.')
 
     def _add_argument(self, parser, param_name, param_value, allow_required=True):
         if param_name == 'model':
             from scripts.utils import get_all_models_by_name
             all_models_dict = get_all_models_by_name()
             all_models = set(all_models_dict.keys())
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models, required=allow_required)
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models)
         elif param_name == 'save_dir':
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=allow_required)
         else:
