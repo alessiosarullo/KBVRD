@@ -1,8 +1,8 @@
-from collections import Counter
 from typing import List, Dict
 
 import numpy as np
 
+from lib.stats.evaluator import MetricFormatter
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
@@ -103,9 +103,8 @@ class Evaluator:
         predict_hoi_scores = np.zeros([0, self.inter_to_op_pair.shape[0]])
         if prediction.obj_boxes is not None:
             assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
-            assert prediction.obj_im_inds is not None and prediction.obj_boxes is not None and prediction.obj_scores is not None
+            assert prediction.obj_im_inds is not None and prediction.obj_boxes is not None
 
-            predict_obj_scores = prediction.obj_scores
             predict_boxes = prediction.obj_boxes
 
             if prediction.ho_pairs is not None:
@@ -116,7 +115,7 @@ class Evaluator:
                 predict_hoi_scores = prediction.hoi_scores
                 if predict_hoi_scores is None:
                     predict_action_scores = prediction.action_score_distributions
-                    predict_obj_scores_per_ho_pair = predict_obj_scores[predict_ho_pairs[:, 1], :]
+                    predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
                     predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.inter_to_op_pair.shape[0]])
                     for iid, (oid, pid) in enumerate(self.inter_to_op_pair):
@@ -188,40 +187,3 @@ class Evaluator:
                 p = 0
             ap = ap + p / 11
         return rec, prec, ap
-
-
-class MetricFormatter:
-    def __init__(self):
-        super().__init__()
-
-    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False):
-        lines = []
-        gt_label_hist = Counter(gt_labels)
-        num_gt_examples = sum(gt_label_hist.values())
-        if sort:
-            inds = [p for p, num in gt_label_hist.most_common()]
-        else:
-            inds = range(len(gt_label_hist))
-
-        for k, v in metrics.items():
-            lines += [self.format_metric(k, v[inds] if v.size > 1 else v, len(gt_str))]
-        format_str = '%{}s %8s [%s]'.format(len(gt_str) + 1)
-        lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]
-        lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in inds]))]
-        return lines
-
-    def format_metric(self, metric_name, data, metric_str_len=None):
-        metric_str_len = metric_str_len or len(metric_name)
-        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x) for x in data]) if data.size > 1 else ''
-        f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data)), per_class_str)
-        return f_str
-
-    @staticmethod
-    def _format_percentage(value, precision=2):
-        if value < 1:
-            if value > 0:
-                return ('%{}.{}f%%'.format(precision + 3, precision)) % (value * 100)
-            else:
-                return ('%{}.{}f%%'.format(precision + 3, 0)) % (value * 100)
-        else:
-            return ('%{}d%%'.format(precision + 3)) % 100
