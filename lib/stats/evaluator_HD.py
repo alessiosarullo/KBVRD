@@ -102,7 +102,7 @@ class Evaluator:
         predict_ho_boxes = np.zeros([0, 8])
         predict_hoi_scores = np.zeros([0, self.inter_to_op_pair.shape[0]])
         if prediction.obj_boxes is not None:
-            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0] == prediction.obj_scores.shape[0]
+            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0]
             assert prediction.obj_im_inds is not None and prediction.obj_boxes is not None
 
             predict_boxes = prediction.obj_boxes
