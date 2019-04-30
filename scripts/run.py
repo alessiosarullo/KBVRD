@@ -172,7 +172,7 @@ class Launcher:
         stats.epoch_toc()
         return epoch_loss
 
-    def loss_batch(self, batch, stats, optimizer=None):
+    def loss_batch(self, batch, stats: RunningStats, optimizer=None):
         """ :arg `optimizer` should be None on validation batches. """
 
         losses = self.detector.get_losses(batch)
