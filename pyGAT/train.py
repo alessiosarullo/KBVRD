@@ -30,6 +30,7 @@ parser.add_argument('--nb_heads', type=int, default=8, help='Number of head atte
 parser.add_argument('--dropout', type=float, default=0.6, help='Dropout rate (1 - keep probability).')
 parser.add_argument('--alpha', type=float, default=0.2, help='Alpha for the leaky_relu.')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
+parser.add_argument('--save_dir', type=str, required=True)
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -39,6 +40,8 @@ np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
+
+save_dir = args.save_dir.rstrip('/')
 
 # Load data
 adj, features, labels, idx_train, idx_val, idx_test = load_data()
@@ -120,7 +123,7 @@ best_epoch = 0
 for epoch in range(args.epochs):
     loss_values.append(train(epoch))
 
-    torch.save(model.state_dict(), 'pyGAT/exp/{}.pkl'.format(epoch))
+    torch.save(model.state_dict(), save_dir + '/{}.pkl'.format(epoch))
     if loss_values[-1] < best:
         best = loss_values[-1]
         best_epoch = epoch
@@ -131,13 +134,13 @@ for epoch in range(args.epochs):
     if bad_counter == args.patience:
         break
 
-    files = glob.glob('pyGAT/exp/*.pkl')
+    files = glob.glob(save_dir + '/*.pkl')
     for file in files:
         epoch_nb = int(file.split('.')[0])
         if epoch_nb < best_epoch:
             os.remove(file)
 
-files = glob.glob('pyGAT/exp/*.pkl')
+files = glob.glob(save_dir + '/*.pkl')
 for file in files:
     epoch_nb = int(file.split('.')[0])
     if epoch_nb > best_epoch:
@@ -148,7 +151,7 @@ print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
 # Restore best model
 print('Loading {}th epoch'.format(best_epoch))
-model.load_state_dict(torch.load('pyGAT/exp/{}.pkl'.format(best_epoch)))
+model.load_state_dict(torch.load(save_dir + '/{}.pkl'.format(best_epoch)))
 
 # Testing
 compute_test()
