@@ -19,8 +19,8 @@ def save_feats():
     sys.argv += ['--img_batch_size', str(batch_size), '--val_ratio', '0']
     cfg.parse_args(allow_required=False)
 
-    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping))
-    test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=float(flipping))
+    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping), load_precomputed=False)
+    test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=float(flipping), load_precomputed=False)
     assert Splits.VAL not in HicoDetInstanceSplit._splits
 
     vm = VisualModule(dataset=train_split)
