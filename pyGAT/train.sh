@@ -21,4 +21,4 @@ mkdir -p ${EXP_DIR}
 exec &> >(tee -a "$LOG")
 echo Logging ${EXP_DIR} to "$LOG"
 
-python -u pyGAT/train.py --save_dir ${EXP_FULL_NAME} "${@:3}"
+python -u pyGAT/train.py --save_dir ${EXP_DIR} "${@:3}"
