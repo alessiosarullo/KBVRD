@@ -57,7 +57,7 @@ def save_feats():
                 x = vm(im_data, inference)
 
                 x = (value.cpu().numpy() if value is not None and not isinstance(value, np.ndarray) else value for value in x)
-                boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, box_labels, action_labels = x
+                boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, box_labels, action_labels, _ = x
 
                 if boxes_ext is not None:
                     assert np.all(boxes_ext[:, 0] == 0)  # because batch size is 1
