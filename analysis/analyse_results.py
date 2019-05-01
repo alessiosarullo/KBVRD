@@ -43,9 +43,10 @@ def evaluate():
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, load_precomputed=False)
     evaluator = Evaluator(dataset=hds, hoi_score_thr=None, num_hoi_thr=None)
-    stats = evaluator.evaluate_predictions(results)
+    evaluator.evaluate_predictions(results)
+    evaluator.print_metrics(sort=True)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
-    stats.print_metrics(sort=True)
+    # stats.print_metrics(sort=True)
 
 
 # def stats():
