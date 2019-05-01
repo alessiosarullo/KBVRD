@@ -71,7 +71,7 @@ class HicoDetInstanceSplit(Dataset):
             assert self.pc_feats_file['box_feats'].shape[1] == self.pc_feats_file['union_boxes_feats'].shape[1] == 2048  # FIXME magic constant
 
             self.pc_box_im_inds = self.pc_feats_file['boxes_ext'][:, 0].astype(np.int)
-            self.pc_ho_infos = self.pc_feats_file['hoi_infos'][:].astype(np.int)
+            self.pc_ho_infos = self.pc_feats_file['ho_infos'][:].astype(np.int)
             self.pc_ho_im_inds = self.pc_ho_infos[:, 0]
             self.pc_image_infos = self.pc_feats_file['img_infos'][:]
             try:
@@ -185,7 +185,7 @@ class HicoDetInstanceSplit(Dataset):
     def num_precomputed_hois(self):
         if not self.has_precomputed:
             raise AttributeError('There is not precomputed data.')
-        return self.pc_feats_file['hoi_labels'].shape[0]
+        return self.pc_feats_file['action_labels'].shape[0]
 
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}
@@ -358,26 +358,26 @@ class HicoDetInstanceSplit(Dataset):
                     precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
                     precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
                     try:
-                        precomp_hoi_labels = self.pc_feats_file['hoi_labels'][start:end, :]
+                        precomp_action_labels = self.pc_feats_file['action_labels'][start:end, :]
                     except KeyError:
-                        precomp_hoi_labels = None
+                        precomp_action_labels = None
 
-                    if precomp_hoi_labels is not None:
+                    if precomp_action_labels is not None:
                         assert precomp_box_labels is not None and box_inds is not None
-                        precomp_hoi_labels = precomp_hoi_labels[:, self.action_class_inds]
+                        precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
 
                         # Remap HOIs box indices
                         precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
                         precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
 
                         # Filter out HOIs
-                        feasible_hoi_labels_inds = np.any(precomp_hoi_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
+                        feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
                         assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, img_fn)
                         precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
                         precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
                         precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
-                        precomp_hoi_labels = precomp_hoi_labels[feasible_hoi_labels_inds, :]
-                        assert np.all(np.sum(precomp_hoi_labels, axis=1) >= 1), precomp_hoi_labels
+                        precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
+                        assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
 
                         # Filter out boxes without interactions
                         hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
@@ -394,7 +394,7 @@ class HicoDetInstanceSplit(Dataset):
                         assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
 
                     assert np.all(precomp_hoi_infos >= 0)
-                    entry.precomp_action_labels = precomp_hoi_labels
+                    entry.precomp_action_labels = precomp_action_labels
                     entry.precomp_hoi_infos = precomp_hoi_infos
                     entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
                     entry.precomp_hoi_union_feats = precomp_hoi_union_feats
