@@ -24,8 +24,7 @@ from scripts.utils import get_all_models_by_name
 
 try:
     matplotlib.use('Qt5Agg')
-    # sys.argv[1:] = ['eval', '--save_dir', 'output/inter/2019-04-23_16-38-16_vanilla']
-    sys.argv[1:] = ['eval', '--save_dir', 'output/hoi/2019-04-22_16-06-15_dbatch-32']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-04-29_15-46-06_vanilla']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
 except ImportError:
     pass
@@ -42,7 +41,7 @@ def _setup_and_load():
 
 def evaluate():
     results = _setup_and_load()
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, load_precomputed=False)
     evaluator = Evaluator(dataset=hds, hoi_score_thr=None, num_hoi_thr=None)
     stats = evaluator.evaluate_predictions(results)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
