@@ -2,6 +2,7 @@ import json
 import os
 import pickle
 import numpy as np
+import re
 
 from config import cfg
 
@@ -14,7 +15,7 @@ class Conceptnet:
                                'dbpedia/knownFor', 'dbpedia/language', 'dbpedia/leader', 'dbpedia/occupation', 'dbpedia/product']
 
         data_dir = os.path.join(cfg.program.data_root, 'ConceptNet')
-        self.path_cnet = os.path.join(data_dir, 'conceptnet.pkl')
+        self.path_cnet = os.path.join(cfg.program.cache_root, 'conceptnet.pkl')
         self.path_raw_cnet = os.path.join(data_dir, 'raw_conceptnet.pkl')
         self.path_raw_cnet_eng = os.path.join(data_dir, 'conceptnet560_en.txt')
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
@@ -59,6 +60,18 @@ class Conceptnet:
     def __getitem__(self, item):
         return self.edges[item]
 
+    # Export methods
+    def export_to_edge_list(self, relationship=None):
+        node_index = {n: i for i, n in enumerate(self.nodes)}
+        output = []
+        for edge in self.edges:
+            if relationship is None or edge['rel'] == relationship:
+                output.append('%d %d' % (node_index[edge['src']], node_index[edge['dst']]))
+        lines = '\n'.join(output)
+        with open(os.path.join(cfg.program.cache_root, 'cnet.edgelist'), 'w') as f:
+            f.write(lines)
+
+    # Private methods
     def _load(self):
         try:
             with open(self.path_cnet, 'rb') as f:
@@ -71,7 +84,6 @@ class Conceptnet:
                 pickle.dump(edges, f)
         return edges
 
-    # Private methods
     def _build_cache(self):
         nodes = sorted({e[k] for e in self.edges for k in ['src', 'dst']})
 
@@ -97,9 +109,13 @@ class Conceptnet:
         to_keep = []
         for i, e in enumerate(edges):
             src, rel, dst = e['src'], e['rel'], e['dst']
-            if rel in self.rels_to_filter or (mandatory_pos_tag and not (self.has_pos_tag(src) and self.has_pos_tag(dst))):
+            # Filter
+            if rel in self.rels_to_filter or \
+                    (mandatory_pos_tag and not (self.has_pos_tag(src) and self.has_pos_tag(dst))) or \
+                    any([bool(re.search(r"[^a-zA-Z0-9'\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
                 continue
 
+            # Extend
             to_keep.append(i)
             if rel == 'RelatedTo':
                 new_edge = {'src': dst,
@@ -175,7 +191,9 @@ class Conceptnet:
 
 
 def main():
-    Conceptnet()
+    cnet = Conceptnet()
+    print(cnet.nodes[:5])
+    cnet.export_to_edge_list()
 
 
 if __name__ == '__main__':
