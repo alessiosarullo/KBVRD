@@ -49,7 +49,7 @@ class Conceptnet:
 
     # Filter
     def filter_nodes(self, node_seed, radius=3):
-        node_seed = set(node_seed)
+        node_seed = set(['%s/%s' % (n, tag) for n in node_seed for tag in self.pos_tags]) | set(node_seed)
         node_set = set(self.nodes)
         keep = node_seed & node_set
         neighs_r = keep
@@ -208,10 +208,14 @@ def main():
     hd = HicoDet()
     cnet = Conceptnet()
     print(cnet.nodes[:5])
+
     # cnet.export_to_deepwalk_edge_list()
-    cnet.filter_nodes(set(hd.objects) | set(hd.predicates), radius=0)
-    print(cnet.nodes)
-    print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
+
+    hd_nodes = set(hd.objects) | set(hd.predicates)
+    cnet.filter_nodes(hd_nodes, radius=0)
+    print(hd_nodes - set(cnet.nodes))
+    # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
+
     # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
 
