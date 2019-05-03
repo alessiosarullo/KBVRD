@@ -119,7 +119,7 @@ class Conceptnet:
             # Filter
             if rel in self.rels_to_filter or \
                     (mandatory_pos_tag and not (self.has_pos_tag(src) and self.has_pos_tag(dst))) or \
-                    any([bool(re.search(r"[^a-zA-Z0-9'\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
+                    any([bool(re.search(r"[^a-zA-Z\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
                 continue
 
             # Extend
