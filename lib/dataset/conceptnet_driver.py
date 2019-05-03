@@ -213,7 +213,7 @@ def main():
 
     hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(hd.objects) | hd_preds
-    cnet.filter_nodes(hd_nodes, radius=0)
+    cnet.filter_nodes(hd_nodes, radius=3)
     print(hd_nodes - set(cnet.nodes))
     # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
 
