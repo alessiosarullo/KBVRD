@@ -211,7 +211,9 @@ def main():
 
     # cnet.export_to_deepwalk_edge_list()
 
-    hd_nodes = {noun.replace('_', ' ') for noun in set(hd.objects) | set(hd.predicates) - {hd.null_interaction}}
+    hd_obj = {noun.replace('_', ' ') for noun in hd.objects}
+    hd_preds = {noun.split['_'][0] for noun in set(hd.predicates) - {hd.null_interaction}}
+    hd_nodes = hd_obj | hd_preds
     cnet.filter_nodes(hd_nodes, radius=0)
     print(hd_nodes - set(cnet.nodes))
     # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
