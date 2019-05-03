@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import scipy.sparse
 import numpy as np
 import re
 
@@ -21,16 +22,8 @@ class Conceptnet:
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
 
         self.edges = self._load()
-        self.nodes, self.edges_from, self.edges_to, self.rel_occurrs = self._build_cache()
-
-        self.relations = sorted(set([edge['rel'] for edge in self.edges]))
-        self._filtered_rels = None
-
-    @property
-    def hico_rels(self):
-        if self._filtered_rels is None:
-            self._filtered_rels = [r for r in self.relations if r not in self.rels_to_filter]
-        return self._filtered_rels
+        self.nodes = self.edges_from = self.edges_to = self.rel_occurrs = self.relations = None
+        self._init()
 
     def has_pos_tag(self, entry, tag=None):
         if len(entry) > 2 and entry[-2] == '/':
@@ -53,6 +46,19 @@ class Conceptnet:
 
     def __getitem__(self, item):
         return self.edges[item]
+
+    # Filter
+    def filter_nodes(self, node_seed, radius=3):
+        node_seed = set(node_seed)
+        node_set = set(self.nodes)
+        keep = node_seed & node_set
+        neighs_r = keep
+        for r in range(1, radius):
+            neighs_r = {self.edges[e]['dst'] for n in neighs_r for e in self.edges_from[n]} - keep
+            keep = keep | neighs_r
+
+        self.edges = [e for e in self.edges if e['src'] in keep and e['dst'] in keep]
+        self._init()
 
     # Export methods
     def export_to_deepwalk_edge_list(self, relationship=None):
@@ -91,21 +97,21 @@ class Conceptnet:
                 pickle.dump(edges, f)
         return edges
 
-    def _build_cache(self):
-        nodes = sorted({e[k] for e in self.edges for k in ['src', 'dst']})
+    def _init(self):
+        self.nodes = sorted({e[k] for e in self.edges for k in ['src', 'dst']})
 
-        edges_from = {}
-        edges_to = {}
+        self.edges_from = {}
+        self.edges_to = {}
         rel_occurrs = {}
         for i, e in enumerate(self.edges):
-            edges_from.setdefault(e['src'], []).append(i)
-            edges_to.setdefault(e['dst'], []).append(i)
+            self.edges_from.setdefault(e['src'], []).append(i)
+            self.edges_to.setdefault(e['dst'], []).append(i)
 
             rel = e['rel']
             rel_occurrs[rel] = rel_occurrs.get(rel, 0) + 1
 
-        rel_occurrs = {r: rel_occurrs[r] for r in sorted(rel_occurrs.keys(), key=lambda x: rel_occurrs[x], reverse=True)}
-        return nodes, edges_from, edges_to, rel_occurrs
+        self.rel_occurrs = {r: rel_occurrs[r] for r in sorted(rel_occurrs.keys(), key=lambda x: rel_occurrs[x], reverse=True)}
+        self.relations = sorted(set([edge['rel'] for edge in self.edges]))
 
     def _extend_and_filter(self, edges, mandatory_pos_tag=False):
         def _hash(_e):
@@ -119,7 +125,7 @@ class Conceptnet:
             # Filter
             if rel in self.rels_to_filter or \
                     (mandatory_pos_tag and not (self.has_pos_tag(src) and self.has_pos_tag(dst))) or \
-                    any([bool(re.search(r"[^a-zA-Z\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
+                    any([bool(re.search(r"[^a-zA-Z0-9'\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
                 continue
 
             # Extend
@@ -198,10 +204,15 @@ class Conceptnet:
 
 
 def main():
+    from lib.dataset.hicodet_driver import HicoDet
+    hd = HicoDet()
     cnet = Conceptnet()
     print(cnet.nodes[:5])
     # cnet.export_to_deepwalk_edge_list()
-    cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
+    cnet.filter_nodes(set(hd.objects) | set(hd.predicates), radius=0)
+    print(cnet.nodes)
+    print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
+    # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
 
 if __name__ == '__main__':
