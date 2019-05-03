@@ -23,14 +23,8 @@ class Conceptnet:
         self.edges = self._load()
         self.nodes, self.edges_from, self.edges_to, self.rel_occurrs = self._build_cache()
 
-        self._relations = None
+        self.relations = sorted(set([edge['rel'] for edge in self.edges]))
         self._filtered_rels = None
-
-    @property
-    def relations(self):
-        if self._relations is None:
-            self._relations = sorted(set([edge['rel'] for edge in self.edges]))
-        return self._relations
 
     @property
     def hico_rels(self):
@@ -61,7 +55,7 @@ class Conceptnet:
         return self.edges[item]
 
     # Export methods
-    def export_to_edge_list(self, relationship=None):
+    def export_to_deepwalk_edge_list(self, relationship=None):
         node_index = {n: i for i, n in enumerate(self.nodes)}
         output = []
         for edge in self.edges:
@@ -70,6 +64,19 @@ class Conceptnet:
         lines = '\n'.join(output)
         with open(os.path.join(cfg.program.cache_root, 'cnet.edgelist'), 'w') as f:
             f.write(lines)
+
+    def export_to_rotate_edge_list(self, output_dir, relationship=None):
+        output = []
+        for edge in self.edges:
+            if relationship is None or edge['rel'] == relationship:
+                output.append('%s\t%s\t%s' % (edge['src'], edge['rel'], edge['dst']))
+        lines = '\n'.join(output)
+        with open(os.path.join(output_dir, 'train.txt'), 'w') as f:
+            f.write(lines)
+        with open(os.path.join(output_dir, 'entities.dict'), 'w') as f:
+            f.write('\n'.join(['%d\t%s' % (i, n) for i, n in enumerate(self.nodes)]))
+        with open(os.path.join(output_dir, 'relations.dict'), 'w') as f:
+            f.write('\n'.join(['%d\t%s' % (i, n) for i, n in enumerate(self.relations)]))
 
     # Private methods
     def _load(self):
@@ -193,7 +200,8 @@ class Conceptnet:
 def main():
     cnet = Conceptnet()
     print(cnet.nodes[:5])
-    cnet.export_to_edge_list()
+    # cnet.export_to_deepwalk_edge_list()
+    cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
 
 if __name__ == '__main__':
