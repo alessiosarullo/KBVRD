@@ -54,7 +54,7 @@ class Conceptnet:
         keep = node_seed & node_set
         neighs_r = keep
         for r in range(1, radius):
-            neighs_r = {self.edges[e]['dst'] for n in neighs_r for e in self.edges_from[n]} - keep
+            neighs_r = {self.edges[e]['dst'] for n in neighs_r for e in self.edges_from.get(n, [])} - keep
             keep = keep | neighs_r
 
         self.edges = [e for e in self.edges if e['src'] in keep and e['dst'] in keep]
