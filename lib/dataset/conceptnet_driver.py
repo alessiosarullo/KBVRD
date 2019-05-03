@@ -212,7 +212,7 @@ def main():
     # cnet.export_to_deepwalk_edge_list()
 
     hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
-    hd_nodes = set(hd.objects) | hd_preds
+    hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
     cnet.filter_nodes(hd_nodes, radius=3)
     print(hd_nodes - set(cnet.nodes))
     # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
