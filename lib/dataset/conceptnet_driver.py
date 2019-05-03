@@ -125,7 +125,7 @@ class Conceptnet:
             # Filter
             if rel in self.rels_to_filter or \
                     (mandatory_pos_tag and not (self.has_pos_tag(src) and self.has_pos_tag(dst))) or \
-                    any([bool(re.search(r"[^a-zA-Z0-9'\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
+                    any([bool(re.search(r"[^a-zA-Z0-9_'\-]", (word[:-2] if self.has_pos_tag(word) else word))) for word in (src, dst)]):
                 continue
 
             # Extend
@@ -211,9 +211,8 @@ def main():
 
     # cnet.export_to_deepwalk_edge_list()
 
-    hd_obj = {noun.replace('_', ' ') for noun in hd.objects}
     hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
-    hd_nodes = hd_obj | hd_preds
+    hd_nodes = set(hd.objects) | hd_preds
     cnet.filter_nodes(hd_nodes, radius=0)
     print(hd_nodes - set(cnet.nodes))
     # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
