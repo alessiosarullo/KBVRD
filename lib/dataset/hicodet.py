@@ -284,7 +284,7 @@ class HicoDetInstanceSplit(Dataset):
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
 
-        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn, precomputed=self.has_precomputed)
+        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn, precomputed=self.has_precomputed, split=self.split)
         if not self.has_precomputed or ignore_precomputed:
             gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 

@@ -200,24 +200,29 @@ class ObjectOnlyEmbModel(ObjectOnlyModel):
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, _, _ = self.visual_module(x, inference)
+            # boxes_ext, _, _, _, _, _, box_labels, _, _ = self.visual_module(x, inference)
+            im_scales = x.img_infos[:, 2].cpu().numpy()
 
-            obj_output = action_output = hoi_output = None
-            if boxes_ext is not None:
-                gt_obj_classes = []
-                for data in x.other_ex_data:
-                    gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(data['index'], read_img=False, ignore_precomputed=True)
-                    gt_obj_classes.append(gt_entry.gt_obj_classes)
-                gt_obj_classes = np.concatenate(gt_obj_classes, axis=0)
-                obj_output, _, _ = self._forward(boxes_ext=None, box_feats=None, masks=None, union_boxes_feats=None, hoi_infos=None,
-                                                 box_labels=gt_obj_classes)
+            boxes_ext = []
+            gt_obj_classes = []
+            for i, data in enumerate(x.other_ex_data):
+                gt_entry = HicoDetInstanceSplit.get_split(data['split']).get_entry(data['index'], read_img=False, ignore_precomputed=True)
+                gt_obj_classes.append(gt_entry.gt_obj_classes)
+                gt_boxes = gt_entry.gt_boxes * im_scales[i]
+                boxes_ext.append(np.concatenate([np.zeros((gt_boxes.shape[0], 1)),
+                                                 gt_boxes,
+                                                 self.visual_module.one_hot_obj_labels(gt_entry.gt_obj_classes)
+                                                 ], axis=1))
+            box_labels = torch.tensor(np.concatenate(gt_obj_classes, axis=0), device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+            boxes_ext = torch.tensor(np.concatenate(boxes_ext, axis=0), device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+            obj_output, _, _ = self._forward(boxes_ext=None, box_feats=None, masks=None, union_boxes_feats=None, hoi_infos=None,
+                                             box_labels=box_labels)
 
             if not inference:
                 assert box_labels is not None
                 return obj_output, None, None, box_labels, None, None
             else:
-                im_scales = x.img_infos[:, 2].cpu().numpy()
-                return self._prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales)
+                return self._prepare_prediction(obj_output, None, None, None, boxes_ext, im_scales)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         obj_logits = self.obj_output_fc(self.obj_embs[box_labels, :])

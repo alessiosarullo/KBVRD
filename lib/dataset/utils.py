@@ -24,10 +24,11 @@ class SquarePad:
 
 
 class Example:
-    def __init__(self, idx_in_split, img_id, img_fn, precomputed):
+    def __init__(self, idx_in_split, img_id, img_fn, precomputed, split):
         self.index = idx_in_split
         self.id = img_id
         self.fn = img_fn
+        self.split = split
 
         self.img_size = None
         self.scale = None
@@ -85,6 +86,7 @@ class Minibatch:
         self.other_ex_data += [{'index': ex.index,
                                 'id': ex.id,
                                 'fn': ex.fn,
+                                'split': ex.split,
                                 'flipped': ex.flipped,
                                 'im_size': ex.img_size,  # this won't be changed
                                 'im_scale': ex.scale,
