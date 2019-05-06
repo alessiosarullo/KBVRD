@@ -172,7 +172,7 @@ class VisualModule(nn.Module):
 
         return boxes_ext, box_labels
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False):
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False, best_hoi_match_only=True):
         bg_ratio = cfg.opt.hoi_bg_ratio
 
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
@@ -201,11 +201,26 @@ class VisualModule(nn.Module):
             predict_gt_match_i = (predict_box_labels_i[:, None] == gt_box_classes_i[None, :]) & (iou_predict_to_gt_i >= self.gt_iou_thr)
 
             action_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
-            for from_gt_ind, rel_id, to_gt_ind in gt_rels_i:
-                for from_predict_ind in np.flatnonzero(predict_gt_match_i[:, from_gt_ind]):
-                    for to_predict_ind in np.flatnonzero(predict_gt_match_i[:, to_gt_ind]):
-                        if from_predict_ind != to_predict_ind:
-                            action_labels_i[from_predict_ind, to_predict_ind, rel_id] = 1.0
+            if best_hoi_match_only:
+                for head_gt_ind, rel_id, tail_gt_ind in gt_rels_i:
+                    head_predict_ind = tail_predict_ind = None
+
+                    head_candidates = np.flatnonzero(predict_gt_match_i[:, head_gt_ind])
+                    if head_candidates.size > 0:
+                        head_predict_ind = head_candidates[np.argmax(iou_predict_to_gt_i[head_candidates])]
+
+                    tail_candidates = np.flatnonzero(predict_gt_match_i[:, tail_gt_ind])
+                    if tail_candidates.size > 0:
+                        tail_predict_ind = tail_candidates[np.argmax(iou_predict_to_gt_i[tail_candidates])]
+
+                    if head_predict_ind is not None and tail_predict_ind is not None and head_predict_ind != tail_predict_ind:
+                        action_labels_i[head_predict_ind, tail_predict_ind, rel_id] = 1.0
+            else:
+                for head_gt_ind, rel_id, tail_gt_ind in gt_rels_i:
+                    for head_predict_ind in np.flatnonzero(predict_gt_match_i[:, head_gt_ind]):
+                        for tail_predict_ind in np.flatnonzero(predict_gt_match_i[:, tail_gt_ind]):
+                            if head_predict_ind != tail_predict_ind:
+                                action_labels_i[head_predict_ind, tail_predict_ind, rel_id] = 1.0
 
             ho_fg_mask = action_labels_i[:, :, 1:].any(axis=2)
             assert not np.any(action_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
