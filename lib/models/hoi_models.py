@@ -1,6 +1,6 @@
-from lib.models.generic_model import GenericModel, Prediction
-from lib.dataset.utils import Splits
 from lib.bbox_utils import compute_ious
+from lib.dataset.utils import Splits
+from lib.models.generic_model import GenericModel, Prediction, Minibatch
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
 
@@ -17,7 +17,7 @@ class OracleModel(GenericModel):
         self.split = Splits.TEST
         self.perfect_detector = True
 
-    def forward(self, x, inference=True, **kwargs):
+    def forward(self, x: Minibatch, inference=True, **kwargs):
         assert inference is True
         assert not self.training
 
@@ -102,6 +102,105 @@ class OracleModel(GenericModel):
                           ho_img_inds=ho_img_inds,
                           ho_pairs=ho_pairs,
                           action_scores=action_probs)
+
+
+class ObjectOnlyModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        raise NotImplementedError()
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+
+    def forward(self, x: Minibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, _, _ = \
+                self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            obj_output = action_output = hoi_output = None
+            if boxes_ext is not None:
+                obj_output, _, _ = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels)
+
+            if not inference:
+                assert box_labels is not None
+                return obj_output, None, None, box_labels, None, None
+            else:
+                im_scales = x.img_infos[:, 2].cpu().numpy()
+                return self._prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales)
+
+    @staticmethod
+    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+        if boxes_ext is not None:
+            assert obj_output is not None
+            obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+            boxes_ext = boxes_ext.cpu().numpy()
+            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+        else:
+            obj_prob = obj_im_inds = obj_boxes = None
+        return Prediction(obj_im_inds=obj_im_inds,
+                          obj_boxes=obj_boxes,
+                          obj_scores=obj_prob,
+                          ho_img_inds=None,
+                          ho_pairs=None,
+                          action_scores=None,
+                          hoi_scores=None)
+
+
+class ObjectOnlyZeroModel(ObjectOnlyModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlyzero'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.fake = torch.nn.Parameter(torch.from_numpy(np.array([1.])), requires_grad=True)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        obj_logits = boxes_ext[:, 5:]
+        return obj_logits, None, None
+
+
+class ObjectOnlyVisModel(ObjectOnlyModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlyvis'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.obj_output_fc = nn.Linear(self.visual_module.vis_feat_dim, self.dataset.num_object_classes)
+        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        obj_logits = self.obj_output_fc(box_feats)
+        return obj_logits, None, None
+
+
+class ObjectOnlyEmbModel(ObjectOnlyModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlyemb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        entity_embs = np.load('cache/rotate/entity_embedding.npy')
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        obj_inds = np.array([entity_inv_index[o] for o in dataset.objects])
+        obj_embs = entity_embs[obj_inds]
+
+        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
+        self.obj_output_fc = nn.Linear(self.visual_module.vis_feat_dim, self.dataset.num_object_classes)
+        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        obj_logits = self.obj_output_fc(box_feats)
+        return obj_logits, None, None
 
 
 class ActionOnlyModel(GenericModel):

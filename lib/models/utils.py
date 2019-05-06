@@ -14,8 +14,8 @@ class Prediction:
     @classmethod
     def from_dict(cls, prediction_dict):
         p = Prediction(obj_im_inds=None, obj_boxes=None, obj_scores=None, ho_img_inds=None, ho_pairs=None, action_scores=None, hoi_scores=None)
-        if 'hoi_img_inds' in prediction_dict.keys():  # FIXME legacy, remove
-            prediction_dict['ho_img_inds'] = prediction_dict['hoi_img_inds']
-            del prediction_dict['hoi_img_inds']
+        # if 'hoi_img_inds' in prediction_dict.keys():  # FIXME legacy, remove
+        #     prediction_dict['ho_img_inds'] = prediction_dict['hoi_img_inds']
+        #     del prediction_dict['hoi_img_inds']
         p.__dict__.update(prediction_dict)
         return p

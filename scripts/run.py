@@ -13,6 +13,7 @@ from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.generic_model import GenericModel, Prediction
 from lib.stats.evaluator import Evaluator
+from lib.stats.object_evaluator import ObjectEvaluator
 from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
@@ -221,7 +222,10 @@ class Launcher:
             if batch_idx % 1000 == 0:
                 stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
-        evaluator = Evaluator(data_loader.dataset)
+        if cfg.program.model.startswith('objonly'):
+            evaluator = ObjectEvaluator(data_loader.dataset)
+        else:
+            evaluator = Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.print_metrics()
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
