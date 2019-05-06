@@ -195,11 +195,32 @@ class ObjectOnlyEmbModel(ObjectOnlyModel):
         obj_embs = entity_embs[obj_inds]
 
         self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
-        self.obj_output_fc = nn.Linear(self.visual_module.vis_feat_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
         torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
+    def forward(self, x: Minibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, _, _ = self.visual_module(x, inference)
+
+            obj_output = action_output = hoi_output = None
+            if boxes_ext is not None:
+                gt_obj_classes = []
+                for data in x.other_ex_data:
+                    gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(data['index'], read_img=False, ignore_precomputed=True)
+                    gt_obj_classes.append(gt_entry.gt_obj_classes)
+                gt_obj_classes = np.concatenate(gt_obj_classes, axis=0)
+                obj_output, _, _ = self._forward(boxes_ext=None, box_feats=None, masks=None, union_boxes_feats=None, hoi_infos=None,
+                                                 box_labels=gt_obj_classes)
+
+            if not inference:
+                assert box_labels is not None
+                return obj_output, None, None, box_labels, None, None
+            else:
+                im_scales = x.img_infos[:, 2].cpu().numpy()
+                return self._prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales)
+
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
-        obj_logits = self.obj_output_fc(box_feats)
+        obj_logits = self.obj_output_fc(self.obj_embs[box_labels, :])
         return obj_logits, None, None
 
 
