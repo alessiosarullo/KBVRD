@@ -181,23 +181,11 @@ class ObjectOnlyVisModel(ObjectOnlyModel):
 class ObjectOnlyEmbModel(ObjectOnlyModel):
     @classmethod
     def get_cline_name(cls):
-        return 'objonlyemb'
+        raise NotImplementedError()
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.use_gt = False
-        entity_embs = np.load('cache/rotate/entity_embedding.npy')
-        with open('cache/rotate/entities.dict', 'r') as f:
-            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
-            ecl_idx = [int(x) for x in ecl_idx]
-            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
-            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        obj_inds = np.array([entity_inv_index['hair_dryer' if o == 'hair_drier' else o] for o in dataset.objects])
-        obj_embs = entity_embs[obj_inds]
-
-        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
-        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
-        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -229,6 +217,43 @@ class ObjectOnlyEmbModel(ObjectOnlyModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         obj_logits = self.obj_output_fc(self.obj_embs[torch.argmax(boxes_ext[:, 5:], dim=1), :])
         return obj_logits, None, None
+
+
+class ObjectOnlyRotateEmbModel(ObjectOnlyEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlyemb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        entity_embs = np.load('cache/rotate/entity_embedding.npy')
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        obj_inds = np.array([entity_inv_index['hair_dryer' if o == 'hair_drier' else o] for o in dataset.objects])
+        obj_embs = entity_embs[obj_inds]
+
+        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
+        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
+        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+
+
+class ObjectOnlyWordEmbModel(ObjectOnlyEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlywordemb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_embs = word_embs.get_embeddings(['hair_dryer' if o == 'hair_drier' else o for o in dataset.objects])
+
+        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
+        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
+        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
 
 class ActionOnlyModel(GenericModel):
