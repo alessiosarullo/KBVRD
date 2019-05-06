@@ -207,11 +207,13 @@ class VisualModule(nn.Module):
 
                     head_candidates = np.flatnonzero(predict_gt_match_i[:, head_gt_ind])
                     if head_candidates.size > 0:
-                        head_predict_ind = head_candidates[np.argmax(iou_predict_to_gt_i[head_candidates])]
+                        iou_for_candidates = iou_predict_to_gt_i[head_candidates, head_gt_ind]
+                        head_predict_ind = head_candidates[np.argmax(iou_for_candidates)]
 
                     tail_candidates = np.flatnonzero(predict_gt_match_i[:, tail_gt_ind])
                     if tail_candidates.size > 0:
-                        tail_predict_ind = tail_candidates[np.argmax(iou_predict_to_gt_i[tail_candidates])]
+                        iou_for_candidates = iou_predict_to_gt_i[tail_candidates, tail_gt_ind]
+                        tail_predict_ind = tail_candidates[np.argmax(iou_for_candidates)]
 
                     if head_predict_ind is not None and tail_predict_ind is not None and head_predict_ind != tail_predict_ind:
                         action_labels_i[head_predict_ind, tail_predict_ind, rel_id] = 1.0
