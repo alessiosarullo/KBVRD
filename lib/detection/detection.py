@@ -25,10 +25,17 @@ def im_detect_boxes(model, inputs):
     nonnms_boxes = nonnms_boxes.cpu().numpy()
     u_nonnms_im_ids = np.unique(nonnms_im_ids)
 
-    box_inds, boxes, _, _ = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    box_inds, boxes, _, box_scores = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
+    # Note: bounding boxes are regressed per class. Thus, same-object bounding boxes may differ and appear twice. We filter them out based on their
+    # score, so that each detected bounding box actually belongs to a single object.
+    s_inds = np.argsort(box_scores)[::-1]
+    box_inds = box_inds[s_inds]
+    boxes = boxes[s_inds]
+    u_box_inds, u_idx = np.unique(box_inds, return_index=True)
+    boxes = boxes[u_idx, :]
 
-    scores = nonnms_scores[box_inds, :]
-    im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
+    scores = nonnms_scores[u_box_inds, :]
+    im_ids = nonnms_im_ids[u_box_inds].astype(np.int, copy=False)
     u_im_ids = np.unique(im_ids)
     assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
 

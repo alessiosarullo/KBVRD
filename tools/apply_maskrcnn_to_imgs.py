@@ -42,7 +42,8 @@ def main():
     model = 'e2e_mask_rcnn_R-50-C4_2x'
     sys.argv += ['--cfg', 'pydetectron/configs/baselines/%s.yaml' % model,
                  '--load_detectron', 'data/pretrained_model/%s.pkl' % model,
-                 '--image_dir', 'data/HICO-DET/images/test2015',
+                 '--image_dir', 'data/HICO-DET/images/train2015',
+                 '--num_imgs', 0,
                  ]
 
     args = parse_args()
@@ -72,7 +73,9 @@ def main():
     maskRCNN = mynn.DataParallel(maskRCNN, cpu_keywords=['im_info', 'roidb'], minibatch=True, device_ids=[0])  # only support single GPU
     maskRCNN.eval()
 
-    imglist = sorted(misc_utils.get_imagelist_from_dir(args.image_dir))[:args.num_imgs]
+    imglist = sorted(misc_utils.get_imagelist_from_dir(args.image_dir))
+    if args.num_imgs != 0:
+        imglist = imglist[:args.num_imgs]
     num_images = len(imglist)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
@@ -80,6 +83,8 @@ def main():
     timers = defaultdict(Timer)
     for i in range(num_images):
         print('img', i)
+        if not imglist[i].endswith('HICO_train2015_00001418.jpg'):
+            continue
         im = cv2.imread(imglist[i])
         assert im is not None
 
