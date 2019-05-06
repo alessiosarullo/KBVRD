@@ -191,7 +191,7 @@ class ObjectOnlyEmbModel(ObjectOnlyModel):
             ecl_idx = [int(x) for x in ecl_idx]
             assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
             entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        obj_inds = np.array([entity_inv_index[o] for o in dataset.objects])
+        obj_inds = np.array([entity_inv_index['hair_dryer' if o == 'hair_drier' else o] for o in dataset.objects])
         obj_embs = entity_embs[obj_inds]
 
         self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
