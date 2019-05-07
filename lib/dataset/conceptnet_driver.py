@@ -34,6 +34,18 @@ class Conceptnet:
                 return entry[-1] == tag
         return False
 
+    def get_adjacency_matrix(self):
+        num_nodes = len(self.nodes)
+        node_index = {n: i for i, n in enumerate(self.nodes)}
+        adj = np.zeros((num_nodes, num_nodes))
+        for src in self.nodes:
+            i = node_index[src]
+            for dst in self.edges_from[src]:
+                j = node_index[self.edges[dst]]
+                adj[i, j] = 1
+        adj[np.arange(num_nodes), np.arange(num_nodes)] = 0
+        return adj
+
     # Iterator methods
     def __iter__(self):
         return self.edges
