@@ -234,6 +234,8 @@ def main():
 
     # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
+    return cnet, hd
+
 
 if __name__ == '__main__':
     main()
