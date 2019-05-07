@@ -43,8 +43,8 @@ class Conceptnet:
         adj = np.zeros((num_nodes, num_nodes), dtype=np.float16)
         for src in self.nodes:
             i = node_index[src]
-            for dst in self.edges_from.get(src, []):
-                j = node_index[self.edges[dst]]
+            for e_idx in self.edges_from.get(src, []):
+                j = node_index[self.edges[e_idx]['dst']]
                 adj[i, j] = 1
         adj[np.arange(num_nodes), np.arange(num_nodes)] = 0
         return adj
