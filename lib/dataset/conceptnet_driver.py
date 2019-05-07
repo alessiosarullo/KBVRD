@@ -36,11 +36,11 @@ class Conceptnet:
 
     def get_adjacency_matrix(self):
         num_nodes = len(self.nodes)
-        if num_nodes**2 >= 1e8:
+        if num_nodes**2 >= 1e10:
             print('Number of nodes is too big: %d.' % num_nodes)
             return
         node_index = {n: i for i, n in enumerate(self.nodes)}
-        adj = np.zeros((num_nodes, num_nodes))
+        adj = np.zeros((num_nodes, num_nodes), dtype=np.float16)
         for src in self.nodes:
             i = node_index[src]
             for dst in self.edges_from[src]:
