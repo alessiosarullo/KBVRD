@@ -26,7 +26,7 @@ def main():
     # np.set_printoptions(precision=2, suppress=True, linewidth=300, edgeitems=20)
 
     imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
+    hd = HicoDetInstanceSplit.get_split(Splits.TRAIN, load_precomputed=False)  # type: HicoDetInstanceSplit
 
     imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
     imsitu_prior = imsitu_op_mat.copy()
@@ -68,71 +68,77 @@ def main():
     # imsitu_prior = imsitu_prior[:, pred_intersection]
     # freq_prior = freq_prior[:, pred_intersection]
 
-    hd = HicoDetInstanceSplit.get_split(Splits.TEST)  # type: HicoDetInstanceSplit
-    if 0:
+    hd = HicoDetInstanceSplit.get_split(Splits.TEST, load_precomputed=False)  # type: HicoDetInstanceSplit
+    if 1:
         all_predictions = []
-        modes = ['freq', 'imsitu', 'sum', 'smax', 'mul', 'gt']
-        mode = modes[-2]
+        modes = ['freq', 'imsitu',
+                 'sum', 'smax', 'mul',
+                 'rnd', 'gt']
+        mode = modes[4]
         print('Mode: %s.' % mode)
         for im_idx in range(len(hd)):
             ex = hd.get_entry(im_idx, read_img=False, ignore_precomputed=True)  # type: Example
-            obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]
+            obj_labels_onehot = np.zeros((ex.gt_obj_classes.shape[0], hd.num_object_classes))
+            obj_labels_onehot[np.arange(obj_labels_onehot.shape[0]), ex.gt_obj_classes] = 1
+            hoi_obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]
 
             if mode == modes[0]:
-                hoi_scores = freq_prior[obj_labels, :].astype(np.float)
+                action_scores = freq_prior[hoi_obj_labels, :].astype(np.float)
             elif mode == modes[1]:
-                hoi_scores = imsitu_prior[obj_labels, :].astype(np.float)
+                action_scores = imsitu_prior[hoi_obj_labels, :].astype(np.float)
             elif mode == modes[2]:
-                hoi_scores = prior_sum[obj_labels, :].astype(np.float)
+                action_scores = prior_sum[hoi_obj_labels, :].astype(np.float)
             elif mode == modes[3]:
-                hoi_scores = prior_smax[obj_labels, :].astype(np.float)
+                action_scores = prior_smax[hoi_obj_labels, :].astype(np.float)
             elif mode == modes[4]:
-                hoi_scores = prior_mul[obj_labels, :].astype(np.float)
+                action_scores = prior_mul[hoi_obj_labels, :].astype(np.float)
+            elif mode == modes[-2]:
+                hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
+                hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), np.random.randint(hd.num_predicates, size=hoi_labels_onehot.shape[0])] = 1
+                action_scores = hoi_labels_onehot
             elif mode == modes[-1]:
                 hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
                 hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), ex.gt_hois[:, 1]] = 1
-                hoi_scores = hoi_labels_onehot
+                action_scores = hoi_labels_onehot
             else:
                 raise ValueError('Unknown mode %s.' % mode)
 
-            prediction = Prediction(obj_im_inds=np.array([im_idx]),
+            prediction = Prediction(obj_im_inds=np.full_like(ex.gt_obj_classes, fill_value=im_idx),
                                     obj_boxes=ex.gt_boxes,
-                                    obj_scores=[],
+                                    obj_scores=obj_labels_onehot,
                                     ho_img_inds=np.array([im_idx]),
                                     ho_pairs=ex.gt_hois[:, [0, 2]],
-                                    action_scores=hoi_scores)
+                                    action_scores=action_scores)
             all_predictions.append(vars(prediction))
-            if im_idx % 20 == 0:
-                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
 
-        evaluator = Evaluator.evaluate_predictions(hd, all_predictions, iou_thresh=0.999)  # type: Evaluator
+        print('Predictions computed.')
+        evaluator = Evaluator(hd, iou_thresh=0.999)  # type: Evaluator
+        evaluator.evaluate_predictions(all_predictions)
         evaluator.print_metrics()
 
-        for i, p in enumerate(hd.predicates):
-            print('%3d %s' % (i, p))
     else:
         # Plot
-        # objects = ['hair_drier']
-        # idx = hd.objects.index('hair_drier')
-        # freq_prior = freq_prior[[idx], :]
-        # imsitu_prior = imsitu_prior[[idx], :]
-        # plot_mat((imsitu_prior + freq_prior * 2) / 3, predicates, objects)
+        objects = ['hair_drier']
+        idx = hd.objects.index('hair_drier')
+        freq_prior = freq_prior[[idx], :]
+        imsitu_prior = imsitu_prior[[idx], :]
+        plot_mat((imsitu_prior + freq_prior * 2) / 3, predicates, objects, plot=False)
 
-        # plt.figure(figsize=(16, 9))
-        # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
-        #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
-        #
-        # plot_mat(freq_prior, predicates, objects, axes=plt.subplot(gs[0, 0]))
-        # plot_mat(imsitu_prior, predicates, objects, axes=plt.subplot(gs[0, 1]))
-        #
-        # plot_mat(prior_mul, predicates, objects, axes=plt.subplot(gs[1, 0]))
-        #
-        # plot_mat(prior_sum, predicates, objects, axes=plt.subplot(gs[1, 1]))
-        # plt.show()
+        plt.figure(figsize=(16, 9))
+        gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
+                               wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
 
-        plot_mat(imsitu_prior, predicates, objects)
+        plot_mat(freq_prior, predicates, objects, axes=plt.subplot(gs[0, 0]), plot=False)
+        plot_mat(imsitu_prior, predicates, objects, axes=plt.subplot(gs[0, 1]), plot=False)
+
+        plot_mat(prior_mul, predicates, objects, axes=plt.subplot(gs[1, 0]), plot=False)
+
+        plot_mat(prior_sum, predicates, objects, axes=plt.subplot(gs[1, 1]), plot=False)
+        plt.show()
+
+        plot_mat(imsitu_prior, predicates, objects, plot=False)
         known_mask = known_objects[:, None] & known_predicates[None, :]
-        plot_mat(known_mask.astype(np.float), predicates, objects)
+        plot_mat(known_mask.astype(np.float), predicates, objects, plot=False)
         plt.show()
 
 

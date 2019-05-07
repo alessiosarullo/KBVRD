@@ -24,7 +24,7 @@ class Evaluator:
 
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
-    def evaluate_predictions(self, predictions: List[Dict], **kwargs):
+    def evaluate_predictions(self, predictions: List[Dict]):
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):
