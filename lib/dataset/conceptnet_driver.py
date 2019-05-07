@@ -9,7 +9,7 @@ from config import cfg
 
 
 class Conceptnet:
-    def __init__(self):
+    def __init__(self, edges=None):
         self.pos_tags = ['n', 'v', 'a', 's', 'r']
         self.rels_to_filter = ['Antonym', 'DistinctFrom', 'NotCapableOf', 'NotDesires', 'NotHasProperty',
                                'dbpedia/capital', 'dbpedia/field', 'dbpedia/genre', 'dbpedia/genus', 'dbpedia/influencedBy',
@@ -21,7 +21,10 @@ class Conceptnet:
         self.path_raw_cnet_eng = os.path.join(data_dir, 'conceptnet560_en.txt')
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
 
-        self.edges = self._load()
+        if edges is None:
+            self.edges = self._load()
+        else:
+            self.edges = edges
         self.nodes = self.edges_from = self.edges_to = self.rel_occurrs = self.relations = None
         self._init()
 
