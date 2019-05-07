@@ -224,16 +224,17 @@ class Conceptnet:
 def main():
     from lib.dataset.hicodet_driver import HicoDet
     hd = HicoDet()
-    cnet = Conceptnet()
+
+    with open('cache/cnet_hd2.pkl', 'rb') as f:
+        cnet_edges = pickle.load(f)
+    cnet = Conceptnet(edges=cnet_edges)
     print(cnet.nodes[:5])
 
     # cnet.export_to_deepwalk_edge_list()
 
     hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
-    cnet.filter_nodes(hd_nodes, radius=3)
     print(hd_nodes - set(cnet.nodes))
-    # print('\n'.join(['%20s %15s %20s' % (e['src'], e['rel'], e['dst']) for e in cnet.edges]))
 
     # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
