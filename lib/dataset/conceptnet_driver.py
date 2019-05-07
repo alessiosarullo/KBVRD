@@ -78,6 +78,38 @@ class Conceptnet:
         self.edges = [e for e in self.edges if e['src'] in keep and e['dst'] in keep]
         self._init()
 
+    def find_relations(self, src_nodes, walk_length=1):
+        node_variants_index = {(n + tag): i for i, n in enumerate(src_nodes) for tag in [''] + ['/' + t for t in self.pos_tags]}
+        cnet_nodes_index = {n: i for i, n in enumerate(self.nodes)}
+
+        nodes_of_interest = list(set(node_variants_index.keys()) & set(self.nodes))
+        inds = np.array([cnet_nodes_index[h] for h in nodes_of_interest])
+
+        adj = self.get_adjacency_matrix()
+        rel = np.zeros((inds.size, inds.size))
+        left = adj[inds, :]  # this is equivalent to diag(inds) @ adj, but more computationally efficient
+        right = adj[:, inds]
+        if walk_length >= 1:
+            rel += adj[inds, :][:, inds]  # similarly, equivalent to diag(inds) @ adj @ diag(inds)
+        for step in range(2, walk_length):
+            # Equivalent to diag(inds) @ adj^step @ diag(inds)
+            rel += left @ right
+
+            # The minimum is there because we don't care about how many paths are there
+            if step + 1 < walk_length:
+                if step % 2 == 0:
+                    left = np.minimum(1, left @ adj)
+                else:
+                    right = np.minimum(1, adj @ right)
+        rel[np.arange(inds.size), np.arange(inds.size)] = 0
+        rel = np.minimum(1, rel)
+
+        src_to_inds = np.zeros((len(src_nodes), inds.size))
+        for i, idx in enumerate(inds):
+            src_to_inds[node_variants_index[self.nodes[idx]], i] = 1
+        rel = np.minimum(1, src_to_inds @ rel @ src_to_inds.T)
+        return rel
+
     # Export methods
     def export_to_deepwalk_edge_list(self, relationship=None):
         node_index = {n: i for i, n in enumerate(self.nodes)}
@@ -235,6 +267,9 @@ def main():
     hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
     print(hd_nodes - set(cnet.nodes))
+
+    # cnet.find_relations(hd_nodes, walk_length=1)
+    cnet.find_relations(list(hd_nodes)[:3], walk_length=1)
 
     # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
