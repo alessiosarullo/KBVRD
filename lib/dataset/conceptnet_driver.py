@@ -290,7 +290,7 @@ def save_cnet_hd(radius=2, walk_length=2):
                      'rel': rel,
                      }, f)
 
-    return cnet, hd, hd_nodes
+    return cnet, hd, hd_nodes, rel
 
 
 def main():
@@ -310,8 +310,6 @@ def main():
     cnet.find_relations(list(hd_nodes)[:3], walk_length=1)
 
     # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
-
-    return cnet, hd, hd_nodes
 
 
 if __name__ == '__main__':
