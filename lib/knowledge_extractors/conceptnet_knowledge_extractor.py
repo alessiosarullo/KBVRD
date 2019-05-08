@@ -172,7 +172,6 @@ def main():
 def plot():
     cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
     print(cnet.node_index['settle'] in [i for i in cnet.edges_from[cnet.node_index['adjust']]])
-    exit(0)
 
     dataset = HicoDet()
     try:
@@ -186,7 +185,7 @@ def plot():
         hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in dataset.objects]) | hd_preds
         rel = cnet.find_relations(src_nodes=hd_nodes, walk_length=2)
         with open('cache/cnet_hd2_rel2.pkl', 'wb') as f:
-            pickle.dump({'nodes': cnet.nodes,
+            pickle.dump({'nodes': hd_nodes,
                          'rel': rel,
                          }, f)
 
