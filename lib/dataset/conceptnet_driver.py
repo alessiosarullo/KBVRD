@@ -114,7 +114,7 @@ class Conceptnet:
             # Equivalent to diag(inds_ends) @ adj^step @ diag(inds_ends)
             rel_with_variants += left @ right
 
-            # The minimum is there because we don't care about how many paths are there
+            # The minimum is there because we don't care about how many paths there are
             if step + 1 < walk_length:
                 if step % 2 == 0:
                     left = np.minimum(1, left @ adj)
@@ -298,9 +298,11 @@ def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
 
     hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
+    print('Filtering')
     cnet.filter_nodes(hd_nodes, radius=radius)
     cnet.save(file_path='cache/cnet_hd%d.pkl' % radius)
 
+    print('Finding relations')
     rel, rel_nodes = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length, path_filter=path_filter)
     assert set(rel_nodes) == set(hd_nodes)
     with open('cache/cnet_hd%d_rel%d%s.pkl' % (radius, walk_length, '' if path_filter is None else '-' + path_filter), 'wb') as f:
