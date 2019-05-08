@@ -9,7 +9,7 @@ from config import cfg
 
 
 class Conceptnet:
-    def __init__(self, edges=None):
+    def __init__(self, edge_dict=None):
         self.pos_tags = ['n', 'v', 'a', 's', 'r']
         self.rels_to_filter = ['Antonym', 'DistinctFrom', 'NotCapableOf', 'NotDesires', 'NotHasProperty',
                                'dbpedia/capital', 'dbpedia/field', 'dbpedia/genre', 'dbpedia/genus', 'dbpedia/influencedBy',
@@ -21,13 +21,28 @@ class Conceptnet:
         self.path_raw_cnet_eng = os.path.join(data_dir, 'conceptnet560_en.txt')
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
 
-        if edges is None:
-            self.edges = self._load()
+        if edge_dict is None:
+            self._edge_dict = self._load()
         else:
-            self.edges = edges
-        self.nodes = self.edges_from = self.edges_to = self.rel_occurrs = self.relations = None
+            self._edge_dict = edge_dict
+        self.nodes = self.node_index = self.relations = self.relation_index = None
+        self.edges = self.edge_rels = self.edge_weights = self.edges_from = self.edges_to = None
         self._init()
 
+    # Properties
+    @property
+    def num_nodes(self):
+        return len(self.nodes)
+
+    @property
+    def num_rels(self):
+        return len(self.relations)
+
+    @property
+    def num_edges(self):
+        return self.edges.shape[0]
+
+    # Public methods
     def has_pos_tag(self, entry, tag=None):
         if len(entry) > 2 and entry[-2] == '/':
             assert entry[-1] in self.pos_tags
@@ -37,53 +52,38 @@ class Conceptnet:
                 return entry[-1] == tag
         return False
 
-    def get_adjacency_matrix(self):
-        num_nodes = len(self.nodes)
-        if num_nodes**2 >= 1e10:
-            print('Number of nodes is too big: %d.' % num_nodes)
-            return
-        node_index = {n: i for i, n in enumerate(self.nodes)}
-        adj = np.zeros((num_nodes, num_nodes), dtype=np.float16)
-        for src in self.nodes:
-            i = node_index[src]
-            for e_idx in self.edges_from.get(src, []):
-                j = node_index[self.edges[e_idx]['dst']]
-                adj[i, j] = 1
+    def get_adjacency_matrix(self, force_dense=True):
+        num_nodes = self.num_nodes
+        if num_nodes**2 >= 1e10 and force_dense:
+            raise ValueError('Number of nodes is too big (%d) for a dense matrix.' % num_nodes)
+
+        row, col = self.edges[:, 0], self.edges[:, 1]
+        try:
+            adj = np.zeros((num_nodes, num_nodes), dtype=np.float16)
+            adj[row, col] = 1
+        except MemoryError:
+            adj = scipy.sparse.csr_matrix((np.ones(row.size), (row, col)))
         adj[np.arange(num_nodes), np.arange(num_nodes)] = 0
         return adj
 
-    # Iterator methods
-    def __iter__(self):
-        return self.edges
-
-    def __next__(self):
-        return self.edges.__next__()
-
-    def __len__(self):
-        return len(self.edges)
-
-    def __getitem__(self, item):
-        return self.edges[item]
-
-    # Filter
     def filter_nodes(self, node_seed, radius=3):
-        node_seed = set(['%s/%s' % (n, tag) for n in node_seed for tag in self.pos_tags]) | set(node_seed)
-        node_set = set(self.nodes)
-        keep = node_seed & node_set
+        node_seed_str = set(['%s/%s' % (n, tag) for n in node_seed for tag in self.pos_tags]) | set(node_seed)
+        node_set_str = set(self.nodes)
+        keep = {self.node_index[n_str] for n_str in node_seed_str & node_set_str}
         neighs_r = keep
         for r in range(1, radius):
-            neighs_r = {self.edges[e]['dst'] for n in neighs_r for e in self.edges_from.get(n, [])} - keep
+            neighs_r = {self.edges[e, 1] for n in neighs_r for e in self.edges_from[n]} - keep
             keep = keep | neighs_r
 
-        self.edges = [e for e in self.edges if e['src'] in keep and e['dst'] in keep]
+        keep_str = {self.nodes[k] for k in keep}
+        self._edge_dict = [e for e in self._edge_dict if e['src'] in keep_str and e['dst'] in keep_str]
         self._init()
 
     def find_relations(self, src_nodes, walk_length=1):
         node_variants_index = {(n + tag): i for i, n in enumerate(src_nodes) for tag in [''] + ['/' + t for t in self.pos_tags]}
-        cnet_nodes_index = {n: i for i, n in enumerate(self.nodes)}
 
         nodes_of_interest = list(set(node_variants_index.keys()) & set(self.nodes))
-        inds = np.array([cnet_nodes_index[h] for h in nodes_of_interest])
+        inds = np.array([self.node_index[h] for h in nodes_of_interest])
 
         adj = self.get_adjacency_matrix()
         rel = np.zeros((inds.size, inds.size))
@@ -108,13 +108,27 @@ class Conceptnet:
         for i, idx in enumerate(inds):
             src_to_inds[node_variants_index[self.nodes[idx]], i] = 1
         rel = np.minimum(1, src_to_inds @ rel @ src_to_inds.T)
+        rel[np.arange(inds.size), np.arange(inds.size)] = 0
         return rel
+
+    # Iterator methods
+    def __iter__(self):
+        return self._edge_dict
+
+    def __next__(self):
+        return self._edge_dict.__next__()
+
+    def __len__(self):
+        return len(self._edge_dict)
+
+    def __getitem__(self, item):
+        return self._edge_dict[item]
 
     # Export methods
     def export_to_deepwalk_edge_list(self, relationship=None):
         node_index = {n: i for i, n in enumerate(self.nodes)}
         output = []
-        for edge in self.edges:
+        for edge in self._edge_dict:
             if relationship is None or edge['rel'] == relationship:
                 output.append('%d %d' % (node_index[edge['src']], node_index[edge['dst']]))
         lines = '\n'.join(output)
@@ -123,7 +137,7 @@ class Conceptnet:
 
     def export_to_rotate_edge_list(self, output_dir, relationship=None):
         output = []
-        for edge in self.edges:
+        for edge in self._edge_dict:
             if relationship is None or edge['rel'] == relationship:
                 output.append('%s\t%s\t%s' % (edge['src'], edge['rel'], edge['dst']))
         lines = '\n'.join(output)
@@ -135,6 +149,29 @@ class Conceptnet:
             f.write('\n'.join(['%d\t%s' % (i, n) for i, n in enumerate(self.relations)]))
 
     # Private methods
+    def _init(self):
+        num_edges = len(self._edge_dict)
+
+        self.nodes = sorted({e[k] for e in self._edge_dict for k in ['src', 'dst']})
+        self.node_index = {n: i for i, n in enumerate(self.nodes)}
+        self.relations = sorted(set([edge['rel'] for edge in self._edge_dict]))
+        self.relation_index = {r: i for i, r in enumerate(self.relations)}
+
+        self.edges = np.full((num_edges, 2), fill_value=-1, dtype=np.int)
+        self.edge_rels = np.full(num_edges, fill_value=-1, dtype=np.int)
+        self.edge_weights = np.zeros(num_edges)
+        self.edges_from = {i: [] for i in range(len(self.nodes))}
+        self.edges_to = {i: [] for i in range(len(self.nodes))}
+        for i, e in enumerate(self._edge_dict):
+            src = self.node_index[e['src']]
+            dst = self.node_index[e['dst']]
+
+            self.edges[i, :] = [src, dst]
+            self.edge_rels[i] = self.relation_index[e['rel']]
+            self.edge_weights[i] = e['weight']
+            self.edges_from[src].append(i)
+            self.edges_to[dst].append(i)
+
     def _load(self):
         try:
             with open(self.path_cnet, 'rb') as f:
@@ -147,30 +184,10 @@ class Conceptnet:
                 pickle.dump(edges, f)
         return edges
 
-    def _init(self):
-        self.nodes = sorted({e[k] for e in self.edges for k in ['src', 'dst']})
-
-        self.edges_from = {}
-        self.edges_to = {}
-        rel_occurrs = {}
-        for i, e in enumerate(self.edges):
-            self.edges_from.setdefault(e['src'], []).append(i)
-            self.edges_to.setdefault(e['dst'], []).append(i)
-
-            rel = e['rel']
-            rel_occurrs[rel] = rel_occurrs.get(rel, 0) + 1
-
-        self.rel_occurrs = {r: rel_occurrs[r] for r in sorted(rel_occurrs.keys(), key=lambda x: rel_occurrs[x], reverse=True)}
-        self.relations = sorted(set([edge['rel'] for edge in self.edges]))
-
-    def _extend_and_filter(self, edges, mandatory_pos_tag=False):
-        def _hash(_e):
-            return '|||'.join([str(_v) for _v in _e.values()])
-
-        edges_hash = {_hash(edge) for edge in edges}
+    def _extend_and_filter(self, edge_dict, mandatory_pos_tag=False):
         new_edges = []
         to_keep = []
-        for i, e in enumerate(edges):
+        for i, e in enumerate(edge_dict):
             src, rel, dst = e['src'], e['rel'], e['dst']
             # Filter
             if rel in self.rels_to_filter or \
@@ -180,22 +197,13 @@ class Conceptnet:
 
             # Extend
             to_keep.append(i)
-            if rel == 'RelatedTo':
-                new_edge = {'src': dst,
-                            'rel': 'RelatedTo',
-                            'dst': src,
-                            'weight': e['weight'],
-                            }
-                if _hash(new_edge) not in edges_hash:
-                    new_edges.append(new_edge)
-
             if rel == 'IsA':
                 new_edges.append({'src': dst,
                                   'rel': 'hasSubtype',
                                   'dst': src,
                                   'weight': e['weight'],
                                   })
-        return [edges[i] for i in to_keep] + new_edges
+        return [edge_dict[i] for i in to_keep] + new_edges
 
     def _load_raw(self):
         def _parse_concept(_raw_concept, filter_pos=False):
@@ -259,12 +267,12 @@ def main():
 
     with open('cache/cnet_hd2.pkl', 'rb') as f:
         cnet_edges = pickle.load(f)
-    cnet = Conceptnet(edges=cnet_edges)
+    cnet = Conceptnet(edge_dict=cnet_edges)
     print(cnet.nodes[:5])
 
     # cnet.export_to_deepwalk_edge_list()
 
-    hd_preds = {noun.split('_')[0] for noun in set(hd.predicates) - {hd.null_interaction}}
+    hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
     print(hd_nodes - set(cnet.nodes))
 

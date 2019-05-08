@@ -33,7 +33,7 @@ class ConceptnetKnowledgeExtractor:
             with open(paths_fn, 'wb') as f:
                 pickle.dump(all_paths, f)
 
-        # self.print_paths(dataset, all_paths, self._path_sep)
+        self.print_paths(dataset, all_paths, self._path_sep)
 
         op_mat = np.array([[1 if obj in pred_paths.keys() else 0 for obj in dataset.objects] for pred_paths in all_paths]).T
         return op_mat
@@ -125,7 +125,7 @@ class ConceptnetKnowledgeExtractor:
     @staticmethod
     def print_paths(hicodet: HicoDet, all_paths, sep, verbose=False):
         assert len(hicodet.predicates) == len(all_paths)
-        wes = [WordEmbeddings(source='numberbatch', normalize=True), WordEmbeddings(source='glove', normalize=True)]
+        wes = [WordEmbeddings(source='numberbatch', normalize=True), WordEmbeddings(source='glove', normalize=True, dim=200)]
 
         hico_we_sim_mats = []
         for we in wes:
@@ -160,7 +160,7 @@ def main():
 
     cnet_ex = ConceptnetKnowledgeExtractor()
     dataset = HicoDet()
-    cnet_op_mat = cnet_ex.extract_freq_matrix(dataset, len_max_path=1)
+    cnet_op_mat = cnet_ex.extract_freq_matrix(dataset, len_max_path=2)
 
     # Hico object-predicate matrix
     hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
@@ -169,5 +169,43 @@ def main():
     plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
 
 
+def plot():
+    with open('cache/cnet_hd2.pkl', 'rb') as f:
+        cnet_edges = pickle.load(f)
+    cnet = Conceptnet(edge_dict=cnet_edges)
+    print('settle' in [cnet._edge_dict[i]['dst'] for i in cnet.edges_from['adjust']])
+    exit(0)
+
+    with open('cache/cnet_hd2_rel2.pkl', 'rb') as f:
+        d = pickle.load(f)
+        nodes = d['nodes']
+        cnet_rel = d['rel']
+        node_inv_index = {n: i for i, n in enumerate(nodes)}
+
+    dataset = HicoDet()
+    hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
+    for i in range(len(dataset.interaction_list)):
+        hico_op_mat[dataset.get_object_index(i), dataset.get_predicate_index(i)] = 1
+
+    # l = len(nodes)
+    # l = 40
+    # plot_mat(cnet_rel[:l, :l], nodes[:l], nodes[:l])
+
+    cnet_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
+    for i, o in enumerate(dataset.objects):
+        o = 'hair_dryer' if o == 'hair_drier' else o
+        oidx = node_inv_index[o]
+        for j, p in enumerate(dataset.predicates):
+            if p == dataset.null_interaction:
+                continue
+            p = p.split('_')[0]
+            pidx = node_inv_index[p]
+            cnet_op_mat[i, j] = cnet_rel[oidx, pidx]
+    cnet_op_mat = np.minimum(1, cnet_op_mat)
+
+    plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
+
+
 if __name__ == '__main__':
-    main()
+    # main()
+    plot()
