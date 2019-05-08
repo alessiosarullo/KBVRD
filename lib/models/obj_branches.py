@@ -157,7 +157,7 @@ class EmbObjBranch(nn.Module):
         with torch.set_grad_enabled(self.training):
             vis_repr = self.vis_repr_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
             emb_repr = self.emb_repr_fc(torch.cat([boxes_ext[:, 5:].detach() @ self.obj_embs, boxes_ext[:, 5:]], dim=1))
-            object_repr = self.obj_repr_fc(torch.cat([vis_repr, emb_repr], axis=1))
+            object_repr = self.obj_repr_fc(torch.cat([vis_repr, emb_repr], dim=1))
             return object_repr
 
     @property
