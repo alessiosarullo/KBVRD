@@ -101,7 +101,7 @@ class Conceptnet:
         right = adj[:, inds]
         if walk_length >= 1:
             rel_with_variants += adj[inds, :][:, inds]  # similarly, equivalent to diag(inds) @ adj @ diag(inds)
-        for step in range(2, walk_length):
+        for step in range(1, walk_length):
             # Equivalent to diag(inds) @ adj^step @ diag(inds)
             rel_with_variants += left @ right
 
