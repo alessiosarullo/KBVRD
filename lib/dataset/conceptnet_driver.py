@@ -82,6 +82,7 @@ class Conceptnet:
         self._init()
 
     def find_relations(self, src_nodes, walk_length=1):
+        src_nodes = sorted(src_nodes)
         node_variants_index = {(n + tag): i for i, n in enumerate(src_nodes) for tag in [''] + ['/' + t for t in self.pos_tags]}
 
         nodes_of_interest = list(set(node_variants_index.keys()) & set(self.nodes))
@@ -112,7 +113,7 @@ class Conceptnet:
             src_to_inds[node_variants_index[self.nodes[idx]], i] = 1
         rel = np.minimum(1, src_to_inds @ rel_with_variants @ src_to_inds.T)
         rel[np.arange(num_nodes), np.arange(num_nodes)] = 0
-        return rel
+        return rel, src_nodes
 
     def save(self, file_path):
         with open(file_path, 'wb') as f:
@@ -284,13 +285,14 @@ def save_cnet_hd(radius=2, walk_length=2):
     cnet.filter_nodes(hd_nodes, radius=radius)
     cnet.save(file_path='cache/cnet_hd%d.pkl' % radius)
 
-    rel = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length)
+    rel, rel_nodes = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length)
+    assert set(rel_nodes) == set(hd_nodes)
     with open('cache/cnet_hd%d_rel%d.pkl' % (radius, walk_length), 'wb') as f:
-        pickle.dump({'nodes': hd_nodes,
+        pickle.dump({'nodes': rel_nodes,
                      'rel': rel,
                      }, f)
 
-    return cnet, hd, hd_nodes, rel
+    return cnet, hd, rel_nodes, rel
 
 
 def main():
