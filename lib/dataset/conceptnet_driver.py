@@ -44,6 +44,13 @@ class Conceptnet:
     def num_edges(self):
         return self.edges.shape[0]
 
+    # "Getters"
+    def neighbours_out(self, node: str):
+        return sorted([self.nodes[self.edges[ei, 1]] for ei in self.edges_from[self.node_index[node]]])
+
+    def neighbours_in(self, node: str):
+        return sorted([self.nodes[self.edges[ei, 0]] for ei in self.edges_to[self.node_index[node]]])
+
     # Public methods
     def has_pos_tag(self, entry, tag=None):
         if len(entry) > 2 and entry[-2] == '/':
