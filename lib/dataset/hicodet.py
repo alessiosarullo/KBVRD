@@ -45,7 +45,7 @@ class HicoDetInstanceSplit(Dataset):
         self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
         # Compute mappings to and from COCO
-        coco_obj_to_idx = {c.replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
+        coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
         assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hicodet_driver.objects)
         self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.objects], dtype=np.int)
 
