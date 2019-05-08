@@ -256,6 +256,22 @@ class ObjectOnlyWordEmbModel(ObjectOnlyEmbModel):
         torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
 
+class ObjectOnlyWordEmb7Model(ObjectOnlyEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'objonlywordemb7'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_embs = word_embs.get_embeddings(['hair_dryer' if o == 'hair_drier' else o for o in dataset.objects])
+
+        self.obj_embs = nn.Parameter(torch.from_numpy(np.tile(obj_embs, reps=[1, 7])), requires_grad=False)
+        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
+        torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+
+
 class ActionOnlyModel(GenericModel):
     @classmethod
     def get_cline_name(cls):

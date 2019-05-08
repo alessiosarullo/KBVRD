@@ -171,10 +171,9 @@ def main():
 
 def plot():
     cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
-    print(cnet.node_index['settle'] in [i for i in cnet.edges_from[cnet.node_index['adjust']]])
 
     dataset = HicoDet()
-    with open('cache/cnet_hd2_rel2.pkl', 'rb') as f:
+    with open('cache/cnet_hd2_rel3-v.pkl', 'rb') as f:
         d = pickle.load(f)
         nodes = d['nodes']
         cnet_rel = d['rel']
