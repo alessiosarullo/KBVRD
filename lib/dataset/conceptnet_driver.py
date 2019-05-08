@@ -88,21 +88,30 @@ class Conceptnet:
         self._edge_dict = [e for e in self._edge_dict if e['src'] in keep_str and e['dst'] in keep_str]
         self._init()
 
-    def find_relations(self, src_nodes, walk_length=1):
+    def find_relations(self, src_nodes, walk_length=1, path_filter=None):
+        if path_filter is not None:
+            assert path_filter in self.pos_tags
+            path_filter = '/' + path_filter
         src_nodes = sorted(src_nodes)
         node_variants_index = {(n + tag): i for i, n in enumerate(src_nodes) for tag in [''] + ['/' + t for t in self.pos_tags]}
 
         nodes_of_interest = list(set(node_variants_index.keys()) & set(self.nodes))
-        inds = np.array([self.node_index[h] for h in nodes_of_interest])
+        inds_ends = np.array([self.node_index[n] for n in nodes_of_interest])
 
         adj = self.get_adjacency_matrix()
-        rel_with_variants = np.zeros((inds.size, inds.size))
-        left = adj[inds, :]  # this is equivalent to diag(inds) @ adj, but more computationally efficient
-        right = adj[:, inds]
+        rel_with_variants = np.zeros((inds_ends.size, inds_ends.size))
         if walk_length >= 1:
-            rel_with_variants += adj[inds, :][:, inds]  # similarly, equivalent to diag(inds) @ adj @ diag(inds)
+            rel_with_variants += adj[inds_ends, :][:, inds_ends]  # similarly, equivalent to diag(inds_ends) @ adj @ diag(inds_ends)
+        if path_filter is None:
+            inds_intermediate = np.array([self.node_index[n] for n in self.nodes if n.endswith(path_filter)])
+            left = adj[inds_ends, :][:, inds_intermediate]
+            right = adj[inds_intermediate, :][:, inds_ends]
+            adj = adj[inds_intermediate, :][:, inds_intermediate]
+        else:
+            left = adj[inds_ends, :]  # this is equivalent to diag(inds_ends) @ adj, but more computationally efficient
+            right = adj[:, inds_ends]
         for step in range(1, walk_length):
-            # Equivalent to diag(inds) @ adj^step @ diag(inds)
+            # Equivalent to diag(inds_ends) @ adj^step @ diag(inds_ends)
             rel_with_variants += left @ right
 
             # The minimum is there because we don't care about how many paths are there
@@ -111,12 +120,12 @@ class Conceptnet:
                     left = np.minimum(1, left @ adj)
                 else:
                     right = np.minimum(1, adj @ right)
-        rel_with_variants[np.arange(inds.size), np.arange(inds.size)] = 0
+        rel_with_variants[np.arange(inds_ends.size), np.arange(inds_ends.size)] = 0
         rel_with_variants = np.minimum(1, rel_with_variants)
 
         num_nodes = len(src_nodes)
-        src_to_inds = np.zeros((num_nodes, inds.size))
-        for i, idx in enumerate(inds):
+        src_to_inds = np.zeros((num_nodes, inds_ends.size))
+        for i, idx in enumerate(inds_ends):
             src_to_inds[node_variants_index[self.nodes[idx]], i] = 1
         rel = np.minimum(1, src_to_inds @ rel_with_variants @ src_to_inds.T)
         rel[np.arange(num_nodes), np.arange(num_nodes)] = 0
@@ -282,7 +291,7 @@ class Conceptnet:
         return parsed_entries
 
 
-def save_cnet_hd(radius=2, walk_length=2):
+def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
     from lib.dataset.hicodet_driver import HicoDet
     hd = HicoDet()
     cnet = Conceptnet()
@@ -292,9 +301,9 @@ def save_cnet_hd(radius=2, walk_length=2):
     cnet.filter_nodes(hd_nodes, radius=radius)
     cnet.save(file_path='cache/cnet_hd%d.pkl' % radius)
 
-    rel, rel_nodes = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length)
+    rel, rel_nodes = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length, path_filter=path_filter)
     assert set(rel_nodes) == set(hd_nodes)
-    with open('cache/cnet_hd%d_rel%d.pkl' % (radius, walk_length), 'wb') as f:
+    with open('cache/cnet_hd%d_rel%d%s.pkl' % (radius, walk_length, '' if path_filter is None else '-' + path_filter), 'wb') as f:
         pickle.dump({'nodes': rel_nodes,
                      'rel': rel,
                      }, f)
