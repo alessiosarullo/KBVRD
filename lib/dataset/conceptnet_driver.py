@@ -274,15 +274,21 @@ class Conceptnet:
         return parsed_entries
 
 
-def save_cnet_hd():
+def save_cnet_hd(radius=2, walk_length=2):
     from lib.dataset.hicodet_driver import HicoDet
     hd = HicoDet()
     cnet = Conceptnet()
 
     hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
     hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
-    cnet.filter_nodes(hd_nodes, radius=2)
-    cnet.save(file_path='cache/cnet_hd2.pkl')
+    cnet.filter_nodes(hd_nodes, radius=radius)
+    cnet.save(file_path='cache/cnet_hd%d.pkl' % radius)
+
+    rel = cnet.find_relations(src_nodes=hd_nodes, walk_length=walk_length)
+    with open('cache/cnet_hd%d_rel%d.pkl' % (radius, walk_length), 'wb') as f:
+        pickle.dump({'nodes': hd_nodes,
+                     'rel': rel,
+                     }, f)
 
     return cnet, hd, hd_nodes
 
