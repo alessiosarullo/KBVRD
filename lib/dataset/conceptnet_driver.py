@@ -89,9 +89,6 @@ class Conceptnet:
         self._init()
 
     def find_relations(self, src_nodes, walk_length=1, path_filter=None):
-        if path_filter is not None:
-            assert path_filter in self.pos_tags
-            path_filter = '/' + path_filter
         src_nodes = sorted(src_nodes)
         node_variants_index = {(n + tag): i for i, n in enumerate(src_nodes) for tag in [''] + ['/' + t for t in self.pos_tags]}
 
@@ -103,13 +100,16 @@ class Conceptnet:
         if walk_length >= 1:
             rel_with_variants += adj[inds_ends, :][:, inds_ends]  # similarly, equivalent to diag(inds_ends) @ adj @ diag(inds_ends)
         if path_filter is None:
+            left = adj[inds_ends, :]  # this is equivalent to diag(inds_ends) @ adj, but more computationally efficient
+            right = adj[:, inds_ends]
+        else:
+            assert path_filter in self.pos_tags
+            path_filter = '/' + path_filter
+            print('Filtering to', path_filter)
             inds_intermediate = np.array([self.node_index[n] for n in self.nodes if n.endswith(path_filter)])
             left = adj[inds_ends, :][:, inds_intermediate]
             right = adj[inds_intermediate, :][:, inds_ends]
             adj = adj[inds_intermediate, :][:, inds_intermediate]
-        else:
-            left = adj[inds_ends, :]  # this is equivalent to diag(inds_ends) @ adj, but more computationally efficient
-            right = adj[:, inds_ends]
         for step in range(1, walk_length):
             # Equivalent to diag(inds_ends) @ adj^step @ diag(inds_ends)
             rel_with_variants += left @ right
