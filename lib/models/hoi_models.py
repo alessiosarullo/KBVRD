@@ -232,7 +232,7 @@ class ObjectOnlyRotateEmbModel(ObjectOnlyEmbModel):
             ecl_idx = [int(x) for x in ecl_idx]
             assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
             entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        obj_inds = np.array([entity_inv_index['hair_dryer' if o == 'hair_drier' else o] for o in dataset.objects])
+        obj_inds = np.array([entity_inv_index[o] for o in dataset.objects])
         obj_embs = entity_embs[obj_inds]
 
         self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
@@ -249,7 +249,7 @@ class ObjectOnlyWordEmbModel(ObjectOnlyEmbModel):
         self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_embs = word_embs.get_embeddings(['hair_dryer' if o == 'hair_drier' else o for o in dataset.objects])
+        obj_embs = word_embs.get_embeddings([o for o in dataset.objects])
 
         self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
         self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
@@ -265,11 +265,42 @@ class ObjectOnlyWordEmb7Model(ObjectOnlyEmbModel):
         self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_embs = word_embs.get_embeddings(['hair_dryer' if o == 'hair_drier' else o for o in dataset.objects])
+        obj_embs = word_embs.get_embeddings([o for o in dataset.objects])
 
         self.obj_embs = nn.Parameter(torch.from_numpy(np.tile(obj_embs, reps=[1, 7])), requires_grad=False)
         self.obj_output_fc = nn.Linear(self.obj_embs.shape[1], self.dataset.num_object_classes)
         torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
+
+
+class ActionOnlyGOEmbModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'gobjemb'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = EmbObjBranch(dataset=dataset, vis_dim=vis_feat_dim)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
+        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        hoi_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(hoi_repr)
+
+        return obj_logits, action_logits, None
 
 
 class ActionOnlyModel(GenericModel):
@@ -281,9 +312,9 @@ class ActionOnlyModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
@@ -312,9 +343,9 @@ class HoiOnlyModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, hoi_repr_dim=1024)  # FIXME magic constant
+        self.hoi_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, hoi_repr_dim=1024)  # FIXME magic constant
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_interactions, bias=True)
         torch.nn.init.xavier_normal_(self.hoi_output_fc.weight, gain=1.0)
 
@@ -343,10 +374,10 @@ class HoiModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)  # FIXME magic constant
-        self.hoi_branch = SimpleHoiBranch(self.act_branch.output_dim, self.obj_branch.repr_dim, hoi_repr_dim=1024)  # FIXME magic constant
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)  # FIXME magic constant
+        self.hoi_branch = SimpleHoiBranch(self.act_branch.output_dim, self.obj_branch.output_dim, hoi_repr_dim=1024)  # FIXME magic constant
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.act_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
         self.hoi_output_fc = nn.Linear(self.hoi_branch.output_dim, dataset.num_interactions, bias=True)
@@ -380,13 +411,13 @@ class EmbsimActModel(ActionOnlyModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)  # FIXME magic constant
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)  # FIXME magic constant
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.act_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
-        self.act_embsim_branch = ActEmbsimBranch(self.act_branch.output_dim, self.obj_branch.repr_dim, dataset)
+        self.act_embsim_branch = ActEmbsimBranch(self.act_branch.output_dim, self.obj_branch.output_dim, dataset)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -416,9 +447,9 @@ class KatoModel(GenericModel):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
 
-        self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim, dataset)
+        self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, dataset)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()

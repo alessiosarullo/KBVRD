@@ -297,7 +297,7 @@ def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
     cnet = Conceptnet()
 
     hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
-    hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
+    hd_nodes = set([obj for obj in hd.objects]) | hd_preds
     print('Filtering')
     cnet.filter_nodes(hd_nodes, radius=radius)
     cnet.save(file_path='cache/cnet_hd%d.pkl' % radius)
@@ -323,7 +323,7 @@ def main():
     # cnet.export_to_deepwalk_edge_list()
 
     hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
-    hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
+    hd_nodes = set([obj for obj in hd.objects]) | hd_preds
     print(hd_nodes - set(cnet.nodes))
 
     # cnet.find_relations(hd_nodes, walk_length=1)

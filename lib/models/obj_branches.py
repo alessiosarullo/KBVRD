@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from lib.dataset.hicodet import HicoDetInstanceSplit
+
 
 class SpatialContext(nn.Module):
     def __init__(self, input_dim, **kwargs):
@@ -100,22 +102,70 @@ class SimpleObjBranch(nn.Module):
         self.obj_fc_dim = 512
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
 
-        self.obj_emb_fc = nn.Sequential(*[
+        self.obj_repr_fc = nn.Sequential(*[
             nn.Linear(input_dim, self.obj_fc_dim),
             nn.ReLU(inplace=True),
         ])
 
     def forward(self, boxes_ext, box_feats, unique_im_ids, box_im_ids, **kwargs):
         with torch.set_grad_enabled(self.training):
-            object_embeddings = self.obj_emb_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
-            return object_embeddings
+            object_repr = self.obj_repr_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
+            return object_repr
 
     @property
     def ctx_dim(self):
         raise NotImplementedError()
 
     @property
-    def repr_dim(self):
+    def output_dim(self):
+        return self.obj_fc_dim
+
+
+class EmbObjBranch(nn.Module):
+    def __init__(self, dataset: HicoDetInstanceSplit, vis_dim, **kwargs):
+        super().__init__()
+        self.obj_fc_dim = 512
+        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
+
+        entity_embs = np.load('cache/rotate/entity_embedding.npy')  # FIXME path
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        obj_inds = np.array([entity_inv_index[o] for o in dataset.objects])
+        obj_embs = entity_embs[obj_inds]
+
+        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
+
+        self.vis_repr_fc = nn.Sequential(*[
+            nn.Linear(vis_dim + dataset.num_object_classes, self.obj_fc_dim),
+            nn.ReLU(inplace=True),
+        ])
+
+        self.emb_repr_fc = nn.Sequential(*[
+            nn.Linear(self.obj_embs.shape[1] + dataset.num_object_classes, self.obj_fc_dim),
+            nn.ReLU(inplace=True),
+        ])
+
+        self.obj_repr_fc = nn.Sequential(*[
+            nn.Linear(self.obj_fc_dim * 2, self.obj_fc_dim),
+            nn.ReLU(inplace=True),
+        ])
+
+    def forward(self, boxes_ext, box_feats, unique_im_ids, box_im_ids, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_repr = self.vis_repr_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
+            emb_repr = self.emb_repr_fc(torch.cat([boxes_ext[:, 5:].detach() @ self.obj_embs, boxes_ext[:, 5:]], dim=1))
+            object_repr = self.obj_repr_fc(torch.cat([vis_repr, emb_repr], axis=1))
+            return object_repr
+
+    @property
+    def ctx_dim(self):
+        raise NotImplementedError()
+
+    @property
+    def output_dim(self):
         return self.obj_fc_dim
 
 

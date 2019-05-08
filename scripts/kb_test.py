@@ -118,8 +118,8 @@ def main():
 
     else:
         # Plot
-        objects = ['hair_drier']
-        idx = hd.objects.index('hair_drier')
+        objects = ['hair_dryer']
+        idx = hd.objects.index('hair_dryer')
         freq_prior = freq_prior[[idx], :]
         imsitu_prior = imsitu_prior[[idx], :]
         plot_mat((imsitu_prior + freq_prior * 2) / 3, predicates, objects, plot=False)

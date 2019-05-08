@@ -67,7 +67,13 @@ class HicoDet:
         self.predicate_dict = pred_dict
 
         # Derived
-        self._objects = sorted(set([inter['obj'] for inter in self.interaction_list]))
+        objects = set([inter['obj'] for inter in self.interaction_list])
+        try:
+            objects.remove('hair_drier')
+            objects.add('hair_dryer')
+        except KeyError:
+            pass
+        self._objects = sorted(objects)
         self._predicates = list(self.predicate_dict.keys())
         self._obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
         self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}

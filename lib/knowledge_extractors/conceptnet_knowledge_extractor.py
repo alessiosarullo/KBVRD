@@ -189,7 +189,6 @@ def plot():
 
     cnet_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
     for i, o in enumerate(dataset.objects):
-        o = 'hair_dryer' if o == 'hair_drier' else o
         oidx = node_inv_index[o]
         for j, p in enumerate(dataset.predicates):
             if p == dataset.null_interaction:
