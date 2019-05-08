@@ -170,19 +170,26 @@ def main():
 
 
 def plot():
-    with open('cache/cnet_hd2.pkl', 'rb') as f:
-        cnet_edges = pickle.load(f)
-    cnet = Conceptnet(edge_dict=cnet_edges)
-    print('settle' in [cnet._edge_dict[i]['dst'] for i in cnet.edges_from['adjust']])
+    cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
+    print(cnet.node_index['settle'] in [i for i in cnet.edges_from[cnet.node_index['adjust']]])
     exit(0)
 
-    with open('cache/cnet_hd2_rel2.pkl', 'rb') as f:
-        d = pickle.load(f)
-        nodes = d['nodes']
-        cnet_rel = d['rel']
-        node_inv_index = {n: i for i, n in enumerate(nodes)}
-
     dataset = HicoDet()
+    try:
+        with open('cache/cnet_hd2_rel2.pkl', 'rb') as f:
+            d = pickle.load(f)
+            nodes = d['nodes']
+            cnet_rel = d['rel']
+            node_inv_index = {n: i for i, n in enumerate(nodes)}
+    except FileNotFoundError:
+        hd_preds = {p.split('_')[0] for p in set(dataset.predicates) - {dataset.null_interaction}}
+        hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in dataset.objects]) | hd_preds
+        rel = cnet.find_relations(src_nodes=hd_nodes, walk_length=2)
+        with open('cache/cnet_hd2_rel2.pkl', 'wb') as f:
+            pickle.dump({'nodes': cnet.nodes,
+                         'rel': rel,
+                         }, f)
+
     hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
     for i in range(len(dataset.interaction_list)):
         hico_op_mat[dataset.get_object_index(i), dataset.get_predicate_index(i)] = 1

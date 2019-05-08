@@ -9,7 +9,7 @@ from config import cfg
 
 
 class Conceptnet:
-    def __init__(self, edge_dict=None):
+    def __init__(self, file_path=None):
         self.pos_tags = ['n', 'v', 'a', 's', 'r']
         self.rels_to_filter = ['Antonym', 'DistinctFrom', 'NotCapableOf', 'NotDesires', 'NotHasProperty',
                                'dbpedia/capital', 'dbpedia/field', 'dbpedia/genre', 'dbpedia/genus', 'dbpedia/influencedBy',
@@ -21,12 +21,14 @@ class Conceptnet:
         self.path_raw_cnet_eng = os.path.join(data_dir, 'conceptnet560_en.txt')
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
 
-        if edge_dict is None:
-            self._edge_dict = self._load()
-        else:
-            self._edge_dict = edge_dict
         self.nodes = self.node_index = self.relations = self.relation_index = None
         self.edges = self.edge_rels = self.edge_weights = self.edges_from = self.edges_to = None
+        if file_path is None:
+            self._edge_dict = self._load()
+        else:
+            with open(file_path, 'rb') as f:
+                d = pickle.load(f)
+            self._edge_dict = d['_edge_dict']
         self._init()
 
     # Properties
@@ -52,17 +54,17 @@ class Conceptnet:
                 return entry[-1] == tag
         return False
 
-    def get_adjacency_matrix(self, force_dense=True):
+    def get_adjacency_matrix(self, sparse=False):
         num_nodes = self.num_nodes
-        if num_nodes**2 >= 1e10 and force_dense:
+        if num_nodes ** 2 >= 1e10 and not sparse:
             raise ValueError('Number of nodes is too big (%d) for a dense matrix.' % num_nodes)
 
         row, col = self.edges[:, 0], self.edges[:, 1]
-        try:
+        if sparse:
+            adj = scipy.sparse.csr_matrix((np.ones(row.size), (row, col)))
+        else:
             adj = np.zeros((num_nodes, num_nodes), dtype=np.float16)
             adj[row, col] = 1
-        except MemoryError:
-            adj = scipy.sparse.csr_matrix((np.ones(row.size), (row, col)))
         adj[np.arange(num_nodes), np.arange(num_nodes)] = 0
         return adj
 
@@ -86,14 +88,14 @@ class Conceptnet:
         inds = np.array([self.node_index[h] for h in nodes_of_interest])
 
         adj = self.get_adjacency_matrix()
-        rel = np.zeros((inds.size, inds.size))
+        rel_with_variants = np.zeros((inds.size, inds.size))
         left = adj[inds, :]  # this is equivalent to diag(inds) @ adj, but more computationally efficient
         right = adj[:, inds]
         if walk_length >= 1:
-            rel += adj[inds, :][:, inds]  # similarly, equivalent to diag(inds) @ adj @ diag(inds)
+            rel_with_variants += adj[inds, :][:, inds]  # similarly, equivalent to diag(inds) @ adj @ diag(inds)
         for step in range(2, walk_length):
             # Equivalent to diag(inds) @ adj^step @ diag(inds)
-            rel += left @ right
+            rel_with_variants += left @ right
 
             # The minimum is there because we don't care about how many paths are there
             if step + 1 < walk_length:
@@ -101,15 +103,26 @@ class Conceptnet:
                     left = np.minimum(1, left @ adj)
                 else:
                     right = np.minimum(1, adj @ right)
-        rel[np.arange(inds.size), np.arange(inds.size)] = 0
-        rel = np.minimum(1, rel)
+        rel_with_variants[np.arange(inds.size), np.arange(inds.size)] = 0
+        rel_with_variants = np.minimum(1, rel_with_variants)
 
-        src_to_inds = np.zeros((len(src_nodes), inds.size))
+        num_nodes = len(src_nodes)
+        src_to_inds = np.zeros((num_nodes, inds.size))
         for i, idx in enumerate(inds):
             src_to_inds[node_variants_index[self.nodes[idx]], i] = 1
-        rel = np.minimum(1, src_to_inds @ rel @ src_to_inds.T)
-        rel[np.arange(inds.size), np.arange(inds.size)] = 0
+        rel = np.minimum(1, src_to_inds @ rel_with_variants @ src_to_inds.T)
+        rel[np.arange(num_nodes), np.arange(num_nodes)] = 0
         return rel
+
+    def save(self, file_path):
+        with open(file_path, 'wb') as f:
+            pickle.dump({'nodes': self.nodes,
+                         'relations': self.relations,
+                         'edges': self.edges,
+                         'edge_rels': self.edge_rels,
+                         'edge_weights': self.edge_weights,
+                         '_edge_dict': self._edge_dict,  # FIXME this is not needed, but keeping it for not refactoring the constructor
+                         }, f)
 
     # Iterator methods
     def __iter__(self):
@@ -261,13 +274,24 @@ class Conceptnet:
         return parsed_entries
 
 
+def save_cnet_hd():
+    from lib.dataset.hicodet_driver import HicoDet
+    hd = HicoDet()
+    cnet = Conceptnet()
+
+    hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
+    hd_nodes = set(['hair_dryer' if obj == 'hair_drier' else obj for obj in hd.objects]) | hd_preds
+    cnet.filter_nodes(hd_nodes, radius=2)
+    cnet.save(file_path='cache/cnet_hd2.pkl')
+
+    return cnet, hd, hd_nodes
+
+
 def main():
     from lib.dataset.hicodet_driver import HicoDet
     hd = HicoDet()
 
-    with open('cache/cnet_hd2.pkl', 'rb') as f:
-        cnet_edges = pickle.load(f)
-    cnet = Conceptnet(edge_dict=cnet_edges)
+    cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
     print(cnet.nodes[:5])
 
     # cnet.export_to_deepwalk_edge_list()
