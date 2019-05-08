@@ -268,7 +268,7 @@ class ObjectOnlyWordEmb7Model(ObjectOnlyEmbModel):
         obj_embs = word_embs.get_embeddings(['hair_dryer' if o == 'hair_drier' else o for o in dataset.objects])
 
         self.obj_embs = nn.Parameter(torch.from_numpy(np.tile(obj_embs, reps=[1, 7])), requires_grad=False)
-        self.obj_output_fc = nn.Linear(obj_embs.shape[1], self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_embs.shape[1], self.dataset.num_object_classes)
         torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
 
 
