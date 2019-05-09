@@ -344,6 +344,7 @@ class ActOnlyEmbModel(GenericModel):
         self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
 
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
