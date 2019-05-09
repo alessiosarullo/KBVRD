@@ -109,6 +109,10 @@ class ActEmbsimBranch(AbstractHOIBranch):
                                                  nn.ReLU())
         nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
 
+    @property
+    def output_dim(self):
+        return self.word_emb_dim
+
     def _forward(self, hoi_feats, obj_feats, hoi_infos):
         sub_repr = self.sub_input_to_emb_fc(obj_feats)
         obj_repr = self.obj_input_to_emb_fc(obj_feats)
