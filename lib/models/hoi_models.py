@@ -406,7 +406,7 @@ class ActOnlyEmbModel(GenericModel):
         return obj_logits, action_logits, act_emb_logits, None
 
 
-class ActOnlyWordembModel(ObjectOnlyEmbModel):
+class ActOnlyWordembModel(ActOnlyEmbModel):
     @classmethod
     def get_cline_name(cls):
         return 'actonlywordemb'
@@ -418,7 +418,7 @@ class ActOnlyWordembModel(ObjectOnlyEmbModel):
         return act_embs
 
 
-class ActOnlyRotateEmbModel(ObjectOnlyEmbModel):
+class ActOnlyRotateEmbModel(ActOnlyEmbModel):
     @classmethod
     def get_cline_name(cls):
         return 'actonlygemb'
