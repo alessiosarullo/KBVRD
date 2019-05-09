@@ -1,24 +1,22 @@
-import numpy as np
-import torch
-
 import matplotlib
-from matplotlib import pyplot as plt
+import numpy as np
 from matplotlib import gridspec
+from matplotlib import pyplot as plt
 
 from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Example
+from lib.dataset.utils import get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
 from lib.stats.evaluator import Evaluator
-from lib.dataset.utils import get_counts
 
 matplotlib.use('Qt5Agg')
 
+
 def main():
     np.random.seed(3)
-    import sys
     # sys.argv += ['--prinds', '2,3,5,6,7,8,9,10,11,13,15,16,17,19,22,23,24,25,27,28,29,33,36,40,41,'
     #                          '43,45,48,49,51,52,53,55,56,58,59,60,61,63,64,66,67,69,70,71,73,74,75,'
     #                          '76,77,80,81,83,84,88,89,90,91,102,104,105,107,108,111']
@@ -70,51 +68,60 @@ def main():
 
     hd = HicoDetInstanceSplit.get_split(Splits.TEST, load_precomputed=False)  # type: HicoDetInstanceSplit
     if 1:
-        all_predictions = []
-        modes = ['freq', 'imsitu',
-                 'sum', 'smax', 'mul',
-                 'rnd', 'gt']
-        mode = modes[4]
-        print('Mode: %s.' % mode)
-        for im_idx in range(len(hd)):
-            ex = hd.get_entry(im_idx, read_img=False, ignore_precomputed=True)  # type: Example
-            obj_labels_onehot = np.zeros((ex.gt_obj_classes.shape[0], hd.num_object_classes))
-            obj_labels_onehot[np.arange(obj_labels_onehot.shape[0]), ex.gt_obj_classes] = 1
-            hoi_obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]
-
-            if mode == modes[0]:
-                action_scores = freq_prior[hoi_obj_labels, :].astype(np.float)
-            elif mode == modes[1]:
-                action_scores = imsitu_prior[hoi_obj_labels, :].astype(np.float)
-            elif mode == modes[2]:
-                action_scores = prior_sum[hoi_obj_labels, :].astype(np.float)
-            elif mode == modes[3]:
-                action_scores = prior_smax[hoi_obj_labels, :].astype(np.float)
-            elif mode == modes[4]:
-                action_scores = prior_mul[hoi_obj_labels, :].astype(np.float)
-            elif mode == modes[-2]:
-                hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
-                hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), np.random.randint(hd.num_predicates, size=hoi_labels_onehot.shape[0])] = 1
-                action_scores = hoi_labels_onehot
-            elif mode == modes[-1]:
-                hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
-                hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), ex.gt_hois[:, 1]] = 1
-                action_scores = hoi_labels_onehot
-            else:
-                raise ValueError('Unknown mode %s.' % mode)
-
-            prediction = Prediction(obj_im_inds=np.full_like(ex.gt_obj_classes, fill_value=im_idx),
-                                    obj_boxes=ex.gt_boxes,
-                                    obj_scores=obj_labels_onehot,
-                                    ho_img_inds=np.array([im_idx]),
-                                    ho_pairs=ex.gt_hois[:, [0, 2]],
-                                    action_scores=action_scores)
-            all_predictions.append(vars(prediction))
-
-        print('Predictions computed.')
+        possible_modes = ['freq', 'imsitu',
+                          'sum', 'smax', 'mul',
+                          'rnd', 'gt']
         evaluator = Evaluator(hd, iou_thresh=0.999)  # type: Evaluator
-        evaluator.evaluate_predictions(all_predictions)
-        evaluator.print_metrics()
+        results = []
+
+        for m in [0, 1, 4, 5]:
+            all_predictions = []
+            mode = possible_modes[m]
+            print('Mode: %s.' % mode)
+            for im_idx in range(len(hd)):
+                ex = hd.get_entry(im_idx, read_img=False, ignore_precomputed=True)  # type: Example
+                obj_labels_onehot = np.zeros((ex.gt_obj_classes.shape[0], hd.num_object_classes))
+                obj_labels_onehot[np.arange(obj_labels_onehot.shape[0]), ex.gt_obj_classes] = 1
+                hoi_obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]
+
+                if mode == possible_modes[0]:
+                    action_scores = freq_prior[hoi_obj_labels, :].astype(np.float)
+                elif mode == possible_modes[1]:
+                    action_scores = imsitu_prior[hoi_obj_labels, :].astype(np.float)
+                elif mode == possible_modes[2]:
+                    action_scores = prior_sum[hoi_obj_labels, :].astype(np.float)
+                elif mode == possible_modes[3]:
+                    action_scores = prior_smax[hoi_obj_labels, :].astype(np.float)
+                elif mode == possible_modes[4]:
+                    action_scores = prior_mul[hoi_obj_labels, :].astype(np.float)
+                elif mode == possible_modes[-2]:
+                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
+                    hoi_labels_onehot[
+                        np.arange(hoi_labels_onehot.shape[0]), np.random.randint(hd.num_predicates, size=hoi_labels_onehot.shape[0])] = 1
+                    action_scores = hoi_labels_onehot
+                elif mode == possible_modes[-1]:
+                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
+                    hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), ex.gt_hois[:, 1]] = 1
+                    action_scores = hoi_labels_onehot
+                else:
+                    raise ValueError('Unknown mode %s.' % mode)
+
+                prediction = Prediction(obj_im_inds=np.full_like(ex.gt_obj_classes, fill_value=im_idx),
+                                        obj_boxes=ex.gt_boxes,
+                                        obj_scores=obj_labels_onehot,
+                                        ho_img_inds=np.array([im_idx]),
+                                        ho_pairs=ex.gt_hois[:, [0, 2]],
+                                        action_scores=action_scores)
+                all_predictions.append(vars(prediction))
+
+            print('Predictions computed.')
+            evaluator.evaluate_predictions(all_predictions)
+            evaluator.print_metrics()
+
+            results.append(evaluator.metrics['M-mAP'])
+
+        for r in results:
+            print(r)
 
     else:
         # Plot

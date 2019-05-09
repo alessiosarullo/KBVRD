@@ -16,7 +16,9 @@ class Evaluator:
         self.num_hoi_thr = num_hoi_thr
 
         self.dataset = dataset
+        self._init()
 
+    def _init(self):
         self.gt_hoi_classes = []
         self.predict_hoi_scores = []
         self.pred_gt_ho_assignment = []
@@ -25,6 +27,7 @@ class Evaluator:
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
     def evaluate_predictions(self, predictions: List[Dict]):
+        self._init()
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):

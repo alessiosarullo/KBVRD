@@ -94,8 +94,8 @@ class ActEmbsimBranch(AbstractHOIBranch):
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        self.act_key_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=False)
-        self.act_value_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=True)
+        self.act_key_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.act_value_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=True)
         self.keys_cossim = torch.nn.CosineSimilarity(dim=1)
         self.att_softmax = torch.nn.Softmax(dim=1)
 
@@ -118,7 +118,7 @@ class ActEmbsimBranch(AbstractHOIBranch):
         obj_repr = self.obj_input_to_emb_fc(obj_feats)
         pred_repr = self.pred_input_to_emb_fc(hoi_feats)
         op_repr = sub_repr[hoi_infos[:, 1], :] + pred_repr + obj_repr[hoi_infos[:, 2], :]
-        att_weights = self.keys_cossim(op_repr.unsqueeze(dim=2), self.act_key_embs.unsqueeze(dim=0))
+        att_weights = self.keys_cossim(op_repr.unsqueeze(dim=2), self.act_key_embs.t().unsqueeze(dim=0))
         act_repr = self.att_softmax(self.att_temp * att_weights) @ self.act_value_embs
         return act_repr
 
