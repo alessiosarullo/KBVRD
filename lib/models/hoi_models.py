@@ -427,7 +427,7 @@ class EmbsimActModel(ActionOnlyModel):
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
-        act_repr = self.act_embsim_branch(union_boxes_feats, obj_repr, hoi_infos)
+        act_repr = self.act_branch(union_boxes_feats, obj_repr, hoi_infos)
         act_logits = self.act_output_fc(act_repr)
 
         return obj_logits, act_logits, None
