@@ -200,7 +200,7 @@ class OptimizerConfig(BaseConfigs):
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
-        self.num_epochs = 5
+        self.num_epochs = 10
         self.img_batch_size = 8
         self.hoi_batch_size = 64
         self.hoi_bg_ratio = 3
