@@ -187,6 +187,16 @@ class HicoDetInstanceSplit(Dataset):
             raise AttributeError('There is not precomputed data.')
         return self.pc_feats_file['action_labels'].shape[0]
 
+    def get_preds_for_embs(self, keep_prepositions=False):
+        preds = []
+        for p in self.predicates:
+            if p != self.hicodet.null_interaction:
+                p = p.replace('_', ' ')
+            if not keep_prepositions:
+                p = p.split(' ')[0]
+            preds.append(p)
+        return preds
+
     def compute_gt_data(self, annotations):
         predicate_index = {p: i for i, p in enumerate(self.predicates)}
         object_index = {o: i for i, o in enumerate(self.objects)}

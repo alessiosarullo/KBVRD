@@ -328,10 +328,111 @@ class ActionOnlyModel(GenericModel):
         obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
         obj_logits = self.obj_output_fc(obj_repr)
 
-        hoi_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
-        action_logits = self.action_output_fc(hoi_repr)
+        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(act_repr)
 
         return obj_logits, action_logits, None
+
+
+class ActOnlyEmbModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        raise NotImplementedError()
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
+
+        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
+
+        self.act_embs = nn.Parameter(torch.from_numpy(self.get_embeddings()), requires_grad=False)
+        self.act_emb_output_fc = nn.Linear(self.act_embs.shape[1], dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.act_emb_output_fc.weight, gain=1.0)
+
+    def get_embeddings(self):
+        raise NotImplementedError()
+
+    def get_losses(self, x, **kwargs):
+        obj_output, action_output, act_emb_output, box_labels, action_labels, hoi_labels = self(x, inference=False, **kwargs)
+        losses = {}
+        if obj_output is not None:
+            losses['object_loss'] = nn.functional.cross_entropy(obj_output, box_labels)
+        losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
+        losses['act_emb_loss'] = nn.functional.binary_cross_entropy_with_logits(act_emb_output, action_labels) * act_emb_output.shape[1]
+        assert losses
+        return losses
+
+    def forward(self, x: Minibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = \
+                self.visual_module(x, inference)
+            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+            # Masks are floats at this point.
+
+            if hoi_infos is not None:
+                obj_output, action_output, act_emb_output, hoi_output = \
+                    self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels, action_labels)
+            else:
+                obj_output = action_output = act_emb_output = hoi_output = None
+
+            if not inference:
+                assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
+                return obj_output, action_output, act_emb_output, box_labels, action_labels, None
+            else:
+                im_scales = x.img_infos[:, 2].cpu().numpy()
+                return self._prepare_prediction(obj_output, act_emb_output, hoi_output, hoi_infos, boxes_ext, im_scales)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(act_repr)
+
+        if action_labels is None:
+            act_emb_logits = self.act_emb_output_fc(self.act_embs[torch.argmax(action_logits.detach(), dim=1)])
+            # act_emb_logits = self.act_emb_output_fc(action_logits.detach() @ self.act_embs)
+        else:
+            act_emb_logits = self.act_emb_output_fc(action_labels @ self.act_embs)
+
+        return obj_logits, action_logits, act_emb_logits, None
+
+
+class ActOnlyWordembModel(ObjectOnlyEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'actonlywordemb'
+
+    def get_embeddings(self):
+        word_emb_dim = 300
+        word_embs = WordEmbeddings(source='glove', dim=word_emb_dim)
+        act_embs = word_embs.get_embeddings([o for o in self.dataset.predicates])
+        return act_embs
+
+
+class ActOnlyRotateEmbModel(ObjectOnlyEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'actonlygemb'
+
+    def get_embeddings(self):
+        entity_embs = np.load('cache/rotate/entity_embedding.npy')
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        act_inds = np.array([entity_inv_index[o] for o in self.dataset.predicates])
+        act_embs = entity_embs[act_inds]
+        return act_embs
 
 
 class HoiOnlyModel(GenericModel):

@@ -1,8 +1,6 @@
-import os
-
 import cv2
-import numpy as np
 import matplotlib
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 
@@ -118,14 +116,16 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
     return texts
 
 
-def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, axes=None, cbar=False, bin_colours=False, grid=False, plot=True):
+def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
+             axes=None, vrange=(0, 1), cbar=False, bin_colours=False, grid=False, plot=True, title=None):
     lfsize = 8
     if axes is None:
         plt.figure(figsize=(16, 9))
         ax = plt.gca()
     else:
         ax = axes
-    mat_ax = ax.matshow(mat, cmap=plt.get_cmap('jet', **({'lut': 5} if bin_colours else {})), vmin=0, vmax=1)
+    mat_ax = ax.matshow(mat, cmap=plt.get_cmap('jet', **({'lut': 5} if bin_colours else {})),
+                        **({'vmin': vrange[0], 'vmax': vrange[1]} if vrange is not None else {}))
     if cbar:
         plt.colorbar(mat_ax, ax=ax,
                      # fraction=0.04,
@@ -163,6 +163,9 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, axes=None,
     ax.set_xticks(min_ticks, minor=True)
     ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='right', rotation_mode='anchor')
     ax.tick_params(axis='x', which='minor', top=True, labeltop=False, bottom=True, labelbottom=True, labelsize=lfsize)
+
+    if title is not None:
+        ax.set_title(title)
 
     if grid:
         ax.grid(which='major', color='k', linestyle='-', linewidth=1)
