@@ -444,7 +444,7 @@ class EmbsimActPredModel(ActionOnlyModel):
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.act_branch = ActEmbsimBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, dataset)
 
-        self.act_embsim_branch = ActEmbsimPredBranch(vis_feat_dim, self.obj_branch.output_dim, dataset)
+        self.act_embsim_branch = ActEmbsimPredBranch(self.act_branch.output_dim, self.obj_branch.output_dim, dataset)
 
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.act_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
@@ -463,7 +463,7 @@ class EmbsimActPredModel(ActionOnlyModel):
         act_repr = self.act_branch(union_boxes_feats, obj_repr, hoi_infos)
         act_logits = self.act_output_fc(act_repr)
 
-        emb_act_logits = self.act_embsim_branch(union_boxes_feats, obj_repr, hoi_infos)
+        emb_act_logits = self.act_embsim_branch(act_repr, obj_repr, hoi_infos)
         act_logits = act_logits + emb_act_logits
 
         return obj_logits, act_logits, None
