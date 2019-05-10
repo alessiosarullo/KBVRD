@@ -442,7 +442,6 @@ class EmbsimActPredModel(ActionOnlyModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)  # FIXME magic constant
 
         self.act_embsim_branch = ActEmbsimPredBranch(vis_feat_dim, self.obj_branch.output_dim, dataset)
 
