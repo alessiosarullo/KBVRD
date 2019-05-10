@@ -134,6 +134,7 @@ def main():
         increment_inds = increment_inds[inds]
         np.set_printoptions(precision=2, suppress=True, linewidth=300, edgeitems=20)
         print(np.stack([results[2][increment_inds] / (results[0][increment_inds] + 1e-8), r[increment_inds] * 100, increment_inds], axis=0))
+        print(['%d (%s %s)' % (i, hd.hicodet.interaction_list[i]['pred'], hd.hicodet.interaction_list[i]['obj']) for i in increment_inds])
 
     else:
         # Plot

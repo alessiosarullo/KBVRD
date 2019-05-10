@@ -35,8 +35,17 @@ def plot():
     oe /= np.linalg.norm(oe, axis=1, keepdims=True) + 1e-6
     pe /= np.linalg.norm(pe, axis=1, keepdims=True) + 1e-6
     op_sim = np.sum(oe[:, None, :] * pe[None, :, :], axis=2)
+    op_sim_exp = np.exp(5 * op_sim)
+    op_sim = np.maximum(op_sim_exp / op_sim_exp.sum(axis=1, keepdims=True), op_sim_exp / op_sim_exp.sum(axis=0, keepdims=True))
+    op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
+    op_sim[:, 0] = 0
     op_sims.append(op_sim)
     plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False)
+
+    # [[1274.6  1277.96  795.53  654.09  605.21  274.13  437.98  352.14  697.77
+    #  [  34.1    28.76   28.17   14.68   13.59   11.88   11.69    7.88    7.43
+    #  [ 262.    405.    389.    350.    334.    239.    427.    552.    395.  ]
+    # 
 
     emb_dim = 1000
     emb_range = (24.0 + 2.0) / emb_dim  # (self.gamma.item() + self.epsilon) / hidden_dim
