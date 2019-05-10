@@ -1,16 +1,11 @@
-import math
-
 import numpy as np
 import torch
 from torch import nn as nn
-from torch.nn.utils.rnn import PackedSequence
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import get_counts
 from lib.dataset.word_embeddings import WordEmbeddings
-from lib.knowledge_extractors.conceptnet_knowledge_extractor import ConceptnetKnowledgeExtractor
-from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.abstract_model import AbstractHOIBranch
 
 
@@ -82,76 +77,6 @@ class HoiPriorBranch(AbstractHOIBranch):
         return hoi_logits
 
 
-class ActEmbsimBranch(AbstractHOIBranch):
-    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        # TODO docs and FIXME comments
-        self.word_emb_dim = 300
-        self.att_temp = 5
-        super().__init__(**kwargs)
-        self.num_objects = dataset.num_object_classes
-        self.num_predicates = dataset.num_predicates
-
-        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
-
-        self.act_key_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-        self.act_value_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=True)
-        self.keys_cossim = torch.nn.CosineSimilarity(dim=1)
-        self.att_softmax = torch.nn.Softmax(dim=1)
-
-        self.sub_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
-                                                 nn.ReLU())
-        nn.init.xavier_normal_(self.sub_input_to_emb_fc[0].weight, gain=1.0)
-        self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
-                                                 nn.ReLU())
-        nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
-        self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(pred_input_dim, self.word_emb_dim),
-                                                 nn.ReLU())
-        nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
-
-    @property
-    def output_dim(self):
-        return self.word_emb_dim
-
-    def _forward(self, hoi_feats, obj_feats, hoi_infos):
-        sub_repr = self.sub_input_to_emb_fc(obj_feats)
-        obj_repr = self.obj_input_to_emb_fc(obj_feats)
-        pred_repr = self.pred_input_to_emb_fc(hoi_feats)
-        op_repr = sub_repr[hoi_infos[:, 1], :] + pred_repr + obj_repr[hoi_infos[:, 2], :]
-        att_weights = self.keys_cossim(op_repr.unsqueeze(dim=2), self.act_key_embs.t().unsqueeze(dim=0))
-        act_repr = self.att_softmax(self.att_temp * att_weights) @ self.act_value_embs
-        return act_repr
-
-
-class ActEmbsimPredBranch(AbstractHOIBranch):
-    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
-        self.word_emb_dim = 300
-        super().__init__(**kwargs)
-        self.num_objects = dataset.num_object_classes
-        self.num_predicates = dataset.num_predicates
-
-        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
-
-        self.act_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=False)
-        self.op_cossim = torch.nn.CosineSimilarity(dim=1)
-
-        self.sub_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
-        nn.init.xavier_normal_(self.sub_input_to_emb_fc.weight, gain=1.0)
-        self.obj_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
-        nn.init.xavier_normal_(self.obj_input_to_emb_fc.weight, gain=1.0)
-        self.pred_input_to_emb_fc = nn.Linear(pred_input_dim, self.word_emb_dim)
-        nn.init.xavier_normal_(self.pred_input_to_emb_fc.weight, gain=1.0)
-
-    def _forward(self, hoi_feats, obj_feats, hoi_infos):
-        sub_repr = self.sub_input_to_emb_fc(obj_feats)
-        obj_repr = self.obj_input_to_emb_fc(obj_feats)
-        pred_repr = self.pred_input_to_emb_fc(hoi_feats)
-        op_repr = sub_repr[hoi_infos[:, 1], :] + pred_repr + obj_repr[hoi_infos[:, 2], :]
-        act_logits = self.op_cossim(op_repr.unsqueeze(dim=2), self.act_embs.unsqueeze(dim=0))
-        return act_logits
-
-
 class HoiEmbsimBranch(AbstractHOIBranch):
     def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
@@ -174,17 +99,6 @@ class HoiEmbsimBranch(AbstractHOIBranch):
         nn.init.xavier_normal_(self.obj_input_to_emb_fc.weight, gain=1.0)
         self.pred_input_to_emb_fc = nn.Linear(pred_input_dim, self.word_emb_dim)
         nn.init.xavier_normal_(self.pred_input_to_emb_fc.weight, gain=1.0)
-
-        # self.obj_input_to_emb_fc = nn.Sequential(nn.Linear(obj_input_dim, self.word_emb_dim),
-        #                                          nn.ReLU(),
-        #                                          nn.Linear(self.word_emb_dim, self.word_emb_dim))
-        # nn.init.xavier_normal_(self.obj_input_to_emb_fc[0].weight, gain=1.0)
-        # nn.init.xavier_normal_(self.obj_input_to_emb_fc[2].weight, gain=1.0)
-        # self.pred_input_to_emb_fc = nn.Sequential(nn.Linear(pred_input_dim, self.word_emb_dim),
-        #                                           nn.ReLU(),
-        #                                           nn.Linear(self.word_emb_dim, self.word_emb_dim))
-        # nn.init.xavier_normal_(self.pred_input_to_emb_fc[0].weight, gain=1.0)
-        # nn.init.xavier_normal_(self.pred_input_to_emb_fc[2].weight, gain=1.0)
 
     def _forward(self, hoi_feats, obj_feats, hoi_infos):
         obj_repr = self.obj_input_to_emb_fc(obj_feats)

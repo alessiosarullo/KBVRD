@@ -1,0 +1,1 @@
+raise ImportError('Classes from this module should not be used.')

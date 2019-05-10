@@ -169,38 +169,5 @@ def main():
     plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
 
 
-def plot():
-    cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
-
-    dataset = HicoDet()
-    with open('cache/cnet_hd2_rel3-v.pkl', 'rb') as f:
-        d = pickle.load(f)
-        nodes = d['nodes']
-        cnet_rel = d['rel']
-        node_inv_index = {n: i for i, n in enumerate(nodes)}
-
-    hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
-    for i in range(len(dataset.interaction_list)):
-        hico_op_mat[dataset.get_object_index(i), dataset.get_predicate_index(i)] = 1
-
-    # l = len(nodes)
-    # l = 40
-    # plot_mat(cnet_rel[:l, :l], nodes[:l], nodes[:l])
-
-    cnet_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
-    for i, o in enumerate(dataset.objects):
-        oidx = node_inv_index[o]
-        for j, p in enumerate(dataset.predicates):
-            if p == dataset.null_interaction:
-                continue
-            p = p.split('_')[0]
-            pidx = node_inv_index[p]
-            cnet_op_mat[i, j] = cnet_rel[oidx, pidx]
-    cnet_op_mat = np.minimum(1, cnet_op_mat)
-
-    plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
-
-
 if __name__ == '__main__':
-    # main()
-    plot()
+    main()
