@@ -446,7 +446,7 @@ class EmbsimActPredModel(ActionOnlyModel):
 
         self.act_embsim_branch = ActEmbsimPredBranch(vis_feat_dim, self.obj_branch.repr_dim, dataset)
 
-        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.act_output_fc = nn.Linear(dataset.num_predicates, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
