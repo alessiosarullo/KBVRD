@@ -10,7 +10,7 @@ from lib.dataset.utils import Splits, Example
 from lib.dataset.utils import get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.utils import Prediction
-from lib.stats.evaluator import Evaluator
+from lib.stats.evaluator import Evaluator, MetricFormatter
 
 matplotlib.use('Qt5Agg')
 
@@ -120,8 +120,20 @@ def main():
 
             results.append(evaluator.metrics['M-mAP'])
 
-        for r in results:
-            print(r)
+        r = results[2] - results[0]
+        mf = MetricFormatter()
+        lines = []
+        hoi_triplets = hd.hoi_triplets
+        hois = hd.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
+        hoi_metrics = {'Diff-M-mAP': r}
+        lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=False)
+        print('\n'.join(lines))
+        increment_inds = np.flatnonzero(r)
+        increment = r[increment_inds]
+        inds = np.argsort(r)[::-1]
+        increment_inds = increment_inds[inds]
+        np.set_printoptions(precision=2, suppress=True, linewidth=300, edgeitems=20)
+        print(np.stack([results[2][increment_inds] / (results[0][increment_inds] + 1e-8), r[increment_inds] * 100, increment_inds], axis=0))
 
     else:
         # Plot

@@ -191,10 +191,14 @@ class MetricFormatter:
         else:
             inds = range(len(gt_label_hist))
 
+        pad = len(gt_str)
+        if metrics:
+            pad = max(pad, max([len(k) for k in metrics.keys()]))
+
         for k, v in metrics.items():
             assert v.size == 1 or len(inds) == v.size
-            lines += [self.format_metric(k, v[inds] if v.size > 1 else v, len(gt_str))]
-        format_str = '%{}s %8s [%s]'.format(len(gt_str) + 1)
+            lines += [self.format_metric(k, v[inds] if v.size > 1 else v, pad)]
+        format_str = '%{}s %8s [%s]'.format(pad + 1)
         lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]
         lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in inds]))]
         return lines

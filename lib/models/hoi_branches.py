@@ -123,6 +123,35 @@ class ActEmbsimBranch(AbstractHOIBranch):
         return act_repr
 
 
+class ActEmbsimPredBranch(AbstractHOIBranch):
+    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(**kwargs)
+        self.num_objects = dataset.num_object_classes
+        self.num_predicates = dataset.num_predicates
+
+        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+
+        self.act_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=False)
+        self.op_cossim = torch.nn.CosineSimilarity(dim=1)
+
+        self.sub_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
+        nn.init.xavier_normal_(self.sub_input_to_emb_fc.weight, gain=1.0)
+        self.obj_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
+        nn.init.xavier_normal_(self.obj_input_to_emb_fc.weight, gain=1.0)
+        self.pred_input_to_emb_fc = nn.Linear(pred_input_dim, self.word_emb_dim)
+        nn.init.xavier_normal_(self.pred_input_to_emb_fc.weight, gain=1.0)
+
+    def _forward(self, hoi_feats, obj_feats, hoi_infos):
+        sub_repr = self.sub_input_to_emb_fc(obj_feats)
+        obj_repr = self.obj_input_to_emb_fc(obj_feats)
+        pred_repr = self.pred_input_to_emb_fc(hoi_feats)
+        op_repr = sub_repr[hoi_infos[:, 1], :] + pred_repr + obj_repr[hoi_infos[:, 2], :]
+        act_logits = self.op_cossim(op_repr.unsqueeze(dim=2), self.act_embs.unsqueeze(dim=0))
+        return act_logits
+
+
 class HoiEmbsimBranch(AbstractHOIBranch):
     def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments

@@ -433,6 +433,38 @@ class EmbsimActModel(ActionOnlyModel):
         return obj_logits, act_logits, None
 
 
+class EmbsimActPredModel(ActionOnlyModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'embsimactpred'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.repr_dim)  # FIXME magic constant
+
+        self.act_embsim_branch = ActEmbsimPredBranch(vis_feat_dim, self.obj_branch.repr_dim, dataset)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.repr_dim, self.dataset.num_object_classes)
+        self.act_output_fc = nn.Linear(dataset.num_predicates, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        emb_act_logits = self.act_embsim_branch(union_boxes_feats, obj_repr, hoi_infos)
+        act_logits = self.act_output_fc(emb_act_logits) + emb_act_logits
+
+        return obj_logits, act_logits, None
+
 class KatoModel(GenericModel):
     # FIXME?
     @classmethod
