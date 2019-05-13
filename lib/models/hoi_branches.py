@@ -77,7 +77,7 @@ class HoiPriorBranch(AbstractHOIBranch):
         return hoi_logits
 
 
-class ActEmbsimBranch(AbstractHOIBranch):
+class ActEmbsimPredBranch(AbstractHOIBranch):
     def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300

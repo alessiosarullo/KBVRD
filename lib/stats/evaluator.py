@@ -47,7 +47,6 @@ class Evaluator:
         ap = np.zeros(self.dataset.num_interactions)
         recall = np.zeros(self.dataset.num_interactions)
         for j in range(self.dataset.num_interactions):
-            # FIXME this uses all pairs for every interaction, which will drive precision down. Maybe threshold by score?
             p_hoi_scores = predict_hoi_scores[:, j]
             p_gt_ho_assignment = pred_gt_ho_assignment[:, j]
             if self.hoi_score_thr is not None:

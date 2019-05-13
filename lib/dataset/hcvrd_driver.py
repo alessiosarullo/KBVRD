@@ -49,8 +49,21 @@ def match():
     hcvrd = HCVRD()
     hd = HicoDet()
 
-    hcvrd_preds = set()
-    for orig in hcvrd.predicates[1:]:
+    # Objects
+    hcvrd_obj_index = {}
+    for orig in hcvrd.objects:
+        obj = orig
+        if obj == "ski's":
+            obj = 'skis'
+        hcvrd_obj_index[obj] = hcvrd.object_index[orig]
+
+    hd_to_hcvrd_obj_match = {}
+    for orig in hd.objects:
+        obj = orig.replace('_', ' ')
+        hd_to_hcvrd_obj_match[orig] = hcvrd_obj_index.get(obj, hcvrd_obj_index.get(obj.split()[-1], None))
+
+    hcvrd_pred_index = {}
+    for orig in hcvrd.predicates:
         p = orig.split()[0]
         if p == 'lying':
             p = 'lie'
@@ -64,23 +77,24 @@ def match():
             p = p[:-3]
         elif p in ['says', 'wears', 'chases', 'ties', 'types']:
             p = p[:-1]
-        hcvrd_preds.add(' '.join([p] + orig.split()[1:]))
+        p = ' '.join([p] + orig.split()[1:])
+        hcvrd_pred_index[p] = hcvrd.predicate_index[orig]
 
-    hd_preds = set()
+    hd_to_hcvrd_pred_match = {}
     for orig in hd.predicates[1:]:
-        p = orig.split('_')[0]
-        hd_preds.add(' '.join([p] + orig.split('_')[1:]))
+        hd_to_hcvrd_pred_match[orig] = hcvrd_pred_index.get(orig.replace('_', ' '), None)
 
-    return sorted(hd_preds - hcvrd_preds)
+    return sorted([k for k, v in hd_to_hcvrd_pred_match.items() if v is None]), sorted([k for k, v in hd_to_hcvrd_obj_match.items() if v is None])
 
 
 def main():
     from lib.dataset.hicodet_driver import HicoDet
-    vg = HCVRD()
+    hcvrd = HCVRD()
     hd = HicoDet()
 
-    m = match()
-    print(m)
+    mp, mo = match()
+    print(mp)
+    print(mo)
 
 
 if __name__ == '__main__':
