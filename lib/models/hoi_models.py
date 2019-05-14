@@ -286,7 +286,6 @@ class ActionOnlyGOEmbModel(GenericModel):
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
@@ -318,7 +317,6 @@ class ActionOnlyModel(GenericModel):
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         # torch.nn.init.xavier_normal_(self.obj_output_fc.weight, gain=1.0)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         box_im_ids = boxes_ext[:, 0].long()
