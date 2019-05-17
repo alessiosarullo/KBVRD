@@ -45,9 +45,9 @@ class GenericModel(AbstractModel):
         if obj_output is not None:
             losses['object_loss'] = nn.functional.cross_entropy(obj_output, box_labels)
         if action_output is not None:
-            losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels)
+            losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
         if hoi_output is not None:
-            losses['hoi_loss'] = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels)
+            losses['hoi_loss'] = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
         assert losses
         return losses
 

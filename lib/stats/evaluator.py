@@ -1,6 +1,7 @@
 from collections import Counter
 from typing import List, Dict
 
+import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
@@ -9,8 +10,26 @@ from lib.dataset.utils import Example
 from lib.models.utils import Prediction
 
 
-class Evaluator:
+class BaseEvaluator:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def load(self, fn):
+        with open(fn, 'rb') as f:
+            d = pickle.load(f)
+            self.__dict__.update(d)
+
+    def save(self, fn):
+        with open(fn, 'wb') as f:
+            pickle.dump({k: v for k, v in vars(self).items() if k not in ['dataset']}, f)
+
+    def evaluate_predictions(self, predictions: List[Dict]):
+        raise NotImplementedError()
+
+
+class Evaluator(BaseEvaluator):
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+        super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
         self.num_hoi_thr = num_hoi_thr

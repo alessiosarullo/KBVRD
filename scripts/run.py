@@ -41,9 +41,9 @@ class Launcher:
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        with open(cfg.program.result_file, 'wb') as f:
+        with open(cfg.program.prediction_file, 'wb') as f:
             pickle.dump(all_predictions, f)
-        print('Wrote results to %s.' % cfg.program.result_file)
+        print('Wrote results to %s.' % cfg.program.prediction_file)
 
     def setup(self):
         seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
@@ -200,40 +200,48 @@ class Launcher:
 
     def eval_epoch(self, epoch_idx, data_loader, stats: RunningStats):
         self.detector.eval()
-        all_predictions = []
 
-        watched_values = {}
+        try:
+            print('Loading results from %s.' % cfg.program.prediction_file)
+            with open(cfg.program.prediction_file, 'rb') as f:
+                all_predictions = pickle.load(f)
+        except FileNotFoundError:
+            all_predictions = []
 
-        stats.epoch_tic()
-        for batch_idx, batch in enumerate(data_loader):
-            stats.batch_tic()
-            prediction = self.detector(batch)  # type: Prediction
-            all_predictions.append(vars(prediction))
-            stats.batch_toc()
+            watched_values = {}
 
-            try:
-                for k, v in self.detector.values_to_monitor.items():
-                    watched_values.setdefault(k, []).append(v)
-            except AttributeError:
-                pass
+            stats.epoch_tic()
+            for batch_idx, batch in enumerate(data_loader):
+                stats.batch_tic()
+                prediction = self.detector(batch)  # type: Prediction
+                all_predictions.append(vars(prediction))
+                stats.batch_toc()
 
-            if batch_idx % 20 == 0:
-                torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
-            if batch_idx % 1000 == 0:
-                stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
+                try:
+                    for k, v in self.detector.values_to_monitor.items():
+                        watched_values.setdefault(k, []).append(v)
+                except AttributeError:
+                    pass
+
+                if batch_idx % 20 == 0:
+                    torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
+                if batch_idx % 1000 == 0:
+                    stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
+
+            if watched_values:
+                with open(cfg.program.watched_values_file, 'wb') as f:
+                    pickle.dump(watched_values, f)
 
         if cfg.program.model.startswith('objonly'):
             evaluator = ObjectEvaluator(data_loader.dataset)
         else:
             evaluator = Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
+        evaluator.save(cfg.program.eval_res_file)
         evaluator.print_metrics()
+
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
-
-        if watched_values:
-            with open(cfg.program.watched_values_file, 'wb') as f:
-                pickle.dump(watched_values, f)
 
         stats.epoch_toc()
         return all_predictions

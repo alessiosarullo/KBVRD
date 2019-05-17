@@ -94,8 +94,12 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'final.tar')
 
     @property
-    def result_file(self):
-        return os.path.join(self.output_path, 'result_test_%s.pkl' % ('predcls' if self.predcls else 'sgdet'))
+    def prediction_file(self):
+        return os.path.join(self.output_path, 'prediction_test_%s.pkl' % ('predcls' if self.predcls else 'sgdet'))
+
+    @property
+    def eval_res_file(self):
+        return os.path.join(self.output_path, 'eval_test_%s.pkl')
 
     @property
     def tensorboard_dir(self):

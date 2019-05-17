@@ -33,7 +33,7 @@ except ImportError:
 def _setup_and_load():
     cfg.parse_args(allow_required=False, reset=True)
 
-    with open(cfg.program.result_file, 'rb') as f:
+    with open(cfg.program.prediction_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
     return results

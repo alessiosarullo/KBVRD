@@ -7,10 +7,12 @@ from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
 from lib.models.utils import Prediction
+from lib.stats.evaluator import BaseEvaluator
 
 
-class ObjectEvaluator:
+class ObjectEvaluator(BaseEvaluator):
     def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+        super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
         self.num_hoi_thr = num_hoi_thr
