@@ -21,11 +21,12 @@ from lib.models.utils import Prediction
 from lib.stats.evaluator_HD import Evaluator as Evaluator_HD
 from lib.stats.evaluator import Evaluator, MetricFormatter
 from scripts.utils import get_all_models_by_name
+from lib.bbox_utils import get_union_boxes
 
 try:
     matplotlib.use('Qt5Agg')
-    sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-04-29_15-46-06_vanilla']
-    # sys.argv[1:] = ['vis', '--save_dir', 'output/hoi/2019-04-22_17-04-13_b64']
+    # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
 
@@ -45,6 +46,7 @@ def evaluate():
     evaluator = Evaluator(dataset=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.evaluate_predictions(results)
     evaluator.print_metrics(sort=True)
+    evaluator.save(cfg.program.eval_res_file)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     # stats.print_metrics(sort=True)
 
@@ -158,53 +160,54 @@ def evaluate():
 #     plt.show()
 
 
-def vis_masks():
+def visualise_images():
+    act_thr = 0.5
+
     results = _setup_and_load()
     hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     hdsl = hds.get_loader(batch_size=1, shuffle=False)
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)
-    dataset_classes = hds.objects
 
     for b_idx, example in enumerate(hdsl):
         example = example  # type: Minibatch
         im_fn = example.other_ex_data[0]['fn']
-        if im_fn not in [s.strip() for s in """
-        HICO_test2015_00000648.jpg
-        """.split('\n')]:
-            continue
+        # if im_fn not in [s.strip() for s in """
+        # HICO_test2015_00000648.jpg
+        # """.split('\n')]:
+        #     continue
 
         prediction_dict = results[b_idx]
         prediction = Prediction.from_dict(prediction_dict)
 
         boxes = prediction.obj_boxes
         obj_scores = prediction.obj_scores
+        ho_pairs = prediction.ho_pairs
+        act_scores = prediction.action_score_distributions
+        if obj_scores is None:
+            continue
+
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]
-        print(boxes)
-        print(box_classes)
-        print(box_class_scores)
 
-        boxes_with_scores = np.concatenate([boxes, box_class_scores[:, None]], axis=1)
         im = cv2.imread(os.path.join(hds.img_dir, im_fn))
         vis_one_image(
-            im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
-            boxes=boxes_with_scores,
-            box_classes=box_classes,
-            class_names=dataset_classes,
-            masks=None,
+            hds, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
+            boxes=boxes, box_classes=box_classes, box_classes_scores=box_class_scores, masks=None,
+            ho_pairs=ho_pairs, action_class_scores=act_scores,
             output_file_path=os.path.join(output_dir, os.path.splitext(im_fn)[0]),
-            box_alpha=0.3,
-            show_class=True,
-            thresh=0.0,  # Lower this to see all the predictions (was 0.7 in the original code)
-            ext='png'
+            ext='png',
+            act_thr=act_thr,
+            dpi=400, fontsize=2,
         )
-        # break
+
+        if b_idx >= 1000:
+            break
 
 
 def main():
-    funcs = {'vis': vis_masks,
+    funcs = {'vis': visualise_images,
              'eval': evaluate,
              }
     print(sys.argv)

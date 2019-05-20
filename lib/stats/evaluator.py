@@ -41,9 +41,15 @@ class Evaluator(BaseEvaluator):
         self.gt_hoi_classes = []
         self.predict_hoi_scores = []
         self.pred_gt_ho_assignment = []
+        self.gt_hit_per_prediction = {}
         self.gt_count = 0
 
         self.metrics = {}  # type: Dict[str, np.ndarray]
+
+    def save(self, fn):
+        with open(fn, 'wb') as f:
+            pickle.dump({'hits': self.gt_hit_per_prediction,
+                         'gt_classes': np.concatenate(self.gt_hoi_classes, axis=0)}, f)
 
     def evaluate_predictions(self, predictions: List[Dict]):
         self._init()
@@ -96,9 +102,7 @@ class Evaluator(BaseEvaluator):
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
-        printstr = '\n'.join(lines)
-        print(printstr)
-        return printstr
+        print('\n'.join(lines))
 
     def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
@@ -174,6 +178,10 @@ class Evaluator(BaseEvaluator):
                 matched_gt_inds = matched_gt_inds[1:]
                 highest_scoring_pred_idx_per_gt_ind = highest_scoring_pred_idx_per_gt_ind[1:]
             tp[highest_scoring_pred_idx_per_gt_ind] = 1
+
+            for sorted_i, i in enumerate(inds):
+                if tp[sorted_i]:
+                    self.gt_hit_per_prediction.setdefault(i, []).append(pred_gtid_assignment[sorted_i])
 
         fp = 1 - tp
         assert np.all(fp[pred_gtid_assignment < 0] == 1)

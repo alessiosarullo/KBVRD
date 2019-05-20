@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 
 from lib.bbox_utils import rescale_masks_to_img
+from lib.dataset.hicodet import HicoDetInstanceSplit
 
 
 def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **kwargs):
@@ -176,14 +177,30 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
     return ax
 
 
-def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=None, thresh=0.9,
-                  output_file_path=None, show_class=False, dpi=200, box_alpha=0.0, ext='png'):
-    """Visual debugging of detections."""
-
-    if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+def vis_one_image(dataset: HicoDetInstanceSplit, im,
+                  boxes, box_classes, box_classes_scores, masks=None,
+                  ho_pairs=None, action_class_scores=None,
+                  output_file_path=None, ext='png',
+                  dpi=300, box_thr=0., act_thr=0.5, box_alpha=1.0, box_lw=0.4, show_class=True, fontsize=3, show_scores=True):
+    """Visual debugging of detections. Boxes are [x1, y1, x2, y2, score]"""
+    if boxes is None or boxes.shape[0] == 0 or np.amax(box_classes_scores) < box_thr:
         return
 
+    assert box_classes_scores.shape[0] == boxes.shape[0] and len(box_classes_scores.shape) == 1
+
+    obj_inds = (box_classes != dataset.human_class)
     color_list = colormap(rgb=True) / 255
+    box_colors = np.zeros((box_classes.shape[0], 3))
+    box_colors[obj_inds] = color_list[np.mod(np.arange((obj_inds > 0).sum()), len(color_list)), :]
+
+    act_inds_per_human = {}
+    act_inds_per_obj = {}
+    for i, (h, o) in enumerate(ho_pairs):
+        act_inds_per_human.setdefault(h, []).append(i)
+        act_inds_per_obj.setdefault(o, []).append(i)
+    act_inds_per_human = {k: np.array(v) for k, v in act_inds_per_human.items()}
+    act_inds_per_obj = {k: np.array(v) for k, v in act_inds_per_obj.items()}
+
     fig = plt.figure(frameon=False)
     fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -195,42 +212,42 @@ def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=N
     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
     sorted_inds = np.argsort(-areas)
 
-    mask_color_id = 0
-    for i in sorted_inds:
-        bbox = boxes[i, :4]
-        score = boxes[i, -1]
-        if score < thresh:
+    for boxidx in sorted_inds:
+        bbox = boxes[boxidx, :4]
+        cls = box_classes[boxidx]
+        score = box_classes_scores[boxidx]
+
+        if score < box_thr:
             continue
 
+        is_human = (cls == dataset.human_class)
+        act_inds = list(set(act_inds_per_human.get(boxidx, np.zeros(0)).tolist() + act_inds_per_obj.get(boxidx, np.zeros(0)).tolist()))
+        interacting = np.any(action_class_scores[act_inds, 1:] > act_thr)
+
+        color = 'g' if is_human else box_colors[boxidx, :]
         ax.add_patch(
             plt.Rectangle((bbox[0], bbox[1]),
                           bbox[2] - bbox[0],
                           bbox[3] - bbox[1],
-                          fill=False, edgecolor='g',
-                          linewidth=0.7, alpha=box_alpha))
+                          fill=False, edgecolor=color,
+                          linewidth=box_lw, linestyle='-' if interacting else '--', alpha=box_alpha))
 
-        if show_class:
+        if interacting and show_class:
+            text = dataset.objects[cls] + (' {:0.2f}'.format(score) if show_scores else '')
             ax.text(
                 bbox[0], bbox[1] - 2,
-                         class_names[box_classes[i]] + ' {:0.2f}'.format(score).lstrip('0'),
-                fontsize=3,
+                text,
+                fontsize=fontsize,
                 family='serif',
                 bbox=dict(
-                    facecolor='g', alpha=0.4, pad=0, edgecolor='none'),
+                    facecolor=color, alpha=0.4, pad=0, edgecolor='none'),
                 color='white')
 
         # show mask
         if masks is not None:
-            img = np.ones(im.shape)
-            color_mask = color_list[mask_color_id % len(color_list), 0:3]
-            mask_color_id += 1
-
             w_ratio = .4
-            for c in range(3):
-                color_mask[c] = color_mask[c] * (1 - w_ratio) + w_ratio
-            for c in range(3):
-                img[:, :, c] = color_mask[c]
-            e = masks[i, :, :]
+            color_mask = box_colors[boxidx, :] * (1 - w_ratio) + w_ratio
+            e = masks[boxidx, :, :]
 
             _, contour, hier = cv2.findContours(e.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
 
@@ -242,14 +259,36 @@ def vis_one_image(im, boxes, box_classes, class_names, masks=None, union_boxes=N
                     alpha=0.5)
                 ax.add_patch(polygon)
 
-    if union_boxes is not None:
-        for ub in union_boxes:
-            ax.add_patch(
-                plt.Rectangle((ub[0], ub[1]),
-                              ub[2] - ub[0],
-                              ub[3] - ub[1],
-                              fill=False, edgecolor='r',
-                              linewidth=0.3, alpha=box_alpha))
+        if is_human:
+            act_inds = act_inds_per_human.get(boxidx, [])
+            action_count = 0
+            for o, scores in zip(ho_pairs[act_inds, 1], action_class_scores[act_inds]):
+                o_bbox = boxes[o, :]
+                color = box_colors[o, :]
+
+                x, y = bbox[0], bbox[1]
+                dx, dy = o_bbox[0] - x, o_bbox[1] - y
+
+                draw_arrow = True
+                for cls, score in enumerate(scores):
+                    if cls == 0 or score < act_thr:
+                        continue
+                    text = dataset.predicates[cls] + (' {:0.2f}'.format(score) if show_scores else '')
+                    ax.text(
+                        x, y + action_count * (fontsize * 6),
+                        text,
+                        fontsize=fontsize,
+                        family='serif',
+                        bbox=dict(facecolor=color, alpha=0.7, pad=0, edgecolor='none'),
+                        horizontalalignment='left', verticalalignment='top',
+                        color='white')
+                    action_count += 1
+
+                    if draw_arrow:
+                        ax.arrow(x, y, dx, dy,
+                                 head_width=5, head_length=10, fc=color, ec=color, lw=0.2, length_includes_head=True,
+                                 )
+                        draw_arrow = False
 
     if output_file_path is None:
         plt.show()

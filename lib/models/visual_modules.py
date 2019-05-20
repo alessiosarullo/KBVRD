@@ -324,14 +324,14 @@ def main():
         vis_one_image(
             im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
             boxes=boxes_with_scores,
-            box_classes=box_classes,
-            class_names=hds.objects,
+            box_classes_scores=box_classes,
+            object_names=hds.objects,
             masks=masks,
             union_boxes=union_boxes,
             output_file_path=os.path.join(output_dir, os.path.splitext(im_fn)[0]),
             box_alpha=0.3,
             show_class=True,
-            thresh=0.0,  # Lower this to see all the predictions (was 0.7 in the original code)
+            box_thr=0.0,  # Lower this to see all the predictions (was 0.7 in the original code)
             ext='png'
         )
 
