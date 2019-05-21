@@ -42,16 +42,18 @@ class VisualModule(nn.Module):
             ho_infos = batch.pc_ho_infos
 
             if self.box_proposal_thr > 0:
-                valid_box_inds = np.flatnonzero(boxes_ext_np[:, 5:].max(axis=1) > self.box_proposal_thr)
-                boxes_ext_np = boxes_ext_np[valid_box_inds, :]
-                uncertain_boxes_set = set((~valid_box_inds).tolist())
+                valid_box_mask = boxes_ext_np[:, 5:].max(axis=1) > self.box_proposal_thr
+                valid_box_inds = np.flatnonzero(valid_box_mask)
+                valid_box_inds_index = np.full_like(valid_box_mask, fill_value=-1)
+                valid_box_inds_index[valid_box_mask] = valid_box_inds
 
-                valid_hoi_inds = []
-                for i, (im, h, o) in enumerate(ho_infos):
-                    if h not in uncertain_boxes_set and o not in uncertain_boxes_set:
-                        valid_hoi_inds.append(i)
-                valid_hoi_inds = np.array(valid_hoi_inds)
+                boxes_ext_np = boxes_ext_np[valid_box_inds, :]
+
+                ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
+                ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
+                valid_hoi_inds = np.all(ho_infos >= 0, axis=1)
                 ho_infos = ho_infos[valid_hoi_inds, :]
+
                 if ho_infos.shape[0] == 0 and not inference:
                     return None, None, None, None, None, None, None, None, None
 
