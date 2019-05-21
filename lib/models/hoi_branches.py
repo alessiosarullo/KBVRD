@@ -114,6 +114,7 @@ class GEmbBranch(AbstractHOIBranch):
         self.output_emb_dim = 600
         super().__init__(**kwargs)
         self.cnet_emb_dim = 1000
+        self.dataset = dataset
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
