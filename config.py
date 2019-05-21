@@ -99,7 +99,7 @@ class ProgramConfig(BaseConfigs):
 
     @property
     def eval_res_file(self):
-        return os.path.join(self.output_path, 'eval_test_%s.pkl')
+        return os.path.join(self.output_path, 'eval_test.pkl')
 
     @property
     def tensorboard_dir(self):

@@ -118,7 +118,7 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
 
 
 def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
-             axes=None, vrange=(0, 1), cbar=False, bin_colours=False, grid=False, plot=True, title=None):
+             axes=None, vrange=(0, 1), cbar=True, bin_colours=False, grid=False, plot=True, title=None):
     lfsize = 8
     if axes is None:
         plt.figure(figsize=(16, 9))

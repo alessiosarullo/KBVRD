@@ -26,9 +26,130 @@ from lib.bbox_utils import get_union_boxes
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    # sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
+
+from collections import Counter
+from typing import List, Dict
+
+import pickle
+import numpy as np
+
+from lib.bbox_utils import compute_ious
+from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.utils import Example
+from lib.models.utils import Prediction
+
+
+class Analyser:
+    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+        super().__init__()
+        self.iou_thresh = iou_thresh
+        self.hoi_score_thr = hoi_score_thr
+        self.num_hoi_thr = num_hoi_thr
+
+        self.dataset = dataset
+        self.gt_interactions = []  # (p, o)
+        self.predict_ho_obj_scores = []
+        self.predict_action_scores = []
+        self.predict_gt_assignment_unconstrained = []
+        self.gt_count = 0
+
+    def get_stats(self, predictions: List[Dict]):
+        assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
+
+        for i, res in enumerate(predictions):
+            ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            prediction = Prediction.from_dict(res)
+            self.process_prediction(i, ex, prediction)
+
+        return self.get_stats_for_spatial_matches()
+
+    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
+        if isinstance(gt_entry, Example):
+            gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
+            num_gt_hois = gt_hoi_triplets.shape[0]
+
+            gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+
+            gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
+            self.gt_count += num_gt_hois
+        else:
+            raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
+
+        predict_action_scores = np.zeros([0, self.dataset.num_predicates])
+        predict_obj_scores_per_ho_pair = np.zeros([0, self.dataset.num_object_classes])
+        predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
+        predict_boxes = np.zeros((0, 4))
+        if prediction.obj_boxes is not None:
+            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0]
+
+            predict_boxes = prediction.obj_boxes
+
+            if prediction.ho_pairs is not None:
+                assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.ho_img_inds)) == 1
+
+                predict_ho_pairs = prediction.ho_pairs
+                assert prediction.hoi_scores is None
+                assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
+                assert prediction.action_score_distributions is not None
+
+                predict_action_scores = prediction.action_score_distributions
+                predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
+        else:
+            assert prediction.ho_pairs is None
+
+        pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
+        pred_gt_assignment = np.full(predict_ho_pairs.shape[0], fill_value=-1, dtype=np.int)
+        for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
+            gt_pair_ious = np.zeros(num_gt_hois)
+            for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
+                iou_h = pred_gt_ious[ph, gh]
+                iou_o = pred_gt_ious[po, go]
+                gt_pair_ious[gtidx] = min(iou_h, iou_o)
+            if np.any(gt_pair_ious >= self.iou_thresh):
+                gt_assignment = np.argmax(gt_pair_ious)
+                pred_gt_assignment[predict_idx] = gt_ho_ids[gt_assignment]
+
+        self.gt_interactions.append(np.stack([gt_hoi_triplets[:, 2], gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]]], axis=1))
+        self.predict_ho_obj_scores.append(predict_obj_scores_per_ho_pair)
+        self.predict_action_scores.append(predict_action_scores)
+        self.predict_gt_assignment_unconstrained.append(pred_gt_assignment)
+
+    def get_stats_for_spatial_matches(self):
+        gt_interactions = np.concatenate(self.gt_interactions, axis=0)
+        predict_ho_obj_scores = np.concatenate(self.predict_ho_obj_scores, axis=0)
+        predict_action_scores = np.concatenate(self.predict_action_scores, axis=0)
+        pred_gt_assignment_unconstrained = np.concatenate(self.predict_gt_assignment_unconstrained, axis=0)
+
+        assert predict_action_scores.shape[0] == predict_ho_obj_scores.shape[0] == pred_gt_assignment_unconstrained.shape[0]
+
+        tp = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        fp = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        misses = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        num_gt = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        num_pred = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+
+        for gt_id, o_scores, a_scores in zip(pred_gt_assignment_unconstrained, predict_ho_obj_scores, predict_action_scores):
+            if gt_id < 0:
+                continue
+
+            po = np.argmax(o_scores)
+            pa = np.argmax(a_scores)
+            num_pred[po, pa] += 1
+
+            ga, go = gt_interactions[gt_id, :]
+            num_gt[go, ga] += 1
+
+            if po == go and pa == ga:
+                tp[po, pa] += 1
+            else:
+                fp[po, pa] += 1
+                misses[go, ga] += 1
+
+        return tp, fp, misses, num_gt, num_pred
 
 
 def _setup_and_load():
@@ -51,113 +172,25 @@ def evaluate():
     # stats.print_metrics(sort=True)
 
 
-# def stats():
-#     base_argv = sys.argv
-#     exps = [
-#         'output/hoi/2019-04-12_09-51-28_red-ored',
-#         # 'output/zero/2019-04-03_10-28-10_vanilla',
-#         # 'output/kb/2019-04-09_11-47-18_ds-imsitu'
-#     ]
-#     true_pos = []
-#     pos = None
-#     for exp in exps:
-#         sys.argv = base_argv + ['--save_dir', exp]
-#         print('=' * 100, '\n', sys.argv)
-#
-#         results = _setup_and_load()
-#
-#         hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
-#         hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-#
-#         stats = Evaluator_old.evaluate_predictions(hdtest, results)  # type: Evaluator_old
-#         stats.print_metrics(sort=True)
-#
-#         # detector = get_all_models_by_name()[cfg.program.model](hdtrain)
-#         # ckpt = torch.load(cfg.program.saved_model_file, map_location='cpu')
-#         # detector.load_state_dict(ckpt['state_dict'])
-#
-#         # op_adj_mat = detector.hoi_branch.op_adj_mat.squeeze(dim=-1).detach().numpy()
-#         # op_conf_mat = torch.sigmoid(detector.hoi_branch.op_conf_mat.squeeze(dim=-1).detach()).numpy()
-#         #
-#         # ds_counts = get_counts(dataset=hdtrain)
-#         # ds_counts[:, 0] = 0  # exclude null interaction
-#         # ds = np.minimum(1, ds_counts)
-#         # imsitu_counts = ImSituKnowledgeExtractor().extract_freq_matrix(hdtrain)
-#         # imsitu_counts[:, 0] = 0  # exclude null interaction
-#         # imsitu = np.minimum(1, imsitu_counts)  # only check if the pair exists (>=1 occurrence) or not (0 occurrences)
-#
-#         # # Plot
-#         # plt.figure(figsize=(16, 9))
-#
-#         # gs = gridspec.GridSpec(2, 2, width_ratios=[1, 1],
-#         #                        wspace=0.01, hspace=0.4, top=0.9, bottom=0.1, left=0.05, right=0.95)
-#         # plot_mat(op_adj_mat[:, :, 1] / 3 + ds * 2 / 3, predicates, objects, axes=plt.subplot(gs[0, 0]))
-#         # plot_mat(op_conf_mat[:, :, 1], predicates, objects, axes=plt.subplot(gs[0, 1]))
-#         # plot_mat(op_adj_mat[:, :, 0] / 3 + imsitu * 2 / 3, predicates, objects, axes=plt.subplot(gs[1, 0]))
-#         # plot_mat(op_conf_mat[:, :, 0], predicates, objects, axes=plt.subplot(gs[1, 1]))
-#         # plt.show()
-#
-#         pred_thr = 0.5
-#         gt_hois = np.concatenate(stats.hoi_labels, axis=0)
-#         bg_hois = gt_hois[:, 0] > 0
-#         fg_hois = np.any(gt_hois[:, 1:], axis=1)
-#         assert not np.any(bg_hois & fg_hois), np.flatnonzero(bg_hois & fg_hois)
-#         gt_hoi_objs = np.concatenate(stats.hoi_obj_labels, axis=0)
-#         predictions = np.concatenate(stats.hoi_predictions, axis=0)
-#         assert gt_hois.shape[0] == gt_hoi_objs.shape[0] == predictions.shape[0] and  \
-#               gt_hois.shape[1] == predictions.shape[1] == hdtrain.num_predicates
-#
-#         tps = np.zeros([hdtrain.num_object_classes, hdtrain.num_predicates])
-#         gt_counts = np.zeros_like(tps)
-#         confmat = np.zeros([hdtrain.num_predicates, hdtrain.num_predicates])
-#         confmat_norm_factor = np.zeros(hdtrain.num_predicates)
-#         for gth_1hot, gto, ph_1hot in zip(gt_hois, gt_hoi_objs, predictions):
-#             gthois = np.flatnonzero(gth_1hot)
-#             tps[gto, gthois] += (ph_1hot[gthois] > pred_thr)
-#             gt_counts[gto, gthois] += 1
-#
-#             gthois = set(gthois.tolist())
-#             phois = set(np.flatnonzero(ph_1hot > pred_thr))
-#             hits = np.array(sorted(gthois & phois))
-#             unmatched = gthois - phois
-#             mistaken_for = np.array(sorted(phois - gthois))
-#             if hits.size > 0:
-#                 confmat[hits, hits] += 1
-#                 confmat_norm_factor[hits] += 1
-#             for u in unmatched:
-#                 if mistaken_for.size > 0:
-#                     confmat[u, mistaken_for] += 1
-#                 else:  # assign to no_interaction by default
-#                     confmat[u, 0] += 1
-#
-#         assert np.all(tps <= gt_counts)
-#         if pos is None:
-#             pos = gt_counts
-#         assert np.all(pos == gt_counts)
-#         true_pos.append(tps)
-#
-#         # assert np.allclose(confmat.sum(axis=1), gt_counts.sum(axis=0))  # This is not true because a HOI can be mistaken for several other ones
-#         confmat /= confmat.sum(axis=1, keepdims=True)
-#
-#     obj_inds = np.argsort(pos.sum(axis=1))[::-1]
-#     # pred_inds = np.argsort(pos.sum(axis=0))[::-1]
-#     pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
-#
-#     print(MetricFormatter().format_metric('01 loss', np.diag(confmat)[pred_inds]))
-#
-#     plot_mat(confmat[:, pred_inds][pred_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.predicates[i] for i in pred_inds],
-#              x_inds=pred_inds, y_inds=pred_inds,
-#              cbar=True, bin_colours=False, plot=False, grid=False)
-#
-#     # true_pos = np.stack(true_pos, axis=2)
-#     # assert true_pos.shape[2] == 2
-#     # mat = (true_pos[:, :, 0] - true_pos[:, :, 1]) / pos
-#     # mat = mat / 2 + 0.5
-#     # plot_mat(mat[:, pred_inds][obj_inds, :], [hdtrain.predicates[i] for i in pred_inds], [hdtrain.objects[i] for i in obj_inds],
-#     #          x_inds=pred_inds, y_inds=obj_inds,
-#     #          cbar=True, bin_colours=True, plot=False)
-#
-#     plt.show()
+def stats():
+    results = _setup_and_load()
+
+    hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+
+    analyser = Analyser(dataset=hdtest, hoi_score_thr=None, num_hoi_thr=None)
+    tp, fp, misses, num_gt, num_pred = analyser.get_stats(results)
+
+    # obj_inds = np.argsort(pos.sum(axis=1))[::-1]
+    # pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
+
+    # plot_mat(tp / np.maximum(1, misses), hdtest.predicates, hdtest.objects, vrange=None, plot=False)
+    x = (num_gt == 0).astype(np.float) * num_pred
+    x[x == 0] = np.inf
+    plot_mat(x, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
+
+    print('\n'.join(['%-20s %s' % (hdtest.predicates[p], hdtest.objects[o]) for p, o in np.stack(np.where(~np.isinf(x.T)), axis=1)]))
+
+    plt.show()
 
 
 def visualise_images():
@@ -208,6 +241,7 @@ def visualise_images():
 
 def main():
     funcs = {'vis': visualise_images,
+             'stats': stats,
              'eval': evaluate,
              }
     print(sys.argv)

@@ -334,6 +334,75 @@ class ActionOnlyModel(GenericModel):
         return obj_logits, action_logits, None
 
 
+class ActionOnlyHoiModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'actonlyhoi'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)
+
+        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
+        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
+
+    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+        box_im_ids = boxes_ext[:, 0].long()
+        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
+        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
+        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
+        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_logits = self.obj_output_fc(obj_repr)
+
+        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(act_repr)
+
+        ho_obj_scores = nn.functional.softmax(obj_logits[hoi_infos[:, 2], :], dim=1)
+        action_scores = torch.sigmoid(action_logits)
+        hoi_logits = action_logits.new_zeros((hoi_infos.shape[0], self.dataset.num_interactions))
+        for iid, (pid, oid) in enumerate(self.dataset.interactions):
+            hoi_logits[:, iid] = ho_obj_scores[:, oid] * action_scores[:, pid]
+
+        return obj_logits, action_logits, hoi_logits.detach()  # Do not train through HOI logits, use them for prediction only
+
+    @staticmethod
+    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+        obj_prob = action_probs = hoi_probs = ho_pairs = ho_img_inds = None
+        if hoi_infos is not None:
+            assert boxes_ext is not None
+            assert action_output is not None or hoi_output is not None
+            if not cfg.program.predcls and obj_output is not None:
+                obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+            if action_output is not None:
+                action_probs = torch.sigmoid(action_output).cpu().numpy()
+            assert hoi_output is not None
+            hoi_probs = hoi_output
+            ho_img_inds = hoi_infos[:, 0]
+            ho_pairs = hoi_infos[:, 1:]
+
+        if boxes_ext is not None:
+            boxes_ext = boxes_ext.cpu().numpy()
+            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+            if cfg.program.predcls:
+                assert obj_prob is None
+                obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
+        else:
+            obj_im_inds = obj_boxes = None
+        return Prediction(obj_im_inds=obj_im_inds,
+                          obj_boxes=obj_boxes,
+                          obj_scores=obj_prob,
+                          ho_img_inds=ho_img_inds,
+                          ho_pairs=ho_pairs,
+                          action_scores=action_probs,
+                          hoi_scores=hoi_probs)
+
+
 class HoiOnlyModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
