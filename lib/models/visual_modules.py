@@ -67,7 +67,7 @@ class VisualModule(nn.Module):
             if self.box_proposal_thr > 0:
                 b_pc_box_feats = b_pc_box_feats[valid_box_inds, :]
                 b_pc_masks = b_pc_masks[valid_box_inds, :]
-                b_pc_box_labels = b_pc_box_labels[valid_box_inds, :]
+                b_pc_box_labels = b_pc_box_labels[valid_box_inds]
                 b_pc_action_labels = b_pc_action_labels[valid_hoi_inds, :]
                 hoi_union_boxes = hoi_union_boxes[valid_hoi_inds, :]
                 b_pc_ho_union_feats = b_pc_ho_union_feats[valid_hoi_inds, :]
