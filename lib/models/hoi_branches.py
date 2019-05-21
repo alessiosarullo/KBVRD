@@ -15,13 +15,13 @@ class SimpleHoiBranch(AbstractHOIBranch):
         self.hoi_repr_dim = 600
         super().__init__(**kwargs)
 
-        self.hoi_subj_repr_fc = nn.Sequential([nn.Linear(obj_repr_dim, self.hoi_repr_dim)] + ([nn.ReLU()] if use_relu else []))
+        self.hoi_subj_repr_fc = nn.Sequential(*([nn.Linear(obj_repr_dim, self.hoi_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
         nn.init.xavier_normal_(self.hoi_subj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
-        self.hoi_obj_repr_fc = nn.Sequential(nn.Linear(obj_repr_dim, self.hoi_repr_dim) + ([nn.ReLU()] if use_relu else []))
+        self.hoi_obj_repr_fc = nn.Sequential(*([nn.Linear(obj_repr_dim, self.hoi_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
         nn.init.xavier_normal_(self.hoi_obj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
-        self.union_repr_fc = nn.Sequential(nn.Linear(input_feats_dim, self.hoi_repr_dim) + ([nn.ReLU()] if use_relu else []))
+        self.union_repr_fc = nn.Sequential(*([nn.Linear(input_feats_dim, self.hoi_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
         nn.init.xavier_normal_(self.union_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
     @property
