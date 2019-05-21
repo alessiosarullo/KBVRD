@@ -41,7 +41,7 @@ class VisualModule(nn.Module):
             boxes_ext_np = batch.pc_boxes_ext
             ho_infos = batch.pc_ho_infos
 
-            if self.box_proposal_thr is not None:
+            if self.box_proposal_thr > 0:
                 uncertain_boxes = boxes_ext_np[:, 5:].max(axis=1) < self.box_proposal_thr
                 boxes_ext_np = boxes_ext_np[~uncertain_boxes, :]
                 uncertain_boxes_set = set(uncertain_boxes.tolist())
