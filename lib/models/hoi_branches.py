@@ -107,35 +107,74 @@ class ActEmbsimPredBranch(AbstractHOIBranch):
         return act_logits
 
 
-class HoiEmbsimBranch(AbstractHOIBranch):
-    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
+class GEmbBranch(AbstractHOIBranch):
+    def __init__(self, hoi_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
+        self.output_emb_dim = 600
         super().__init__(**kwargs)
+        self.cnet_emb_dim = 1000
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
-        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+        obj_embs, act_embs, op_sim = self.get_cnet_rotate_embs()
+        self.obj_embs = nn.Parameter(torch.from_numpy(obj_embs), requires_grad=False)
+        # self.act_embs = nn.Parameter(torch.from_numpy(act_embs), requires_grad=False)
+        # self.cnet_op_sim = nn.Parameter(torch.from_numpy(op_sim), requires_grad=False)
 
-        interactions = dataset.interactions  # each is [p, o]
-        hoi_embs = np.concatenate([pred_word_embs[interactions[:, 0]],
-                                   obj_word_embs[interactions[:, 1]]], axis=1)
-        self.hoi_embs = nn.Parameter(torch.from_numpy(hoi_embs.T), requires_grad=False)
-        self.op_cossim = torch.nn.CosineSimilarity(dim=1)
+        # self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        # obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        # pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        self.obj_input_to_emb_fc = nn.Linear(obj_input_dim, self.word_emb_dim)
-        nn.init.xavier_normal_(self.obj_input_to_emb_fc.weight, gain=1.0)
-        self.pred_input_to_emb_fc = nn.Linear(pred_input_dim, self.word_emb_dim)
-        nn.init.xavier_normal_(self.pred_input_to_emb_fc.weight, gain=1.0)
+        self.obj_input_to_emb_fc = nn.Linear(self.cnet_emb_dim + hoi_input_dim, self.output_emb_dim)
 
-    def _forward(self, hoi_feats, obj_feats, hoi_infos):
-        obj_repr = self.obj_input_to_emb_fc(obj_feats)
-        pred_repr = self.pred_input_to_emb_fc(hoi_feats)
-        op_repr = torch.cat([pred_repr, obj_repr[hoi_infos[:, 2], :]], dim=1)
-        hoi_logits = self.op_cossim(op_repr.unsqueeze(dim=2), self.hoi_embs.unsqueeze(dim=0))
-        return hoi_logits
+    @property
+    def output_dim(self):
+        return self.output_emb_dim
+
+    def _forward(self, hoi_repr, hoi_infos, obj_logits, box_labels=None):
+        if box_labels is not None:
+            obj_repr = self.obj_embs[box_labels, :]
+        else:
+            obj_repr = self.obj_embs[obj_logits.argmax(dim=1), :]
+        new_hoi_repr = torch.cat([hoi_repr, obj_repr[hoi_infos[:, 2], :]], dim=1)
+        return new_hoi_repr
+
+    def get_cnet_rotate_embs(self):
+        emb_dim = self.cnet_emb_dim
+        emb_range = (24.0 + 2.0) / emb_dim  # (self.gamma.item() + self.epsilon) / hidden_dim
+        PI = 3.14159265358979323846
+
+        entity_embs = np.load('cache/rotate/entity_embedding.npy')  # FIXME path
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+
+        obj_embs = entity_embs[np.array([entity_inv_index[o] for o in self.dataset.objects])]
+        act_embs = np.concatenate([np.zeros((1, entity_embs.shape[1])),
+                                   entity_embs[np.array([entity_inv_index[p] for p in self.dataset.get_preds_for_embs()[1:]])]
+                                   ], axis=0)
+
+        rotate_rel_embs = np.load('cache/rotate/relation_embedding.npy') / (emb_range / PI)
+        re_rotrel_embs = np.cos(rotate_rel_embs)
+        im_rotrel_embs = np.sin(rotate_rel_embs)
+
+        rot_op_sims = np.zeros((self.num_objects, self.num_predicates, rotate_rel_embs.shape[0]))
+        re_pred, im_pred = act_embs[:, :emb_dim], act_embs[:, emb_dim:]
+        re_obj, im_obj = obj_embs[:, :emb_dim][:, None, :], obj_embs[:, emb_dim:][:, None, :]
+        for i in range(rotate_rel_embs.shape[0]):
+            re_dist = (re_pred * re_rotrel_embs[None, i] - im_pred * im_rotrel_embs[None, i])[None, :, :] - re_obj
+            im_dist = (re_pred * im_rotrel_embs[None, i] + im_pred * re_rotrel_embs[None, i])[None, :, :] - im_obj
+            dist = np.linalg.norm(np.linalg.norm(np.stack([re_dist, im_dist], axis=3), ord=2, axis=3), ord=1, axis=2)
+            rot_op_sims[:, :, i] = -dist
+        op_sim = rot_op_sims.max(axis=2)
+        op_sim = np.log((op_sim - op_sim.min()) / (op_sim.max() - op_sim.min()))
+        op_sim[:, 0] = 0
+        op_sim = np.log(op_sim + 1e-3)
+
+        return obj_embs, act_embs, op_sim
 
 
 class KatoGCNBranch(AbstractHOIBranch):

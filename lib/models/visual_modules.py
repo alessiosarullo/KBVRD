@@ -51,8 +51,8 @@ class VisualModule(nn.Module):
 
                 ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
                 ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
-                valid_hoi_inds = np.all(ho_infos >= 0, axis=1)
-                ho_infos = ho_infos[valid_hoi_inds, :]
+                valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
+                ho_infos = ho_infos[valid_hoi_mask, :]
 
                 if ho_infos.shape[0] == 0 and not inference:
                     return None, None, None, None, None, None, None, None, None
@@ -70,9 +70,9 @@ class VisualModule(nn.Module):
                 b_pc_box_feats = b_pc_box_feats[valid_box_inds, :]
                 b_pc_masks = b_pc_masks[valid_box_inds, :]
                 b_pc_box_labels = b_pc_box_labels[valid_box_inds]
-                b_pc_action_labels = b_pc_action_labels[valid_hoi_inds, :]
-                hoi_union_boxes = hoi_union_boxes[valid_hoi_inds, :]
-                b_pc_ho_union_feats = b_pc_ho_union_feats[valid_hoi_inds, :]
+                b_pc_action_labels = b_pc_action_labels[valid_hoi_mask, :]
+                hoi_union_boxes = hoi_union_boxes[valid_hoi_mask, :]
+                b_pc_ho_union_feats = b_pc_ho_union_feats[valid_hoi_mask, :]
 
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             boxes_ext = torch.tensor(boxes_ext_np, device=device)

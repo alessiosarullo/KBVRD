@@ -21,30 +21,25 @@ def plot():
     cfg.parse_args(allow_required=False, reset=True)
     dataset = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
 
-    op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
-    for p, o in dataset.interactions:
-        op_mat[o, p] = 1
-    plot_mat(op_mat, dataset.predicates, dataset.objects, plot=False)
+    # op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+    # for p, o in dataset.interactions:
+    #     op_mat[o, p] = 1
+    # plot_mat(op_mat, dataset.predicates, dataset.objects, plot=False)
 
     op_sims = []
 
-    word_emb_dim = 300
-    word_embs = WordEmbeddings(source='glove', dim=word_emb_dim)
-    oe = word_embs.get_embeddings(dataset.objects)
-    pe = word_embs.get_embeddings(dataset.predicates)
-    oe /= np.linalg.norm(oe, axis=1, keepdims=True) + 1e-6
-    pe /= np.linalg.norm(pe, axis=1, keepdims=True) + 1e-6
-    op_sim = np.sum(oe[:, None, :] * pe[None, :, :], axis=2)
-    # op_sim_exp = np.exp(5 * op_sim)
-    # op_sim = np.maximum(op_sim_exp / op_sim_exp.sum(axis=1, keepdims=True), op_sim_exp / op_sim_exp.sum(axis=0, keepdims=True))
-    # op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
-    op_sims.append(op_sim)
-    plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False)
-
-    # [[1274.6  1277.96  795.53  654.09  605.21  274.13
-    #  [  34.1    28.76   28.17   14.68   13.59   11.88
-    #  [ 262.    405.    389.    350.    334.    239.  ]
-    # ['262 (wash broccoli)', '405 (wash orange)', '389 (clean microwave)', '350 (repair hair_dryer)', '334 (wash fork)', '239 (clean bed)']
+    # word_emb_dim = 300
+    # word_embs = WordEmbeddings(source='glove', dim=word_emb_dim)
+    # oe = word_embs.get_embeddings(dataset.objects)
+    # pe = word_embs.get_embeddings(dataset.predicates)
+    # oe /= np.linalg.norm(oe, axis=1, keepdims=True) + 1e-6
+    # pe /= np.linalg.norm(pe, axis=1, keepdims=True) + 1e-6
+    # op_sim = np.sum(oe[:, None, :] * pe[None, :, :], axis=2)
+    # # op_sim_exp = np.exp(5 * op_sim)
+    # # op_sim = np.maximum(op_sim_exp / op_sim_exp.sum(axis=1, keepdims=True), op_sim_exp / op_sim_exp.sum(axis=0, keepdims=True))
+    # # op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
+    # op_sims.append(op_sim)
+    # plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False)
 
     emb_dim = 1000
     emb_range = (24.0 + 2.0) / emb_dim  # (self.gamma.item() + self.epsilon) / hidden_dim
@@ -76,16 +71,16 @@ def plot():
         im_dist = (re_pred * im_rotrel_embs[None, i] + im_pred * re_rotrel_embs[None, i])[None, :, :] - im_obj
         dist = np.linalg.norm(np.linalg.norm(np.stack([re_dist, im_dist], axis=3), ord=2, axis=3), ord=1, axis=2)
         rot_op_sims[:, :, i] = -dist
-        # plot_mat(rot_op_sims[:, :, i], dataset.predicates, dataset.objects, plot=False, vrange=None, cbar=True, title=rot_relation_classes[i])
     op_sim = rot_op_sims.max(axis=2)
-    op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
+    plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False, vrange=None)
+    # op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
 
-    op_sim_exp = np.exp(5 * op_sim)
-    op_sim = np.maximum(op_sim_exp / op_sim_exp.sum(axis=1, keepdims=True), op_sim_exp / op_sim_exp.sum(axis=0, keepdims=True))
-    op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
-    op_sim[:, 0] = 0
-    op_sims.append(op_sim)
-    plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False)
+    # op_sim_exp = np.exp(5 * op_sim)
+    # op_sim = np.maximum(op_sim_exp / op_sim_exp.sum(axis=1, keepdims=True), op_sim_exp / op_sim_exp.sum(axis=0, keepdims=True))
+    # op_sim = (op_sim - op_sim.min()) / (op_sim.max() - op_sim.min())
+    # op_sim[:, 0] = 0
+    # op_sims.append(op_sim)
+    # plot_mat(op_sim, dataset.predicates, dataset.objects, plot=False)
 
     plt.show()
 
