@@ -185,6 +185,7 @@ class ModelConfig(BaseConfigs):
         self.use_cnet = False
 
         self.proposal_thr = 0.
+        self.relu = False
 
         self.bn_momentum = 0.01
 

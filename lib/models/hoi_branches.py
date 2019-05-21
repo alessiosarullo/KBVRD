@@ -10,19 +10,19 @@ from lib.models.abstract_model import AbstractHOIBranch
 
 
 class SimpleHoiBranch(AbstractHOIBranch):
-    def __init__(self, input_feats_dim, obj_repr_dim, **kwargs):
+    def __init__(self, input_feats_dim, obj_repr_dim, use_relu=False, **kwargs):
         # TODO docs and FIXME comments
         self.hoi_repr_dim = 600
         super().__init__(**kwargs)
 
-        self.hoi_subj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.hoi_subj_repr_fc.weight, gain=1.0)
+        self.hoi_subj_repr_fc = nn.Sequential([nn.Linear(obj_repr_dim, self.hoi_repr_dim)] + ([nn.ReLU()] if use_relu else []))
+        nn.init.xavier_normal_(self.hoi_subj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
-        self.hoi_obj_repr_fc = nn.Linear(obj_repr_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.hoi_obj_repr_fc.weight, gain=1.0)
+        self.hoi_obj_repr_fc = nn.Sequential(nn.Linear(obj_repr_dim, self.hoi_repr_dim) + ([nn.ReLU()] if use_relu else []))
+        nn.init.xavier_normal_(self.hoi_obj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
-        self.union_repr_fc = nn.Linear(input_feats_dim, self.hoi_repr_dim)
-        nn.init.xavier_normal_(self.union_repr_fc.weight, gain=1.0)
+        self.union_repr_fc = nn.Sequential(nn.Linear(input_feats_dim, self.hoi_repr_dim) + ([nn.ReLU()] if use_relu else []))
+        nn.init.xavier_normal_(self.union_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
 
     @property
     def output_dim(self):
@@ -138,7 +138,7 @@ class GEmbBranch(AbstractHOIBranch):
             obj_repr = self.obj_embs[box_labels, :]
         else:
             obj_repr = self.obj_embs[obj_logits.argmax(dim=1), :]
-        new_hoi_repr = torch.cat([hoi_repr, obj_repr[hoi_infos[:, 2], :]], dim=1)
+        new_hoi_repr = self.obj_input_to_emb_fc(torch.cat([hoi_repr, obj_repr[hoi_infos[:, 2], :]], dim=1))
         return new_hoi_repr
 
     def get_cnet_rotate_embs(self):
