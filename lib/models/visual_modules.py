@@ -44,7 +44,7 @@ class VisualModule(nn.Module):
             if self.box_proposal_thr > 0:
                 valid_box_inds = boxes_ext_np[:, 5:].max(axis=1) > self.box_proposal_thr
                 boxes_ext_np = boxes_ext_np[valid_box_inds, :]
-                uncertain_boxes_set = set(~valid_box_inds.tolist())
+                uncertain_boxes_set = set((~valid_box_inds).tolist())
 
                 valid_hoi_inds = []
                 for i, (im, h, o) in enumerate(ho_infos):
