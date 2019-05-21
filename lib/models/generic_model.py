@@ -105,7 +105,7 @@ class GenericModel(AbstractModel):
                 obj_output = action_output = hoi_output = None
 
             if not inference:
-                assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
+                # assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
                 return obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels
             else:
                 im_scales = x.img_infos[:, 2].cpu().numpy()
@@ -114,8 +114,7 @@ class GenericModel(AbstractModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
-    @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(self, obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         obj_prob = action_probs = hoi_probs = ho_pairs = ho_img_inds = None
         if hoi_infos is not None:
             assert boxes_ext is not None

@@ -76,8 +76,7 @@ class OracleModel(GenericModel):
     def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
         raise NotImplementedError()
 
-    @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(self, obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if hoi_infos is not None:
             assert obj_output is not None and action_output is not None and boxes_ext is not None
             obj_prob = obj_output.cpu().numpy()
@@ -130,8 +129,7 @@ class ObjectOnlyModel(GenericModel):
                 im_scales = x.img_infos[:, 2].cpu().numpy()
                 return self._prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales)
 
-    @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(self, obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         if boxes_ext is not None:
             assert obj_output is not None
             obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
@@ -337,7 +335,7 @@ class ActionOnlyModel(GenericModel):
 class ActionOnlyHoiModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'actonlyhoi'
+        return 'hoiactonly'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
@@ -362,16 +360,9 @@ class ActionOnlyHoiModel(GenericModel):
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
         action_logits = self.action_output_fc(act_repr)
 
-        ho_obj_scores = nn.functional.softmax(obj_logits[hoi_infos[:, 2], :], dim=1)
-        action_scores = torch.sigmoid(action_logits)
-        hoi_logits = action_logits.new_zeros((hoi_infos.shape[0], self.dataset.num_interactions))
-        for iid, (pid, oid) in enumerate(self.dataset.interactions):
-            hoi_logits[:, iid] = ho_obj_scores[:, oid] * action_scores[:, pid]
+        return obj_logits, action_logits, None
 
-        return obj_logits, action_logits, hoi_logits.detach()  # Do not train through HOI logits, use them for prediction only
-
-    @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(self, obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
         obj_prob = action_probs = hoi_probs = ho_pairs = ho_img_inds = None
         if hoi_infos is not None:
             assert boxes_ext is not None
@@ -380,8 +371,13 @@ class ActionOnlyHoiModel(GenericModel):
                 obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
             if action_output is not None:
                 action_probs = torch.sigmoid(action_output).cpu().numpy()
-            assert hoi_output is not None
-            hoi_probs = hoi_output
+
+            assert hoi_output is None
+            ho_obj_probs = obj_prob[hoi_infos[:, 2], :]
+            hoi_probs = np.zeros((hoi_infos.shape[0], self.dataset.num_interactions))
+            for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                hoi_probs[:, iid] = ho_obj_probs[:, oid] * action_probs[:, pid]
+
             ho_img_inds = hoi_infos[:, 0]
             ho_pairs = hoi_infos[:, 1:]
 
@@ -604,8 +600,7 @@ class PeyreModel(GenericModel):
         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos)
         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
 
-    @staticmethod
-    def _prepare_prediction(obj_output, action_output, hoi_probs, hoi_infos, boxes_ext, im_scales):
+    def _prepare_prediction(self, obj_output, action_output, hoi_probs, hoi_infos, boxes_ext, im_scales):
         assert obj_output is None and action_output is None
 
         ho_pairs = ho_img_inds = None

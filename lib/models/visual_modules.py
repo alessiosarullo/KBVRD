@@ -19,6 +19,7 @@ class VisualModule(nn.Module):
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__()
         self.gt_iou_thr = 0.5  # FIXME? params
+        self.box_proposal_thr = cfg.model.proposal_thr
         self.dataset = dataset
         self._precomputed = self.dataset.has_precomputed
 
@@ -38,6 +39,20 @@ class VisualModule(nn.Module):
 
         if self._precomputed:
             boxes_ext_np = batch.pc_boxes_ext
+            ho_infos = batch.pc_ho_infos
+
+            if self.box_proposal_thr is not None:
+                uncertain_boxes = boxes_ext_np[:, 5:].max(axis=1) < self.box_proposal_thr
+                boxes_ext_np = boxes_ext_np[~uncertain_boxes, :]
+                uncertain_boxes_set = set(uncertain_boxes.tolist())
+                inds = []
+                for i, (im, h, o) in enumerate(ho_infos):
+                    if h not in uncertain_boxes_set and o not in uncertain_boxes_set:
+                        inds.append(i)
+                ho_infos = ho_infos[np.array(inds), :]
+                if ho_infos.shape[0] == 0 and not inference:
+                    return None, None, None, None, None, None, None, None, None
+
             if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
                 return None, None, None, None, None, None, None, None, None
 
@@ -45,7 +60,6 @@ class VisualModule(nn.Module):
             boxes_ext = torch.tensor(boxes_ext_np, device=device)
             box_feats = torch.tensor(batch.pc_box_feats, device=device)
             masks = torch.tensor(batch.pc_masks, device=device)
-            ho_infos = batch.pc_ho_infos
 
             if ho_infos.shape[0] == 0:
                 assert inference and not cfg.program.predcls

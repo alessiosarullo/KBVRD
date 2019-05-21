@@ -184,10 +184,7 @@ class ModelConfig(BaseConfigs):
         self.use_imsitu = False
         self.use_cnet = False
 
-        self.prior_att = False
-        self.train_prior = False
-        self.kb_sim = False
-        self.use_memory = False
+        self.proposal_thr = None
 
         self.bn_momentum = 0.01
 
