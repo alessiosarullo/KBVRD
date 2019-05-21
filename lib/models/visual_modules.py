@@ -42,36 +42,52 @@ class VisualModule(nn.Module):
             ho_infos = batch.pc_ho_infos
 
             if self.box_proposal_thr > 0:
-                uncertain_boxes = boxes_ext_np[:, 5:].max(axis=1) < self.box_proposal_thr
-                boxes_ext_np = boxes_ext_np[~uncertain_boxes, :]
-                uncertain_boxes_set = set(uncertain_boxes.tolist())
-                inds = []
+                valid_box_inds = boxes_ext_np[:, 5:].max(axis=1) > self.box_proposal_thr
+                boxes_ext_np = boxes_ext_np[valid_box_inds, :]
+                uncertain_boxes_set = set(~valid_box_inds.tolist())
+
+                valid_hoi_inds = []
                 for i, (im, h, o) in enumerate(ho_infos):
                     if h not in uncertain_boxes_set and o not in uncertain_boxes_set:
-                        inds.append(i)
-                ho_infos = ho_infos[np.array(inds), :]
+                        valid_hoi_inds.append(i)
+                valid_hoi_inds = np.array(valid_hoi_inds)
+                ho_infos = ho_infos[valid_hoi_inds, :]
                 if ho_infos.shape[0] == 0 and not inference:
                     return None, None, None, None, None, None, None, None, None
 
             if inference and not cfg.program.predcls and boxes_ext_np.shape[0] == 0:
                 return None, None, None, None, None, None, None, None, None
 
+            b_pc_box_feats = batch.pc_box_feats
+            b_pc_masks = batch.pc_masks
+            b_pc_box_labels = batch.pc_box_labels
+            b_pc_action_labels = batch.pc_action_labels
+            hoi_union_boxes = batch.pc_ho_union_boxes
+            b_pc_ho_union_feats = batch.pc_ho_union_feats
+            if self.box_proposal_thr > 0:
+                b_pc_box_feats = b_pc_box_feats[valid_box_inds, :]
+                b_pc_masks = b_pc_masks[valid_box_inds, :]
+                b_pc_box_labels = b_pc_box_labels[valid_box_inds, :]
+                b_pc_action_labels = b_pc_action_labels[valid_hoi_inds, :]
+                hoi_union_boxes = hoi_union_boxes[valid_hoi_inds, :]
+                b_pc_ho_union_feats = b_pc_ho_union_feats[valid_hoi_inds, :]
+
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             boxes_ext = torch.tensor(boxes_ext_np, device=device)
-            box_feats = torch.tensor(batch.pc_box_feats, device=device)
-            masks = torch.tensor(batch.pc_masks, device=device)
+            box_feats = torch.tensor(b_pc_box_feats, device=device)
+            masks = torch.tensor(b_pc_masks, device=device)
 
             if ho_infos.shape[0] == 0:
                 assert inference and not cfg.program.predcls
                 return boxes_ext, box_feats, masks, None, None, None, None, None, None
             ho_infos = ho_infos.astype(np.int, copy=False)
 
-            if batch.pc_box_labels is None:
-                assert batch.pc_action_labels is None
+            if b_pc_box_labels is None:
+                assert b_pc_action_labels is None
                 box_labels = action_labels = hoi_labels = None
             else:
-                box_labels_np = batch.pc_box_labels
-                action_labels_np = batch.pc_action_labels
+                box_labels_np = b_pc_box_labels
+                action_labels_np = b_pc_action_labels
                 hoi_labels_np = self.action_labels_to_hoi_labels(box_labels_np, action_labels_np, ho_infos)
 
                 box_labels = torch.tensor(box_labels_np, device=device)
@@ -79,8 +95,7 @@ class VisualModule(nn.Module):
                 hoi_labels = torch.tensor(hoi_labels_np, device=device)
 
             # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
-            hoi_union_boxes = batch.pc_ho_union_boxes
-            hoi_union_boxes_feats = torch.tensor(batch.pc_ho_union_feats, device=device)
+            hoi_union_boxes_feats = torch.tensor(b_pc_ho_union_feats, device=device)
             return boxes_ext, box_feats, masks, hoi_union_boxes, hoi_union_boxes_feats, ho_infos, box_labels, action_labels, hoi_labels
         else:
             with torch.set_grad_enabled(self.training):
