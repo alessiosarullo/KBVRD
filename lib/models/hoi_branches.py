@@ -127,7 +127,7 @@ class GEmbBranch(AbstractHOIBranch):
         # obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         # pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        self.obj_input_to_emb_fc = nn.Linear(self.cnet_emb_dim + hoi_input_dim, self.output_emb_dim)
+        self.obj_input_to_emb_fc = nn.Linear(2 * self.cnet_emb_dim + hoi_input_dim, self.output_emb_dim)
 
     @property
     def output_dim(self):
