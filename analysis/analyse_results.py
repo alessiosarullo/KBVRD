@@ -2,26 +2,21 @@ import argparse
 import os
 import pickle
 import sys
-from collections import Counter
-from typing import Dict
+from typing import List, Dict
 
 import cv2
 import matplotlib
 import numpy as np
-import torch
-from matplotlib import gridspec
 from matplotlib import pyplot as plt
 
-from analysis.utils import vis_one_image, plot_mat, heatmap, annotate_heatmap
+from analysis.utils import vis_one_image, plot_mat
 from config import cfg
+from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.utils import Minibatch, get_counts
-from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
+from lib.dataset.utils import Minibatch, Example
 from lib.models.utils import Prediction
-from lib.stats.evaluator_HD import Evaluator as Evaluator_HD
-from lib.stats.evaluator import Evaluator, MetricFormatter
-from scripts.utils import get_all_models_by_name
-from lib.bbox_utils import get_union_boxes
+from lib.stats.evaluator import Evaluator
+from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
@@ -30,17 +25,6 @@ try:
     # sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
-
-from collections import Counter
-from typing import List, Dict
-
-import pickle
-import numpy as np
-
-from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Example
-from lib.models.utils import Prediction
 
 
 class Analyser:
@@ -170,6 +154,7 @@ def evaluate():
     evaluator.save(cfg.program.eval_res_file)
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     # stats.print_metrics(sort=True)
+    Timer.print()
 
 
 def stats():
