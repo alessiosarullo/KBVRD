@@ -21,8 +21,8 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/actgemb/2019-05-21_11-39-01_vanilla']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/actgemb/2019-05-21_11-39-01_vanilla']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
@@ -161,6 +161,7 @@ def evaluate():
 def stats():
     results = _setup_and_load()
     res_save_path = cfg.program.res_stats_path
+    os.makedirs(res_save_path, exist_ok=True)
 
     hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
@@ -174,9 +175,9 @@ def stats():
     zero_shot_preds = (num_gt == 0).astype(np.float) * num_pred
     zero_shot_preds[zero_shot_preds == 0] = np.inf
     plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'zero_shot.png'), dpi=300)
     plt.show()
-    plt.figure(0).savefig(os.path.join(res_save_path, 'zero_shot.png'), dpi=300)
-    zero_shot_str = '\n'.join(['%-20s %s' % (hdtest.predicates[p], hdtest.objects[o])
+    zero_shot_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], zero_shot_preds[o, p])
                                for p, o in np.stack(np.where(~np.isinf(zero_shot_preds.T)), axis=1)])
     print(zero_shot_str)
     with open(os.path.join(res_save_path, 'zero_shot.txt'), 'w') as f:

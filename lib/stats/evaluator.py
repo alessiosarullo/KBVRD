@@ -42,8 +42,8 @@ class Evaluator(BaseEvaluator):
         self.gt_hoi_classes = []
         self.predict_hoi_scores = []
         self.pred_gt_assignment_per_hoi = []
-        self.pred_gt_assignment_unconstrained = []
         self.gt_hit_per_prediction = {}
+        self.gt_hit_per_prediction2 = []
         self.gt_count = 0
 
         self.metrics = {}  # type: Dict[str, np.ndarray]
@@ -198,6 +198,15 @@ class Evaluator(BaseEvaluator):
                     self.gt_hit_per_prediction.setdefault(i, []).append(pred_gtid_assignment[sorted_i])
             Timer.get('Eval epoch', 'Metrics', 'Assignment').toc()
 
+            # Timer.get('Eval epoch', 'Metrics', 'Assignment2').tic()
+            # inv_ind = np.empty_like(inds)
+            # inv_ind[inds] = np.arange(inds.size)
+            # tp_inv = tp[inv_ind]
+            # gt_hit_per_prediction = np.full_like(tp, fill_value=-1)
+            # gt_hit_per_prediction[tp_inv] = pred_gtid_assignment[inv_ind][tp_inv]
+            # self.gt_hit_per_prediction2.append(gt_hit_per_prediction)
+            # Timer.get('Eval epoch', 'Metrics', 'Assignment2').toc()
+
         fp = 1 - tp
         assert np.all(fp[pred_gtid_assignment < 0] == 1)
 
@@ -211,82 +220,34 @@ class Evaluator(BaseEvaluator):
 
         # compute average precision
         Timer.get('Eval epoch', 'Metrics', 'PR-comp').tic()
-        # rec_thresholds = np.digitize(rec, np.arange(11) / 10)
-        rec_thresholds = np.full(11, fill_value=-1, dtype=np.int)
-        i_thr = 0
-        for i, r in enumerate(rec):
-            while r >= i_thr / (rec_thresholds.size - 1):
-                rec_thresholds[i_thr] = i
-                i_thr += 1
-            if i_thr >= rec_thresholds.size:
-                break
-        ap = 0
-        max_p = np.maximum.accumulate(prec)
-        for i in range(rec_thresholds.size):
-            if rec_thresholds[i] < 0:
-                p = 0
-            else:
-                p = max_p[rec_thresholds[i]]
-            ap = ap + p / 11
-
+        # rec_thresholds = np.full(11, fill_value=-1, dtype=np.int)
+        # i_thr = 0
+        # for i, r in enumerate(rec):
+        #     while r >= i_thr / (rec_thresholds.size - 1):
+        #         rec_thresholds[i_thr] = i
+        #         i_thr += 1
+        #     if i_thr >= rec_thresholds.size:
+        #         break
         # ap = 0
-        # for t in np.arange(11) / 10:
-        #     pr = prec[rec >= t]
-        #     if pr.size > 0:
-        #         p = max(pr)
-        #     else:
+        # max_p = np.maximum.accumulate(prec)
+        # for rt in rec_thresholds:
+        #     if rt < 0:
         #         p = 0
-        #     ap = ap + p / 11
+        #     else:
+        #         p = max_p[rt]
+        #     ap = ap + p / rec_thresholds.size
+
+        ap = 0
+        for t in np.arange(11) / 10:
+            pr = prec[rec >= t]
+            if pr.size > 0:
+                p = max(pr)
+            else:
+                p = 0
+            ap = ap + p / 11
         Timer.get('Eval epoch', 'Metrics', 'PR-comp').toc()
         return rec, prec, ap
 
-    def process_prediction_for_errors(self, im_id, gt_entry: Example, prediction: Prediction):
-        if isinstance(gt_entry, Example):
-            gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
-            num_gt_hois = gt_hoi_triplets.shape[0]
-
-            gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
-
-            gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
-            self.gt_count += num_gt_hois
-        else:
-            raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
-
-        predict_action_scores = np.zeros([0, self.dataset.num_predicates])
-        predict_obj_scores_per_ho_pair = np.zeros([0, self.dataset.num_object_classes])
-        predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
-        predict_boxes = np.zeros((0, 4))
-        if prediction.obj_boxes is not None:
-            assert prediction.obj_im_inds.shape[0] == prediction.obj_boxes.shape[0]
-
-            predict_boxes = prediction.obj_boxes
-
-            if prediction.ho_pairs is not None:
-                assert len(np.unique(prediction.obj_im_inds)) == len(np.unique(prediction.ho_img_inds)) == 1
-
-                predict_ho_pairs = prediction.ho_pairs
-                assert prediction.hoi_scores is None
-                assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
-                assert prediction.action_score_distributions is not None
-
-                predict_action_scores = prediction.action_score_distributions
-                predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
-        else:
-            assert prediction.ho_pairs is None
-
-        pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_assignment = np.full(predict_ho_pairs.shape[0], fill_value=-1, dtype=np.int)
-        for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
-            gt_pair_ious = np.zeros(num_gt_hois)
-            for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
-                iou_h = pred_gt_ious[ph, gh]
-                iou_o = pred_gt_ious[po, go]
-                gt_pair_ious[gtidx] = min(iou_h, iou_o)
-            if np.any(gt_pair_ious >= self.iou_thresh):
-                gt_assignment = np.argmax(gt_pair_ious)
-                pred_gt_assignment[predict_idx] = gt_ho_ids[gt_assignment]
-
-        self.pred_gt_assignment_unconstrained.append(pred_gt_assignment)
 
 class MetricFormatter:
     def __init__(self):
