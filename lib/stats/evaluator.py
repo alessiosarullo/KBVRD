@@ -8,6 +8,7 @@ from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
 from lib.models.utils import Prediction
+from lib.stats.utils import Timer
 
 
 class BaseEvaluator:
@@ -57,11 +58,17 @@ class Evaluator(BaseEvaluator):
         self._init()
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
+        Timer.get('Eval epoch').tic()
+        Timer.get('Eval epoch', 'Predictions').tic()
         for i, res in enumerate(predictions):
             ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
+        Timer.get('Eval epoch', 'Predictions').toc()
+        Timer.get('Eval epoch', 'Metrics').tic()
         self.compute_metrics()
+        Timer.get('Eval epoch', 'Metrics').toc()
+        Timer.get('Eval epoch').toc()
 
     def compute_metrics(self):
         gt_hoi_classes = np.concatenate(self.gt_hoi_classes, axis=0)
@@ -172,29 +179,38 @@ class Evaluator(BaseEvaluator):
         tp = np.zeros(num_predictions)
 
         if num_predictions > 0:
+            Timer.get('Eval epoch', 'Metrics', 'Argsort').tic()
             inds = np.argsort(predicted_conf_scores)[::-1]
             pred_gtid_assignment = pred_gtid_assignment[inds]
+            Timer.get('Eval epoch', 'Metrics', 'Argsort').toc()
 
+            Timer.get('Eval epoch', 'Metrics', 'Unique').tic()
             matched_gt_inds, highest_scoring_pred_idx_per_gt_ind = np.unique(pred_gtid_assignment, return_index=True)
             if matched_gt_inds[0] == -1:
                 matched_gt_inds = matched_gt_inds[1:]
                 highest_scoring_pred_idx_per_gt_ind = highest_scoring_pred_idx_per_gt_ind[1:]
             tp[highest_scoring_pred_idx_per_gt_ind] = 1
+            Timer.get('Eval epoch', 'Metrics', 'Unique').toc()
 
+            Timer.get('Eval epoch', 'Metrics', 'Assignment').tic()
             for sorted_i, i in enumerate(inds):
                 if tp[sorted_i]:
                     self.gt_hit_per_prediction.setdefault(i, []).append(pred_gtid_assignment[sorted_i])
+            Timer.get('Eval epoch', 'Metrics', 'Assignment').toc()
 
         fp = 1 - tp
         assert np.all(fp[pred_gtid_assignment < 0] == 1)
 
         # compute precision/recall
+        Timer.get('Eval epoch', 'Metrics', 'PR-misc').tic()
         fp = np.cumsum(fp)
         tp = np.cumsum(tp)
         rec = tp / num_hoi_gt_positives
         prec = tp / (fp + tp)
+        Timer.get('Eval epoch', 'Metrics', 'PR-misc').toc()
 
         # compute average precision
+        Timer.get('Eval epoch', 'Metrics', 'PR-comp').tic()
         ap = 0
         for t in np.arange(11) / 10:
             pr = prec[rec >= t]
@@ -203,6 +219,7 @@ class Evaluator(BaseEvaluator):
             else:
                 p = 0
             ap = ap + p / 11
+        Timer.get('Eval epoch', 'Metrics', 'PR-comp').toc()
         return rec, prec, ap
 
     def process_prediction_for_errors(self, im_id, gt_entry: Example, prediction: Prediction):

@@ -25,9 +25,9 @@ from lib.bbox_utils import get_union_boxes
 
 try:
     matplotlib.use('Qt5Agg')
-    # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
 
@@ -189,6 +189,8 @@ def stats():
     plot_mat(x, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
 
     print('\n'.join(['%-20s %s' % (hdtest.predicates[p], hdtest.objects[o]) for p, o in np.stack(np.where(~np.isinf(x.T)), axis=1)]))
+
+    # TODO save
 
     plt.show()
 
