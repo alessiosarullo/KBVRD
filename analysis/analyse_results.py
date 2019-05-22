@@ -20,8 +20,9 @@ from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
-    sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/actgemb/2019-05-21_11-39-01_vanilla']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
 except ImportError:
     pass
@@ -159,6 +160,7 @@ def evaluate():
 
 def stats():
     results = _setup_and_load()
+    res_save_path = cfg.program.res_stats_path
 
     hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
@@ -169,15 +171,16 @@ def stats():
     # pred_inds = np.array((np.argsort(pos.sum(axis=0)[1:])[::-1] + 1).tolist() + [0])  # no_interaction at the end
 
     # plot_mat(tp / np.maximum(1, misses), hdtest.predicates, hdtest.objects, vrange=None, plot=False)
-    x = (num_gt == 0).astype(np.float) * num_pred
-    x[x == 0] = np.inf
-    plot_mat(x, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
-
-    print('\n'.join(['%-20s %s' % (hdtest.predicates[p], hdtest.objects[o]) for p, o in np.stack(np.where(~np.isinf(x.T)), axis=1)]))
-
-    # TODO save
-
+    zero_shot_preds = (num_gt == 0).astype(np.float) * num_pred
+    zero_shot_preds[zero_shot_preds == 0] = np.inf
+    plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
     plt.show()
+    plt.figure(0).savefig(os.path.join(res_save_path, 'zero_shot.png'), dpi=300)
+    zero_shot_str = '\n'.join(['%-20s %s' % (hdtest.predicates[p], hdtest.objects[o])
+                               for p, o in np.stack(np.where(~np.isinf(zero_shot_preds.T)), axis=1)])
+    print(zero_shot_str)
+    with open(os.path.join(res_save_path, 'zero_shot.txt'), 'w') as f:
+        f.write(zero_shot_str)
 
 
 def visualise_images():
