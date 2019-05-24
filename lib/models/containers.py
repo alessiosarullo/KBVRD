@@ -46,9 +46,9 @@ class VisualOutput:
             valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1)[0] >= thr)
 
         if self.ho_infos is not None:
-            valid_box_mask = valid_box_mask.detach().cpu().numpy().astype(bool)
-            valid_box_inds_index = np.full(valid_box_mask.shape[0], fill_value=-1, dtype=np.int)
-            valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
+            valid_box_mask_np = valid_box_mask.detach().cpu().numpy().astype(bool)
+            valid_box_inds_index = np.full(valid_box_mask_np.shape[0], fill_value=-1, dtype=np.int)
+            valid_box_inds_index[valid_box_mask_np] = np.arange(valid_box_mask_np.sum())
 
             ho_infos = self.ho_infos.copy()
             ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
@@ -57,10 +57,10 @@ class VisualOutput:
             valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
             if not np.any(valid_hoi_mask) and self.box_labels is not None:  # training
                 # No valid interactions. Pick one and the corresponding boxes.
-                valid_box_mask[self.ho_infos[0, 1]] = True
-                valid_box_mask[self.ho_infos[0, 2]] = True
+                valid_box_mask_np[self.ho_infos[0, 1]] = True
+                valid_box_mask_np[self.ho_infos[0, 2]] = True
 
-                valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
+                valid_box_inds_index[valid_box_mask_np] = np.arange(valid_box_mask_np.sum())
 
                 ho_infos = self.ho_infos.copy()
                 ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
