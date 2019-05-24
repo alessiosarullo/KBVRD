@@ -43,7 +43,7 @@ class VisualOutput:
         if thr is None:  # filter BG boxes
             valid_box_mask = (self.box_labels >= 0)
         else:
-            valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1) > thr)
+            valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1)[0] > thr)
         discarded_boxes = self.boxes_ext[~valid_box_mask, :]
         discarded_box_feats = self.box_feats[~valid_box_mask, :]
         discarded_masks = self.masks[~valid_box_mask, :]
