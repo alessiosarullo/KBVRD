@@ -163,7 +163,8 @@ class ObjFGPredModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput):
-        bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=None)
+        if vis_output.box_labels is not None:
+            bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=None)
 
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
@@ -202,7 +203,8 @@ class ActionOnlyModel(GenericModel):
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
     def _forward(self, vis_output: VisualOutput):
-        vis_output.filter_boxes(thr=None)
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes(thr=None)
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -292,7 +294,8 @@ class ActionOnlyHoiModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput):
-        vis_output.filter_boxes(thr=None)
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes(thr=None)
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
