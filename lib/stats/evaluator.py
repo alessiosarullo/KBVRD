@@ -192,12 +192,12 @@ class Evaluator(BaseEvaluator):
             tp[highest_scoring_pred_idx_per_gt_ind] = 1
             Timer.get('Eval epoch', 'Metrics', 'Unique').toc()
 
-            Timer.get('Eval epoch', 'Metrics', 'Assignment').tic()
-            for sorted_i, i in enumerate(inds):
-                if tp[sorted_i]:
-                    self.gt_hit_per_prediction.setdefault(i, []).append(pred_gtid_assignment[sorted_i])
-            Timer.get('Eval epoch', 'Metrics', 'Assignment').toc()
-
+            # Timer.get('Eval epoch', 'Metrics', 'Assignment').tic()
+            # for sorted_i, i in enumerate(inds):
+            #     if tp[sorted_i]:
+            #         self.gt_hit_per_prediction.setdefault(i, []).append(pred_gtid_assignment[sorted_i])
+            # Timer.get('Eval epoch', 'Metrics', 'Assignment').toc()
+            #
             # Timer.get('Eval epoch', 'Metrics', 'Assignment2').tic()
             # inv_ind = np.empty_like(inds)
             # inv_ind[inds] = np.arange(inds.size)
@@ -220,32 +220,17 @@ class Evaluator(BaseEvaluator):
 
         # compute average precision
         Timer.get('Eval epoch', 'Metrics', 'PR-comp').tic()
-        rec_thresholds = np.full(11, fill_value=-1, dtype=np.int)
-        i_thr = 0
-        for i, r in enumerate(rec):
-            while r >= i_thr / (rec_thresholds.size - 1):
-                rec_thresholds[i_thr] = i
-                i_thr += 1
-            if i_thr >= rec_thresholds.size:
-                break
+        num_bins = 10  # uniformly distributed in [0, 1) (e.g., use 10 for 0.1 spacing)
+        thr_values, thr_inds = np.unique(np.floor(rec * num_bins) / num_bins, return_index=True)
+        rec_thresholds = np.full(num_bins + 1, fill_value=-1, dtype=np.int)
+        rec_thresholds[np.floor(thr_values * num_bins).astype(np.int)] = thr_inds
+        for i in range(num_bins, 0, -1):  # fix gaps of -1s
+            if rec_thresholds[i - 1] < 0 and rec_thresholds[i] >= 0:
+                rec_thresholds[i - 1] = rec_thresholds[i]
         assert rec_thresholds[0] == 0
-        ap = 0
-        max_p = np.maximum.accumulate(prec[::-1])[::-1]
-        for rt in rec_thresholds:
-            if rt < 0:
-                p = 0
-            else:
-                p = max_p[rt]
-            ap = ap + p / rec_thresholds.size
 
-        # ap = 0
-        # for t in np.arange(11) / 10:
-        #     pr = prec[rec >= t]
-        #     if pr.size > 0:
-        #         p = max(pr)
-        #     else:
-        #         p = 0
-        #     ap = ap + p / 11
+        max_p = np.maximum.accumulate(prec[::-1])[::-1]
+        ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         Timer.get('Eval epoch', 'Metrics', 'PR-comp').toc()
         return rec, prec, ap
 
