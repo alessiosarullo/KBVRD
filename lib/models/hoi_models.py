@@ -170,6 +170,7 @@ class ObjFGPredModel(GenericModel):
 
         if self.box_thr > 0:
             bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=self.box_thr)
+
         if vis_output.ho_infos is None:
             return None, None
 

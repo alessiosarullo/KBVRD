@@ -43,10 +43,14 @@ class VisualOutput:
         if thr is None:  # filter BG boxes
             valid_box_mask = (self.box_labels >= 0)
         else:
-            valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1)[0] > thr)
+            thr = min(thr, self.boxes_ext[:, 5:].max())
+            valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1)[0] >= thr)
+            assert valid_box_mask.any()
+
         discarded_boxes = self.boxes_ext[~valid_box_mask, :]
         discarded_box_feats = self.box_feats[~valid_box_mask, :]
         discarded_masks = self.masks[~valid_box_mask, :]
+
         self.boxes_ext = self.boxes_ext[valid_box_mask, :]
         self.box_feats = self.box_feats[valid_box_mask, :]
         self.masks = self.masks[valid_box_mask, :]
@@ -61,6 +65,9 @@ class VisualOutput:
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
 
             valid_hoi_mask = np.all(self.ho_infos >= 0, axis=1)
+            if not np.any(valid_hoi_mask) and self.box_labels is None:  # inference
+                valid_hoi_mask[0] = 1
+
             if not np.any(valid_hoi_mask):
                 self.ho_infos = None
                 self.hoi_union_boxes = None
