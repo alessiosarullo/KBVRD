@@ -107,7 +107,7 @@ class SimpleObjBranch(nn.Module):
             nn.ReLU(inplace=True),
         ])
 
-    def forward(self, boxes_ext, box_feats, unique_im_ids, box_im_ids, **kwargs):
+    def forward(self, boxes_ext, box_feats, **kwargs):
         with torch.set_grad_enabled(self.training):
             object_repr = self.obj_repr_fc(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
             return object_repr

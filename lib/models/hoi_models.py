@@ -177,15 +177,9 @@ class ObjFGPredModel(GenericModel):
         box_feats = vis_output.box_feats
         masks = vis_output.masks
         union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = vis_output.ho_infos
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_repr = self.obj_branch(boxes_ext, box_feats)
         obj_logits = self.obj_output_fc(obj_repr)
 
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
@@ -216,15 +210,9 @@ class ActionOnlyModel(GenericModel):
         box_feats = vis_output.box_feats
         masks = vis_output.masks
         union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = vis_output.ho_infos
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_repr = self.obj_branch(boxes_ext, box_feats)
         obj_logits = self.obj_output_fc(obj_repr)
 
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
@@ -307,15 +295,9 @@ class ActionOnlyHoiModel(GenericModel):
         box_feats = vis_output.box_feats
         masks = vis_output.masks
         union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = vis_output.ho_infos
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
-        box_im_ids = boxes_ext[:, 0].long()
-        hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-        im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-        box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-        assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_repr = self.obj_branch(boxes_ext, box_feats)
         obj_logits = self.obj_output_fc(obj_repr)
 
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
@@ -345,7 +327,7 @@ class KatoModel(GenericModel):
         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
 
-        obj_repr = self.obj_branch(boxes_ext, box_feats, im_ids, box_im_ids)
+        obj_repr = self.obj_branch(boxes_ext, box_feats)
         obj_logits = self.obj_output_fc(obj_repr)
 
         hoi_obj_logits, action_logits = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)

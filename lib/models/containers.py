@@ -56,7 +56,7 @@ class VisualOutput:
         if self.ho_infos is not None:
             valid_box_mask = valid_box_mask.detach().cpu().numpy().astype(bool)
             valid_box_inds_index = np.full(valid_box_mask.shape[0], fill_value=-1, dtype=np.int)
-            valid_box_inds_index[valid_box_mask] = np.flatnonzero(valid_box_mask)
+            valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
             self.ho_infos[:, 1] = valid_box_inds_index[self.ho_infos[:, 1]]
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
 
