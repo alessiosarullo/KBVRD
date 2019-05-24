@@ -69,7 +69,7 @@ class VisualOutput:
                 valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
                 assert valid_hoi_mask[0], valid_hoi_mask
 
-                valid_box_mask = torch.from_numpy(valid_box_mask_np.astype(np.uint8))
+                valid_box_mask = (torch.from_numpy(valid_box_mask_np.astype(np.uint8)) > 0)
 
             if not np.any(valid_hoi_mask):
                 self.ho_infos = None
@@ -79,7 +79,7 @@ class VisualOutput:
             else:
                 self.ho_infos = ho_infos[valid_hoi_mask, :]
 
-                valid_hoi_mask = torch.from_numpy(valid_hoi_mask.astype(np.uint8))
+                valid_hoi_mask = (torch.from_numpy(valid_hoi_mask.astype(np.uint8)) > 0)
                 self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
                 self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
 
