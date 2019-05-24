@@ -65,7 +65,7 @@ class VisualOutput:
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
 
             valid_hoi_mask = np.all(self.ho_infos >= 0, axis=1)
-            if not np.any(valid_hoi_mask) and self.box_labels is None:  # inference
+            if not np.any(valid_hoi_mask) and self.box_labels is not None:  # training
                 valid_hoi_mask[0] = 1
 
             if not np.any(valid_hoi_mask):
