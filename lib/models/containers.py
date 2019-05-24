@@ -60,13 +60,16 @@ class VisualOutput:
                 valid_box_mask_np[self.ho_infos[0, 1]] = True
                 valid_box_mask_np[self.ho_infos[0, 2]] = True
 
+                valid_box_inds_index = np.full(valid_box_mask_np.shape[0], fill_value=-1, dtype=np.int)
                 valid_box_inds_index[valid_box_mask_np] = np.arange(valid_box_mask_np.sum())
 
                 ho_infos = self.ho_infos.copy()
                 ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
                 ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
                 valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
-                assert valid_hoi_mask[0] is True
+                assert valid_hoi_mask[0], valid_hoi_mask
+
+                valid_box_mask = torch.from_numpy(valid_box_mask_np.astype(np.uint8))
 
             if not np.any(valid_hoi_mask):
                 self.ho_infos = None
