@@ -112,6 +112,8 @@ class ObjFGPredModel(GenericModel):
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.box_thr = cfg.model.proposal_thr
+
         vis_feat_dim = self.visual_module.vis_feat_dim
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
@@ -165,6 +167,11 @@ class ObjFGPredModel(GenericModel):
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
             bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=None)
+
+        if self.box_thr > 0:
+            bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=self.box_thr)
+        if vis_output.ho_infos is None:
+            return None, None
 
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats

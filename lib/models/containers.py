@@ -61,13 +61,19 @@ class VisualOutput:
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
 
             valid_hoi_mask = np.all(self.ho_infos >= 0, axis=1)
-            self.ho_infos = self.ho_infos[valid_hoi_mask, :]
+            if not np.any(valid_hoi_mask):
+                self.ho_infos = None
+                self.hoi_union_boxes = None
+                self.hoi_union_boxes_feats = None
+                self.action_labels = None
+            else:
+                self.ho_infos = self.ho_infos[valid_hoi_mask, :]
 
-            valid_hoi_mask = torch.from_numpy(valid_hoi_mask.astype(np.uint8))
-            self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
-            self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
+                valid_hoi_mask = torch.from_numpy(valid_hoi_mask.astype(np.uint8))
+                self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
+                self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
 
-            if self.action_labels is not None:
-                self.action_labels = self.action_labels[valid_hoi_mask, :]
+                if self.action_labels is not None:
+                    self.action_labels = self.action_labels[valid_hoi_mask, :]
 
         return discarded_boxes, discarded_box_feats, discarded_masks
