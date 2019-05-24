@@ -58,8 +58,11 @@ class VisualOutput:
             valid_box_inds_index[valid_box_mask] = np.flatnonzero(valid_box_mask)
             self.ho_infos[:, 1] = valid_box_inds_index[self.ho_infos[:, 1]]
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
+
             valid_hoi_mask = np.all(self.ho_infos >= 0, axis=1)
             self.ho_infos = self.ho_infos[valid_hoi_mask, :]
+
+            valid_hoi_mask = torch.from_numpy(valid_hoi_mask)
             self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
             self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
 
