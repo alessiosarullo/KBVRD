@@ -43,9 +43,45 @@ class VisualOutput:
         if thr is None:  # filter BG boxes
             valid_box_mask = (self.box_labels >= 0)
         else:
-            thr = min(thr, self.boxes_ext[:, 5:].max())
             valid_box_mask = (self.boxes_ext[:, 5:].max(dim=1)[0] >= thr)
-            assert valid_box_mask.any()
+
+        if self.ho_infos is not None:
+            valid_box_mask = valid_box_mask.detach().cpu().numpy().astype(bool)
+            valid_box_inds_index = np.full(valid_box_mask.shape[0], fill_value=-1, dtype=np.int)
+            valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
+
+            ho_infos = self.ho_infos.copy()
+            ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
+            ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
+
+            valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
+            if not np.any(valid_hoi_mask) and self.box_labels is not None:  # training
+                # No valid interactions. Pick one and the corresponding boxes.
+                valid_box_mask[self.ho_infos[0, 1]] = True
+                valid_box_mask[self.ho_infos[0, 2]] = True
+
+                valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
+
+                ho_infos = self.ho_infos.copy()
+                ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
+                ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
+                valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
+                assert valid_hoi_mask[0] is True
+
+            if not np.any(valid_hoi_mask):
+                self.ho_infos = None
+                self.hoi_union_boxes = None
+                self.hoi_union_boxes_feats = None
+                self.action_labels = None
+            else:
+                self.ho_infos = ho_infos[valid_hoi_mask, :]
+
+                valid_hoi_mask = torch.from_numpy(valid_hoi_mask.astype(np.uint8))
+                self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
+                self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
+
+                if self.action_labels is not None:
+                    self.action_labels = self.action_labels[valid_hoi_mask, :]
 
         discarded_boxes = self.boxes_ext[~valid_box_mask, :]
         discarded_box_feats = self.box_feats[~valid_box_mask, :]
@@ -56,31 +92,5 @@ class VisualOutput:
         self.masks = self.masks[valid_box_mask, :]
         if self.box_labels is not None:
             self.box_labels = self.box_labels[valid_box_mask]
-
-        if self.ho_infos is not None:
-            valid_box_mask = valid_box_mask.detach().cpu().numpy().astype(bool)
-            valid_box_inds_index = np.full(valid_box_mask.shape[0], fill_value=-1, dtype=np.int)
-            valid_box_inds_index[valid_box_mask] = np.arange(valid_box_mask.sum())
-            self.ho_infos[:, 1] = valid_box_inds_index[self.ho_infos[:, 1]]
-            self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
-
-            valid_hoi_mask = np.all(self.ho_infos >= 0, axis=1)
-            if not np.any(valid_hoi_mask) and self.box_labels is not None:  # training
-                valid_hoi_mask[0] = 1
-
-            if not np.any(valid_hoi_mask):
-                self.ho_infos = None
-                self.hoi_union_boxes = None
-                self.hoi_union_boxes_feats = None
-                self.action_labels = None
-            else:
-                self.ho_infos = self.ho_infos[valid_hoi_mask, :]
-
-                valid_hoi_mask = torch.from_numpy(valid_hoi_mask.astype(np.uint8))
-                self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
-                self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
-
-                if self.action_labels is not None:
-                    self.action_labels = self.action_labels[valid_hoi_mask, :]
 
         return discarded_boxes, discarded_box_feats, discarded_masks
