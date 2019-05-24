@@ -7,7 +7,7 @@ import torch
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Minibatch
-from lib.models.visual_modules import VisualModule
+from lib.detection.visual_module import VisualModule
 
 
 def save_feats():

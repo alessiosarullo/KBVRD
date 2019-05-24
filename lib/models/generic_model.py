@@ -8,8 +8,8 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Minibatch
 from lib.models.abstract_model import AbstractModel
-from lib.models.visual_modules import VisualModule
-from lib.models.utils import Prediction
+from lib.detection.visual_module import VisualModule
+from lib.models.containers import Prediction, VisualOutput
 
 
 class GenericModel(AbstractModel):
@@ -38,18 +38,6 @@ class GenericModel(AbstractModel):
 
             self.class_pos_weights = torch.nn.Parameter(torch.from_numpy(expected_class_cost).view(1, -1), requires_grad=False)
             self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
-
-    def get_losses(self, x, **kwargs):
-        obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels = self(x, inference=False, **kwargs)
-        losses = {}
-        if obj_output is not None:
-            losses['object_loss'] = nn.functional.cross_entropy(obj_output, box_labels)
-        if action_output is not None:
-            losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
-        if hoi_output is not None:
-            losses['hoi_loss'] = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
-        assert losses
-        return losses
 
     # def focal_loss(self, logits, labels):
     #     gamma = cfg.opt.gamma
@@ -93,54 +81,45 @@ class GenericModel(AbstractModel):
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
-            boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = \
-                self.visual_module(x, inference)
-            # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-            # Masks are floats at this point.
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
-            if hoi_infos is not None:
-                obj_output, action_output, hoi_output = self._forward(boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels,
-                                                                      action_labels)
+            if vis_output.ho_infos is not None:
+                obj_output, action_output = self._forward(vis_output)
             else:
-                obj_output = action_output = hoi_output = None
+                obj_output = action_output = None
 
             if not inference:
-                # assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
-                return obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels
+                box_labels = vis_output.box_labels
+                action_labels = vis_output.action_labels
+
+                fg_box_inds = (box_labels >= 0)
+                obj_output = obj_output[fg_box_inds, :]
+                box_labels = box_labels[fg_box_inds]
+
+                losses = {'object_loss': nn.functional.cross_entropy(obj_output, box_labels),
+                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
             else:
-                im_scales = x.img_infos[:, 2].cpu().numpy()
-                return self._prepare_prediction(obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales)
+                prediction = Prediction()
 
-    def _forward(self, boxes_ext, box_feats, masks, union_boxes_feats, hoi_infos, box_labels=None, action_labels=None, hoi_labels=None):
+                if vis_output.ho_infos is not None:
+                    assert action_output is not None
+
+                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                    prediction.obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+                    prediction.action_probs = torch.sigmoid(action_output).cpu().numpy()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput):
         raise NotImplementedError()
-
-    def _prepare_prediction(self, obj_output, action_output, hoi_output, hoi_infos, boxes_ext, im_scales):
-        obj_prob = action_probs = hoi_probs = ho_pairs = ho_img_inds = None
-        if hoi_infos is not None:
-            assert boxes_ext is not None
-            assert action_output is not None or hoi_output is not None
-            if not cfg.program.predcls and obj_output is not None:
-                obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-            if action_output is not None:
-                action_probs = torch.sigmoid(action_output).cpu().numpy()
-            if hoi_output is not None:
-                hoi_probs = torch.sigmoid(hoi_output).cpu().numpy()
-            ho_img_inds = hoi_infos[:, 0]
-            ho_pairs = hoi_infos[:, 1:]
-
-        if boxes_ext is not None:
-            boxes_ext = boxes_ext.cpu().numpy()
-            obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-            obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-            if cfg.program.predcls:
-                assert obj_prob is None
-                obj_prob = boxes_ext[:, 5:]  # this cannot be refined because of the lack of spatial relationships
-        else:
-            obj_im_inds = obj_boxes = None
-        return Prediction(obj_im_inds=obj_im_inds,
-                          obj_boxes=obj_boxes,
-                          obj_scores=obj_prob,
-                          ho_img_inds=ho_img_inds,
-                          ho_pairs=ho_pairs,
-                          action_scores=action_probs,
-                          hoi_scores=hoi_probs)

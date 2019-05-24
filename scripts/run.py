@@ -2,6 +2,7 @@ import datetime
 import os
 import pickle
 import random
+from typing import Union
 
 import numpy as np
 import torch
@@ -10,8 +11,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.models.abstract_model import AbstractHOIBranch
-from lib.models.generic_model import GenericModel, Prediction
+from lib.models.abstract_model import AbstractModel
+from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.object_evaluator import ObjectEvaluator
 from lib.stats.running_stats import RunningStats
@@ -27,8 +28,8 @@ class Launcher:
         if cfg.program.load_train_output:
             cfg.load()
         cfg.print()
-        self.detector = None  # type: GenericModel
-        self.train_split, self.val_split, self.test_split = None, None, None  # type: HicoDetInstanceSplit
+        self.detector = None  # type: Union[None, AbstractModel]
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: Union[None, HicoDetInstanceSplit]
         self.curr_train_iter = 0
 
     def run(self):
@@ -57,7 +58,7 @@ class Launcher:
         self.val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
         self.test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
-        self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: GenericModel
+        self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():
             self.detector.cuda()
         else:
@@ -67,7 +68,7 @@ class Launcher:
         if cfg.program.load_train_output:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
-            # # TODO resume from checkpoint
+            # # TODO resume from checkpoint?
             # if cfg.program.resume:
             # start_epoch = ckpt['epoch']
             # print("Continuing from epoch %d." % (start_epoch + 1))
@@ -129,7 +130,7 @@ class Launcher:
 
                     all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
 
-                    if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):  # FIXME magic constant
+                    if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):
                         print('Exiting training early.', flush=True)
                         break
             Timer.get().print()
@@ -159,7 +160,7 @@ class Launcher:
             if optimizer is not None:
                 if batch_idx % cfg.program.log_interval == 0:
                     stats.log_stats(self.curr_train_iter, verbose=verbose,
-                                    lr=optimizer.param_groups[0]['lr'], epoch=epoch_idx, batch=batch_idx)  # TODO lr for each parameter group
+                                    lr=optimizer.param_groups[0]['lr'], epoch=epoch_idx, batch=batch_idx)
                 self.curr_train_iter += 1
             else:
                 if verbose:
@@ -176,7 +177,7 @@ class Launcher:
     def loss_batch(self, batch, stats: RunningStats, optimizer=None):
         """ :arg `optimizer` should be None on validation batches. """
 
-        losses = self.detector.get_losses(batch)
+        losses = self.detector(batch, inference=False)
         assert losses is not None
         loss = sum(losses.values())  # type: torch.Tensor
         losses['total_loss'] = loss

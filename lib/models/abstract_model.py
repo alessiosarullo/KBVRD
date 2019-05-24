@@ -14,9 +14,6 @@ class AbstractModel(nn.Module):
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
         self.values_to_monitor = {}  # FIXME maybe?
 
-    def get_losses(self, batch, **kwargs):
-        raise NotImplementedError()
-
     def forward(self, x, predict=True, **kwargs):
         raise NotImplementedError()
 

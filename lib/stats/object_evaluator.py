@@ -6,7 +6,7 @@ import numpy as np
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
-from lib.models.utils import Prediction
+from lib.models.containers import Prediction
 from lib.stats.evaluator import BaseEvaluator
 
 

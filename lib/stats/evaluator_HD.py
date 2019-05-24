@@ -6,7 +6,7 @@ from lib.stats.evaluator import MetricFormatter
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
-from lib.models.utils import Prediction
+from lib.models.containers import Prediction
 
 
 class Evaluator:
@@ -117,7 +117,7 @@ class Evaluator:
                 predict_ho_boxes = np.concatenate([predict_boxes[predict_ho_pairs[:, 0], :], predict_boxes[predict_ho_pairs[:, 1], :]], axis=1)
                 predict_hoi_scores = prediction.hoi_scores
                 if predict_hoi_scores is None:
-                    predict_action_scores = prediction.action_score_distributions
+                    predict_action_scores = prediction.action_scores
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
                     predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.inter_to_op_pair.shape[0]])

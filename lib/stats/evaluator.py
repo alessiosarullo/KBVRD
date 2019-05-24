@@ -7,7 +7,7 @@ import numpy as np
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Example
-from lib.models.utils import Prediction
+from lib.models.containers import Prediction
 from lib.stats.utils import Timer
 
 
@@ -143,8 +143,8 @@ class Evaluator(BaseEvaluator):
                 predict_hoi_scores = prediction.hoi_scores
                 if predict_hoi_scores is None:
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
-                    assert prediction.action_score_distributions is not None
-                    predict_action_scores = prediction.action_score_distributions
+                    assert prediction.action_scores is not None
+                    predict_action_scores = prediction.action_scores
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
                     predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.dataset.num_interactions])

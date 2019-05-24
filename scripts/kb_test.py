@@ -9,7 +9,7 @@ from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Example
 from lib.dataset.utils import get_counts
 from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
-from lib.models.utils import Prediction
+from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator, MetricFormatter
 
 matplotlib.use('Qt5Agg')

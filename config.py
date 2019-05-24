@@ -42,7 +42,6 @@ class ProgramConfig(BaseConfigs):
         self.verbose = False
 
         self.randomize = False
-        self.predcls = False
 
         self.model = None
         self.recompute_visual = False
@@ -95,7 +94,7 @@ class ProgramConfig(BaseConfigs):
 
     @property
     def prediction_file(self):
-        return os.path.join(self.output_path, 'prediction_test_%s.pkl' % ('predcls' if self.predcls else 'sgdet'))
+        return os.path.join(self.output_path, 'prediction_test.pkl')
 
     @property
     def tensorboard_dir(self):
@@ -300,9 +299,7 @@ class Configs:
         if program:
             output_path = cls.program.output_path
             save_dir = cls.program.save_dir
-            predcls = cls.program.predcls
             cls.program.__dict__.update(d['program'])
-            cls.program.predcls = predcls
             cls.program.save_dir = save_dir
             assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
         if data:
@@ -321,7 +318,7 @@ def main():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'nmotifs', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5', '--predcls']
+    sys.argv += ['--sync', '--model', 'nmotifs', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()
