@@ -179,18 +179,14 @@ class Evaluator(BaseEvaluator):
         tp = np.zeros(num_predictions)
 
         if num_predictions > 0:
-            Timer.get('Eval epoch', 'Metrics', 'Argsort').tic()
             inds = np.argsort(predicted_conf_scores)[::-1]
             pred_gtid_assignment = pred_gtid_assignment[inds]
-            Timer.get('Eval epoch', 'Metrics', 'Argsort').toc()
 
-            Timer.get('Eval epoch', 'Metrics', 'Unique').tic()
             matched_gt_inds, highest_scoring_pred_idx_per_gt_ind = np.unique(pred_gtid_assignment, return_index=True)
             if matched_gt_inds[0] == -1:
                 matched_gt_inds = matched_gt_inds[1:]
                 highest_scoring_pred_idx_per_gt_ind = highest_scoring_pred_idx_per_gt_ind[1:]
             tp[highest_scoring_pred_idx_per_gt_ind] = 1
-            Timer.get('Eval epoch', 'Metrics', 'Unique').toc()
 
             # Timer.get('Eval epoch', 'Metrics', 'Assignment').tic()
             # for sorted_i, i in enumerate(inds):
@@ -211,15 +207,12 @@ class Evaluator(BaseEvaluator):
         assert np.all(fp[pred_gtid_assignment < 0] == 1)
 
         # compute precision/recall
-        Timer.get('Eval epoch', 'Metrics', 'PR-misc').tic()
         fp = np.cumsum(fp)
         tp = np.cumsum(tp)
         rec = tp / num_hoi_gt_positives
         prec = tp / (fp + tp)
-        Timer.get('Eval epoch', 'Metrics', 'PR-misc').toc()
 
         # compute average precision
-        Timer.get('Eval epoch', 'Metrics', 'PR-comp').tic()
         num_bins = 10  # uniformly distributed in [0, 1) (e.g., use 10 for 0.1 spacing)
         thr_values, thr_inds = np.unique(np.floor(rec * num_bins) / num_bins, return_index=True)
         rec_thresholds = np.full(num_bins + 1, fill_value=-1, dtype=np.int)
@@ -231,7 +224,6 @@ class Evaluator(BaseEvaluator):
 
         max_p = np.maximum.accumulate(prec[::-1])[::-1]
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
-        Timer.get('Eval epoch', 'Metrics', 'PR-comp').toc()
         return rec, prec, ap
 
 
