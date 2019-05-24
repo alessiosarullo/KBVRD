@@ -120,20 +120,47 @@ class ObjFGPredModel(GenericModel):
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
-    def get_losses(self, x, **kwargs):
-        obj_output, action_output, hoi_output, box_labels, action_labels, hoi_labels = self(x, inference=False, **kwargs)
-        losses = {}
-        if obj_output is not None:
-            fg_box_inds = (box_labels >= 0)
-            obj_output = obj_output[fg_box_inds, :]
-            box_labels = box_labels[fg_box_inds]
-            losses['object_loss'] = nn.functional.cross_entropy(obj_output, box_labels)
-        if action_output is not None:
-            losses['action_loss'] = nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
-        if hoi_output is not None:
-            losses['hoi_loss'] = nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]
-        assert losses
-        return losses
+    def forward(self, x: Minibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                obj_output, action_output = self._forward(vis_output)
+            else:
+                obj_output = action_output = None
+
+            if not inference:
+                box_labels = vis_output.box_labels
+                action_labels = vis_output.action_labels
+
+                fg_box_inds = (box_labels >= 0)
+                obj_output = obj_output[fg_box_inds, :]
+                box_labels = box_labels[fg_box_inds]
+
+                losses = {'object_loss': nn.functional.cross_entropy(obj_output, box_labels),
+                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.ho_infos is not None:
+                    assert action_output is not None
+
+                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                    prediction.obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+                    prediction.action_probs = torch.sigmoid(action_output).cpu().numpy()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+
+                return prediction
 
     def _forward(self, vis_output: VisualOutput):
         bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=None)

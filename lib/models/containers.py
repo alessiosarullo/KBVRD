@@ -54,7 +54,7 @@ class VisualOutput:
             self.box_labels = self.box_labels[valid_box_mask]
 
         if self.ho_infos is not None:
-            valid_box_inds_index = torch.full_like(valid_box_mask, fill_value=-1)
+            valid_box_inds_index = np.full(valid_box_mask.detach().cpu().numpy().shape[0], fill_value=-1, dtype=np.int)
             valid_box_inds_index[valid_box_mask] = np.flatnonzero(valid_box_mask)
             self.ho_infos[:, 1] = valid_box_inds_index[self.ho_infos[:, 1]]
             self.ho_infos[:, 2] = valid_box_inds_index[self.ho_infos[:, 2]]
