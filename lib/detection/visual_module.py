@@ -17,9 +17,9 @@ from lib.models.containers import VisualOutput
 
 # noinspection PyCallingNonCallable
 class VisualModule(nn.Module):
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetInstanceSplit):
         super().__init__()
-        self.gt_iou_thr = 0.5  # FIXME? params
+        self.gt_iou_thr = 0.5
         self.dataset = dataset
         self._precomputed = self.dataset.has_precomputed
 
@@ -33,8 +33,7 @@ class VisualModule(nn.Module):
             self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
     def forward(self, batch: Minibatch, inference, **kwargs):
-        # TODO docs
-        # `ho_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
+        # `ho_infos` is an R x 3 NumPy array of [image ID, subject index, object index].
 
         output = VisualOutput()
         training = not inference

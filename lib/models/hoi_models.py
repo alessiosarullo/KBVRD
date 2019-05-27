@@ -111,14 +111,17 @@ class ObjFGPredModel(GenericModel):
         return 'objfgpred'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        self.fg_thr = 0.5
         super().__init__(dataset, **kwargs)
-        self.box_thr = cfg.model.proposal_thr
-
         vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
 
+        self.fg_obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.fg_obj_output_fc = nn.Linear(self.fg_obj_branch.output_dim, 1)
+
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
+
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
@@ -127,31 +130,30 @@ class ObjFGPredModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                obj_output, action_output = self._forward(vis_output)
+                obj_logits, action_logits, fg_obj_logits = self._forward(vis_output)
             else:
-                obj_output = action_output = None
+                obj_logits = action_logits, fg_obj_logits = None
 
             if not inference:
-                box_labels = vis_output.box_labels
+                box_labels = vis_output.box_labels  # type: torch.Tensor
                 action_labels = vis_output.action_labels
+                fg_box_labels = torch.cat([box_labels.new_ones(box_labels.shape[0]),
+                                           box_labels.new_zeros(fg_obj_logits.shape[0] - box_labels.shape[0])], dim=0)
 
-                fg_box_inds = (box_labels >= 0)
-                obj_output = obj_output[fg_box_inds, :]
-                box_labels = box_labels[fg_box_inds]
-
-                losses = {'object_loss': nn.functional.cross_entropy(obj_output, box_labels),
-                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'object_loss': nn.functional.cross_entropy(obj_logits, box_labels),
+                          'fg_object_loss': nn.functional.binary_cross_entropy_with_logits(fg_obj_logits, fg_box_labels),
+                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_logits, action_labels) * action_logits.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
 
                 if vis_output.ho_infos is not None:
-                    assert action_output is not None
+                    assert action_logits is not None
 
                     prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                     prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    prediction.action_probs = torch.sigmoid(action_output).cpu().numpy()
+                    prediction.obj_prob = nn.functional.softmax(obj_logits, dim=1).cpu().numpy()
+                    prediction.action_probs = torch.sigmoid(action_logits).cpu().numpy()
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
@@ -166,27 +168,46 @@ class ObjFGPredModel(GenericModel):
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
-            bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=None)
+            bg_boxes_ext, bg_box_feats, bg_masks = vis_output.filter_bg_boxes()
+            boxes_ext = vis_output.boxes_ext
+            box_feats = vis_output.box_feats
+            masks = vis_output.masks
 
-        if self.box_thr > 0:
-            bg_boxes, bg_box_feats, bg_masks = vis_output.filter_boxes(thr=self.box_thr)
+            fg_and_bg_boxes_ext = torch.cat((boxes_ext, bg_boxes_ext), dim=0)
+            fg_and_bg_box_feats = torch.cat((box_feats, bg_box_feats), dim=0)
 
-        if vis_output.ho_infos is None:
-            return None, None
+            fg_obj_repr = self.fg_obj_branch(fg_and_bg_boxes_ext, fg_and_bg_box_feats)
+            fg_obj_logits = self.fg_obj_output_fc(fg_obj_repr)
+        else:
+            fg_and_bg_boxes_ext = vis_output.boxes_ext
+            fg_and_bg_box_feats = vis_output.box_feats
 
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+            fg_obj_repr = self.fg_obj_branch(fg_and_bg_boxes_ext, fg_and_bg_box_feats)
+            fg_obj_logits = self.fg_obj_output_fc(fg_obj_repr)
+            fg_score = torch.sigmoid(fg_obj_logits)
+            vis_output.filter_bg_boxes(fg_box_mask=(fg_score >= self.fg_thr))
+
+            if vis_output.boxes_ext is None:
+                return None, None
+
+            boxes_ext = vis_output.boxes_ext
+            box_feats = vis_output.box_feats
+            masks = vis_output.masks
 
         obj_repr = self.obj_branch(boxes_ext, box_feats)
         obj_logits = self.obj_output_fc(obj_repr)
 
+        if vis_output.ho_infos is None:
+            assert vis_output.box_labels is None
+            return obj_logits, None
+
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
         act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
         action_logits = self.action_output_fc(act_repr)
 
-        return obj_logits, action_logits
+        return obj_logits, action_logits, fg_obj_logits
 
 
 class ActionOnlyModel(GenericModel):
@@ -206,7 +227,7 @@ class ActionOnlyModel(GenericModel):
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
-            vis_output.filter_boxes(thr=None)
+            vis_output.filter_bg_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -291,7 +312,7 @@ class ActionOnlyHoiModel(GenericModel):
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
-            vis_output.filter_boxes(thr=None)
+            vis_output.filter_bg_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
