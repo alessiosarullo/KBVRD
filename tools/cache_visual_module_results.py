@@ -7,7 +7,7 @@ import torch
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Minibatch
-from lib.detection.visual_module import VisualModule
+from lib.detection.visual_module import VisualModule, VisualOutput
 
 
 def save_feats():
@@ -54,10 +54,15 @@ def save_feats():
                 im_infos = np.array([*im_data.other_ex_data[0]['im_size'], im_data.other_ex_data[0]['im_scale']])
                 all_img_infos[im_i] = im_infos
 
-                x = vm(im_data, inference)
-
-                x = (value.cpu().numpy() if value is not None and not isinstance(value, np.ndarray) else value for value in x)
-                boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, box_labels, action_labels, _ = x
+                vout = vm(im_data, inference)  # type: VisualOutput
+                boxes_ext = vout.boxes_ext.cpu().numpy()
+                box_feats = vout.box_feats.cpu().numpy()
+                masks = vout.masks.cpu().numpy()
+                ho_infos = vout.ho_infos
+                union_boxes = vout.hoi_union_boxes.cpu().numpy()
+                union_boxes_feats = vout.hoi_union_boxes_feats.cpu().numpy()
+                box_labels = vout.box_labels.cpu().numpy()
+                action_labels = vout.action_labels.cpu().numpy()
 
                 if boxes_ext is not None:
                     assert np.all(boxes_ext[:, 0] == 0)  # because batch size is 1
