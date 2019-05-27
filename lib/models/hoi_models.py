@@ -188,7 +188,7 @@ class ObjFGPredModel(GenericModel):
             vis_output.filter_bg_boxes(fg_box_mask=(fg_score >= self.fg_thr))
 
             if vis_output.boxes_ext is None:
-                return None, None
+                return None, None, None
 
             boxes_ext = vis_output.boxes_ext
             box_feats = vis_output.box_feats
@@ -199,7 +199,7 @@ class ObjFGPredModel(GenericModel):
 
         if vis_output.ho_infos is None:
             assert vis_output.box_labels is None
-            return obj_logits, None
+            return obj_logits, None, None
 
         union_boxes_feats = vis_output.hoi_union_boxes_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
