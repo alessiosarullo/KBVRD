@@ -132,7 +132,7 @@ class ObjFGPredModel(GenericModel):
             if vis_output.ho_infos is not None:
                 obj_logits, action_logits, fg_obj_logits = self._forward(vis_output)
             else:
-                obj_logits = action_logits, fg_obj_logits = None
+                obj_logits = action_logits = fg_obj_logits = None
 
             if not inference:
                 box_labels = vis_output.box_labels  # type: torch.Tensor
@@ -152,8 +152,8 @@ class ObjFGPredModel(GenericModel):
 
                     prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                     prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.obj_prob = nn.functional.softmax(obj_logits, dim=1).cpu().numpy()
-                    prediction.action_probs = torch.sigmoid(action_logits).cpu().numpy()
+                    prediction.obj_scores = nn.functional.softmax(obj_logits, dim=1).cpu().numpy()
+                    prediction.action_scores = torch.sigmoid(action_logits).cpu().numpy()
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
@@ -295,8 +295,8 @@ class ActionOnlyHoiModel(GenericModel):
 
                     prediction.ho_img_inds = ho_infos[:, 0]
                     prediction.ho_pairs = ho_infos[:, 1:]
-                    prediction.obj_prob = obj_prob
-                    prediction.action_probs = action_probs
+                    prediction.obj_scores = obj_prob
+                    prediction.action_scores = action_probs
                     prediction.hoi_scores = hoi_probs
 
                 if vis_output.boxes_ext is not None:

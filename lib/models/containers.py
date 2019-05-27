@@ -74,9 +74,9 @@ class VisualOutput:
                 self.action_labels = None
             else:
                 self.ho_infos = ho_infos[valid_hoi_mask, :]
+                self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
 
                 valid_hoi_mask = (torch.from_numpy(valid_hoi_mask.astype(np.uint8)) > 0)
-                self.hoi_union_boxes = self.hoi_union_boxes[valid_hoi_mask, :]
                 self.hoi_union_boxes_feats = self.hoi_union_boxes_feats[valid_hoi_mask, :]
 
                 if self.action_labels is not None:

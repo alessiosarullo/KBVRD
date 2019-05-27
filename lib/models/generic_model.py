@@ -107,8 +107,8 @@ class GenericModel(AbstractModel):
 
                     prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                     prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    prediction.action_probs = torch.sigmoid(action_output).cpu().numpy()
+                    prediction.obj_scores = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
+                    prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
