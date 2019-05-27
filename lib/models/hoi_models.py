@@ -137,8 +137,8 @@ class ObjFGPredModel(GenericModel):
             if not inference:
                 box_labels = vis_output.box_labels  # type: torch.Tensor
                 action_labels = vis_output.action_labels
-                fg_box_labels = torch.cat([box_labels.new_ones(box_labels.shape[0]),
-                                           box_labels.new_zeros(fg_obj_logits.shape[0] - box_labels.shape[0])], dim=0)
+                fg_box_labels = torch.cat([box_labels.new_ones((box_labels.shape[0], 1)),
+                                           box_labels.new_zeros((fg_obj_logits.shape[0] - box_labels.shape[0], 1))], dim=0)
 
                 losses = {'object_loss': nn.functional.cross_entropy(obj_logits, box_labels),
                           'fg_object_loss': nn.functional.binary_cross_entropy_with_logits(fg_obj_logits, fg_box_labels),
