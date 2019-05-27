@@ -336,28 +336,31 @@ class HicoDetInstanceSplit(Dataset):
                 precomp_boxes_ext = precomp_boxes_ext[:, self.box_ext_class_inds]
                 precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
                 precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
+                box_inds = None
                 if self.pc_box_labels is not None:
                     # TODO mapping of obj inds for rels
                     precomp_box_labels = self.pc_box_labels[start:end].copy()
-                    num_boxes = precomp_box_labels.shape[0]
-                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
-                    precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
-                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
-                    feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1)
 
-                    box_inds = np.full_like(precomp_box_labels, fill_value=-1)
-                    box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
-                    precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
-                    precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
-                    precomp_masks = precomp_masks[feasible_box_labels_inds]
-                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
-                    assert np.all(np.sum(precomp_box_labels_one_hot, axis=1) == 1), precomp_box_labels_one_hot
-                    x = np.where(precomp_box_labels_one_hot)
-                    assert np.all(x[0] == np.arange(np.sum(feasible_box_labels_inds)))
-                    precomp_box_labels = x[1].astype(precomp_box_labels_one_hot.dtype)
+                    if len(self.obj_class_inds) < self.num_object_classes:
+                        num_boxes = precomp_box_labels.shape[0]
+                        bg_box_mask = (precomp_box_labels < 0)
+
+                        precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
+                        precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
+                        precomp_box_labels_one_hot[bg_box_mask, :] = 0
+                        precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
+                        feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1) | bg_box_mask
+
+                        box_inds = np.full_like(precomp_box_labels, fill_value=-1)
+                        box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
+                        precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
+                        precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
+                        precomp_masks = precomp_masks[feasible_box_labels_inds]
+                        precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
+                        precomp_box_labels = np.argmax(precomp_box_labels_one_hot, axis=1).astype(precomp_box_labels_one_hot.dtype)
+                        precomp_box_labels[~np.any(precomp_box_labels_one_hot, axis=1)] = -1
                 else:
                     precomp_box_labels = None
-                    box_inds = None
 
                 # HOI data
                 img_hoi_inds = np.flatnonzero(self.pc_ho_im_inds == pc_im_idx)
@@ -372,8 +375,8 @@ class HicoDetInstanceSplit(Dataset):
                     except KeyError:
                         precomp_action_labels = None
 
-                    if precomp_action_labels is not None:
-                        assert precomp_box_labels is not None and box_inds is not None
+                    if precomp_action_labels is not None and box_inds is not None:
+                        assert precomp_box_labels is not None
                         precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
 
                         # Remap HOIs box indices
@@ -391,8 +394,6 @@ class HicoDetInstanceSplit(Dataset):
 
                         # Filter out boxes without interactions
                         hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                        # if np.any(hoi_box_inds != np.arange(hoi_box_inds.shape[0)):
-                        #     print('Bingpot!')  # FIXME
                         precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
                         precomp_box_feats = precomp_box_feats[hoi_box_inds]
                         precomp_masks = precomp_masks[hoi_box_inds]
