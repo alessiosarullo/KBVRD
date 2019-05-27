@@ -29,7 +29,7 @@ def save_feats():
     else:
         print('!!!!!!!!!!!!!!!!! Running on CPU!')
     vm.eval()
-    for split, hds in [(Splits.TRAIN, train_split),
+    for split, hds in [#(Splits.TRAIN, train_split),
                        (Splits.TEST, test_split),
                        ]:
         hd_loader = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
@@ -55,14 +55,24 @@ def save_feats():
                 all_img_infos[im_i] = im_infos
 
                 vout = vm(im_data, inference)  # type: VisualOutput
-                boxes_ext = vout.boxes_ext.cpu().numpy()
-                box_feats = vout.box_feats.cpu().numpy()
-                masks = vout.masks.cpu().numpy()
+                boxes_ext = vout.boxes_ext
+                box_feats = vout.box_feats
+                masks = vout.masks
                 ho_infos = vout.ho_infos
-                union_boxes = vout.hoi_union_boxes.cpu().numpy()
-                union_boxes_feats = vout.hoi_union_boxes_feats.cpu().numpy()
-                box_labels = vout.box_labels.cpu().numpy()
-                action_labels = vout.action_labels.cpu().numpy()
+                union_boxes = vout.hoi_union_boxes
+                union_boxes_feats = vout.hoi_union_boxes_feats
+                box_labels = vout.box_labels
+                action_labels = vout.action_labels
+                if boxes_ext is not None:
+                    boxes_ext = boxes_ext.cpu().numpy()
+                    box_feats = box_feats.cpu().numpy()
+                    masks = masks.cpu().numpy()
+                if ho_infos is not None:
+                    union_boxes_feats = union_boxes_feats.cpu().numpy()
+                if box_labels is not None:
+                    box_labels = box_labels.cpu().numpy()
+                if action_labels is not None:
+                    action_labels = action_labels.cpu().numpy()
 
                 if boxes_ext is not None:
                     assert np.all(boxes_ext[:, 0] == 0)  # because batch size is 1
