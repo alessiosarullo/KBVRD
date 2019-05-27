@@ -184,7 +184,7 @@ class ObjFGPredModel(GenericModel):
 
             fg_obj_repr = self.fg_obj_branch(fg_and_bg_boxes_ext, fg_and_bg_box_feats)
             fg_obj_logits = self.fg_obj_output_fc(fg_obj_repr)
-            fg_score = torch.sigmoid(fg_obj_logits)
+            fg_score = torch.sigmoid(fg_obj_logits.squeeze(dim=1))
             vis_output.filter_bg_boxes(fg_box_mask=(fg_score >= self.fg_thr))
 
             if vis_output.boxes_ext is None:
