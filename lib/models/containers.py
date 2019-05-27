@@ -50,20 +50,26 @@ class VisualOutput:
         discarded_box_feats = self.box_feats[~fg_box_mask, :]
         discarded_masks = self.masks[~fg_box_mask, :]
 
-        self.boxes_ext = self.boxes_ext[fg_box_mask, :]
-        self.box_feats = self.box_feats[fg_box_mask, :]
-        self.masks = self.masks[fg_box_mask, :]
-        if self.box_labels is not None:
-            self.box_labels = self.box_labels[fg_box_mask]
+        if not fg_box_mask.any():
+            self.boxes_ext = None
+            self.box_feats = None
+            self.masks = None
+            self.box_labels = None
+        else:
+            self.boxes_ext = self.boxes_ext[fg_box_mask, :]
+            self.box_feats = self.box_feats[fg_box_mask, :]
+            self.masks = self.masks[fg_box_mask, :]
+            if self.box_labels is not None:
+                self.box_labels = self.box_labels[fg_box_mask]
 
         if self.ho_infos is not None:
-            valid_box_mask_np = fg_box_mask.detach().cpu().numpy().astype(bool)
-            valid_box_inds_index = np.full(valid_box_mask_np.shape[0], fill_value=-1, dtype=np.int)
-            valid_box_inds_index[valid_box_mask_np] = np.arange(valid_box_mask_np.sum())
+            fg_box_mask_np = fg_box_mask.detach().cpu().numpy().astype(bool)
+            fg_box_inds_index = np.full(fg_box_mask_np.shape[0], fill_value=-1, dtype=np.int)
+            fg_box_inds_index[fg_box_mask_np] = np.arange(fg_box_mask_np.sum())
 
             ho_infos = self.ho_infos.copy()
-            ho_infos[:, 1] = valid_box_inds_index[ho_infos[:, 1]]
-            ho_infos[:, 2] = valid_box_inds_index[ho_infos[:, 2]]
+            ho_infos[:, 1] = fg_box_inds_index[ho_infos[:, 1]]
+            ho_infos[:, 2] = fg_box_inds_index[ho_infos[:, 2]]
 
             valid_hoi_mask = np.all(ho_infos >= 0, axis=1)
 
