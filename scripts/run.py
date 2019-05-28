@@ -203,9 +203,9 @@ class Launcher:
         self.detector.eval()
 
         try:
-            print('Loading results from %s.' % cfg.program.prediction_file)
             with open(cfg.program.prediction_file, 'rb') as f:
                 all_predictions = pickle.load(f)
+            print('Results loaded from %s.' % cfg.program.prediction_file)
         except FileNotFoundError:
             all_predictions = []
 

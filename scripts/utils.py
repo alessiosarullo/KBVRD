@@ -38,9 +38,9 @@ def print_params(model, breakdown=False):
         else:
             return '%.1fM' % (_n / 10 ** 6)
 
+    # FIXME outdated. Also, use Torch modules
     modules = {'Visual module': {}, 'Object branch': {}, 'Spatial branch': {}, 'Human-Object-Interaction branch': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
-        # FIXME check the parameters are recorded correctly
         if not ('bias' in p_name.split('.')[-1] or 'bn' in p_name.split('.')[-1]):
 
             p_name_root = p_name.split('.')[0]
