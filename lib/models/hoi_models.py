@@ -221,6 +221,71 @@ class ActionOnlyModel(GenericModel):
         self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
         self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
 
+        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
+        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
+
+    def forward(self, x: Minibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                action_output = self._forward(vis_output)
+            else:
+                action_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.ho_infos is not None:
+                    assert action_output is not None
+
+                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                    prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput):
+        if vis_output.box_labels is not None:
+            vis_output.filter_bg_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        masks = vis_output.masks
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        obj_repr = self.obj_branch(boxes_ext, box_feats)
+        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
+        action_logits = self.action_output_fc(act_repr)
+
+        return action_logits
+
+
+class BaseModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'base'
+
+    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
+        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
+
         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
@@ -243,10 +308,10 @@ class ActionOnlyModel(GenericModel):
         return obj_logits, action_logits
 
 
-class ActionOnlyHoiModel(GenericModel):
+class HoiBaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'hoiactonly'
+        return 'hoibase'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         super().__init__(dataset, **kwargs)

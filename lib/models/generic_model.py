@@ -21,7 +21,7 @@ class GenericModel(AbstractModel):
         self.gt_iou_thr = 0.5  # before superclass' constructor's invocation because of the dict update of attributes according to keyword arguments.
         super().__init__(**kwargs)
         self.dataset = dataset
-        self.visual_module = VisualModule(dataset, **kwargs)
+        self.visual_module = VisualModule(dataset)
 
         if cfg.model.csloss:
             prcls_hist = Counter(dataset.hoi_triplets[:, 1])
