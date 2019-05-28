@@ -213,7 +213,7 @@ class ObjFGPredModel(GenericModel):
 class ActionOnlyModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'actonly'
+        return 'base'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
         self.obj_repr_dim = 512
@@ -237,41 +237,6 @@ class ActionOnlyModel(GenericModel):
 
         self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
-
-    def forward(self, x: Minibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output)
-            else:
-                action_output = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.ho_infos is not None:
-                    assert action_output is not None
-
-                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                return prediction
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
@@ -297,34 +262,38 @@ class ActionOnlyModel(GenericModel):
 class ActionOnlyv2Model(GenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'actonlyv2'
+        return 'basev2'
 
     def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        self.obj_repr_dim = 512
         self.act_repr_dim = 600
         super().__init__(dataset, **kwargs)
-        use_relu = cfg.model.relu
         vis_feat_dim = self.visual_module.vis_feat_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+                                                nn.BatchNorm1d(self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                nn.BatchNorm1d(self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[2].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+                                               nn.BatchNorm1d(self.act_repr_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                               nn.BatchNorm1d(self.act_repr_dim),
                                                nn.ReLU(inplace=True),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[2].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
+                                              nn.BatchNorm1d(self.act_repr_dim),
                                               nn.ReLU(inplace=True),
                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                              nn.BatchNorm1d(self.act_repr_dim),
                                               nn.ReLU(inplace=True),
                                               ])
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -332,41 +301,6 @@ class ActionOnlyv2Model(GenericModel):
 
         self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
-
-    def forward(self, x: Minibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output)
-            else:
-                action_output = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.ho_infos is not None:
-                    assert action_output is not None
-
-                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                return prediction
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
@@ -389,94 +323,27 @@ class ActionOnlyv2Model(GenericModel):
         return action_logits
 
 
-class BaseModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'base'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, use_relu=cfg.model.relu)
-
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
-        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
-
-    def _forward(self, vis_output: VisualOutput):
-        if vis_output.box_labels is not None:
-            vis_output.filter_bg_boxes()
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats)
-        obj_logits = self.obj_output_fc(obj_repr)
-
-        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
-        action_logits = self.action_output_fc(act_repr)
-
-        return obj_logits, action_logits
-
-
-class HoiBaseModel(GenericModel):
+class HoiBaseModel(ActionOnlyModel):
     @classmethod
     def get_cline_name(cls):
         return 'hoibase'
-
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-        self.obj_branch = SimpleObjBranch(input_dim=vis_feat_dim + self.dataset.num_object_classes)
-        self.act_branch = SimpleHoiBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim)
-
-        self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
-        self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
     def forward(self, x: Minibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                obj_output, action_output = self._forward(vis_output)
+                action_output = self._forward(vis_output)
             else:
-                obj_output = action_output = None
+                assert inference
+                action_output = None
 
             if not inference:
-                box_labels = vis_output.box_labels
                 action_labels = vis_output.action_labels
-
-                fg_box_inds = (box_labels >= 0)
-                obj_output = obj_output[fg_box_inds, :]
-                box_labels = box_labels[fg_box_inds]
-
-                losses = {'object_loss': nn.functional.cross_entropy(obj_output, box_labels),
-                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
-
-                if vis_output.ho_infos is not None:
-                    assert action_output is not None
-
-                    ho_infos = vis_output.ho_infos
-                    obj_prob = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    action_probs = torch.sigmoid(action_output).cpu().numpy()
-
-                    ho_obj_probs = obj_prob[ho_infos[:, 2], :]
-                    hoi_probs = np.zeros((ho_infos.shape[0], self.dataset.num_interactions))
-                    for iid, (pid, oid) in enumerate(self.dataset.interactions):
-                        hoi_probs[:, iid] = ho_obj_probs[:, oid] * action_probs[:, pid]
-
-                    prediction.ho_img_inds = ho_infos[:, 0]
-                    prediction.ho_pairs = ho_infos[:, 1:]
-                    prediction.obj_scores = obj_prob
-                    prediction.action_scores = action_probs
-                    prediction.hoi_scores = hoi_probs
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
@@ -486,25 +353,22 @@ class HoiBaseModel(GenericModel):
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
                     prediction.obj_im_inds = obj_im_inds
                     prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                        ho_obj_probs = prediction.obj_scores[vis_output.ho_infos[:, 2], :]
+                        hoi_probs = np.zeros((action_output.shape[0], self.dataset.num_interactions))
+                        for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                            hoi_probs[:, iid] = ho_obj_probs[:, oid] * prediction.action_scores[:, pid]
+                        prediction.hoi_scores = hoi_probs
 
                 return prediction
-
-    def _forward(self, vis_output: VisualOutput):
-        if vis_output.box_labels is not None:
-            vis_output.filter_bg_boxes()
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
-
-        obj_repr = self.obj_branch(boxes_ext, box_feats)
-        obj_logits = self.obj_output_fc(obj_repr)
-
-        act_repr = self.act_branch(obj_repr, union_boxes_feats, hoi_infos)
-        action_logits = self.action_output_fc(act_repr)
-
-        return obj_logits, action_logits
 
 
 class KatoModel(GenericModel):

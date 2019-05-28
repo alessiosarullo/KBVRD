@@ -84,31 +84,17 @@ class GenericModel(AbstractModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                obj_output, action_output = self._forward(vis_output)
+                action_output = self._forward(vis_output)
             else:
-                obj_output = action_output = None
+                assert inference
+                action_output = None
 
             if not inference:
-                box_labels = vis_output.box_labels
                 action_labels = vis_output.action_labels
-
-                fg_box_inds = (box_labels >= 0)
-                obj_output = obj_output[fg_box_inds, :]
-                box_labels = box_labels[fg_box_inds]
-
-                losses = {'object_loss': nn.functional.cross_entropy(obj_output, box_labels),
-                          'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
-
-                if vis_output.ho_infos is not None:
-                    assert action_output is not None
-
-                    prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                    prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                    prediction.obj_scores = nn.functional.softmax(obj_output, dim=1).cpu().numpy()
-                    prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
@@ -118,6 +104,14 @@ class GenericModel(AbstractModel):
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
                     prediction.obj_im_inds = obj_im_inds
                     prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
 
