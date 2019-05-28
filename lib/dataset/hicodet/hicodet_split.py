@@ -144,7 +144,7 @@ def remap_box_pairs(box_pairs, box_mask):
     return box_pairs
 
 
-def filter_data(hicodet: HicoDet, split, obj_inds, pred_inds, filter_empty_imgs) -> List[HicoDetImData]:
+def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs) -> List[HicoDetImData]:
     split_data = hicodet.split_data[split]  # type: List[HicoDetImData]
     image_ids = list(range(len(split_data)))
 
