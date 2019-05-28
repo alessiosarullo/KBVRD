@@ -4,14 +4,14 @@ from typing import List, Dict
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.utils import GTEntry
 from lib.models.containers import Prediction
 from lib.stats.evaluator import BaseEvaluator
 
 
 class ObjectEvaluator(BaseEvaluator):
-    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
@@ -30,7 +30,7 @@ class ObjectEvaluator(BaseEvaluator):
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):
-            ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            ex = self.dataset.get_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
         self.compute_metrics()
@@ -74,8 +74,8 @@ class ObjectEvaluator(BaseEvaluator):
         print(printstr)
         return printstr
 
-    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
-        if isinstance(gt_entry, Example):
+    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
+        if isinstance(gt_entry, GTEntry):
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
             gt_classes = gt_entry.gt_obj_classes
             num_gt = gt_boxes.shape[0]

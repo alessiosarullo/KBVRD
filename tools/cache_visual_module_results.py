@@ -3,9 +3,10 @@ import sys
 import h5py
 import numpy as np
 import torch
+import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.utils import Splits, Minibatch
 from lib.detection.visual_module import VisualModule, VisualOutput
 
@@ -13,15 +14,13 @@ from lib.detection.visual_module import VisualModule, VisualOutput
 def save_feats():
     def empty_lists(num, length):
         return ([None for j in range(length)] for i in range(num))
-    batch_size = 1
-    flipping = False
 
-    sys.argv += ['--img_batch_size', str(batch_size), '--val_ratio', '0']
+    sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
     cfg.parse_args(allow_required=False)
 
-    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=float(flipping), load_precomputed=False)
-    test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=float(flipping), load_precomputed=False)
-    assert Splits.VAL not in HicoDetInstanceSplit._splits
+    train_split = HicoDetSplit.get_split(split=Splits.TRAIN)
+    test_split = HicoDetSplit.get_split(split=Splits.TEST)
+    assert Splits.VAL not in HicoDetSplit._splits
 
     vm = VisualModule(dataset=train_split)
     if torch.cuda.is_available():
@@ -32,7 +31,13 @@ def save_feats():
     for split, hds in [(Splits.TRAIN, train_split),
                        (Splits.TEST, test_split),
                        ]:
-        hd_loader = hds.get_loader(batch_size=batch_size, shuffle=False, drop_last=False)
+        hd_loader = torch.utils.data.DataLoader(dataset=hds,
+                                                batch_size=1,
+                                                shuffle=False,
+                                                num_workers=0,
+                                                collate_fn=lambda x: Minibatch.collate(x),
+                                                drop_last=False,
+                                                )
 
         precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch, split.value)
         feat_file = h5py.File(precomputed_feats_fn, 'w')
@@ -49,7 +54,6 @@ def save_feats():
             for im_i, im_data in enumerate(hd_loader):
                 im_data = im_data  # type: Minibatch
                 assert len(im_data.other_ex_data) == 1
-                assert im_data.other_ex_data[0]['flipped'] == flipping
 
                 im_infos = np.array([*im_data.other_ex_data[0]['im_size'], im_data.other_ex_data[0]['im_scale']])
                 all_img_infos[im_i] = im_infos

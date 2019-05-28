@@ -9,9 +9,8 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.hicodet_driver import HicoDet
-from lib.dataset.utils import Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
+from lib.dataset.utils import GTEntry
 
 try:
     matplotlib.use('Qt5Agg')
@@ -27,7 +26,7 @@ def stats():
     split = Splits.TRAIN
 
     os.makedirs(output_dir, exist_ok=True)
-    hds = HicoDetInstanceSplit.get_split(split=split, load_precomputed=False)
+    hds = HicoDetSplit.get_split(split=split)
     hd = hds.hicodet
 
     op_mat = np.zeros([hds.num_object_classes, hds.num_predicates])
@@ -59,7 +58,7 @@ def stats():
 
 def find():
     cfg.parse_args(allow_required=False, reset=True)
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
+    hds = HicoDetSplit.get_split(split=Splits.TRAIN)
 
     query_str = ['hold', 'refrigerator']
     query = [hds.hicodet._pred_index[query_str[0]], hds.hicodet._obj_class_index[query_str[1]]]
@@ -68,8 +67,8 @@ def find():
     os.makedirs(output_dir, exist_ok=True)
 
     for idx in range(len(hds)):
-        example = hds.get_entry(idx, read_img=False, ignore_precomputed=True)  # type: Example
-        im_fn = example.fn
+        example = hds.get_entry(idx, read_img=False)  # type: GTEntry
+        im_fn = example.filename
 
         boxes = example.gt_boxes
         box_classes = example.gt_obj_classes
@@ -99,14 +98,14 @@ def find():
 
 def vis_gt():
     cfg.parse_args(allow_required=False, reset=True)
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, load_precomputed=False)
+    hds = HicoDetSplit.get_split(split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
     os.makedirs(output_dir, exist_ok=True)
 
     for idx in range(len(hds)):
-        example = hds.get_entry(idx, read_img=False, ignore_precomputed=True)  # type: Example
-        im_fn = example.fn
+        example = hds.get_entry(idx, read_img=False)  # type: GTEntry
+        im_fn = example.filename
         # if im_fn not in [s.strip() for s in """
         # HICO_train2015_00001418.jpg
         # """.split('\n')]:

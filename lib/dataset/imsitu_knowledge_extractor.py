@@ -6,7 +6,7 @@ from typing import Dict
 import numpy as np
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.imsitu_driver import ImSitu
 from lib.dataset.utils import Splits
 
@@ -25,7 +25,7 @@ class ImSituKnowledgeExtractor:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_freq_matrix(self, dataset: HicoDetInstanceSplit, return_known_mask=False):
+    def extract_freq_matrix(self, dataset: HicoDetSplit, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
@@ -161,7 +161,7 @@ class ImSituKnowledgeExtractor:
                                    for verb, instance_ids in concrete_dobjs_per_verb.items()}
         return concrete_dobjs_per_verb
 
-    def match_preds_with_verbs(self, dataset: HicoDetInstanceSplit):
+    def match_preds_with_verbs(self, dataset: HicoDetSplit):
         verb_dict = self.imsitu.verbs
         pred_verb_matches = {}
         for orig_pred in dataset.predicates:
@@ -198,7 +198,7 @@ class ImSituKnowledgeExtractor:
 
 def main():
     imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetInstanceSplit.get_split(Splits.TRAIN)  # type: HicoDetInstanceSplit
+    hd = HicoDetSplit.get_split(Splits.TRAIN)  # type: HicoDetSplit
     imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
 
 

@@ -9,8 +9,8 @@ import torch
 from torch.utils.data import Dataset
 
 from config import cfg
-from lib.dataset.hicodet_driver import HicoDet as HicoDetDriver
-from lib.dataset.utils import Splits, preprocess_img, Example, Minibatch
+from lib.dataset.hicodet.hicodet import HicoDetDriver as HicoDetDriver
+from lib.dataset.utils import Splits, preprocess_img, GTEntry, Minibatch
 from lib.detection.wrappers import COCO_CLASSES
 from lib.stats.utils import Timer
 
@@ -19,7 +19,7 @@ class HicoDetInstanceSplit(Dataset):
     _splits = {}  # type: Dict[Splits, HicoDetInstanceSplit]
     _hicodet_driver = None
 
-    def __init__(self, split, hicodet_driver, annotations, image_ids, object_inds, predicate_inds, flipping_prob=0, load_precomputed=None):
+    def __init__(self, split, hicodet_driver, annotations, image_ids, object_inds, predicate_inds, load_precomputed=None):
         """
         """
         # TODO docs, mention split in print so as not to have confusing messages
@@ -27,7 +27,6 @@ class HicoDetInstanceSplit(Dataset):
 
         self.split = split
         self.image_ids = image_ids
-        self.flipping_prob = flipping_prob
 
         self._annotations = annotations
         self.hicodet = hicodet_driver  # type: HicoDetDriver
@@ -36,8 +35,6 @@ class HicoDetInstanceSplit(Dataset):
         predicate_inds = sorted(predicate_inds)
         self.objects = [hicodet_driver.objects[i] for i in object_inds]
         self.predicates = [hicodet_driver.predicates[i] for i in predicate_inds]
-        if flipping_prob > 0:
-            print('Flipping is enabled with probability %.2f.' % flipping_prob)
 
         # ################ Initialize
         self.human_class = self.objects.index('person')
@@ -63,7 +60,6 @@ class HicoDetInstanceSplit(Dataset):
         if load_precomputed is None:
             load_precomputed = not cfg.program.recompute_visual
         if load_precomputed:
-            assert self.flipping_prob == 0  # TODO? extract features for flipped image
             precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
                                                                                 (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
             print('Loading precomputed feats for %s split from %s.' % (self.split.value, precomputed_feats_fn))
@@ -288,140 +284,29 @@ class HicoDetInstanceSplit(Dataset):
             )
         return data_loader
 
-    def get_entry(self, idx, read_img=True, ignore_precomputed=False) -> Example:
+    def get_entry(self, idx, read_img=True, ignore_precomputed=False) -> GTEntry:
         # Read the image
 
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
 
-        entry = Example(idx_in_split=idx, img_id=img_id, img_fn=img_fn, precomputed=self.has_precomputed, split=self.split)
+        entry = GTEntry(idx_in_split=idx, img_id=img_id, filename=img_fn, precomputed=self.has_precomputed, split=self.split)
         if not self.has_precomputed or ignore_precomputed:
             gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 
             if read_img:
                 raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
                 img_h, img_w = raw_image.shape[:2]
-                flipped = self.split == Splits.TRAIN and np.random.random() < self.flipping_prob  # Optionally flip the image if we're doing training
-                if flipped:
-                    raw_image = raw_image[:, ::-1, :]  # NOTE: change this to [:, :, ::-1] if the image is read through PIL
-                    gt_boxes[:, [0, 2]] = img_w - gt_boxes[:, [2, 0]]
                 image, img_scale_factor = preprocess_img(raw_image)
                 img_size = (img_h, img_w)
 
                 entry.image = image
                 entry.img_size = img_size
                 entry.scale = img_scale_factor
-                entry.flipped = flipped
 
             entry.gt_boxes = gt_boxes
             entry.gt_obj_classes = self._im_box_classes[idx].copy()
             entry.gt_hois = self._im_inters[idx].copy()
-        else:
-            pc_im_idx = self.im_id_to_pc_im_idx[img_id]
-            assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
-
-            # Image data
-            img_infos = self.pc_image_infos[pc_im_idx].copy()
-            assert img_infos.shape == (3,)
-            entry.img_size = img_infos[:2]
-            entry.scale = img_infos[2]
-
-            # Object data
-            img_box_inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
-            if img_box_inds.size > 0:
-                start, end = img_box_inds[0], img_box_inds[-1] + 1
-                assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-
-                precomp_boxes_ext = self.pc_feats_file['boxes_ext'][start:end, :]
-                precomp_boxes_ext = precomp_boxes_ext[:, self.box_ext_class_inds]
-                precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
-                precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
-                box_inds = None
-                if self.pc_box_labels is not None:
-                    # TODO mapping of obj inds for rels
-                    precomp_box_labels = self.pc_box_labels[start:end].copy()
-
-                    if self.obj_class_inds.size < self.num_object_classes:
-                        num_boxes = precomp_box_labels.shape[0]
-                        bg_box_mask = (precomp_box_labels < 0)
-
-                        precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet_driver.objects)], dtype=precomp_box_labels.dtype)
-                        precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
-                        precomp_box_labels_one_hot[bg_box_mask, :] = 0
-                        precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
-                        feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1) | bg_box_mask
-
-                        box_inds = np.full_like(precomp_box_labels, fill_value=-1)
-                        box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
-                        precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
-                        precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
-                        precomp_masks = precomp_masks[feasible_box_labels_inds]
-                        precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
-                        precomp_box_labels = np.argmax(precomp_box_labels_one_hot, axis=1).astype(precomp_box_labels_one_hot.dtype)
-                        precomp_box_labels[~np.any(precomp_box_labels_one_hot, axis=1)] = -1
-                else:
-                    precomp_box_labels = None
-
-                # HOI data
-                img_hoi_inds = np.flatnonzero(self.pc_ho_im_inds == pc_im_idx)
-                if img_hoi_inds.size > 0:
-                    start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
-                    assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-                    precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
-                    precomp_hoi_union_boxes = self.pc_feats_file['union_boxes'][start:end, :]
-                    precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
-                    try:
-                        precomp_action_labels = self.pc_feats_file['action_labels'][start:end, :]
-                    except KeyError:
-                        precomp_action_labels = None
-
-                    if precomp_action_labels is not None:
-                        assert precomp_box_labels is not None
-
-                        if self.action_class_inds.size < self.num_predicates:
-                            precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
-
-                        # Remap HOIs box indices
-                        if box_inds is not None:
-                            precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                            precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-
-                        # Filter out HOIs
-                        if self.action_class_inds.size < self.num_predicates or box_inds is not None:
-                            feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
-                            assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, img_fn)
-                            precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
-                            precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
-                            precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
-                            precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
-                            assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
-
-                            # Filter out boxes without interactions
-                            hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                            precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
-                            precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                            precomp_masks = precomp_masks[hoi_box_inds]
-                            precomp_box_labels = precomp_box_labels[hoi_box_inds]
-                            box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
-                            box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
-                            precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                            precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-                            assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
-
-                    assert np.all(precomp_hoi_infos >= 0)
-                    entry.precomp_action_labels = precomp_action_labels
-                    entry.precomp_hoi_infos = precomp_hoi_infos
-                    entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
-                    entry.precomp_hoi_union_feats = precomp_hoi_union_feats
-                else:
-                    assert self.split == Splits.TEST, (idx, pc_im_idx, img_id, img_fn)
-
-                entry.precomp_boxes_ext = precomp_boxes_ext
-                entry.precomp_box_feats = precomp_box_feats
-                entry.precomp_masks = precomp_masks
-                entry.precomp_box_labels = precomp_box_labels
-            assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
-                   (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
         return entry
 
     def __getitem__(self, idx):
@@ -442,12 +327,16 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         self.hoi_batch_size = self.batch_size
         assert dataset.has_precomputed
 
+        num_hois = {}
+        for i in dataset.pc_ho_im_inds:
+            num_hois.setdefault(i, 0)
+            num_hois[i] += 1
+
         self.num_hois_per_img_idx = {}
         for idx in self.sampler:
             img_id = dataset.image_ids[idx]
             pc_im_idx = dataset.im_id_to_pc_im_idx[img_id]
-            img_hoi_inds = np.flatnonzero(dataset.pc_ho_im_inds == pc_im_idx)
-            self.num_hois_per_img_idx[idx] = img_hoi_inds.size
+            self.num_hois_per_img_idx[idx] = num_hois[pc_im_idx]
 
         self.batches = self.get_all_batches()
 
@@ -551,7 +440,7 @@ def compute_annotations(split, hicodet_driver: HicoDetDriver, im_inds, obj_inds,
 
 
 def find_interaction():
-    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=cfg.data.flip_prob)
+    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST)
 
     action = 'ride'
     obj = 'bicycle'
@@ -578,7 +467,7 @@ def find_interaction():
 def main():
     # import sys
     # sys.argv += ['--model', 'base', '--save_dir', 'fake']
-    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST, flipping_prob=cfg.data.flip_prob)
+    hd = HicoDetInstanceSplit.get_split(split=Splits.TEST)
     for i, (box_classes, inters) in enumerate(zip(hd._im_box_classes, hd._im_inters)):
         hois = np.stack([inters[:, 1], box_classes[inters[:, 2]]], axis=1)
         hois = np.unique(hois, axis=0)

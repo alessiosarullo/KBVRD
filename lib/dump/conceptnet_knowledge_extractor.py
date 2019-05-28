@@ -7,7 +7,7 @@ import numpy as np
 from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.conceptnet_driver import Conceptnet
-from lib.dataset.hicodet_driver import HicoDet
+from lib.dataset.hicodet.hicodet import HicoDetDriver
 from lib.dataset.word_embeddings import WordEmbeddings
 
 
@@ -20,7 +20,7 @@ class ConceptnetKnowledgeExtractor:
         self.cache_paths_fn_format = os.path.join(cfg.program.cache_root, 'cnet_paths_len%d.pkl')
 
     def extract_freq_matrix(self, dataset, len_max_path=1):
-        assert isinstance(dataset, (HicoDet,))
+        assert isinstance(dataset, (HicoDetDriver,))
 
         # Compute paths
         paths_fn = self.cache_paths_fn_format % len_max_path
@@ -123,7 +123,7 @@ class ConceptnetKnowledgeExtractor:
         return results
 
     @staticmethod
-    def print_paths(hicodet: HicoDet, all_paths, sep, verbose=False):
+    def print_paths(hicodet: HicoDetDriver, all_paths, sep, verbose=False):
         assert len(hicodet.predicates) == len(all_paths)
         wes = [WordEmbeddings(source='numberbatch', normalize=True), WordEmbeddings(source='glove', normalize=True, dim=200)]
 
@@ -159,7 +159,7 @@ def main():
     random.seed(3)
 
     cnet_ex = ConceptnetKnowledgeExtractor()
-    dataset = HicoDet()
+    dataset = HicoDetDriver()
     cnet_op_mat = cnet_ex.extract_freq_matrix(dataset, len_max_path=2)
 
     # Hico object-predicate matrix

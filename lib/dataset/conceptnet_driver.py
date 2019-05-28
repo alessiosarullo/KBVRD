@@ -292,7 +292,7 @@ class Conceptnet:
 
 
 def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
-    from lib.dataset.hicodet_driver import HicoDet
+    from lib.dataset.hicodet.hicodet import HicoDet
     hd = HicoDet()
     cnet = Conceptnet()
 
@@ -314,7 +314,7 @@ def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
 
 
 def plot():
-    from lib.dataset.hicodet_driver import HicoDet
+    from lib.dataset.hicodet.hicodet import HicoDet
     from analysis.utils import plot_mat
     cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
 
@@ -348,7 +348,7 @@ def plot():
 
 
 def main():
-    from lib.dataset.hicodet_driver import HicoDet
+    from lib.dataset.hicodet.hicodet import HicoDet
     hd = HicoDet()
 
     cnet = Conceptnet(file_path='cache/cnet_hd2.pkl')
@@ -367,5 +367,6 @@ def main():
 
 
 if __name__ == '__main__':
+    raise NotImplementedError()  # Outdated
     # main()
     plot()

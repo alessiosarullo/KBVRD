@@ -44,7 +44,6 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
 
         self.model = None
-        self.recompute_visual = False
 
         self.save_dir = ''
 
@@ -140,8 +139,6 @@ class DataConfig(BaseConfigs):
         self.pixel_std = None
         self.im_scale = None
         self.im_max_size = None
-
-        self.flip_prob = 0.0
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
         self.val_ratio = 0.1

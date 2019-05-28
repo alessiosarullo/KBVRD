@@ -1,12 +1,9 @@
 from typing import Dict, Type, Set
 
-import numpy as np
-
 from lib.models.abstract_model import AbstractModel
 
 try:  # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
     from lib.models.hoi_models import *
-    from lib.models.nmotifs.hoi_nmotifs import *
 except ImportError:
     pass
 

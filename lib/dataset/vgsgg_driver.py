@@ -1,15 +1,11 @@
-import os
-import h5py
 import json
+import os
 from typing import List
 
+import h5py
 import numpy as np
-from PIL import Image
-from matplotlib import pyplot as plt
-from scipy.io import loadmat
 
-from lib.dataset.utils import Splits
-from lib.dataset.hicodet_driver import HicoDet
+from lib.dataset.hicodet.hicodet import HicoDet
 
 
 class VGSGG:
@@ -87,8 +83,8 @@ class VGSGG:
     def get_hoi_freq(self, hd: HicoDet):
         hd_to_vgsgg_pred_match, hd_to_vgsgg_obj_match = self.match(hd)
 
-        vgsgg_to_hd_obj = {v: hd.obj_class_index[k] for k, v in hd_to_vgsgg_obj_match.items() if v is not None}
-        vgsgg_to_hd_pred = {v: hd.pred_index[k] for k, v in hd_to_vgsgg_pred_match.items() if v is not None}
+        vgsgg_to_hd_obj = {v: hd.object_index[k] for k, v in hd_to_vgsgg_obj_match.items() if v is not None}
+        vgsgg_to_hd_pred = {v: hd.predicate_index[k] for k, v in hd_to_vgsgg_pred_match.items() if v is not None}
         human_classes = set(self.human_classes)
 
         op_mat = np.zeros((len(hd.objects), len(hd.predicates)))
@@ -149,7 +145,6 @@ def match_objs():
 
 
 def main():
-    from lib.dataset.hicodet_driver import HicoDet
     vg = VGSGG()
     hd = HicoDet()
 

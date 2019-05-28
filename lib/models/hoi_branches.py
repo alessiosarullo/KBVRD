@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.utils import get_counts
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractHOIBranch
@@ -37,7 +37,7 @@ class SimpleHoiBranch(AbstractHOIBranch):
 
 
 class HoiPriorBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, hoi_repr_dim, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, hoi_repr_dim, **kwargs):
         super().__init__(**kwargs)
 
         # Freq bias
@@ -78,7 +78,7 @@ class HoiPriorBranch(AbstractHOIBranch):
 
 
 class ActEmbsimPredBranch(AbstractHOIBranch):
-    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, pred_input_dim, obj_input_dim, dataset: HicoDetSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
         super().__init__(**kwargs)
@@ -108,7 +108,7 @@ class ActEmbsimPredBranch(AbstractHOIBranch):
 
 
 class GEmbBranch(AbstractHOIBranch):
-    def __init__(self, hoi_input_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, hoi_input_dim, dataset: HicoDetSplit, **kwargs):
         # TODO docs and FIXME comments
         self.word_emb_dim = 300
         self.output_emb_dim = 600
@@ -179,7 +179,7 @@ class GEmbBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, visual_feats_dim, obj_repr_dim, dataset: HicoDetSplit, **kwargs):
         self.word_emb_dim = 300
         super().__init__(**kwargs)
 
@@ -261,7 +261,7 @@ class KatoGCNBranch(AbstractHOIBranch):
 
 
 class PeyreEmbsimBranch(AbstractHOIBranch):
-    def __init__(self, visual_feats_dim, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, visual_feats_dim, dataset: HicoDetSplit, **kwargs):
         super().__init__(**kwargs)
 
         self.word_embs = WordEmbeddings(source='word2vec')

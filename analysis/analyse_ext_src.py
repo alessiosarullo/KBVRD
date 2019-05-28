@@ -7,8 +7,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import plot_mat
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.word_embeddings import WordEmbeddings
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
 from lib.dataset.vgsgg_driver import VGSGG
 from lib.dataset.hcvrd_driver import HCVRD
 from lib.dataset.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
@@ -23,7 +22,7 @@ except ImportError:
 
 def plot_embedding_sim():
     cfg.parse_args(allow_required=False, reset=True)
-    dataset = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
+    dataset = HicoDetSplit.get_split(split=Splits.TRAIN)
 
     # op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
     # for p, o in dataset.interactions:
@@ -91,7 +90,7 @@ def plot_embedding_sim():
 
 def plot_feasible_hois():
     cfg.parse_args(allow_required=False, reset=True)
-    dataset = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
+    dataset = HicoDetSplit.get_split(split=Splits.TRAIN)
 
     hico_op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
     for p, o in dataset.interactions:

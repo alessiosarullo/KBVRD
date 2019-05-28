@@ -5,8 +5,8 @@ import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.utils import GTEntry
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer
 
@@ -29,13 +29,14 @@ class BaseEvaluator:
 
 
 class Evaluator(BaseEvaluator):
-    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, split: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
         self.num_hoi_thr = num_hoi_thr
 
-        self.dataset = dataset
+        self.split = split
+        self.dataset = split.hicodet
         self._init()
 
     def _init(self):
@@ -56,12 +57,12 @@ class Evaluator(BaseEvaluator):
 
     def evaluate_predictions(self, predictions: List[Dict]):
         self._init()
-        assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
+        assert len(predictions) == self.split.num_images, (len(predictions), self.split.num_images)
 
         Timer.get('Eval epoch').tic()
         Timer.get('Eval epoch', 'Predictions').tic()
         for i, res in enumerate(predictions):
-            ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            ex = self.split.get_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
         Timer.get('Eval epoch', 'Predictions').toc()
@@ -103,9 +104,9 @@ class Evaluator(BaseEvaluator):
         lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
-        hoi_triplets = self.dataset.hoi_triplets
+        hoi_triplets = self.split.hoi_triplets
         hois = self.dataset.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
         assert np.all(hois >= 0)
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
@@ -113,8 +114,8 @@ class Evaluator(BaseEvaluator):
 
         print('\n'.join(lines))
 
-    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
-        if isinstance(gt_entry, Example):
+    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
+        if isinstance(gt_entry, GTEntry):
             gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             num_gt_hois = gt_hoi_triplets.shape[0]
 

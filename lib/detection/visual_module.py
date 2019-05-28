@@ -1,44 +1,41 @@
-import os
-import random
-import sys
-
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 
-from analysis.utils import postprocess_for_visualisation
 from config import cfg
 from lib.bbox_utils import compute_ious, get_union_boxes
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.utils import Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split_loader import PrecomputedHicoDetSplit
+from lib.dataset.utils import Minibatch, PrecomputedMinibatch
 from lib.models.containers import VisualOutput
 
 
 # noinspection PyCallingNonCallable
 class VisualModule(nn.Module):
-    def __init__(self, dataset: HicoDetInstanceSplit):
+    def __init__(self, dataset: HicoDetSplit):
         super().__init__()
         self.gt_iou_thr = 0.5
         self.dataset = dataset
-        self._precomputed = self.dataset.has_precomputed
 
-        if not self._precomputed:
+        if isinstance(self.dataset, PrecomputedHicoDetSplit):
+            self._precomputed = True
+            self.mask_resolution = cfg.model.mask_resolution
+            self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
+        else:
             from lib.detection.mask_rcnn import MaskRCNN
+            self._precomputed = False
             self.mask_rcnn = MaskRCNN()
             self.mask_resolution = self.mask_rcnn.mask_resolution
             self.vis_feat_dim = self.mask_rcnn.output_feat_dim
-        else:
-            self.mask_resolution = cfg.model.mask_resolution
-            self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
-    def forward(self, batch: Minibatch, inference, **kwargs):
+    def forward(self, batch, inference, **kwargs):
         # `ho_infos` is an R x 3 NumPy array of [image ID, subject index, object index].
 
         output = VisualOutput()
         training = not inference
 
         if self._precomputed:
+            assert isinstance(batch, PrecomputedMinibatch)
             boxes_ext_np = batch.pc_boxes_ext
             ho_infos = batch.pc_ho_infos
 
@@ -62,6 +59,7 @@ class VisualModule(nn.Module):
                 else:
                     assert inference
         else:
+            assert isinstance(batch, Minibatch)
             with torch.set_grad_enabled(self.training):
                 boxes_ext_np, feat_map = self.mask_rcnn(batch)
                 # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
@@ -270,66 +268,3 @@ class VisualModule(nn.Module):
 
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs)
-
-
-def main():
-    from analysis.utils import vis_one_image
-
-    np.set_printoptions(precision=3, suppress=True)
-
-    sys.argv += ['--model', 'base', '--save_dir', 'fake']  # fake required arguments
-    cfg.parse_args()
-    output_dir = os.path.join('analysis', 'output', 'tmp', 'e2e' if cfg.program.recompute_visual else 'pre')
-    os.makedirs(output_dir, exist_ok=True)
-
-    seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    print('RNG seed:', seed)
-
-    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
-    vm = VisualModule(dataset=train_split)
-    vm.cuda()
-    vm.eval()
-    split = Splits.TRAIN
-    if split == Splits.TRAIN:
-        hds = train_split
-    else:
-        hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, im_inds=[0, 1, 2, 3, 4])
-    hdsl = hds.get_loader(batch_size=1, shuffle=False)
-
-    for batch_i, batch in enumerate(hdsl):
-        print('Batch', batch_i)
-        batch = batch  # type: Minibatch
-        assert len(batch.other_ex_data) == 1
-
-        boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, ho_infos, _, _ = vm(batch, mode_inference=split == Splits.TEST)
-
-        im_fn = batch.other_ex_data[0]['fn']
-        im = cv2.imread(os.path.join(hds.img_dir, im_fn))
-
-        boxes_with_scores, box_classes, masks, union_boxes = postprocess_for_visualisation(boxes_ext, masks, union_boxes, batch.img_infos)
-
-        print(union_boxes)
-        print(ho_infos)
-        print(np.concatenate([boxes_with_scores, box_classes[:, None]], axis=1))
-
-        vis_one_image(
-            im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
-            boxes=boxes_with_scores,
-            box_classes_scores=box_classes,
-            object_names=hds.objects,
-            masks=masks,
-            union_boxes=union_boxes,
-            output_file_path=os.path.join(output_dir, os.path.splitext(im_fn)[0]),
-            box_alpha=0.3,
-            show_class=True,
-            box_thr=0.0,  # Lower this to see all the predictions (was 0.7 in the original code)
-            ext='png'
-        )
-
-
-if __name__ == '__main__':
-    main()

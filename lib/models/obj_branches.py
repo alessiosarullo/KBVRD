@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 
 
 class SpatialContext(nn.Module):
@@ -122,7 +122,7 @@ class SimpleObjBranch(nn.Module):
 
 
 class EmbObjBranch(nn.Module):
-    def __init__(self, dataset: HicoDetInstanceSplit, vis_dim, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, vis_dim, **kwargs):
         super().__init__()
         self.obj_fc_dim = 512
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})

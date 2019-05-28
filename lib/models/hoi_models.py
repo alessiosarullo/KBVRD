@@ -1,6 +1,6 @@
 from lib.bbox_utils import compute_ious
 from lib.dataset.utils import Splits
-from lib.models.generic_model import GenericModel, Prediction, Minibatch
+from lib.models.generic_model import GenericModel, Prediction, PrecomputedMinibatch
 from lib.models.containers import VisualOutput
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *
@@ -11,7 +11,7 @@ class OracleModel(GenericModel):
     def get_cline_name(cls):
         return 'oracle'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         raise NotImplementedError('This needs to be checked after refactors.')
         self.fake = torch.nn.Parameter(torch.from_numpy(np.array([1.])), requires_grad=True)
@@ -19,13 +19,13 @@ class OracleModel(GenericModel):
         self.split = Splits.TEST
         self.perfect_detector = True
 
-    def forward(self, x: Minibatch, inference=True, **kwargs):
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         assert inference is True
         assert not self.training
 
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = self.visual_module(x, True)
         im_scales = x.img_infos[:, 2].cpu().numpy()
-        gt_entry = HicoDetInstanceSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False, ignore_precomputed=True)
+        gt_entry = HicoDetSplit.get_split(self.split).get_entry(x.other_ex_data[0]['index'], read_img=False)
         gt_boxes = gt_entry.gt_boxes * im_scales[0]
         gt_obj_classes = gt_entry.gt_obj_classes
         if self.perfect_detector:
@@ -110,7 +110,7 @@ class ObjFGPredModel(GenericModel):
     def get_cline_name(cls):
         return 'objfgpred'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.fg_thr = 0.5
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
@@ -125,7 +125,7 @@ class ObjFGPredModel(GenericModel):
         self.action_output_fc = nn.Linear(self.act_branch.output_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.action_output_fc.weight, gain=1.0)
 
-    def forward(self, x: Minibatch, inference=True, **kwargs):
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
@@ -215,7 +215,7 @@ class ActionOnlyModel(GenericModel):
     def get_cline_name(cls):
         return 'base'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.obj_repr_dim = 512
         self.act_repr_dim = 600
         super().__init__(dataset, **kwargs)
@@ -264,7 +264,7 @@ class ActionOnlyv2Model(GenericModel):
     def get_cline_name(cls):
         return 'basev2'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.act_repr_dim = 600
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
@@ -328,7 +328,7 @@ class HoiBaseModel(ActionOnlyModel):
     def get_cline_name(cls):
         return 'hoibase'
 
-    def forward(self, x: Minibatch, inference=True, **kwargs):
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
@@ -377,7 +377,7 @@ class KatoModel(GenericModel):
     def get_cline_name(cls):
         return 'kato'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         raise NotImplementedError('This needs to be checked after refactors.')
         self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
@@ -405,7 +405,7 @@ class PeyreModel(GenericModel):
     def get_cline_name(cls):
         return 'peyre'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         raise NotImplementedError('This needs to be checked after refactors.')
         self.hoi_branch = PeyreEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
@@ -493,17 +493,3 @@ class PeyreModel(GenericModel):
                           ho_pairs=ho_pairs,
                           action_scores=None,
                           hoi_scores=hoi_probs)
-
-
-def main():
-    from lib.dataset.hicodet import Splits
-    from scripts.utils import get_all_models_by_name
-
-    cfg.parse_args(allow_required=False)
-    hdtrain = HicoDetInstanceSplit.get_split(split=Splits.TRAIN)
-    detector = get_all_models_by_name()[cfg.program.model](hdtrain)
-    detector.cuda()
-
-
-if __name__ == '__main__':
-    main()

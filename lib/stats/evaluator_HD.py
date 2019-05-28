@@ -5,7 +5,7 @@ import numpy as np
 from lib.stats.evaluator import MetricFormatter
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Example
+from lib.dataset.utils import GTEntry
 from lib.models.containers import Prediction
 
 
@@ -45,7 +45,7 @@ class Evaluator:
 
         evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
-            ex = dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            ex = dataset.get_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             evaluator.process_prediction(i, ex, prediction)
 
@@ -91,8 +91,8 @@ class Evaluator:
         print(printstr)
         return printstr
 
-    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
-        if isinstance(gt_entry, Example):
+    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
+        if isinstance(gt_entry, GTEntry):
             gt_hois = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
             gt_obj_classes = gt_entry.gt_obj_classes

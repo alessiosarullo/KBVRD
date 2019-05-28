@@ -12,8 +12,8 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
-from lib.dataset.utils import Minibatch, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
+from lib.dataset.utils import Minibatch, GTEntry
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.utils import Timer
@@ -29,7 +29,7 @@ except ImportError:
 
 
 class Analyser:
-    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5, hoi_score_thr=0.5):
+    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=0.5):
         super().__init__()
 
         self.iou_thresh = iou_thresh
@@ -56,14 +56,14 @@ class Analyser:
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):
-            ex = self.dataset.get_entry(i, read_img=False, ignore_precomputed=True)
+            ex = self.dataset.get_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
 
         self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1))
 
-    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
-        if isinstance(gt_entry, Example):
+    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
+        if isinstance(gt_entry, GTEntry):
             gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             gt_interactions = np.stack([gt_hoi_triplets[:, 2], gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]]], axis=1)  # (a, o)
             num_gt_hois = gt_hoi_triplets.shape[0]
@@ -174,8 +174,8 @@ def _setup_and_load():
 
 def evaluate():
     results = _setup_and_load()
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST, load_precomputed=False)
-    evaluator = Evaluator(dataset=hds, hoi_score_thr=None, num_hoi_thr=None)
+    hds = HicoDetSplit.get_split(split=Splits.TEST)
+    evaluator = Evaluator(split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.evaluate_predictions(results)
     evaluator.print_metrics(sort=True)
     evaluator.save(cfg.program.eval_res_file)
@@ -189,7 +189,7 @@ def stats():
     res_save_path = cfg.program.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    hdtest = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+    hdtest = HicoDetSplit.get_split(split=Splits.TEST)
 
     analyser = Analyser(dataset=hdtest)
 
@@ -239,15 +239,14 @@ def visualise_images():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-    hdsl = hds.get_loader(batch_size=1, shuffle=False)
+    hds = HicoDetSplit.get_split(split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)
 
-    for b_idx, example in enumerate(hdsl):
-        example = example  # type: Minibatch
-        im_fn = example.other_ex_data[0]['fn']
+    for b_idx in range(len(hds)):
+        entry = hds.get_entry(b_idx, read_img=False)
+        im_fn = entry.fn
 
         prediction_dict = results[b_idx]
         prediction = Prediction.from_dict(prediction_dict)

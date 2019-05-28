@@ -10,11 +10,11 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
+from lib.dataset.hicodet.hicodet_split_loader import PrecomputedHicoDetSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
-from lib.stats.object_evaluator import ObjectEvaluator
 from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
@@ -29,7 +29,7 @@ class Launcher:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
-        self.train_split, self.val_split, self.test_split = None, None, None  # type: Union[None, HicoDetInstanceSplit]
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: Union[None, HicoDetSplit]
         self.curr_train_iter = 0
 
     def run(self):
@@ -54,9 +54,9 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        self.train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
-        self.val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
-        self.test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
+        self.train_split = PrecomputedHicoDetSplit.get_split(split=Splits.TRAIN)
+        self.val_split = PrecomputedHicoDetSplit.get_split(split=Splits.VAL)
+        self.test_split = PrecomputedHicoDetSplit.get_split(split=Splits.TEST)
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():
@@ -98,10 +98,7 @@ class Launcher:
         optimizer, scheduler = self.get_optim()
 
         train_loader = self.train_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
-        if cfg.program.model.startswith('nmotifs'):
-            val_loader = self.val_split.get_loader(batch_size=1)
-        else:
-            val_loader = self.val_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
+        val_loader = self.val_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
         test_loader = self.test_split.get_loader(batch_size=1)
 
         training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
@@ -234,10 +231,7 @@ class Launcher:
                 with open(cfg.program.watched_values_file, 'wb') as f:
                     pickle.dump(watched_values, f)
 
-        if cfg.program.model.startswith('objonly'):
-            evaluator = ObjectEvaluator(data_loader.dataset)
-        else:
-            evaluator = Evaluator(data_loader.dataset)
+        evaluator = Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.program.eval_res_file)
         evaluator.print_metrics()
@@ -255,47 +249,9 @@ class Launcher:
         return all_predictions
 
 
-def debug():
-    cfg.parse_args()
-    if cfg.program.load_train_output:
-        cfg.load()
-    cfg.print()
-
-    # seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
-    # random.seed(seed)
-    # np.random.seed(seed)
-    # torch.manual_seed(seed)
-    # torch.cuda.manual_seed(seed)
-    # print('RNG seed:', seed)
-
-    train_split = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, flipping_prob=cfg.data.flip_prob)
-    val_split = HicoDetInstanceSplit.get_split(split=Splits.VAL)
-    test_split = HicoDetInstanceSplit.get_split(split=Splits.TEST)
-
-    print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-
-    train_loader = train_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
-    if cfg.program.model.startswith('nmotifs'):
-        val_loader = val_split.get_loader(batch_size=1)
-    else:
-        val_loader = val_split.get_loader(batch_size=cfg.opt.hoi_batch_size, use_hoi_batches=True)
-    test_loader = test_split.get_loader(batch_size=1)
-
-    for epoch in range(cfg.opt.num_epochs):
-        print('Epoch %d start.' % epoch)
-        epoch_loss = 0
-        for batch_idx, batch in enumerate(train_loader):
-            pass
-        epoch_loss /= len(train_loader)
-
-    print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    exit(0)
-
-
 def main():
     Launcher().run()
 
 
 if __name__ == '__main__':
-    # debug()
     main()

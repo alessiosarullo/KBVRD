@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.utils.rnn import PackedSequence
 
-from lib.models.nmotifs.word_vectors import obj_edge_vectors
-from ..highway_lstm_cuda.alternating_highway_lstm import block_orthogonal
+from lib.dump.models.nmotifs import obj_edge_vectors
+from lib.dump.models.highway_lstm_cuda.alternating_highway_lstm import block_orthogonal
 
 
 def get_dropout_mask(dropout_probability: float, tensor_for_masking: torch.autograd.Variable):

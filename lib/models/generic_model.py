@@ -5,8 +5,8 @@ import torch.nn as nn
 from collections import Counter
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.utils import Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.utils import PrecomputedMinibatch
 from lib.models.abstract_model import AbstractModel
 from lib.detection.visual_module import VisualModule
 from lib.models.containers import Prediction, VisualOutput
@@ -17,7 +17,7 @@ class GenericModel(AbstractModel):
     def get_cline_name(cls) -> str:
         raise NotImplementedError()
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.gt_iou_thr = 0.5  # before superclass' constructor's invocation because of the dict update of attributes according to keyword arguments.
         super().__init__(**kwargs)
         self.dataset = dataset
@@ -79,7 +79,7 @@ class GenericModel(AbstractModel):
     #     loss = loss.mean() * num_rels  # The average is computed over classes and examples, instead of only over examples. This fixes it.
     #     return loss
 
-    def forward(self, x: Minibatch, inference=True, **kwargs):
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 

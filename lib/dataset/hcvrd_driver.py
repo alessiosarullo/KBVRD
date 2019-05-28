@@ -1,15 +1,10 @@
-import os
-import h5py
 import json
+import os
 from typing import List
 
 import numpy as np
-from PIL import Image
-from matplotlib import pyplot as plt
-from scipy.io import loadmat
 
-from lib.dataset.hicodet_driver import HicoDet
-from lib.dataset.utils import Splits
+from lib.dataset.hicodet.hicodet import HicoDet
 
 
 class HCVRD:
@@ -89,8 +84,8 @@ class HCVRD:
     def get_hoi_freq(self, hd: HicoDet):
         hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match = self.match(hd)
 
-        hcvrd_to_hd_obj = {v: hd.obj_class_index[k] for k, v in hd_to_hcvrd_obj_match.items() if v is not None}
-        hcvrd_to_hd_pred = {v: hd.pred_index[k] for k, v in hd_to_hcvrd_pred_match.items() if v is not None}
+        hcvrd_to_hd_obj = {v: hd.object_index[k] for k, v in hd_to_hcvrd_obj_match.items() if v is not None}
+        hcvrd_to_hd_pred = {v: hd.predicate_index[k] for k, v in hd_to_hcvrd_pred_match.items() if v is not None}
         human_classes = set(self.human_classes)
 
         op_mat = np.zeros((len(hd.objects), len(hd.predicates)))
@@ -102,7 +97,6 @@ class HCVRD:
 
 
 def main():
-    from lib.dataset.hicodet_driver import HicoDet
     hcvrd = HCVRD()
     hd = HicoDet()
 

@@ -5,12 +5,12 @@ import torch.nn as nn
 import torch.nn.parallel
 
 from config import cfg
-from lib.dataset.hicodet import HicoDetInstanceSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.generic_model import GenericModel
-from lib.models.nmotifs.freq import FrequencyLogProbs
+from lib.dump.models.nmotifs import FrequencyLogProbs
 from lib.dataset.utils import get_counts
-from lib.models.nmotifs.lincontext import LinearizedContext
+from lib.dump.models.nmotifs import LinearizedContext
 
 
 class NMotifs(GenericModel):
@@ -18,7 +18,7 @@ class NMotifs(GenericModel):
     def get_cline_name(cls):
         return 'nmotifs'
 
-    def __init__(self, dataset: HicoDetInstanceSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.hoi_branch = NMotifsHOIBranch(self.dataset, self.visual_module.vis_feat_dim)
 
@@ -28,7 +28,7 @@ class NMotifs(GenericModel):
 
 
 class NMotifsHOIBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetInstanceSplit, visual_feats_dim):
+    def __init__(self, dataset: HicoDetSplit, visual_feats_dim):
         super().__init__()
         self.use_bias = cfg.model.freq_bias
 
