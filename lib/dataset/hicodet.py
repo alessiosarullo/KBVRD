@@ -442,12 +442,12 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         self.hoi_batch_size = self.batch_size
         assert dataset.has_precomputed
 
-        self.num_hois_per_img_idx = []
+        self.num_hois_per_img_idx = {}
         for idx in self.sampler:
             img_id = dataset.image_ids[idx]
             pc_im_idx = dataset.im_id_to_pc_im_idx[img_id]
             img_hoi_inds = np.flatnonzero(dataset.pc_ho_im_inds == pc_im_idx)
-            self.num_hois_per_img_idx.append(img_hoi_inds.size)
+            self.num_hois_per_img_idx[idx] = img_hoi_inds.size
 
         self.batches = self.get_all_batches()
 
