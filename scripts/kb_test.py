@@ -8,7 +8,7 @@ from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.utils import Splits, Example
 from lib.dataset.utils import get_counts
-from lib.knowledge_extractors.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
+from lib.dataset.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator, MetricFormatter
 

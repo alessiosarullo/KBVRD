@@ -341,7 +341,7 @@ class HicoDetInstanceSplit(Dataset):
                     # TODO mapping of obj inds for rels
                     precomp_box_labels = self.pc_box_labels[start:end].copy()
 
-                    if len(self.obj_class_inds) < self.num_object_classes:
+                    if self.obj_class_inds.size < self.num_object_classes:
                         num_boxes = precomp_box_labels.shape[0]
                         bg_box_mask = (precomp_box_labels < 0)
 
@@ -375,34 +375,38 @@ class HicoDetInstanceSplit(Dataset):
                     except KeyError:
                         precomp_action_labels = None
 
-                    if precomp_action_labels is not None and box_inds is not None:
+                    if precomp_action_labels is not None:
                         assert precomp_box_labels is not None
-                        precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
+
+                        if self.action_class_inds.size < self.num_predicates:
+                            precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
 
                         # Remap HOIs box indices
-                        precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                        precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
+                        if box_inds is not None:
+                            precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
+                            precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
 
                         # Filter out HOIs
-                        feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
-                        assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, img_fn)
-                        precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
-                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
-                        precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
-                        assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
+                        if self.action_class_inds.size < self.num_predicates or box_inds is not None:
+                            feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
+                            assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, img_fn)
+                            precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
+                            precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
+                            precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
+                            precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
+                            assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
 
-                        # Filter out boxes without interactions
-                        hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                        precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
-                        precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                        precomp_masks = precomp_masks[hoi_box_inds]
-                        precomp_box_labels = precomp_box_labels[hoi_box_inds]
-                        box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
-                        box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
-                        precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                        precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-                        assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
+                            # Filter out boxes without interactions
+                            hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
+                            precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
+                            precomp_box_feats = precomp_box_feats[hoi_box_inds]
+                            precomp_masks = precomp_masks[hoi_box_inds]
+                            precomp_box_labels = precomp_box_labels[hoi_box_inds]
+                            box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
+                            box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
+                            precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
+                            precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
+                            assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
 
                     assert np.all(precomp_hoi_infos >= 0)
                     entry.precomp_action_labels = precomp_action_labels
@@ -530,7 +534,7 @@ def compute_annotations(split, hicodet_driver: HicoDetDriver, im_inds, obj_inds,
         for i, ann in enumerate(annotations):
             for inter in ann['interactions']:
                 visible = not inter['invis']
-                foreground = hicodet_driver.get_predicate_index(inter['id']) != hicodet_driver._pred_index[hicodet_driver.null_interaction]
+                foreground = hicodet_driver.get_predicate_index(inter['id']) != hicodet_driver.pred_index[hicodet_driver.null_interaction]
                 if (not filter_invisible or visible) and (not filter_bg_only or foreground):
                     vis_im_inds.append(i)
                     new_annotations.append(ann)
@@ -552,8 +556,8 @@ def find_interaction():
     action = 'ride'
     obj = 'bicycle'
     try:
-        p_idx = hd.hicodet._pred_index[action]
-        o_idx = hd.hicodet._obj_class_index[obj]
+        p_idx = hd.hicodet.pred_index[action]
+        o_idx = hd.hicodet.obj_class_index[obj]
         # inter_idx = np.flatnonzero(np.all(hd.interactions == np.array([p_idx, o_idx], dtype=np.int), axis=1))
         # if inter_idx.size == 0:
         #     raise KeyError()

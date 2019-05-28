@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from scipy.io import loadmat
 
 from lib.dataset.utils import Splits
+from lib.dataset.hicodet_driver import HicoDet
 
 
 class VGSGG:
@@ -19,9 +20,9 @@ class VGSGG:
         self._load()
 
     @property
-    def human_class(self) -> int:
-        raise NotImplementedError()
-        return self._obj_class_index['person']
+    def human_classes(self) -> List[int]:
+        return [self.object_index[o] for o in ['person', 'people', 'guy', 'man', 'men', 'player', 'skier', 'lady', 'woman', 'boy', 'girl', 'child',
+                                               'kid']]
 
     @property
     def triplet_str(self):
@@ -54,9 +55,51 @@ class VGSGG:
         assert all([v == self.predicate_index[k] for k, v in dicts['predicate_to_idx'].items()]) and \
                set(dicts['predicate_to_idx'].keys()) == (set(self.predicate_index.keys()) - {self.null_predicate})
 
+    def match(self, hd: HicoDet):
+        hd_to_vgsgg_obj_match = {}
+        for orig in hd.objects:
+            obj = orig.replace('_', ' ')
+            hd_to_vgsgg_obj_match[orig] = self.object_index.get(obj, self.object_index.get(obj.split()[-1], None))
 
-def match():
-    from lib.dataset.hicodet_driver import HicoDet
+        vgsgg_pred_index = {self.null_predicate: self.predicate_index[self.null_predicate]}
+        for orig in self.predicates[1:]:
+            p = orig.split()[0]
+            if p == 'riding':
+                p = 'ride'
+            elif p == 'sitting':
+                p = 'sit'
+            elif p == 'using':
+                p = 'use'
+            elif p.endswith('ing'):
+                p = p[:-3]
+            elif p == 'says':
+                p = 'say'
+            elif p == 'wears':
+                p = 'wear'
+            vgsgg_pred_index[p] = self.predicate_index[orig]
+
+        hd_to_vgsgg_pred_match = {}
+        for orig in hd.predicates[1:]:
+            hd_to_vgsgg_pred_match[orig] = vgsgg_pred_index.get(orig.split('_')[0], None)
+
+        return hd_to_vgsgg_pred_match, hd_to_vgsgg_obj_match
+
+    def get_hoi_freq(self, hd: HicoDet):
+        hd_to_vgsgg_pred_match, hd_to_vgsgg_obj_match = self.match(hd)
+
+        vgsgg_to_hd_obj = {v: hd.obj_class_index[k] for k, v in hd_to_vgsgg_obj_match.items() if v is not None}
+        vgsgg_to_hd_pred = {v: hd.pred_index[k] for k, v in hd_to_vgsgg_pred_match.items() if v is not None}
+        human_classes = set(self.human_classes)
+
+        op_mat = np.zeros((len(hd.objects), len(hd.predicates)))
+        for s, p, o in self.triplets:
+            if s in human_classes and p in vgsgg_to_hd_pred.keys() and o in vgsgg_to_hd_obj.keys():
+                op_mat[vgsgg_to_hd_obj[o], vgsgg_to_hd_pred[p]] += 1
+
+        return op_mat
+
+
+def match_preds():
     vg = VGSGG()
     hd = HicoDet()
 
@@ -87,15 +130,35 @@ def match():
     return sorted([vgp[x] for x in svgp & shdp]), sorted([vgp[x] for x in svgp - shdp]), sorted([hdp[x] for x in shdp - svgp])
 
 
+def match_objs():
+    vg = VGSGG()
+    hd = HicoDet()
+
+    vgp = {vg.null_object: vg.null_object}
+    for orig in vg.objects[1:]:
+        vgp[orig] = orig
+
+    hdp = {}
+    for orig in hd.objects:
+        p = orig.split('_')[-1]
+        hdp[p] = orig
+
+    svgp = set(vgp.keys())
+    shdp = set(hdp.keys())
+    return sorted([hdp[x] for x in svgp & shdp]), sorted([vgp[x] for x in svgp - shdp]), sorted([hdp[x] for x in shdp - svgp])
+
+
 def main():
     from lib.dataset.hicodet_driver import HicoDet
     vg = VGSGG()
     hd = HicoDet()
 
-    m, v, h = match()
+    m, v, h = match_preds()
+    # m, v, h = match_objs()
     print(m)
     print(v)
     print(h)
+    vgsgg_op_mat = (VGSGG().get_hoi_freq(hd) > 0).astype(np.float)
 
 
 if __name__ == '__main__':

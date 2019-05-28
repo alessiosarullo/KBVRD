@@ -9,15 +9,19 @@ from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.hicodet import HicoDetInstanceSplit, Splits
 from lib.dataset.word_embeddings import WordEmbeddings
+from lib.dataset.vgsgg_driver import VGSGG
+from lib.dataset.hcvrd_driver import HCVRD
+from lib.dataset.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 
 try:
     matplotlib.use('Qt5Agg')
-    sys.argv[1:] = ['plot']
+    # sys.argv[1:] = ['emb']
+    sys.argv[1:] = ['hois']
 except ImportError:
     pass
 
 
-def plot():
+def plot_embedding_sim():
     cfg.parse_args(allow_required=False, reset=True)
     dataset = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
 
@@ -85,8 +89,37 @@ def plot():
     plt.show()
 
 
+def plot_feasible_hois():
+    cfg.parse_args(allow_required=False, reset=True)
+    dataset = HicoDetInstanceSplit.get_split(split=Splits.TRAIN, load_precomputed=False)
+
+    hico_op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+    for p, o in dataset.interactions:
+        hico_op_mat[o, p] = 1
+
+    op_mats = []
+
+    imsitu_op_mat = (ImSituKnowledgeExtractor().extract_freq_matrix(dataset) > 0).astype(np.float)
+    plot_mat((imsitu_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects, plot=False, vrange=None)
+    op_mats.append(imsitu_op_mat)
+
+    vgsgg_op_mat = (VGSGG().get_hoi_freq(dataset.hicodet) > 0).astype(np.float)
+    plot_mat((vgsgg_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects, plot=False)
+    op_mats.append(vgsgg_op_mat)
+
+    hcvrd_op_mat = (HCVRD().get_hoi_freq(dataset.hicodet) > 0).astype(np.float)
+    plot_mat((hcvrd_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects, plot=False)
+    op_mats.append(hcvrd_op_mat)
+
+    all_op_mat = (sum(op_mats) > 0).astype(np.float)
+    plot_mat((all_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects, plot=False)
+
+    plt.show()
+
+
 def main():
-    funcs = {'plot': plot,
+    funcs = {'emb': plot_embedding_sim,
+             'hois': plot_feasible_hois,
              }
     print(sys.argv)
     parser = argparse.ArgumentParser()

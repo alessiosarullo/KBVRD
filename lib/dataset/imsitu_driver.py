@@ -5,6 +5,7 @@ from typing import Dict, Any, Tuple
 
 from config import cfg
 
+
 class ImSitu:
     def __init__(self):
         """
@@ -102,6 +103,7 @@ class ImSitu:
 def main():
     imsitu = ImSitu()
     imsitu._print_verb_entry('riding')
+
 
 if __name__ == '__main__':
     main()

@@ -62,19 +62,19 @@ class HicoDet:
         train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict = self.load_annotations(use_hico_det=True)
         self.split_data[Splits.TRAIN]['annotations'] = train_annotations
         self.split_data[Splits.TEST]['annotations'] = test_annotations
-        self._interaction_list = interaction_list
+        self.interaction_list = interaction_list
         self.wn_predicate_dict = wn_pred_dict
         self.predicate_dict = pred_dict
 
         # Derived
-        self._objects = sorted(set([inter['obj'] for inter in self.interaction_list]))
-        self._predicates = list(self.predicate_dict.keys())
-        self._obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
-        self._pred_index = {pred: i for i, pred in enumerate(self.predicates)}
-        assert len(self._pred_index) == len(self._predicates)
-        assert len(self._obj_class_index) == len(self._objects)
-        assert self._pred_index[self.null_interaction] == 0
-        self._interactions = np.array([[self._pred_index[inter['pred']], self._obj_class_index[inter['obj']]] for inter in self._interaction_list])
+        self.objects = sorted(set([inter['obj'] for inter in self.interaction_list]))
+        self.predicates = list(self.predicate_dict.keys())
+        self.obj_class_index = {obj: i for i, obj in enumerate(self.objects)}
+        self.pred_index = {pred: i for i, pred in enumerate(self.predicates)}
+        assert len(self.pred_index) == len(self.predicates)
+        assert len(self.obj_class_index) == len(self.objects)
+        assert self.pred_index[self.null_interaction] == 0
+        self.interactions = np.array([[self.pred_index[inter['pred']], self.obj_class_index[inter['obj']]] for inter in self.interaction_list])
 
         # Statistics
         self.compute_stats()
@@ -119,30 +119,14 @@ class HicoDet:
         return self.split_data[split]['img_dir']
 
     @property
-    def interaction_list(self) -> List:
-        return self._interaction_list
-
-    @property
-    def interactions(self) -> np.ndarray:  # [p, o]
-        return self._interactions
-
-    @property
-    def predicates(self) -> List:
-        return self._predicates
-
-    @property
-    def objects(self) -> List:
-        return self._objects
-
-    @property
     def human_class(self) -> int:
-        return self._obj_class_index['person']
+        return self.obj_class_index['person']
 
     def get_predicate_index(self, interaction_id):
-        return self._pred_index[self.interaction_list[interaction_id]['pred']]
+        return self.pred_index[self.interaction_list[interaction_id]['pred']]
 
     def get_object_index(self, interaction_id):
-        return self._obj_class_index[self.interaction_list[interaction_id]['obj']]
+        return self.obj_class_index[self.interaction_list[interaction_id]['obj']]
 
     def get_occurrences(self, interaction, split=Splits.TRAIN):
         """
