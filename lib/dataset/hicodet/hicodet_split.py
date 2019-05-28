@@ -127,10 +127,10 @@ class HicoDetSplit(Dataset):
         entry.gt_boxes = im_data.boxes.astype(np.float, copy=False)
         entry.gt_obj_classes = im_data.box_classes.copy()
         entry.gt_hois = im_data.interactions.copy()
+        return entry
 
     def __getitem__(self, idx):
-        entry = self.get_entry(idx)
-        return entry
+        return self.get_entry(idx)
 
     def __len__(self):
         return self.num_images
@@ -200,7 +200,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
             print('The following objects have been discarded due to the lack of feasible predicates: %s.' %
                   ', '.join(['%s (%d)' % (hicodet.objects[o], o) for o in (obj_inds - set(obj_count.keys()))]))
 
-    # Filter images with only null interactions
+    # Filter images with only invisible or null interactions
     if filter_empty_imgs:
         im_with_interactions, new_split_data = [], []
         for i, im_data in enumerate(split_data):

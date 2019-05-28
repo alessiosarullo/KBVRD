@@ -106,9 +106,9 @@ class HicoDet:
                 im_boxes = np.concatenate([im_hum_boxes, im_obj_boxes], axis=0)
                 im_box_classes = np.concatenate([np.full(num_hum_boxes, fill_value=self.human_class, dtype=np.int), im_obj_box_classes])
             else:
-                im_boxes = []
-                im_box_classes = []
-                im_interactions = []
+                im_boxes = np.empty((0, 4), dtype=np.int)
+                im_box_classes = np.empty(0, dtype=np.int)
+                im_interactions = np.empty((0, 3), dtype=np.int)
             split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, interactions=im_interactions))
 
         return split_data
