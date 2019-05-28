@@ -62,7 +62,7 @@ class Evaluator(BaseEvaluator):
         Timer.get('Eval epoch').tic()
         Timer.get('Eval epoch', 'Predictions').tic()
         for i, res in enumerate(predictions):
-            ex = self.split.get_entry(i, read_img=False)
+            ex = self.split.get_img_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
         Timer.get('Eval epoch', 'Predictions').toc()

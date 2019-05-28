@@ -56,7 +56,7 @@ class Analyser:
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):
-            ex = self.dataset.get_entry(i, read_img=False)
+            ex = self.dataset.get_img_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
 
@@ -245,7 +245,7 @@ def visualise_images():
     os.makedirs(output_dir, exist_ok=True)
 
     for b_idx in range(len(hds)):
-        entry = hds.get_entry(b_idx, read_img=False)
+        entry = hds.get_img_entry(b_idx, read_img=False)
         im_fn = entry.fn
 
         prediction_dict = results[b_idx]

@@ -45,7 +45,7 @@ class Evaluator:
 
         evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
-            ex = dataset.get_entry(i, read_img=False)
+            ex = dataset.get_img_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             evaluator.process_prediction(i, ex, prediction)
 

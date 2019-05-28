@@ -30,7 +30,7 @@ class ObjectEvaluator(BaseEvaluator):
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
 
         for i, res in enumerate(predictions):
-            ex = self.dataset.get_entry(i, read_img=False)
+            ex = self.dataset.get_img_entry(i, read_img=False)
             prediction = Prediction.from_dict(res)
             self.process_prediction(i, ex, prediction)
         self.compute_metrics()

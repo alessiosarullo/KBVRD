@@ -280,7 +280,7 @@ def calculate_im_scale(im_size):
 def get_counts(dataset):
     counts = np.zeros((dataset.num_object_classes, dataset.num_predicates), dtype=np.int64)
     for i in range(len(dataset)):
-        ex = dataset.get_entry(i, read_img=False)  # type: GTEntry
+        ex = dataset.get_img_entry(i, read_img=False)  # type: GTEntry
         gt_hois = ex.gt_hois
         objs = ex.gt_obj_classes[gt_hois[:, 2]]
         assert np.all(ex.gt_obj_classes[gt_hois[:, 0]] == dataset.human_class)

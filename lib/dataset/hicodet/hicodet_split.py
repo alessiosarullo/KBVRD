@@ -110,7 +110,7 @@ class HicoDetSplit(Dataset):
             preds.append(p)
         return preds
 
-    def get_entry(self, idx, read_img=True) -> GTEntry:
+    def get_img_entry(self, idx, read_img=True) -> GTEntry:
         im_data = self._data[idx]
 
         entry = GTEntry(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
@@ -130,7 +130,7 @@ class HicoDetSplit(Dataset):
         return entry
 
     def __getitem__(self, idx):
-        return self.get_entry(idx)
+        return self.get_img_entry(idx)
 
     def __len__(self):
         return self.num_images

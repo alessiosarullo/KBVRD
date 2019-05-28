@@ -79,7 +79,7 @@ def main():
             mode = possible_modes[m]
             print('Mode: %s.' % mode)
             for im_idx in range(len(hd)):
-                ex = hd.get_entry(im_idx, read_img=False)  # type: GTEntry
+                ex = hd.get_img_entry(im_idx, read_img=False)  # type: GTEntry
                 obj_labels_onehot = np.zeros((ex.gt_obj_classes.shape[0], hd.num_object_classes))
                 obj_labels_onehot[np.arange(obj_labels_onehot.shape[0]), ex.gt_obj_classes] = 1
                 hoi_obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]

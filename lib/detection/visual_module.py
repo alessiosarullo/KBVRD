@@ -165,7 +165,7 @@ class VisualModule(nn.Module):
 
         return boxes_ext, box_labels
 
-    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False):
+    def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=True):
         bg_ratio = cfg.opt.hoi_bg_ratio
 
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
@@ -205,9 +205,10 @@ class VisualModule(nn.Module):
             ho_bg_mask = ~ho_fg_mask
             action_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
 
-            # Filter irrelevant BG relationships (i.e., those where the subject is not human).
+            # Filter irrelevant BG relationships (i.e., those where the subject is not human or self-relations).
             non_human_box_inds_i = (predict_box_labels_i != self.dataset.human_class)
             ho_bg_mask[non_human_box_inds_i, :] = 0
+            ho_bg_mask[np.arange(num_predict_boxes_i), np.arange(num_predict_boxes_i)] = 0
 
             ho_fg_pairs_i = np.stack(np.where(ho_fg_mask), axis=1)
             ho_bg_pairs_i = np.stack(np.where(ho_bg_mask), axis=1)
