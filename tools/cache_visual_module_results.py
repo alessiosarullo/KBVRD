@@ -28,7 +28,7 @@ def save_feats():
     else:
         print('!!!!!!!!!!!!!!!!! Running on CPU!')
     vm.eval()
-    for split, hds in [#(Splits.TRAIN, train_split),
+    for split, hds in [(Splits.TRAIN, train_split),
                        (Splits.TEST, test_split),
                        ]:
         hd_loader = torch.utils.data.DataLoader(dataset=hds,
