@@ -170,14 +170,14 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         self.pos_hois_mask = pos_hois_mask & self.split_mask
         self.neg_hois_mask = neg_hois_mask & self.split_mask
 
-        self.hoi_range_per_img_idx = {}
+        self.hoi_range_per_pc_img_idx = {}
         for i, im_idx in enumerate(dataset.pc_ho_im_inds):
-            start, end = self.hoi_range_per_img_idx.setdefault(im_idx, [i, -1])
-            self.hoi_range_per_img_idx[im_idx][1] = i
+            start, end = self.hoi_range_per_pc_img_idx.setdefault(im_idx, [i, -1])
+            self.hoi_range_per_pc_img_idx[im_idx][1] = i
 
         # Check
         for im_idx in np.unique(dataset.pc_ho_im_inds):
-            start, end = self.hoi_range_per_img_idx[im_idx]
+            start, end = self.hoi_range_per_pc_img_idx[im_idx]
             fg_hois_inds = np.flatnonzero(dataset.pc_action_labels[start:end + 1, 0] == 0)
             bg_hois_inds = np.flatnonzero(dataset.pc_action_labels[start:end + 1, 0] > 0)
             if bg_hois_inds.size > 0:
@@ -199,10 +199,13 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
     def get_all_batches(self):
         batches = []
         pos_inds, neg_inds_dict = [], {}
+        pc_im_idx_to_im_idx = {}
         for im_idx in self.sampler:
             pc_im_idx = self.dataset.im_id_to_pc_im_idx[self.dataset.image_ids[im_idx]]
+            assert pc_im_idx not in pc_im_idx_to_im_idx
+            pc_im_idx_to_im_idx[pc_im_idx] = im_idx
 
-            img_hois_start_idx, img_hois_end_idx = self.hoi_range_per_img_idx[pc_im_idx]
+            img_hois_start_idx, img_hois_end_idx = self.hoi_range_per_pc_img_idx[pc_im_idx]
             start, end = img_hois_start_idx, img_hois_end_idx + 1
             assert np.all(self.split_mask[start:end])  # image belongs to split
 
@@ -239,7 +242,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
 
             batch = []
             for pc_im_idx, v in data_per_im.items():
-                batch.append([pc_im_idx, v['pos'], v['neg']])
+                batch.append([pc_im_idx_to_im_idx[pc_im_idx], v['pos'], v['neg']])
             assert sum([len(x[1]) for x in batch]) == self.pos_per_batch
             assert sum([len(x[2]) for x in batch]) == self.neg_per_batch
 
