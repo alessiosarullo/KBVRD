@@ -10,7 +10,8 @@ from torch.utils.data import Dataset
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDetDriver as HicoDetDriver
-from lib.dataset.utils import Splits, preprocess_img, GTEntry, Minibatch
+from lib.dataset.utils import Splits, preprocess_img
+from lib.dataset.hicodet.hicodet_split import Example, Minibatch
 from lib.detection.wrappers import COCO_CLASSES
 from lib.stats.utils import Timer
 
@@ -284,13 +285,13 @@ class HicoDetInstanceSplit(Dataset):
             )
         return data_loader
 
-    def get_entry(self, idx, read_img=True, ignore_precomputed=False) -> GTEntry:
+    def get_entry(self, idx, read_img=True, ignore_precomputed=False) -> Example:
         # Read the image
 
         img_fn = self._im_filenames[idx]
         img_id = self.image_ids[idx]
 
-        entry = GTEntry(idx_in_split=idx, img_id=img_id, filename=img_fn, precomputed=self.has_precomputed, split=self.split)
+        entry = Example(idx_in_split=idx, img_id=img_id, filename=img_fn, precomputed=self.has_precomputed, split=self.split)
         if not self.has_precomputed or ignore_precomputed:
             gt_boxes = self._im_boxes[idx].astype(np.float, copy=False)
 

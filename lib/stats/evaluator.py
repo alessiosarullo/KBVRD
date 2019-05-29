@@ -5,8 +5,7 @@ import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import GTEntry
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer
 
@@ -114,8 +113,8 @@ class Evaluator(BaseEvaluator):
 
         print('\n'.join(lines))
 
-    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
-        if isinstance(gt_entry, GTEntry):
+    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
+        if isinstance(gt_entry, Example):
             gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             num_gt_hois = gt_hoi_triplets.shape[0]
 

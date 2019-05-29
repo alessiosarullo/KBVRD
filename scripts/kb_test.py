@@ -5,8 +5,8 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import Splits, GTEntry
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
+from lib.dataset.utils import Splits
 from lib.dataset.utils import get_counts
 from lib.dataset.imsitu_knowledge_extractor import ImSituKnowledgeExtractor
 from lib.models.containers import Prediction
@@ -79,7 +79,7 @@ def main():
             mode = possible_modes[m]
             print('Mode: %s.' % mode)
             for im_idx in range(len(hd)):
-                ex = hd.get_img_entry(im_idx, read_img=False)  # type: GTEntry
+                ex = hd.get_img_entry(im_idx, read_img=False)  # type: Example
                 obj_labels_onehot = np.zeros((ex.gt_obj_classes.shape[0], hd.num_object_classes))
                 obj_labels_onehot[np.arange(obj_labels_onehot.shape[0]), ex.gt_obj_classes] = 1
                 hoi_obj_labels = ex.gt_obj_classes[ex.gt_hois[:, 2]]

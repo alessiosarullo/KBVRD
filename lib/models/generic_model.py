@@ -6,7 +6,7 @@ from collections import Counter
 
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import PrecomputedMinibatch
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.models.abstract_model import AbstractModel
 from lib.detection.visual_module import VisualModule
 from lib.models.containers import Prediction, VisualOutput

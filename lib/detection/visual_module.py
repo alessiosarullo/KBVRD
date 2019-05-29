@@ -4,9 +4,8 @@ import torch.nn as nn
 
 from config import cfg
 from lib.bbox_utils import compute_ious, get_union_boxes
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.hicodet.hicodet_split_loader import PrecomputedHicoDetSplit
-from lib.dataset.utils import Minibatch, PrecomputedMinibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Minibatch
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch
 from lib.models.containers import VisualOutput
 
 

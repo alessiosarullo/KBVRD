@@ -3,12 +3,117 @@ from typing import List
 import h5py
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+import torch.utils.data
 
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import Splits, PrecomputedExample, PrecomputedMinibatch
+from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
+
+
+class PrecomputedExample:
+    def __init__(self, idx_in_split, img_id, filename, split):
+        self.index = idx_in_split
+        self.id = img_id
+        self.filename = filename
+        self.split = split
+
+        self.img_size = None
+        self.scale = None
+
+        self.precomp_boxes_ext = None
+        self.precomp_box_feats = None
+        self.precomp_masks = None
+
+        self.precomp_hoi_infos = None
+        self.precomp_hoi_union_boxes = None
+        self.precomp_hoi_union_feats = None
+
+        self.precomp_box_labels = None
+        self.precomp_action_labels = None
+
+
+class PrecomputedMinibatch:
+    def __init__(self):
+        self.img_infos = []
+        self.other_ex_data = []
+        self.pc_boxes_ext = []
+        self.pc_box_feats = []
+        self.pc_masks = []
+        self.pc_ho_infos = []
+        self.pc_ho_union_boxes = []
+        self.pc_ho_union_feats = []
+        self.pc_box_labels = []
+        self.pc_action_labels = []
+
+    def append(self, ex: PrecomputedExample):
+        im_id_in_batch = len(self.img_infos)
+        self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]
+
+        self.other_ex_data += [{'index': ex.index,
+                                'id': ex.id,
+                                'fn': ex.filename,
+                                'split': ex.split,
+                                'im_size': ex.img_size,  # this won't be changed
+                                'im_scale': ex.scale,
+                                }]
+
+        boxes_ext = ex.precomp_boxes_ext
+        if boxes_ext is not None:
+            boxes_ext[:, 0] = im_id_in_batch
+            self.pc_boxes_ext += [boxes_ext]
+            self.pc_box_feats += [ex.precomp_box_feats]
+            self.pc_masks += [ex.precomp_masks]
+
+            self.pc_box_labels += [ex.precomp_box_labels]
+
+            hoi_infos = ex.precomp_hoi_infos
+            if hoi_infos is not None:
+                num_boxes = sum([boxes.shape[0] for boxes in self.pc_boxes_ext[:-1]])
+                hoi_infos[:, 0] = im_id_in_batch
+                hoi_infos[:, 1:] += num_boxes
+                self.pc_ho_infos += [hoi_infos]
+                self.pc_ho_union_boxes += [ex.precomp_hoi_union_boxes]
+                self.pc_ho_union_feats += [ex.precomp_hoi_union_feats]
+
+                self.pc_action_labels += [ex.precomp_action_labels]
+
+    def vectorize(self, device):
+        for k, v in self.__dict__.items():
+            if k.startswith('pc_') and ('label' not in k):
+                if not v:
+                    v = [np.empty(0)]
+                self.__dict__[k] = np.concatenate(v, axis=0)
+
+        assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
+        assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0] == self.pc_ho_union_feats.shape[0]
+
+        img_infos = np.stack(self.img_infos, axis=0)
+        img_infos[:, 0] = max(img_infos[:, 0])
+        img_infos[:, 1] = max(img_infos[:, 1])
+        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
+
+        if self.pc_box_labels[0] is None:
+            assert all([l is None for l in self.pc_box_labels])
+            assert all([l is None for l in self.pc_action_labels])
+            self.pc_box_labels = self.pc_action_labels = None
+        else:
+            assert all([l is not None for l in self.pc_box_labels])
+            assert all([l is not None for l in self.pc_action_labels])
+            assert len(self.pc_box_labels) == len(self.pc_action_labels) == self.img_infos.shape[0], \
+                (len(self.pc_box_labels), len(self.pc_action_labels), self.img_infos.shape[0])
+            self.pc_box_labels = np.concatenate(self.pc_box_labels, axis=0)
+            self.pc_action_labels = np.concatenate(self.pc_action_labels, axis=0)
+            assert self.pc_boxes_ext.shape[0] == self.pc_box_labels.shape[0]
+            assert self.pc_ho_infos.shape[0] == self.pc_action_labels.shape[0]
+
+    @classmethod
+    def collate(cls, examples):
+        minibatch = cls()
+        for ex in examples:
+            minibatch.append(ex)
+        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        return minibatch
 
 
 class PrecomputedHicoDetSplit(HicoDetSplit):
@@ -26,6 +131,8 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
         self.pc_boxes_ext = self.pc_feats_file['boxes_ext'][:]
         self.pc_box_im_inds = self.pc_boxes_ext[:, 0].astype(np.int)
+        self.pc_boxes_feats = self.pc_feats_file['box_feats']
+        self.pc_masks = self.pc_feats_file['masks']
         try:
             self.pc_box_labels = self.pc_feats_file['box_labels'][:]
         except KeyError:
@@ -33,6 +140,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
         self.pc_ho_infos = self.pc_feats_file['ho_infos'][:].astype(np.int)
         self.pc_union_boxes = self.pc_feats_file['union_boxes'][:]
+        self.pc_union_boxes_feats = self.pc_feats_file['union_boxes_feats']
         self.pc_ho_im_inds = self.pc_ho_infos[:, 0]
         try:
             self.pc_action_labels = self.pc_feats_file['action_labels'][:]
@@ -51,7 +159,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
     @property
     def precomputed_visual_feat_dim(self):
-        return self.pc_feats_file['box_feats'].shape[1]
+        return self.pc_boxes_feats.shape[1]
 
     @property
     def num_precomputed_hois(self):
@@ -99,8 +207,8 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
             precomp_boxes_ext = self.pc_boxes_ext[start:end, :]
-            precomp_box_feats = self.pc_feats_file['box_feats'][start:end, :]
-            precomp_masks = self.pc_feats_file['masks'][start:end, :, :]
+            precomp_box_feats = self.pc_boxes_feats[start:end, :]
+            precomp_masks = self.pc_masks[start:end, :, :]
             box_inds = None
             if self.pc_box_labels is not None:
                 # TODO mapping of obj inds for rels
@@ -135,7 +243,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
                 precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
                 precomp_hoi_union_boxes = self.pc_union_boxes[start:end, :]
-                precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][start:end, :]
+                precomp_hoi_union_feats = self.pc_union_boxes_feats[start:end, :]
                 if self.pc_action_labels is not None:
                     precomp_action_labels = self.pc_action_labels[start:end, :]
                 else:
@@ -193,164 +301,3 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
     def __len__(self):
         return self.num_images
-
-
-class PrecomputedHOIHicoDetSplit(PrecomputedHicoDetSplit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.split == Splits.TEST:
-            raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
-        self.pc_im_idx_to_im_idx = {}
-        im_id_to_im_idx = {im_id: i for i, im_id in enumerate(self.image_ids)}
-        for pc_im_idx, im_id in enumerate(self.pc_image_ids):
-            if im_id in im_id_to_im_idx.keys():
-                im_idx = im_id_to_im_idx[im_id]
-                assert im_idx not in self.pc_im_idx_to_im_idx.values()
-                self.pc_im_idx_to_im_idx[pc_im_idx] = im_idx
-
-    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
-        if shuffle is None:
-            shuffle = True if self.split == Splits.TRAIN else False
-        batch_size = batch_size * num_gpus
-
-        data_loader = torch.utils.data.DataLoader(
-            dataset=self,
-            batch_sampler=BalancedHOISampler(self, batch_size, drop_last, shuffle),
-            num_workers=num_workers,
-            collate_fn=lambda x: PrecomputedMinibatch.collate(x),
-            # pin_memory=True,  # disable this in case of freezes
-            **kwargs,
-        )
-        return data_loader
-
-    def __getitem__(self, hoi_idx) -> PrecomputedExample:
-        Timer.get('GetBatch').tic()
-        pc_im_idx = self.pc_ho_im_inds[hoi_idx]
-        img_id = self.pc_image_ids[pc_im_idx]
-        im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
-        im_data = self._data[im_idx]
-
-        entry = PrecomputedExample(idx_in_split=im_idx, img_id=img_id, filename=im_data.filename, split=self.split)
-
-        # Image data
-        img_infos = self.pc_image_infos[pc_im_idx].copy()
-        assert img_infos.shape == (3,)
-        entry.img_size = img_infos[:2]
-        entry.scale = img_infos[2]
-
-        # HOI data
-        precomp_hoi_infos = self.pc_ho_infos[hoi_idx, :].copy()
-        precomp_hoi_union_boxes = self.pc_union_boxes[hoi_idx, :]
-        precomp_hoi_union_feats = self.pc_feats_file['union_boxes_feats'][hoi_idx, :]
-        if self.pc_action_labels is not None:
-            precomp_action_labels = self.pc_action_labels[hoi_idx, :]
-        else:
-            precomp_action_labels = None
-
-        # Object data
-        img_box_inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
-        assert img_box_inds.size > 0
-        start, end = img_box_inds[0], img_box_inds[-1] + 1
-        assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-        assert precomp_hoi_infos[1] < end and precomp_hoi_infos[2] < end
-
-        pair = start + precomp_hoi_infos[1:]
-        if pair[0] < pair[1]:
-            precomp_hoi_infos[1] = 0
-            precomp_hoi_infos[2] = 1
-        else:
-            pair = pair[[1, 0]]
-            precomp_hoi_infos[1] = 1
-            precomp_hoi_infos[2] = 0
-        precomp_boxes_ext = self.pc_boxes_ext[pair, :]
-        precomp_box_feats = self.pc_feats_file['box_feats'][pair, :]
-        precomp_masks = self.pc_feats_file['masks'][pair, :, :]
-        if self.pc_box_labels is not None:
-            precomp_box_labels = self.pc_box_labels[pair].copy()
-        else:
-            precomp_box_labels = None
-
-        # Create entry
-        entry.precomp_action_labels = precomp_action_labels
-        entry.precomp_hoi_infos = precomp_hoi_infos
-        entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
-        entry.precomp_hoi_union_feats = precomp_hoi_union_feats
-
-        entry.precomp_boxes_ext = precomp_boxes_ext
-        entry.precomp_box_feats = precomp_box_feats
-        entry.precomp_masks = precomp_masks
-        entry.precomp_box_labels = precomp_box_labels
-        assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
-               (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
-        Timer.get('GetBatch').toc()
-        return entry
-
-    def __len__(self):
-        return self.num_precomputed_hois
-
-
-class BalancedHOISampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PrecomputedHOIHicoDetSplit, hoi_batch_size, drop_last, shuffle):
-        super().__init__(dataset)
-        if not drop_last:
-            raise NotImplementedError()
-        self.hoi_batch_size = hoi_batch_size
-        self.drop_last = drop_last
-        self.shuffle = shuffle
-
-        image_ids = set(dataset.image_ids)
-        split_mask = np.array([dataset.pc_image_ids[im_ind] in image_ids for im_ind in dataset.pc_ho_im_inds])
-        pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
-        neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
-        assert np.all(pos_hois_mask != neg_hois_mask)
-        self.pos_hois = np.flatnonzero(pos_hois_mask & split_mask)
-        self.neg_hois = np.flatnonzero(neg_hois_mask & split_mask)
-
-        self.pos_per_batch = np.ceil(hoi_batch_size * self.pos_hois.size / self.neg_hois.size).astype(np.int)
-        self.neg_per_batch = hoi_batch_size - self.pos_per_batch
-
-        self.batches = self.get_all_batches()
-
-    def __iter__(self):
-        for batch in self.batches:
-            yield batch
-        self.batches = self.get_all_batches()
-
-    def get_all_batches(self):
-        pos_sampler = torch.utils.data.SubsetRandomSampler(self.pos_hois) if self.shuffle else torch.utils.data.SequentialSampler(self.pos_hois)
-        neg_sampler = torch.utils.data.SubsetRandomSampler(self.neg_hois) if self.shuffle else torch.utils.data.SequentialSampler(self.neg_hois)
-        neg_sampler_iter = iter(neg_sampler)
-        batches = []
-        batch = []
-        for idx in pos_sampler:
-            batch.append(idx)
-            if len(batch) >= self.pos_per_batch:
-                assert len(batch) == self.pos_per_batch
-                for i in range(self.neg_per_batch):
-                    batch.append(next(neg_sampler_iter))
-                assert len(batch) == self.hoi_batch_size
-                batches.append(batch)
-                batch = []
-        return batches
-
-    def __len__(self):
-        return len(self.batches)
-
-
-def main():
-    import random
-    seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-
-    s = PrecomputedHOIHicoDetSplit.get_split(split=Splits.TRAIN)
-    ld = s.get_loader(batch_size=64)
-
-    for x in ld:
-        pass
-
-
-if __name__ == '__main__':
-    main()

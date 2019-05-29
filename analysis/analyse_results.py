@@ -12,8 +12,7 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
-from lib.dataset.utils import Minibatch, GTEntry
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits, Example, Minibatch
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.utils import Timer
@@ -62,8 +61,8 @@ class Analyser:
 
         self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1))
 
-    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
-        if isinstance(gt_entry, GTEntry):
+    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
+        if isinstance(gt_entry, Example):
             gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             gt_interactions = np.stack([gt_hoi_triplets[:, 2], gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]]], axis=1)  # (a, o)
             num_gt_hois = gt_hoi_triplets.shape[0]

@@ -6,8 +6,8 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import Splits, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Minibatch
+from lib.dataset.utils import Splits
 from lib.detection.visual_module import VisualModule, VisualOutput
 
 

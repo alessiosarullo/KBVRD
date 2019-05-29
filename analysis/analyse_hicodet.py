@@ -9,8 +9,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
-from lib.dataset.utils import GTEntry
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits, Example
 
 try:
     matplotlib.use('Qt5Agg')
@@ -67,7 +66,7 @@ def find():
     os.makedirs(output_dir, exist_ok=True)
 
     for idx in range(len(hds)):
-        example = hds.get_img_entry(idx, read_img=False)  # type: GTEntry
+        example = hds.get_img_entry(idx, read_img=False)  # type: Example
         im_fn = example.filename
 
         boxes = example.gt_boxes
@@ -104,7 +103,7 @@ def vis_gt():
     os.makedirs(output_dir, exist_ok=True)
 
     for idx in range(len(hds)):
-        example = hds.get_img_entry(idx, read_img=False)  # type: GTEntry
+        example = hds.get_img_entry(idx, read_img=False)  # type: Example
         im_fn = example.filename
         # if im_fn not in [s.strip() for s in """
         # HICO_train2015_00001418.jpg

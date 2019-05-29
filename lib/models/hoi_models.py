@@ -1,6 +1,7 @@
 from lib.bbox_utils import compute_ious
 from lib.dataset.utils import Splits
-from lib.models.generic_model import GenericModel, Prediction, PrecomputedMinibatch
+from lib.models.generic_model import GenericModel, Prediction
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.models.containers import VisualOutput
 from lib.models.hoi_branches import *
 from lib.models.obj_branches import *

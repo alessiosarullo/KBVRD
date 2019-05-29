@@ -4,12 +4,90 @@ from typing import List
 
 import cv2
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
-from lib.dataset.utils import Splits, preprocess_img, GTEntry
+from lib.dataset.utils import Splits, preprocess_img, _im_list_to_4d_tensor
 from lib.detection.wrappers import COCO_CLASSES
+
+
+class Example:
+    def __init__(self, idx_in_split, img_id, filename, split):
+        self.index = idx_in_split
+        self.id = img_id
+        self.filename = filename
+        self.split = split
+
+        self.img_size = None
+        self.scale = None
+
+        self.image = None
+        self.gt_boxes = None
+        self.gt_obj_classes = None
+        self.gt_hois = None
+
+
+class Minibatch:
+    # TODO refactor in list[Example], then merged when called vectorize()
+    def __init__(self):
+        self.img_infos = []
+        self.other_ex_data = []
+
+        self.imgs = []
+        self.gt_boxes = []
+        self.gt_obj_classes = []
+        self.gt_box_im_ids = []
+        self.gt_hois = []
+        self.gt_hoi_im_ids = []
+
+    def append(self, ex: Example):
+        self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]
+
+        self.other_ex_data += [{'index': ex.index,
+                                'id': ex.id,
+                                'fn': ex.filename,
+                                'split': ex.split,
+                                'im_size': ex.img_size,  # this won't be changed
+                                'im_scale': ex.scale,
+                                }]
+
+        self.imgs += [ex.image]
+        self.gt_boxes += [ex.gt_boxes * ex.scale]
+        self.gt_obj_classes += [ex.gt_obj_classes]
+        self.gt_hois += [ex.gt_hois]
+
+        self.gt_box_im_ids += [np.full_like(ex.gt_obj_classes, fill_value=len(self.gt_box_im_ids))]
+        self.gt_hoi_im_ids += [np.full(ex.gt_hois.shape[0], fill_value=len(self.gt_hoi_im_ids), dtype=np.int)]
+
+    def vectorize(self, device):
+        assert all([len(v) > 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
+
+        self.imgs = _im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
+
+        img_infos = np.stack(self.img_infos, axis=0)
+        img_infos[:, 0] = self.imgs.shape[2]
+        img_infos[:, 1] = self.imgs.shape[3]
+        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
+
+        assert self.imgs.shape[0] == self.img_infos.shape[0]
+
+        self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
+        self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
+        self.gt_obj_classes = np.concatenate(self.gt_obj_classes, axis=0)
+        self.gt_hoi_im_ids = np.concatenate(self.gt_hoi_im_ids, axis=0)
+        self.gt_hois = np.concatenate(self.gt_hois, axis=0)
+        assert len(self.gt_boxes) == len(self.gt_obj_classes) == len(self.gt_box_im_ids)
+        assert len(self.gt_hois) == len(self.gt_hoi_im_ids)
+
+    @classmethod
+    def collate(cls, examples):
+        minibatch = cls()
+        for ex in examples:
+            minibatch.append(ex)
+        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        return minibatch
 
 
 class HicoDetSplit(Dataset):
@@ -110,10 +188,10 @@ class HicoDetSplit(Dataset):
             preds.append(p)
         return preds
 
-    def get_img_entry(self, idx, read_img=True) -> GTEntry:
+    def get_img_entry(self, idx, read_img=True) -> Example:
         im_data = self._data[idx]
 
-        entry = GTEntry(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
+        entry = Example(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
         if read_img:
             raw_image = cv2.imread(os.path.join(self.img_dir, im_data.filename))
             img_h, img_w = raw_image.shape[:2]
@@ -144,7 +222,7 @@ def remap_box_pairs(box_pairs, box_mask):
     return box_pairs
 
 
-def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs) -> List[HicoDetImData]:
+def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs):
     split_data = hicodet.split_data[split]  # type: List[HicoDetImData]
     image_ids = list(range(len(split_data)))
 

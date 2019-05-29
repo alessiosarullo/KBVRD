@@ -4,8 +4,7 @@ from typing import List, Dict
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import GTEntry
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.evaluator import BaseEvaluator
 
@@ -74,8 +73,8 @@ class ObjectEvaluator(BaseEvaluator):
         print(printstr)
         return printstr
 
-    def process_prediction(self, im_id, gt_entry: GTEntry, prediction: Prediction):
-        if isinstance(gt_entry, GTEntry):
+    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
+        if isinstance(gt_entry, Example):
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
             gt_classes = gt_entry.gt_obj_classes
             num_gt = gt_boxes.shape[0]
