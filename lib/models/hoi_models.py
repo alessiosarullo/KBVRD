@@ -211,7 +211,7 @@ class ObjFGPredModel(GenericModel):
         return obj_logits, action_logits, fg_obj_logits
 
 
-class ActionOnlyModel(GenericModel):
+class BaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'base'
@@ -260,7 +260,7 @@ class ActionOnlyModel(GenericModel):
         return action_logits
 
 
-class ActionOnlyv2Model(GenericModel):
+class Basev2Model(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'basev2'
@@ -271,31 +271,31 @@ class ActionOnlyv2Model(GenericModel):
         vis_feat_dim = self.visual_module.vis_feat_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
-                                                nn.BatchNorm1d(self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
+                                                nn.Dropout(p=0.5),
                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                                nn.BatchNorm1d(self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
+                                                nn.Dropout(p=0.5),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
-                                               nn.BatchNorm1d(self.act_repr_dim),
                                                nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5),
                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                               nn.BatchNorm1d(self.act_repr_dim),
                                                nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
-                                              nn.BatchNorm1d(self.act_repr_dim),
                                               nn.ReLU(inplace=True),
+                                              nn.Dropout(p=0.5),
                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                              nn.BatchNorm1d(self.act_repr_dim),
                                               nn.ReLU(inplace=True),
+                                              nn.Dropout(p=0.5),
                                               ])
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -324,7 +324,7 @@ class ActionOnlyv2Model(GenericModel):
         return action_logits
 
 
-class HoiBaseModel(ActionOnlyModel):
+class HoiBaseModel(BaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'hoibase'
