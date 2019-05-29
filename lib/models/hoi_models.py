@@ -385,27 +385,33 @@ class Basev2Model(GenericModel):
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[2].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
                                                nn.ReLU(inplace=True),
+                                               nn.Dropout(0.5),
                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
                                                nn.ReLU(inplace=True),
+                                               nn.Dropout(0.5),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[2].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
                                               nn.ReLU(inplace=True),
+                                              nn.Dropout(0.5),
                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
                                               nn.ReLU(inplace=True),
+                                              nn.Dropout(0.5),
                                               ])
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.union_repr_mlp[2].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
