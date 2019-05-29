@@ -211,6 +211,114 @@ class ObjFGPredModel(GenericModel):
         return obj_logits, action_logits, fg_obj_logits
 
 
+class FuncGenModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'fgen'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.fc1_dim = 1024
+        self.fc2_dim = 512
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = word_embs.get_embeddings(dataset.objects)
+        self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
+
+        self.act_branch = nn.Sequential(*[nn.Linear(vis_feat_dim + self.word_emb_dim + 14, self.fc1_dim),  # 14 = # geometric features
+                                          nn.ReLU(inplace=True),
+                                          nn.Linear(self.fc1_dim, self.fc2_dim),
+                                          nn.ReLU(inplace=True),
+                                          ])
+        self.act_output_fc = nn.Linear(self.fc2_dim, dataset.num_predicates, bias=True)
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                vis_output.minibatch = x
+                action_output = self._forward(vis_output, x)
+            else:
+                assert inference
+                action_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
+
+    # noinspection PyMethodOverriding
+    def _forward(self, vis_output: VisualOutput, batch: PrecomputedMinibatch):
+        if vis_output.box_labels is not None:
+            vis_output.filter_bg_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        masks = vis_output.masks
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        im_sizes = torch.from_numpy(np.array([d['im_size'] for d in batch.other_ex_data]))
+        im_areas = im_sizes.prod(dim=1)
+
+        norm_boxes = boxes_ext[:, 1:5] / im_sizes[boxes_ext[:, 0], :].repeat(1, 2)
+        assert (0 <= norm_boxes <= 1).all()
+        box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
+        box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
+        norm_box_areas =  box_widths * box_heights / im_areas[boxes_ext[:, 0]]
+        assert (0 < norm_box_areas <= 1).all()
+
+        hum_inds = hoi_infos[:, 1]
+        obj_inds = hoi_infos[:, 2]
+        obj_widths = box_widths[obj_inds]
+        obj_heights = box_widths[obj_inds]
+
+        h_dist = (boxes_ext[hum_inds, 1] - boxes_ext[obj_inds, 1]) / obj_widths
+        v_dist = (boxes_ext[hum_inds, 2] - boxes_ext[obj_inds, 2]) / obj_heights
+
+        h_ratio = (box_widths[hum_inds] / obj_widths).log()
+        v_ratio = (box_widths[hum_inds] / obj_heights).log()
+
+        geo_feats = torch.cat([norm_boxes[hum_inds, :],
+                               norm_box_areas[hum_inds, None],
+                               norm_boxes[obj_inds, :],
+                               norm_box_areas[obj_inds, None],
+                               h_dist[:, None], v_dist[:, None], h_ratio[:, None], v_ratio[:, None]
+                               ], dim=1)
+
+        obj_word_embs = self.obj_word_embs(boxes_ext[:, 5:].argmax())
+
+        hum_repr = box_feats[hum_inds, :]
+
+        act_repr = self.act_branch(torch.cat([geo_feats, obj_word_embs, hum_repr], dim=1))
+        action_logits = self.act_output_fc(act_repr)
+
+        return action_logits
+
+
 class BaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
