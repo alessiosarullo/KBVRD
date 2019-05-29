@@ -54,7 +54,7 @@ class PrecomputedMinibatch:
                                 'id': ex.id,
                                 'fn': ex.filename,
                                 'split': ex.split,
-                                'im_size': ex.img_size,  # this won't be changed
+                                'im_size': ex.img_size,  # this is the original one and won't be changed
                                 'im_scale': ex.scale,
                                 }]
 

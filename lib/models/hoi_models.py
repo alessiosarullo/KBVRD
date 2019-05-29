@@ -278,18 +278,18 @@ class FuncGenModel(GenericModel):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
-        im_sizes = torch.from_numpy(np.array([d['im_size'] for d in batch.other_ex_data]))
+        im_sizes = torch.tensor(np.array([d['im_size'][::-1] * d['im_scale'] for d in batch.other_ex_data]).astype(np.float32), device=masks.device)
         im_areas = im_sizes.prod(dim=1)
 
-        norm_boxes = boxes_ext[:, 1:5] / im_sizes[boxes_ext[:, 0], :].repeat(1, 2)
-        assert (0 <= norm_boxes <= 1).all()
+        box_im_inds = boxes_ext[:, 0].long()
+        norm_boxes = boxes_ext[:, 1:5] / im_sizes[box_im_inds, :].repeat(1, 2)
+        assert (0 <= norm_boxes).all() and (norm_boxes <= 1).all()
         box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
         box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
-        norm_box_areas =  box_widths * box_heights / im_areas[boxes_ext[:, 0]]
-        assert (0 < norm_box_areas <= 1).all()
+        norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
+        assert (0 < norm_box_areas).all() and (norm_box_areas <= 1).all()
 
         hum_inds = hoi_infos[:, 1]
         obj_inds = hoi_infos[:, 2]
