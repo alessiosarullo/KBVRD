@@ -285,11 +285,16 @@ class FuncGenModel(GenericModel):
 
         box_im_inds = boxes_ext[:, 0].long()
         norm_boxes = boxes_ext[:, 1:5] / im_sizes[box_im_inds, :].repeat(1, 2)
-        assert (0 <= norm_boxes).all() and (norm_boxes <= 1).all()
+        assert (0 <= norm_boxes).all()
+        norm_boxes.clamp_(max=1)  # Might not be true for numerical errors. Also when assigning GT to detections this is not true (maybe?).
+        assert (norm_boxes <= 1).all()
+
         box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
         box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
         norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
-        assert (0 < norm_box_areas).all() and (norm_box_areas <= 1).all()
+        assert (0 < norm_box_areas).all()
+        norm_box_areas.clamp_(max=1)  # Same as above
+        assert (norm_box_areas <= 1).all()
 
         hum_inds = hoi_infos[:, 1]
         obj_inds = hoi_infos[:, 2]
@@ -309,7 +314,7 @@ class FuncGenModel(GenericModel):
                                h_dist[:, None], v_dist[:, None], h_ratio[:, None], v_ratio[:, None]
                                ], dim=1)
 
-        obj_word_embs = self.obj_word_embs(boxes_ext[:, 5:].argmax())
+        obj_word_embs = self.obj_word_embs(boxes_ext[obj_inds, 5:].argmax(dim=1))
 
         hum_repr = box_feats[hum_inds, :]
 
