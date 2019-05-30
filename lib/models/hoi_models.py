@@ -283,16 +283,21 @@ class FuncGenModel(GenericModel):
         im_sizes = torch.tensor(np.array([d['im_size'][::-1] * d['im_scale'] for d in batch.other_ex_data]).astype(np.float32), device=masks.device)
         im_areas = im_sizes.prod(dim=1)
 
+        # Needed for numerical errors. Also when assigning GT to detections this is not guaranteed to be true.
         box_im_inds = boxes_ext[:, 0].long()
-        norm_boxes = boxes_ext[:, 1:5] / im_sizes[box_im_inds, :].repeat(1, 2)
+        box_im_sizes = im_sizes[box_im_inds, :]
+        boxes_ext[:, 3] = torch.min(boxes_ext[:, 3], box_im_sizes[:, 0])
+        boxes_ext[:, 4] = torch.min(boxes_ext[:, 4], box_im_sizes[:, 1])
+
+        norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
         assert (0 <= norm_boxes).all()
-        norm_boxes.clamp_(max=1)  # Might not be true for numerical errors. Also when assigning GT to detections this is not true (maybe?).
+        # norm_boxes.clamp_(max=1)  # Needed for numerical errors
         assert (norm_boxes <= 1).all()
 
         box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
         box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
         norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
-        assert (0 < norm_box_areas).all()
+        assert (0 < norm_box_areas).all(), (boxes_ext[:, :5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
         norm_box_areas.clamp_(max=1)  # Same as above
         assert (norm_box_areas <= 1).all()
 

@@ -53,7 +53,7 @@ class MaskRCNN(nn.Module):
         with torch.set_grad_enabled(self.training):
             box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs={'data': x.imgs, 'im_info': x.img_infos})
             im_scales = x.img_infos[:, 2].cpu().numpy()
-            boxes = boxes * im_scales[box_im_ids, None]
+            boxes = boxes * im_scales[box_im_ids, None]  # Note: this can introduce numerical errors! Box might be bigger than image.
             boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)
