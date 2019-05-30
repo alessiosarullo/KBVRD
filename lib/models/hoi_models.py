@@ -290,16 +290,18 @@ class FuncGenModel(GenericModel):
         boxes_ext[:, 4] = torch.min(boxes_ext[:, 4], box_im_sizes[:, 1])
 
         norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
-        assert (0 <= norm_boxes).all()
+        assert (0 <= norm_boxes).all(), \
+            (boxes_ext[:, :5].detach().cpu().numpy(), box_im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
         # norm_boxes.clamp_(max=1)  # Needed for numerical errors
-        assert (norm_boxes <= 1).all()
+        assert (norm_boxes <= 1).all(), \
+            (boxes_ext[:, :5].detach().cpu().numpy(), box_im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
 
         box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
         box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
         norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
         assert (0 < norm_box_areas).all(), (boxes_ext[:, :5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
         norm_box_areas.clamp_(max=1)  # Same as above
-        assert (norm_box_areas <= 1).all()
+        assert (norm_box_areas <= 1).all(), (boxes_ext[:, :5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
 
         hum_inds = hoi_infos[:, 1]
         obj_inds = hoi_infos[:, 2]
@@ -333,55 +335,6 @@ class BaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'base'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.obj_repr_dim = 512
-        self.act_repr_dim = 600
-        super().__init__(dataset, **kwargs)
-        use_relu = cfg.model.relu
-        vis_feat_dim = self.visual_module.vis_feat_dim
-
-        self.obj_branch = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.obj_repr_dim),
-                                          nn.ReLU(inplace=True),
-                                          ])
-
-        self.act_subj_repr_fc = nn.Sequential(*([nn.Linear(self.obj_repr_dim, self.act_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
-        nn.init.xavier_normal_(self.act_subj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
-
-        self.act_obj_repr_fc = nn.Sequential(*([nn.Linear(self.obj_repr_dim, self.act_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
-        nn.init.xavier_normal_(self.act_obj_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
-
-        self.union_repr_fc = nn.Sequential(*([nn.Linear(self.visual_module.vis_feat_dim, self.act_repr_dim)] + ([nn.ReLU()] if use_relu else [])))
-        nn.init.xavier_normal_(self.union_repr_fc[0].weight, gain=torch.nn.init.calculate_gain('relu' if use_relu else 'linear'))
-
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
-
-    def _forward(self, vis_output: VisualOutput):
-        if vis_output.box_labels is not None:
-            vis_output.filter_bg_boxes()
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
-
-        obj_repr = self.obj_branch(torch.cat([box_feats, boxes_ext[:, 5:]], dim=1))
-
-        hoi_subj_repr = self.act_subj_repr_fc(obj_repr[hoi_infos[:, 1], :])
-        hoi_obj_repr = self.act_obj_repr_fc(obj_repr[hoi_infos[:, 2], :])
-        union_repr = self.union_repr_fc(union_boxes_feats)
-        act_repr = union_repr + hoi_subj_repr + hoi_obj_repr
-
-        action_logits = self.act_output_fc(act_repr)
-
-        return action_logits
-
-
-class Basev2Model(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'basev2'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.act_repr_dim = 600
