@@ -23,11 +23,11 @@ def main():
     data_dir = os.path.join('data', 'VG')
     # rel_synsets = json.load(open(os.path.join(data_dir, 'relationship_synsets.json'), 'r'))
     try:
-        with open(os.path.join(data_dir, 'region_descriptions.txt'), 'r') as f:
+        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
             region_descr = [l.strip() for l in f.readlines()]
     except FileNotFoundError:
         region_descr = json.load(open(os.path.join(data_dir, 'relationship_synsets.json'), 'r'))
-        with open(os.path.join(data_dir, 'region_descriptions.txt'), 'w') as f:
+        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
             f.write('\n'.join([r['phrase'] for rd in region_descr for r in rd['regions']]))
     print('\n'.join(region_descr[:10]))
     print()
