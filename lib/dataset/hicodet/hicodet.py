@@ -9,11 +9,12 @@ from typing import Dict, List
 
 
 class HicoDetImData:
-    def __init__(self, filename, boxes, box_classes, interactions):
+    def __init__(self, filename, boxes, box_classes, interactions, wnet_actions):
         self.filename = filename
         self.boxes = boxes
         self.box_classes = box_classes
         self.interactions = interactions
+        self.wnet_actions = wnet_actions
 
 
 class HicoDet:
@@ -64,7 +65,7 @@ class HicoDet:
         annotations = self.driver.split_annotations[split if split == Splits.TEST else Splits.TRAIN]
         split_data = []
         for i, img_ann in enumerate(annotations):
-            im_hum_boxes, im_obj_boxes, im_obj_box_classes, im_interactions = [], [], [], []
+            im_hum_boxes, im_obj_boxes, im_obj_box_classes, im_interactions, im_wn_actions = [], [], [], [], []
             for inter in img_ann['interactions']:
                 inter_id = inter['id']
                 if not inter['invis']:
@@ -74,11 +75,13 @@ class HicoDet:
                     # Interaction
                     pred_class = self.interactions[inter_id][0]
                     new_inters = inter['conn']
+                    num_new_inters = new_inters.shape[0]
                     new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
-                                           np.full(new_inters.shape[0], fill_value=pred_class, dtype=np.int),
+                                           np.full(num_new_inters, fill_value=pred_class, dtype=np.int),
                                            new_inters[:, 1] + curr_num_obj_boxes
                                            ], axis=1)
                     im_interactions.append(new_inters)
+                    im_wn_actions += [self.driver.interaction_list[inter_id]['pred_wid'] for _ in range(num_new_inters)]
 
                     # Human
                     im_hum_boxes.append(inter['hum_bbox'])
@@ -109,7 +112,8 @@ class HicoDet:
                 im_boxes = np.empty((0, 4), dtype=np.int)
                 im_box_classes = np.empty(0, dtype=np.int)
                 im_interactions = np.empty((0, 3), dtype=np.int)
-            split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, interactions=im_interactions))
+            split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, interactions=im_interactions,
+                                            wnet_actions=im_wn_actions))
 
         return split_data
 

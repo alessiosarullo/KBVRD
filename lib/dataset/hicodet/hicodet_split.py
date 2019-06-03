@@ -1,6 +1,5 @@
 import os
-from typing import Dict
-from typing import List
+from typing import Dict, List, Type, Union
 
 import cv2
 import numpy as np
@@ -9,7 +8,7 @@ from torch.utils.data import Dataset
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
-from lib.dataset.utils import Splits, preprocess_img, _im_list_to_4d_tensor
+from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor
 from lib.detection.wrappers import COCO_CLASSES
 
 
@@ -64,7 +63,7 @@ class Minibatch:
     def vectorize(self, device):
         assert all([len(v) > 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
 
-        self.imgs = _im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
+        self.imgs = im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
 
         img_infos = np.stack(self.img_infos, axis=0)
         img_infos[:, 0] = self.imgs.shape[2]
@@ -91,9 +90,6 @@ class Minibatch:
 
 
 class HicoDetSplit(Dataset):
-    _splits = {}  # type: Dict[Splits, HicoDetSplit]
-    _hicodet = None
-
     def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds):
         assert split in Splits
 
@@ -124,38 +120,6 @@ class HicoDetSplit(Dataset):
         self.hoi_triplets = np.concatenate(hoi_triplets, axis=0)
 
         self.obj_labels = np.concatenate([im_data.box_classes for im_data in self._data])
-
-    @classmethod
-    def get_split(cls, split: Splits, pred_inds=None, obj_inds=None):
-        if split not in cls._splits:
-            if split == Splits.VAL:
-                assert Splits.TRAIN not in cls._splits or cfg.data.val_ratio == 0, 'Training split must be instantiated before validation split.'
-
-            if cls._hicodet is None:
-                cls._hicodet = HicoDet()
-
-            # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
-            obj_inds = obj_inds or cfg.data.obj_inds
-            pred_inds = pred_inds or cfg.data.pred_inds
-
-            split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls._hicodet, obj_inds, pred_inds,
-                                                                             filter_empty_imgs=split == Splits.TRAIN)
-            assert len(split_data) == len(image_ids)
-
-            # Split train/val if needed
-            if cfg.data.val_ratio > 0 and split == Splits.TRAIN:
-                num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
-                cls._splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hicodet=cls._hicodet,
-                                                data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
-                                                object_inds=object_inds, predicate_inds=predicate_inds)
-                cls._splits[Splits.VAL] = cls(split=Splits.VAL, hicodet=cls._hicodet,
-                                              data=split_data[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
-                                              object_inds=object_inds, predicate_inds=predicate_inds)
-            else:
-                cls._splits[split] = cls(split=split, hicodet=cls._hicodet, data=split_data, image_ids=image_ids,
-                                         object_inds=object_inds, predicate_inds=predicate_inds)
-
-        return cls._splits[split]
 
     @property
     def human_class(self) -> int:
@@ -212,6 +176,85 @@ class HicoDetSplit(Dataset):
 
     def __len__(self):
         return self.num_images
+
+
+class HicoDetSplits:
+    splits = {}  # type: Dict[Type[HicoDetSplit], Dict[Splits, HicoDetSplit]]
+    hicodet = None
+
+    @classmethod
+    def get_split(cls, split_class: Type[HicoDetSplit], split: Splits, pred_inds=None, obj_inds=None):
+        class_splits = cls.splits.setdefault(split_class, {})
+        if split not in class_splits:
+            if split == Splits.VAL:
+                assert Splits.TRAIN not in class_splits or cfg.data.val_ratio == 0, 'Training split must be instantiated before validation split.'
+
+            if cls.hicodet is None:
+                cls.hicodet = HicoDet()
+
+            # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
+            obj_inds = obj_inds or cfg.data.obj_inds
+            pred_inds = pred_inds or cfg.data.pred_inds
+
+            split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
+                                                                             filter_empty_imgs=split == Splits.TRAIN)
+            assert len(split_data) == len(image_ids)
+
+            # Split train/val if needed
+            if cfg.data.val_ratio > 0 and split == Splits.TRAIN:
+                num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
+                class_splits[Splits.TRAIN] = split_class(split=Splits.TRAIN, hicodet=cls.hicodet,
+                                                         data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
+                                                         object_inds=object_inds, predicate_inds=predicate_inds)
+                class_splits[Splits.VAL] = split_class(split=Splits.VAL, hicodet=cls.hicodet,
+                                                       data=split_data[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
+                                                       object_inds=object_inds, predicate_inds=predicate_inds)
+            else:
+                class_splits[split] = split_class(split=split, hicodet=cls.hicodet, data=split_data, image_ids=image_ids,
+                                                  object_inds=object_inds, predicate_inds=predicate_inds)
+
+        return class_splits[split]
+
+    @classmethod
+    def get_splits(cls, hdsplit_class: Type[HicoDetSplit], splits: Union[List[Splits], Splits], pred_inds=None, obj_inds=None):
+        if not isinstance(splits, List):
+            splits = [splits]
+        if cls.hicodet is None:
+            cls.hicodet = HicoDet()
+        if Splits.VAL in splits:
+            assert Splits.TRAIN in splits, 'Validation split requires train.'
+            assert cfg.data.val_ratio > 0
+            val = True
+        else:
+            val = False
+
+        class_splits = {}
+        for split in [s for s in splits if s != Splits.VAL]:
+            # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
+            obj_inds = obj_inds or cfg.data.obj_inds
+            pred_inds = pred_inds or cfg.data.pred_inds
+
+            split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
+                                                                             filter_empty_imgs=split == Splits.TRAIN)
+            assert len(split_data) == len(image_ids)
+
+            # Split train/val if needed
+            if val:
+                num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
+                class_splits[Splits.TRAIN] = hdsplit_class(split=Splits.TRAIN, hicodet=cls.hicodet,
+                                                           data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
+                                                           object_inds=object_inds, predicate_inds=predicate_inds)
+                class_splits[Splits.VAL] = hdsplit_class(split=Splits.VAL, hicodet=cls.hicodet,
+                                                         data=split_data[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
+                                                         object_inds=object_inds, predicate_inds=predicate_inds)
+            else:
+                class_splits[split] = hdsplit_class(split=split, hicodet=cls.hicodet, data=split_data, image_ids=image_ids,
+                                                    object_inds=object_inds, predicate_inds=predicate_inds)
+
+        ret = [class_splits[s] for s in splits]
+        if len(ret) == 1:
+            ret = ret[0]
+        return ret
 
 
 def remap_box_pairs(box_pairs, box_mask):

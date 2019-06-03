@@ -26,7 +26,7 @@ class OracleModel(GenericModel):
 
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = self.visual_module(x, True)
         im_scales = x.img_infos[:, 2].cpu().numpy()
-        gt_entry = HicoDetSplit.get_split(self.split).get_img_entry(x.other_ex_data[0]['index'], read_img=False)
+        gt_entry = HicoDetSplits.get_split(HicoDetSplit, self.split).get_img_entry(x.other_ex_data[0]['index'], read_img=False)
         gt_boxes = gt_entry.gt_boxes * im_scales[0]
         gt_obj_classes = gt_entry.gt_obj_classes
         if self.perfect_detector:
@@ -169,7 +169,7 @@ class ObjFGPredModel(GenericModel):
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
-            bg_boxes_ext, bg_box_feats, bg_masks = vis_output.filter_bg_boxes()
+            bg_boxes_ext, bg_box_feats, bg_masks = vis_output.filter_boxes()
             boxes_ext = vis_output.boxes_ext
             box_feats = vis_output.box_feats
             masks = vis_output.masks
@@ -186,7 +186,7 @@ class ObjFGPredModel(GenericModel):
             fg_obj_repr = self.fg_obj_branch(fg_and_bg_boxes_ext, fg_and_bg_box_feats)
             fg_obj_logits = self.fg_obj_output_fc(fg_obj_repr)
             fg_score = torch.sigmoid(fg_obj_logits.squeeze(dim=1))
-            vis_output.filter_bg_boxes(fg_box_mask=(fg_score >= self.fg_thr))
+            vis_output.filter_boxes(valid_box_mask=(fg_score >= self.fg_thr))
 
             if vis_output.boxes_ext is None:
                 return None, None, None
@@ -274,7 +274,7 @@ class FuncGenModel(GenericModel):
     # noinspection PyMethodOverriding
     def _forward(self, vis_output: VisualOutput, batch: PrecomputedMinibatch):
         if vis_output.box_labels is not None:
-            vis_output.filter_bg_boxes()
+            vis_output.filter_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -284,6 +284,7 @@ class FuncGenModel(GenericModel):
         im_areas = im_sizes.prod(dim=1)
 
         # Needed for numerical errors. Also when assigning GT to detections this is not guaranteed to be true.
+        # FIXME this should be needed, remove
         box_im_inds = boxes_ext[:, 0].long()
         box_im_sizes = im_sizes[box_im_inds, :]
         boxes_ext[:, 3] = torch.min(boxes_ext[:, 3], box_im_sizes[:, 0])
@@ -291,17 +292,21 @@ class FuncGenModel(GenericModel):
 
         norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
         assert (0 <= norm_boxes).all(), \
-            (boxes_ext[:, :5].detach().cpu().numpy(), box_im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
+            (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(),
+             im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
         # norm_boxes.clamp_(max=1)  # Needed for numerical errors
         assert (norm_boxes <= 1).all(), \
-            (boxes_ext[:, :5].detach().cpu().numpy(), box_im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
+            (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(),
+             im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
 
         box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
         box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
         norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
-        assert (0 < norm_box_areas).all(), (boxes_ext[:, :5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
+        assert (0 < norm_box_areas).all(), \
+            (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
         norm_box_areas.clamp_(max=1)  # Same as above
-        assert (norm_box_areas <= 1).all(), (boxes_ext[:, :5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
+        assert (norm_box_areas <= 1).all(), \
+            (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
 
         hum_inds = hoi_infos[:, 1]
         obj_inds = hoi_infos[:, 2]
@@ -376,7 +381,7 @@ class BaseModel(GenericModel):
 
     def _forward(self, vis_output: VisualOutput):
         if vis_output.box_labels is not None:
-            vis_output.filter_bg_boxes()
+            vis_output.filter_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks

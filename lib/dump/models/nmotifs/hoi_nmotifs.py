@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.parallel
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.generic_model import GenericModel
 from lib.dump.models.nmotifs import FrequencyLogProbs

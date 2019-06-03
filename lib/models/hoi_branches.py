@@ -3,7 +3,7 @@ import torch
 from torch import nn as nn
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
 from lib.dataset.utils import get_counts
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractHOIBranch

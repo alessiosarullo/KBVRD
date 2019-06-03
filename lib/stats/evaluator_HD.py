@@ -5,7 +5,7 @@ import numpy as np
 from lib.stats.evaluator import MetricFormatter
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.hicodet.hicodet_split import Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, Example
 from lib.models.containers import Prediction
 
 
@@ -46,7 +46,7 @@ class Evaluator:
         evaluator = cls(dataset, **kwargs)
         for i, res in enumerate(predictions):
             ex = dataset.get_img_entry(i, read_img=False)
-            prediction = Prediction.from_dict(res)
+            prediction = Prediction(res)
             evaluator.process_prediction(i, ex, prediction)
 
         evaluator.compute_metrics()

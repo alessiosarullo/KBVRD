@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Minibatch
 from lib.dataset.utils import Splits
 from lib.detection.visual_module import VisualModule, VisualOutput
 
@@ -18,9 +18,9 @@ def save_feats():
     sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
     cfg.parse_args(allow_required=False)
 
-    train_split = HicoDetSplit.get_split(split=Splits.TRAIN)
-    test_split = HicoDetSplit.get_split(split=Splits.TEST)
-    assert Splits.VAL not in HicoDetSplit._splits
+    train_split = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
+    test_split = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
+    assert Splits.VAL not in HicoDetSplit.splits
 
     vm = VisualModule(dataset=train_split)
     if torch.cuda.is_available():

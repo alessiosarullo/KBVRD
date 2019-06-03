@@ -118,7 +118,12 @@ def _im_detect_bbox(model, inputs, im_info):
 
     # Apply bounding-box regression deltas
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
+
+    # FIXME Boxes are clipped to max image size, not their own. This doesn't actually make a difference because box detection is performed on a
+    #  single image, though.
+    # TODO check if the size given here is the correct one (scaled vs unscaled). Pretty sure it's scaled, which is wrong because boxes are not.
     pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
+    # TODO filter 0-area boxes
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the image size
 

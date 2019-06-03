@@ -4,7 +4,7 @@ from typing import List, Dict
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.evaluator import BaseEvaluator
 
@@ -30,7 +30,7 @@ class ObjectEvaluator(BaseEvaluator):
 
         for i, res in enumerate(predictions):
             ex = self.dataset.get_img_entry(i, read_img=False)
-            prediction = Prediction.from_dict(res)
+            prediction = Prediction(res)
             self.process_prediction(i, ex, prediction)
         self.compute_metrics()
 

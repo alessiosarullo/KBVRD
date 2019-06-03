@@ -6,7 +6,7 @@ from typing import Dict
 import numpy as np
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
 from lib.dataset.imsitu_driver import ImSitu
 from lib.dataset.utils import Splits
 
@@ -198,7 +198,7 @@ class ImSituKnowledgeExtractor:
 
 def main():
     imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetSplit.get_split(Splits.TRAIN)  # type: HicoDetSplit
+    hd = HicoDetSplits.get_split(HicoDetSplit, Splits.TRAIN)  # type: HicoDetSplit
     imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
 
 

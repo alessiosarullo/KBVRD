@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Splits, Example
 
 try:
     matplotlib.use('Qt5Agg')
@@ -25,7 +25,7 @@ def stats():
     split = Splits.TRAIN
 
     os.makedirs(output_dir, exist_ok=True)
-    hds = HicoDetSplit.get_split(split=split)
+    hds = HicoDetSplits.get_split(HicoDetSplit, split=split)
     hd = hds.hicodet
 
     op_mat = np.zeros([hds.num_object_classes, hds.num_predicates])
@@ -57,7 +57,7 @@ def stats():
 
 def find():
     cfg.parse_args(allow_required=False, reset=True)
-    hds = HicoDetSplit.get_split(split=Splits.TRAIN)
+    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
 
     query_str = ['hold', 'refrigerator']
     query = [hds.hicodet._pred_index[query_str[0]], hds.hicodet._obj_class_index[query_str[1]]]
@@ -97,7 +97,7 @@ def find():
 
 def vis_gt():
     cfg.parse_args(allow_required=False, reset=True)
-    hds = HicoDetSplit.get_split(split=Splits.TEST)
+    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
     os.makedirs(output_dir, exist_ok=True)

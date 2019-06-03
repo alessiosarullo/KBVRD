@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
 
 
 class SpatialContext(nn.Module):

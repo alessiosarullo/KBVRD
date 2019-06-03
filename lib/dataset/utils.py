@@ -22,7 +22,7 @@ class SquarePad:
         return img_padded
 
 
-def _im_list_to_4d_tensor(ims, use_fpn=False):
+def im_list_to_4d_tensor(ims, use_fpn=False):
     """
     :param ims [list(Tensor)]: List of N color images to concatenate.
     :param use_fpn:

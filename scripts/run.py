@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Splits
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.dataset.hicodet.pc_hicodet_hoi_split import PrecomputedHicoDetHOISplit
 from lib.models.abstract_model import AbstractModel
@@ -55,9 +55,9 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        self.train_split = PrecomputedHicoDetHOISplit.get_split(split=Splits.TRAIN)
-        self.val_split = PrecomputedHicoDetHOISplit.get_split(split=Splits.VAL)
-        self.test_split = PrecomputedHicoDetSplit.get_split(split=Splits.TEST)
+        self.train_split = HicoDetSplits.get_split(PrecomputedHicoDetHOISplit, split=Splits.TRAIN)
+        self.val_split = HicoDetSplits.get_split(PrecomputedHicoDetHOISplit, split=Splits.VAL)
+        self.test_split = HicoDetSplits.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():

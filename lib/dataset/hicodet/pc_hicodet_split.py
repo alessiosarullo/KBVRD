@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
@@ -219,7 +219,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                     num_boxes = precomp_box_labels.shape[0]
                     bg_box_mask = (precomp_box_labels < 0)
 
-                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self._hicodet.objects)], dtype=precomp_box_labels.dtype)
+                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self.hicodet.objects)], dtype=precomp_box_labels.dtype)
                     precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
                     precomp_box_labels_one_hot[bg_box_mask, :] = 0
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]

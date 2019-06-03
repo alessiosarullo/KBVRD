@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits, Example, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Splits, Example, Minibatch
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.utils import Timer
@@ -56,7 +56,7 @@ class Analyser:
 
         for i, res in enumerate(predictions):
             ex = self.dataset.get_img_entry(i, read_img=False)
-            prediction = Prediction.from_dict(res)
+            prediction = Prediction(res)
             self.process_prediction(i, ex, prediction)
 
         self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1))
@@ -173,7 +173,7 @@ def _setup_and_load():
 
 def evaluate():
     results = _setup_and_load()
-    hds = HicoDetSplit.get_split(split=Splits.TEST)
+    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.evaluate_predictions(results)
     evaluator.print_metrics(sort=True)
@@ -188,7 +188,7 @@ def stats():
     res_save_path = cfg.program.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    hdtest = HicoDetSplit.get_split(split=Splits.TEST)
+    hdtest = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
 
     analyser = Analyser(dataset=hdtest)
 
@@ -238,32 +238,32 @@ def visualise_images():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetSplit.get_split(split=Splits.TEST)
+    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)
 
     for b_idx in range(len(hds)):
-        entry = hds.get_img_entry(b_idx, read_img=False)
-        im_fn = entry.fn
+        entry = hds.get_img_entry(b_idx, read_img=False)  # type: Example
+        im_fn = entry.filename
 
         prediction_dict = results[b_idx]
-        prediction = Prediction.from_dict(prediction_dict)
+        prediction = Prediction(prediction_dict)
 
         boxes = prediction.obj_boxes
         obj_scores = prediction.obj_scores
         ho_pairs = prediction.ho_pairs
-        act_scores = prediction.action_score_distributions
+        act_scores = prediction.action_scores
         if obj_scores is None:
             continue
 
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]
 
-        if im_fn not in [s.strip() for s in """
-        HICO_test2015_00000003.jpg
-        """.split('\n')]:
-            continue
+        # if im_fn not in [s.strip() for s in """
+        # HICO_test2015_00000003.jpg
+        # """.split('\n')]:
+        #     continue
 
         # FIND
         # if act_scores[box_classes[ho_pairs[:, 1]] == 18, 9].size == 0 or np.all(act_scores[box_classes[ho_pairs[:, 1]] == 18, 9] < act_thr):
@@ -271,6 +271,8 @@ def visualise_images():
         # print(im_fn)
 
         im = cv2.imread(os.path.join(hds.img_dir, im_fn))
+        assert np.all(boxes[:, [0, 2]] < im.shape[1]) and np.all(boxes[:, [1, 3]] < im.shape[0]), b_idx
+        continue
         vis_one_image(
             hds, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
             boxes=boxes, box_classes=box_classes, box_classes_scores=box_class_scores, masks=None,

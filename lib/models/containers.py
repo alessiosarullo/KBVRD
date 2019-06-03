@@ -5,7 +5,7 @@ import torch
 
 
 class Prediction:
-    def __init__(self):
+    def __init__(self, prediction_dict=None):
         self.obj_im_inds = None  # type: Union[None, np.ndarray]
         self.obj_boxes = None  # type: Union[None, np.ndarray]
         self.obj_scores = None  # type: Union[None, np.ndarray]
@@ -14,11 +14,14 @@ class Prediction:
         self.action_scores = None  # type: Union[None, np.ndarray]
         self.hoi_scores = None  # type: Union[None, np.ndarray]
 
-    @classmethod
-    def from_dict(cls, prediction_dict):
-        p = Prediction()
-        p.__dict__.update(prediction_dict)
-        return p
+        if prediction_dict is not None:
+            if 'action_score_distribution' in prediction_dict.keys():  # FIXME legacy, remove
+                prediction_dict['action_scores'] = prediction_dict['action_score_distribution']
+                del prediction_dict['action_score_distribution']
+            self.__dict__.update(prediction_dict)
+
+    def from_dict(self, prediction_dict):
+        return self
 
 
 class VisualOutput:
@@ -39,31 +42,31 @@ class VisualOutput:
         self.box_labels = None  # N
         self.action_labels = None  # N x #actions
 
-    def filter_bg_boxes(self, fg_box_mask=None):
+    def filter_boxes(self, valid_box_mask=None):
         assert self.boxes_ext is not None
 
-        if fg_box_mask is None:
+        if valid_box_mask is None:
             assert self.box_labels is not None
-            fg_box_mask = (self.box_labels >= 0)
+            valid_box_mask = (self.box_labels >= 0)
 
-        discarded_boxes_ext = self.boxes_ext[~fg_box_mask, :]
-        discarded_box_feats = self.box_feats[~fg_box_mask, :]
-        discarded_masks = self.masks[~fg_box_mask, :]
+        discarded_boxes_ext = self.boxes_ext[~valid_box_mask, :]
+        discarded_box_feats = self.box_feats[~valid_box_mask, :]
+        discarded_masks = self.masks[~valid_box_mask, :]
 
-        if not fg_box_mask.any():
+        if not valid_box_mask.any():
             self.boxes_ext = None
             self.box_feats = None
             self.masks = None
             self.box_labels = None
         else:
-            self.boxes_ext = self.boxes_ext[fg_box_mask, :]
-            self.box_feats = self.box_feats[fg_box_mask, :]
-            self.masks = self.masks[fg_box_mask, :]
+            self.boxes_ext = self.boxes_ext[valid_box_mask, :]
+            self.box_feats = self.box_feats[valid_box_mask, :]
+            self.masks = self.masks[valid_box_mask, :]
             if self.box_labels is not None:
-                self.box_labels = self.box_labels[fg_box_mask]
+                self.box_labels = self.box_labels[valid_box_mask]
 
         if self.ho_infos is not None:
-            fg_box_mask_np = fg_box_mask.detach().cpu().numpy().astype(bool)
+            fg_box_mask_np = valid_box_mask.detach().cpu().numpy().astype(bool)
             fg_box_inds_index = np.full(fg_box_mask_np.shape[0], fill_value=-1, dtype=np.int)
             fg_box_inds_index[fg_box_mask_np] = np.arange(fg_box_mask_np.sum())
 
