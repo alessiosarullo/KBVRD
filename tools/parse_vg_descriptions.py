@@ -27,8 +27,9 @@ def main():
             region_descr = [l.strip() for l in f.readlines()]
     except FileNotFoundError:
         region_descr = json.load(open(os.path.join(data_dir, 'region_descriptions.json'), 'r'))
+        region_descr = [r['phrase'] for rd in region_descr for r in rd['regions']]
         with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
-            f.write('\n'.join([r['phrase'] for rd in region_descr for r in rd['regions']]))
+            f.write('\n'.join(region_descr))
     print('\n'.join(region_descr[:10]))
     print()
 
