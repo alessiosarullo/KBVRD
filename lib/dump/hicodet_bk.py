@@ -477,6 +477,6 @@ def main():
 
 
 if __name__ == '__main__':
-    cfg.parse_args(allow_required=False)
+    cfg.parse_args(fail_if_missing=False)
     main()
     # find_interaction()

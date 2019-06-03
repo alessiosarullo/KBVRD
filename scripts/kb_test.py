@@ -20,7 +20,7 @@ def main():
     # sys.argv += ['--prinds', '2,3,5,6,7,8,9,10,11,13,15,16,17,19,22,23,24,25,27,28,29,33,36,40,41,'
     #                          '43,45,48,49,51,52,53,55,56,58,59,60,61,63,64,66,67,69,70,71,73,74,75,'
     #                          '76,77,80,81,83,84,88,89,90,91,102,104,105,107,108,111']
-    cfg.parse_args(allow_required=False)
+    cfg.parse_args(fail_if_missing=False)
     # np.set_printoptions(precision=2, suppress=True, linewidth=300, edgeitems=20)
 
     imsitu_ke = ImSituKnowledgeExtractor()

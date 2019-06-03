@@ -16,7 +16,7 @@ def save_feats():
         return ([None for j in range(length)] for i in range(num))
 
     sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
-    cfg.parse_args(allow_required=False)
+    cfg.parse_args(fail_if_missing=False)
 
     train_split = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
     test_split = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)

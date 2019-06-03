@@ -28,7 +28,7 @@ except ImportError:
 
 
 def plot_embedding_op_sim():
-    cfg.parse_args(allow_required=False, reset=True)
+    cfg.parse_args(fail_if_missing=False, reset=True)
     dataset = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
 
     # op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
@@ -116,7 +116,7 @@ def plot_embedding_pp_sim():
                                                       for j in sorted_by_sim[i, s:11] if sim_mat[i, j] > 0])))
         print()
 
-    # cfg.parse_args(allow_required=False, reset=True)
+    # cfg.parse_args(fail_if_missing=False, reset=True)
     # dataset = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
     #
     # # Co-occurrences
@@ -222,7 +222,7 @@ def plot_embedding_pp_sim():
 
 
 def plot_feasible_hois():
-    cfg.parse_args(allow_required=False, reset=True)
+    cfg.parse_args(fail_if_missing=False, reset=True)
     dataset = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
 
     hico_op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])

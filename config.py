@@ -6,16 +6,16 @@ import pickle
 
 
 class BaseConfigs:
-    def parse_args(self, args, allow_required=True):
+    def parse_args(self, args, fail_if_missing=True):
         parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
         for k, v in vars(self).items():
-            self._add_argument(parser, k, v, allow_required=allow_required)
+            self._add_argument(parser, k, v, fail_if_missing=fail_if_missing)
         namespace = parser.parse_known_args(args)
         self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
-        self._postprocess_args(allow_required)
+        self._postprocess_args(fail_if_missing)
         return namespace[1]
 
-    def _add_argument(self, parser, param_name, param_value, allow_required=True):
+    def _add_argument(self, parser, param_name, param_value, fail_if_missing=True):
         if param_value is not None:
             parser_kwargs = {'dest': param_name}
             if type(param_value) == bool:
@@ -24,7 +24,7 @@ class BaseConfigs:
                 parser_kwargs['type'] = type(param_value)
             parser.add_argument('--%s' % param_name, **parser_kwargs)
 
-    def _postprocess_args(self, allow_required):
+    def _postprocess_args(self, fail_if_missing):
         pass
 
     def __str__(self):
@@ -115,24 +115,24 @@ class ProgramConfig(BaseConfigs):
     def load_train_output(self):
         return os.path.exists(self.saved_model_file)
 
-    def _postprocess_args(self, allow_required):
+    def _postprocess_args(self, fail_if_missing):
         self.save_dir = self.save_dir.rstrip('/')
         if '/' in self.save_dir:
             old_save_dir = self.save_dir
             self.save_dir = old_save_dir.split('/')[-1]
             self.model = self.model or old_save_dir.split('/')[-2]
             assert old_save_dir == self.output_path
-        if allow_required and self.model is None:
+        if fail_if_missing and self.model is None:
             raise ValueError('A model is required.')
 
-    def _add_argument(self, parser, param_name, param_value, allow_required=True):
+    def _add_argument(self, parser, param_name, param_value, fail_if_missing=True):
         if param_name == 'model':
             from scripts.utils import get_all_models_by_name
             all_models_dict = get_all_models_by_name()
             all_models = set(all_models_dict.keys())
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, choices=all_models)
         elif param_name == 'save_dir':
-            parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=allow_required)
+            parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=fail_if_missing)
         else:
             super()._add_argument(parser, param_name, param_value)
 
@@ -227,13 +227,13 @@ class Configs:
     opt = OptimizerConfig()
 
     @classmethod
-    def parse_args(cls, allow_required=True, reset=False):
+    def parse_args(cls, fail_if_missing=True, reset=False):
         args = sys.argv
         for k, v in sorted(cls.__dict__.items()):
             if isinstance(v, BaseConfigs):
                 if reset:
                     v.__init__()
-                args = v.parse_args(args, allow_required=allow_required)
+                args = v.parse_args(args, fail_if_missing=fail_if_missing)
         if args[1:]:
             # Detectron configurations should not be changed.
             raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))

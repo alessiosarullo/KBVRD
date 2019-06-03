@@ -1,13 +1,18 @@
-import pickle
 import os
-from nltk.corpus import wordnet as wn, stopwords
-from nltk.tokenize import word_tokenize
-from stop_words import get_stop_words
+import pickle
+import json
+
+from nltk.corpus import wordnet as wn
 from nltk.tag import pos_tag
+from nltk.tokenize import word_tokenize
+
 from lib.dataset.hicodet.hicodet import HicoDet
+from config import cfg
 
 
 def main():
+    cfg.parse_args(fail_if_missing=False)
+
     hd = HicoDet()
     # stop_words = stopwords.words('english') + list(get_stop_words('en'))
 
@@ -17,8 +22,13 @@ def main():
 
     data_dir = os.path.join('data', 'VG')
     # rel_synsets = json.load(open(os.path.join(data_dir, 'relationship_synsets.json'), 'r'))
-    with open(os.path.join(data_dir, 'region_descriptions.txt'), 'r') as f:
-        region_descr = [l.strip() for l in f.readlines()]
+    try:
+        with open(os.path.join(data_dir, 'region_descriptions.txt'), 'r') as f:
+            region_descr = [l.strip() for l in f.readlines()]
+    except FileNotFoundError:
+        region_descr = json.load(open(os.path.join(data_dir, 'relationship_synsets.json'), 'r'))
+        with open(os.path.join(data_dir, 'region_descriptions.txt'), 'w') as f:
+            f.write('\n'.join([r['phrase'] for rd in region_descr for r in rd['regions']]))
     print('\n'.join(region_descr[:10]))
     print()
 
@@ -26,7 +36,7 @@ def main():
     pred_verbs = [preds[0]] + [p.split('_')[0] for p in preds[1:]]
     predset = set(pred_verbs)
     objs_per_pred = {p: set() for p in preds}
-    for i_r, r in enumerate(region_descr[:10000]):
+    for i_r, r in enumerate(region_descr):
         if i_r % 1000 == 0:
             print(i_r)
 
@@ -46,7 +56,7 @@ def main():
             continue
 
         assert verb is not None
-        if not person_found or i_tokens + 1 == len(tokens) :
+        if not person_found or i_tokens + 1 == len(tokens):
             continue
 
         following_tagged_tokens = tagged_tokens[i_tokens + 1:]
@@ -80,7 +90,7 @@ def main():
     for p, objs in objs_per_pred.items():
         print('%20s:' % p, sorted(objs))
 
-    with open('vg_predicate_objects.pkl', 'wb') as f:
+    with open(os.path.join(cfg.program.cache_root, 'vg_predicate_objects.pkl'), 'wb') as f:
         pickle.dump(objs_per_pred, f)
 
     print(len(region_descr))

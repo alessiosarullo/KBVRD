@@ -163,7 +163,7 @@ class Analyser:
 
 
 def _setup_and_load():
-    cfg.parse_args(allow_required=False, reset=True)
+    cfg.parse_args(fail_if_missing=False, reset=True)
 
     with open(cfg.program.prediction_file, 'rb') as f:
         results = pickle.load(f)

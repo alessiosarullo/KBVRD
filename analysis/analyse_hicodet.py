@@ -56,7 +56,7 @@ def stats():
 
 
 def find():
-    cfg.parse_args(allow_required=False, reset=True)
+    cfg.parse_args(fail_if_missing=False, reset=True)
     hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TRAIN)
 
     query_str = ['hold', 'refrigerator']
@@ -96,7 +96,7 @@ def find():
 
 
 def vis_gt():
-    cfg.parse_args(allow_required=False, reset=True)
+    cfg.parse_args(fail_if_missing=False, reset=True)
     hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
