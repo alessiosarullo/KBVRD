@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
 
 from lib.bbox_utils import rescale_masks_to_img
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit
 
 
 def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **kwargs):

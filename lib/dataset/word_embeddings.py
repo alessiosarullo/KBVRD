@@ -66,18 +66,37 @@ class WordEmbeddings:
                 word = word.replace('_', ' ').strip()
             emb = self.embedding(word, none_on_miss=True)
             if emb is None and retry and not word.startswith('_'):
-                tokens = word.replace('_', ' ').strip().split(' ')
+                tokens = word.split(' ')
                 if retry == 'longest':
                     repl_word = sorted(tokens, key=lambda x: len(x), reverse=True)[0]
+                    replacements[word] = repl_word
+                    emb = self.embedding(repl_word, none_on_miss=True)
                 elif retry == 'first':
                     repl_word = tokens[0]
+                    replacements[word] = repl_word
+                    emb = self.embedding(repl_word, none_on_miss=True)
                 elif retry == 'last':
                     repl_word = tokens[-1]
+                    replacements[word] = repl_word
+                    emb = self.embedding(repl_word, none_on_miss=True)
+                elif retry == 'avg_norm_first':
+                    embs = [self.embedding(token, none_on_miss=True) for token in tokens]
+                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
+                    if embs:
+                        weights = [2 ** (-i) for i in range(len(embs))]
+                        emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
+                    else:
+                        emb = None
+                elif retry == 'avg_norm_last':
+                    embs = [self.embedding(token, none_on_miss=True) for token in tokens]
+                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
+                    if embs:
+                        weights = [2 ** (len(embs) - 1 - i) for i in range(len(embs))]
+                        emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
+                    else:
+                        emb = None
                 else:
                     raise ValueError(retry)
-
-                replacements[word] = repl_word
-                emb = self.embedding(repl_word, none_on_miss=True)
 
             if emb is not None:
                 vectors[i] = emb

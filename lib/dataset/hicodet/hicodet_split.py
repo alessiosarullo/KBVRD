@@ -99,11 +99,18 @@ class HicoDetSplit(Dataset):
         self._data = data
 
         object_inds = sorted(object_inds)
-        predicate_inds = sorted(predicate_inds)
         self.objects = [hicodet.objects[i] for i in object_inds]
-        self.predicates = [hicodet.predicates[i] for i in predicate_inds]
         self.obj_class_inds = np.array(object_inds, dtype=np.int)
+        self.object_index = {obj: i for i, obj in enumerate(self.objects)}
+
+        predicate_inds = sorted(predicate_inds)
+        self.predicates = [hicodet.predicates[i] for i in predicate_inds]
         self.action_class_inds = np.array(predicate_inds, dtype=np.int)
+        self.predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
+
+        interactions = np.array([[self.predicate_index.get(self.hicodet.predicates[p], -1), self.object_index.get(self.hicodet.objects[o], -1)]
+                                 for p, o in self.hicodet.interactions])
+        self.interactions = interactions[np.all(interactions >= 0, axis=1), :]
 
         # Compute mappings to and from COCO
         coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
@@ -178,9 +185,12 @@ class HicoDetSplit(Dataset):
         return self.num_images
 
 
-class HicoDetSplits:
+class HicoDetSplitBuilder:
     splits = {}  # type: Dict[Type[HicoDetSplit], Dict[Splits, HicoDetSplit]]
     hicodet = None
+
+    def __init__(self):
+        raise NotImplementedError('Use class methods only.')
 
     @classmethod
     def get_split(cls, split_class: Type[HicoDetSplit], split: Splits, pred_inds=None, obj_inds=None):

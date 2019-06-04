@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Splits, Example, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example, Minibatch
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.utils import Timer
@@ -173,7 +173,7 @@ def _setup_and_load():
 
 def evaluate():
     results = _setup_and_load()
-    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.evaluate_predictions(results)
     evaluator.print_metrics(sort=True)
@@ -188,7 +188,7 @@ def stats():
     res_save_path = cfg.program.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    hdtest = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
     analyser = Analyser(dataset=hdtest)
 
@@ -238,7 +238,7 @@ def visualise_images():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetSplits.get_split(HicoDetSplit, split=Splits.TEST)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)

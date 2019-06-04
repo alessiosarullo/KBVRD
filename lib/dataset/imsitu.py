@@ -1,21 +1,20 @@
+import json
 import os
 import pickle
 from collections import Counter
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
-from lib.dataset.imsitu_driver import ImSitu
-from lib.dataset.utils import Splits
+from lib.dataset.hicodet.hicodet import HicoDet
 
 
 class ImSituKnowledgeExtractor:
     def __init__(self):
         self.cache_file = os.path.join(cfg.program.cache_root, 'imsitu_dobjs.pkl')
 
-        self.imsitu = ImSitu()
+        self.imsitu = ImSituDriver()
 
         # FIXME direct objects only? Doesn't work for example in "jump over an obstacle", though
         dobj_tokens_in_verb_abstracts = self.get_dobj_tokens_in_verb_abstracts()
@@ -25,7 +24,7 @@ class ImSituKnowledgeExtractor:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_freq_matrix(self, dataset: HicoDetSplit, return_known_mask=False):
+    def extract_freq_matrix(self, dataset: HicoDet, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
@@ -96,7 +95,6 @@ class ImSituKnowledgeExtractor:
             os.environ['JAVAHOME'] = 'C:/Program Files/Java/jdk-10.0.2/bin/java.exe'  # FIXME
 
             verbs = self.imsitu.verbs
-            verbs = {k: v for k, v in verbs.items() if k in ['hitting', 'flipping', 'jumping', 'sliding']}
 
             direct_objects_per_verb = {}
             while set(direct_objects_per_verb.keys()) != set(verbs.keys()):
@@ -161,13 +159,13 @@ class ImSituKnowledgeExtractor:
                                    for verb, instance_ids in concrete_dobjs_per_verb.items()}
         return concrete_dobjs_per_verb
 
-    def match_preds_with_verbs(self, dataset: HicoDetSplit):
+    def match_preds_with_verbs(self, dataset: HicoDet):
         verb_dict = self.imsitu.verbs
         pred_verb_matches = {}
         for orig_pred in dataset.predicates:
-            ing = dataset.hicodet.predicate_dict[orig_pred]['ing']
+            ing = dataset.driver.predicate_dict[orig_pred]['ing']
             pred = orig_pred
-            if pred != dataset.hicodet.null_interaction:
+            if pred != dataset.null_interaction:
                 pred = pred.replace('_', ' ')
                 ing = ing.replace('_', ' ').split()[0]
 
@@ -196,9 +194,106 @@ class ImSituKnowledgeExtractor:
         return matching_dobjs_per_verb
 
 
+class ImSituDriver:
+    def __init__(self):
+        """
+        Attributes:
+            - nouns [dict(dict)]: More than 80k entries. Keys are ImageNet synsets, which are in turn derived from WordNet 3.0. Values are
+                dictionaries containing the following items:
+                    - 'gloss' [list(str)]: List of nouns  describing the concept.
+                    - 'def' [str]: A definition.
+                EXAMPLE: Key: 'n03024882'. Value:
+                    {'gloss': ['choker', 'collar', 'dog collar', 'neckband'],
+                     'def': "necklace that fits tightly around a woman's neck"
+                     }
+            - verbs [dict]: Around 500 entries. Keys are verbs themselves [str], while values are dictionaries of:
+                - 'framenet' [str]: ID of the verb in FrameNet. Seems to somehow describe the category the verb belongs to.
+                - 'def' [str]: Definition of the verb.
+                - 'roles' [dict]: A dictionaries of the roles involved in the action specified by this verb. Keys vary according to the verb and
+                    each item contains:
+                        - 'framenet': See above.
+                        - 'def' [str]: Describes the role the item specified by this key has.
+                - 'abstract' [str]: A string describing the action on a general level.
+                - 'order' [list(str)]: The order the roles appear in `abstract`.
+                EXAMPLE: Key: 'tattoing'. Value:
+                    {'framenet': 'Create_physical_artwork',
+                     'def': 'to mark the skin with permanent colors and patterns',
+                     'roles':
+                        {'tool': {'framenet': 'instrument', 'def': 'The tool used'},
+                         'place': {'framenet': 'place', 'def': 'The location where the tattoo event is happening'},
+                         'target': {'framenet': 'representation', 'def': 'The entity being tattooed'},
+                         'agent': {'framenet': 'creator', 'def': 'The entity doing the tattoo action'}
+                         }
+                     'abstract': 'AGENT tattooed TARGET with TOOL in PLACE',
+                     'order': ['agent', 'target', 'tool', 'place'],
+                    }
+            - train, val, test [dict(dict)]: Keys are image file names, values are dictionaries with the following keys:
+                - 'verb' [str]: Verb describing the image. It's a key for `verbs`.
+                - 'frames' [list(dict)]: Each item is a dictionary. Keys are the roles specified in `verbs` for this verb, taking their values from
+                    `nouns`'s keys.
+                EXAMPLE: Key: 'glaring_215.jpg'. Value:
+                    {'verb': 'glaring',
+                     'frames': [{'place': 'n04215402', 'perceiver': '', 'agent': 'n10287213'},
+                                {'place': 'n08613733', 'perceiver': '', 'agent': 'n10287213'},
+                                {'place': 'n08613733', 'perceiver': '', 'agent': 'n10287213'}
+                                ]
+                    }
+        """
+        data_dir = os.path.join(cfg.program.data_root, 'imSitu')
+        self.image_dir = os.path.join(data_dir, 'images')
+        self.path_domain_file = os.path.join(data_dir, 'imsitu_space.json')
+        self.path_train_file = os.path.join(data_dir, 'train.json')
+        self.path_val_file = os.path.join(data_dir, 'dev.json')
+        self.path_test_file = os.path.join(data_dir, 'test.json')
+
+        self.nouns, self.verbs, self.train, self.val, self.test = self.load()
+        self.verbs = self.fix_verbs(self.verbs)
+
+    @staticmethod
+    def fix_verbs(verbs) -> Dict[str, Dict]:
+        verbs['riding']['abstract'] = verbs['riding']['abstract'].replace(' then ', ' the ')
+        verbs['teaching']['abstract'] = verbs['teaching']['abstract'].replace(' to teach ', ' teaches ')
+        return verbs
+
+    def get_annotations(self, split):
+        splits = {'train': self.train,
+                  'val': self.val,
+                  'test': self.test,
+                  }
+        return splits[split]
+
+    def _print_verb_entry(self, verb):
+        print('ImSitu verb entry example:')
+        for k, v in self.verbs[verb].items():
+            if k != 'roles':
+                print('%15s: %s' % (k, v))
+            else:
+                print('%15s:' % k)
+                ln = max([len(r) for r in v.keys()]) + 1
+                for r, d in v.items():
+                    print(('%15s  - %-' + str(ln) + 's %s') % ('', r + ':', d))
+
+    def load(self) -> Tuple[Dict[str, Dict], Dict[str, Dict], Dict[str, Dict], Dict[str, Dict], Dict[str, Dict]]:
+        with open(self.path_domain_file, 'r') as f:
+            domain = json.load(f)
+        verbs, nouns = domain['verbs'], domain['nouns']
+
+        with open(self.path_train_file, 'r') as f:
+            train = json.load(f)
+        with open(self.path_val_file, 'r') as f:
+            val = json.load(f)
+        with open(self.path_test_file, 'r') as f:
+            test = json.load(f)
+
+        return nouns, verbs, train, val, test
+
+
 def main():
+    # imsitu = ImSituDriver()
+    # imsitu._print_verb_entry('riding')
+
     imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetSplits.get_split(HicoDetSplit, Splits.TRAIN)  # type: HicoDetSplit
+    hd = HicoDet()
     imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
 
 

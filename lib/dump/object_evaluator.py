@@ -4,7 +4,7 @@ from typing import List, Dict
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.evaluator import BaseEvaluator
 

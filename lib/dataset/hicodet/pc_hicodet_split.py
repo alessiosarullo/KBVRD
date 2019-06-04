@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 

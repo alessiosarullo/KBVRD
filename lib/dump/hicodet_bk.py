@@ -11,7 +11,7 @@ from torch.utils.data import Dataset
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDetDriver as HicoDetDriver
 from lib.dataset.utils import Splits, preprocess_img
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, Example, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Example, Minibatch
 from lib.detection.wrappers import COCO_CLASSES
 from lib.stats.utils import Timer
 

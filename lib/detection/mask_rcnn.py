@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplits, Minibatch
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Minibatch
 from lib.detection.detection import im_detect_boxes, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import Generalized_RCNN, load_detectron_weight
 

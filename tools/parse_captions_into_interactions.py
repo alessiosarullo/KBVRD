@@ -1,50 +1,41 @@
+import argparse
+import json
 import os
 import pickle
-import json
+import sys
 
 from nltk.corpus import wordnet as wn
 from nltk.tag import pos_tag
 from nltk.tokenize import word_tokenize
 
-from lib.dataset.hicodet.hicodet import HicoDet
 from config import cfg
+from lib.dataset.hicodet.hicodet import HicoDet
 
 
-def main():
-    cfg.parse_args(fail_if_missing=False)
+def parse_captions(captions):
+    # If not downlowaded already, run:
+    # nltk.download('punkt')
+    # nltk.download('averaged_perceptron_tagger')
+    # nltk.download('universal_tagset')
+    # nltk.download('wordnet')
 
-    hd = HicoDet()
     # stop_words = stopwords.words('english') + list(get_stop_words('en'))
-
     person_words = {'person', 'man', 'woman', 'boy', 'girl', 'child', 'kid', 'baby', 'guy',
                     'audience', 'catcher', 'carrier', 'classroom', 'couple', 'cowboy', 'crowd', 'driver', 'friend', 'guard', 'little girl',
-                    'player', 'rider', 'skateboarder', 'skater', 'skier', 'small child', 'snowboarder', 'surfer', 'tennis player'}
+                    'player', 'rider', 'skateboarder', 'skater', 'skier', 'small child', 'snowboarder', 'surfer', 'tennis player'}  # FIXME
 
-    data_dir = os.path.join('data', 'VG')
-    # rel_synsets = json.load(open(os.path.join(data_dir, 'relationship_synsets.json'), 'r'))
-    try:
-        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
-            region_descr = [l.strip() for l in f.readlines()]
-    except FileNotFoundError:
-        region_descr = json.load(open(os.path.join(data_dir, 'region_descriptions.json'), 'r'))
-        region_descr = [r['phrase'] for rd in region_descr for r in rd['regions']]
-        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
-            f.write('\n'.join(region_descr))
-    print('\n'.join(region_descr[:10]))
-    print()
-
+    hd = HicoDet()
     preds = hd.predicates
     pred_verbs = [preds[0]] + [p.split('_')[0] for p in preds[1:]]
     predset = set(pred_verbs)
     objs_per_pred = {p: set() for p in preds}
-    for i_r, r in enumerate(region_descr):
-        if i_r % 1000 == 0:
-            print(i_r)
+    for i_cap, caption in enumerate(captions):
+        if i_cap % 1000 == 0:
+            print(i_cap)
 
-        tokens = word_tokenize(r)
+        tokens = word_tokenize(caption)
         tagged_tokens = pos_tag(tokens, tagset='universal')
 
-        verb = None
         person_found = False
         for i_tokens, w in enumerate(tokens):
             if wn.morphy(w, wn.NOUN) in person_words:
@@ -56,7 +47,6 @@ def main():
         else:
             continue
 
-        assert verb is not None
         if not person_found or i_tokens + 1 == len(tokens):
             continue
 
@@ -91,10 +81,42 @@ def main():
     for p, objs in objs_per_pred.items():
         print('%20s:' % p, sorted(objs))
 
+    return objs_per_pred
+
+
+def vg():
+    data_dir = os.path.join(cfg.program.data_root, 'VG')
+    try:
+        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
+            region_descr = [l.strip() for l in f.readlines()]
+    except FileNotFoundError:
+        region_descr = json.load(open(os.path.join(data_dir, 'region_descriptions.json'), 'r'))
+        region_descr = [r['phrase'] for rd in region_descr for r in rd['regions']]
+        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
+            f.write('\n'.join(region_descr))
+    print('\n'.join(region_descr[:10]))
+    print()
+
+    objs_per_pred = parse_captions(region_descr)
     with open(os.path.join(cfg.program.cache_root, 'vg_predicate_objects.pkl'), 'wb') as f:
         pickle.dump(objs_per_pred, f)
-
     print(len(region_descr))
+
+
+def main():
+    funcs = {
+        'vg': vg,
+    }
+    print(sys.argv)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('func', type=str, choices=funcs.keys())
+    namespace = parser.parse_known_args()
+    func = vars(namespace[0])['func']
+    sys.argv = sys.argv[:1] + namespace[1]
+    print(sys.argv)
+
+    cfg.parse_args(fail_if_missing=False)
+    funcs[func]()
 
 
 if __name__ == '__main__':

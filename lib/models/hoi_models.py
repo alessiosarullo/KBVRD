@@ -26,7 +26,7 @@ class OracleModel(GenericModel):
 
         boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = self.visual_module(x, True)
         im_scales = x.img_infos[:, 2].cpu().numpy()
-        gt_entry = HicoDetSplits.get_split(HicoDetSplit, self.split).get_img_entry(x.other_ex_data[0]['index'], read_img=False)
+        gt_entry = HicoDetSplitBuilder.get_split(HicoDetSplit, self.split).get_img_entry(x.other_ex_data[0]['index'], read_img=False)
         gt_boxes = gt_entry.gt_boxes * im_scales[0]
         gt_obj_classes = gt_entry.gt_obj_classes
         if self.perfect_detector:
