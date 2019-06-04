@@ -35,11 +35,6 @@ class HCVRD:
         self.predicates = sorted({t[1] for t in triplets_str})
         self.predicate_index = {x: i for i, x in enumerate(self.predicates)}
 
-        # Just to check
-        with open(os.path.join(self.data_dir, 'predicates.txt'), 'r') as f:
-            predicates = sorted(set([l.strip() for l in f.readlines()]))
-        assert predicates == self.predicates
-
         self.triplets = np.array([[self.object_index[s], self.predicate_index[p], self.object_index[o]] for s, p, o in triplets_str])
 
     def match(self, hd: HicoDet):
