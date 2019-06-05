@@ -106,11 +106,13 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         image_ids = set(dataset.image_ids)
         pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
         neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
-        assert np.all(pos_hois_mask != neg_hois_mask)
         if dataset.pc_hoi_mask is None:
-            assert np.all(pos_hois_mask | neg_hois_mask)
+            assert np.all(pos_hois_mask ^ neg_hois_mask)
         else:
             assert np.all(pos_hois_mask | neg_hois_mask | (~dataset.pc_hoi_mask))
+            assert not np.any(pos_hois_mask & (~dataset.pc_hoi_mask))
+            assert not np.any(neg_hois_mask & (~dataset.pc_hoi_mask))
+            assert np.all((pos_hois_mask & dataset.pc_hoi_mask) ^ (neg_hois_mask & dataset.pc_hoi_mask))
         self.split_mask = np.array([dataset.pc_image_ids[im_ind] in image_ids for im_ind in dataset.pc_ho_im_inds])
         self.pos_hois_mask = pos_hois_mask & self.split_mask
         self.neg_hois_mask = neg_hois_mask & self.split_mask
