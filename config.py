@@ -190,18 +190,10 @@ class ModelConfig(BaseConfigs):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
 
-        self.freq_bias = False
-        self.use_ds = False
-        self.use_imsitu = False
-        self.use_cnet = False
-
         self.proposal_thr = 0.
         self.relu = False
 
-        self.bn_momentum = 0.01
-
-        self.floss = False  # Focal loss
-        self.csloss = False  # Cost sensitive loss
+        self.wnorm = False
 
 
 class OptimizerConfig(BaseConfigs):

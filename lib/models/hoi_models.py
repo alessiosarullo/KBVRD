@@ -45,8 +45,11 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
+        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+        if cfg.model.wnorm:
+            with torch.no_grad():
+                self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
 
     @property
     def act_repr_dim(self):
@@ -67,11 +70,21 @@ class BaseModel(GenericModel):
         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
         union_repr = self.union_repr_mlp(union_boxes_feats)
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
+
+        if cfg.model.wnorm:
+            with torch.no_grad():
+                act_repr.div_(torch.norm(act_repr, dim=1, keepdim=True))
+
         if return_repr:
             return act_repr
 
         action_logits = self.act_output_fc(act_repr)
         return action_logits
+
+    def post_optim_step(self):
+        if cfg.model.wnorm:
+            with torch.no_grad():
+                self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
 
 
 class ZSModel(GenericModel):

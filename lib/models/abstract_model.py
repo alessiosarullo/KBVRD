@@ -17,6 +17,9 @@ class AbstractModel(nn.Module):
     def forward(self, x, predict=True, **kwargs):
         raise NotImplementedError()
 
+    def post_optim_step(self):
+        pass
+
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs)
 

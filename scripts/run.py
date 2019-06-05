@@ -199,6 +199,7 @@ class Launcher:
             # batch_stats['watch'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in hoi_branch.named_parameters() if v.requires_grad}
 
             optimizer.step()
+            self.detector.post_optim_step()
 
         stats.update_stats(batch_stats)
 
