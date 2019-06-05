@@ -107,13 +107,14 @@ class Evaluator(BaseEvaluator):
         lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset_split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.hicodet.num_object_classes, self.dataset_split.obj_labels,
+                                               metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
         hoi_triplets = self.dataset_split.hoi_triplets
         hois = self.hicodet.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
         assert np.all(hois >= 0)
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.hicodet.num_interactions, hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         print('\n'.join(lines))
 
@@ -240,14 +241,14 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False):
+    def format_metric_and_gt_lines(self, num_classes, gt_labels, metrics, gt_str, sort=False):
         lines = []
         gt_label_hist = Counter(gt_labels)
         num_gt_examples = sum(gt_label_hist.values())
         if sort:
-            inds = [p for p, num in gt_label_hist.most_common()]
+            inds = [p for p, num in gt_label_hist.most_common()] + sorted(set(range(num_classes)) - set(gt_label_hist.keys()))
         else:
-            inds = range(len(gt_label_hist))
+            inds = range(num_classes)
 
         pad = len(gt_str)
         if metrics:
