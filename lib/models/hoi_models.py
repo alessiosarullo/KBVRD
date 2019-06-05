@@ -45,53 +45,12 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
+        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
-        if cfg.model.wnorm:
-            with torch.no_grad():
-                self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
 
     @property
     def act_repr_dim(self):
         return self._act_repr_dim
-
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output, )
-            else:
-                assert inference
-                action_output = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                if cfg.model.wnorm:
-                    losses['action_loss'] += torch.abs(torch.norm(self.act_output_fc.weight, dim=1) - 1).mean()
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
         if vis_output.box_labels is not None:
@@ -108,20 +67,11 @@ class BaseModel(GenericModel):
         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
         union_repr = self.union_repr_mlp(union_boxes_feats)
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
-
-        if cfg.model.wnorm:
-            act_repr = act_repr / torch.norm(act_repr, dim=1, keepdim=True)
-
         if return_repr:
             return act_repr
 
         action_logits = self.act_output_fc(act_repr)
         return action_logits
-
-    # def post_optim_step(self):
-    #     if cfg.model.wnorm:
-    #         with torch.no_grad():
-    #             self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
 
 
 class ZSModel(GenericModel):
@@ -147,6 +97,8 @@ class ZSModel(GenericModel):
         self.num_predicates = dataset.num_predicates
         self.base_model = base_model
 
+        self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.t().detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
         pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
@@ -168,14 +120,15 @@ class ZSModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output, )
+                hoi_predictors = self._forward(vis_output, )
             else:
                 assert inference
-                action_output = None
+                hoi_predictors = None
 
             if not inference:
                 action_labels = vis_output.action_labels
-                losses = {'action_loss': (action_output * action_labels).sum() / action_labels.sum()}  # For MSE
+                target_classifiers = action_labels.unsqueeze(dim=2) * self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
+                losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors, target_classifiers)}
                 # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
@@ -192,12 +145,15 @@ class ZSModel(GenericModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos is not None:
-                        assert action_output is not None
+                        assert hoi_predictors is not None
+                        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
+                        visual_feats = nn.functional.normalize(visual_feats, dim=2)
+                        action_output = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
                         # prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-                        prediction.action_scores = torch.sigmoid(-action_output.log()).cpu().numpy()  # For MSE
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()  # For MSE
 
                 return prediction
 
@@ -215,10 +171,5 @@ class ZSModel(GenericModel):
         hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
                                    self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
                                    ], dim=2)  # N x P x 2*E
-        hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)  # N * D * P
-
-        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
-        # action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
-        action_output = ((visual_feats.unsqueeze(dim=2) - hoi_predictors) ** 2).sum(dim=1)  # for MSE
-
-        return action_output
+        hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
+        return hoi_predictors
