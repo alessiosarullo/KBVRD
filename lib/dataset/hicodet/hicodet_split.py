@@ -287,8 +287,8 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
         obj_inds = set(obj_inds or range(hicodet.num_object_classes))
         pred_inds = pred_inds or list(range(hicodet.num_predicates))
         assert 0 in pred_inds
-        pred_mapping = np.full(hicodet.num_predicates, fill_value=-1, dtype=np.int)
-        pred_mapping[pred_inds] = np.arange(len(pred_inds))
+        pred_filtering_map = np.full(hicodet.num_predicates, fill_value=-1, dtype=np.int)
+        pred_filtering_map[pred_inds] = pred_inds
 
         new_im_inds, new_split_data = [], []
         pred_count = {}
@@ -303,7 +303,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
 
             # Filter interactions of bad classes or between removed boxes
             hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
-            hois[:, 1] = pred_mapping[hois[:, 1]]
+            hois[:, 1] = pred_filtering_map[hois[:, 1]]
             interaction_mask = np.all(hois >= 0, axis=1)
             hois = hois[interaction_mask, :]
 
