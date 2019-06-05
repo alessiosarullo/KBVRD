@@ -108,7 +108,7 @@ class CosModel(BaseModel):
         if return_repr:
             return act_repr
 
-        action_logits = self.act_output_cs(act_repr @ self.act_weights)
+        action_logits = self.act_output_cs(act_repr.unsqueeze(dim=2), self.act_weights.unsqueeze(dim=0))
         return action_logits
 
 
