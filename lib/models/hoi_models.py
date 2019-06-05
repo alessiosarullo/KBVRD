@@ -125,8 +125,8 @@ class ZSModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
-                # losses = {'action_loss': (action_output * action_labels).sum(dim=1)}  # For MSE
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'action_loss': (action_output * action_labels).sum(dim=1)}  # For MSE
+                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
@@ -146,7 +146,8 @@ class ZSModel(GenericModel):
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+                        # prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+                        prediction.action_scores = torch.sigmoid(-action_output.log()).cpu().numpy()  # For MSE
 
                 return prediction
 
@@ -167,7 +168,7 @@ class ZSModel(GenericModel):
         hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)
 
         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
-        action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
-        # action_output = ((union_boxes_feats.unsqueeze(dim=1) - hoi_predictors) ** 2).sum(dim=2) # for MSE
+        # action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
+        action_output = ((visual_feats.unsqueeze(dim=1) - hoi_predictors) ** 2).sum(dim=2)  # for MSE
 
         return action_output
