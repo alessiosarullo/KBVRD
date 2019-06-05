@@ -125,7 +125,7 @@ class ZSModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
-                losses = {'action_loss': (action_output * action_labels).sum(dim=1)}  # For MSE
+                losses = {'action_loss': (action_output * action_labels).sum() / action_labels.sum()}  # For MSE
                 # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
