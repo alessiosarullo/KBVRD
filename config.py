@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import random
 
 import pickle
 
@@ -159,9 +160,14 @@ class DataConfig(BaseConfigs):
         if not self.prinds:  # use all predicates
             return None
         try:  # case in which a single number is specified
-            num_preds = int(self.prinds)
-            pred_inds = list(range(num_preds))
-        except ValueError:  # cannot cast to int: a list has been specified
+            try:
+                num_preds = int(self.prinds)
+                pred_inds = list(range(num_preds))
+            except ValueError:  # cannot cast to int
+                num_possible_preds = 116  # FIXME magic constant
+                num_preds = int(float(self.prinds) * num_possible_preds)
+                pred_inds = [0] + sorted(random.sample(range(num_possible_preds), num_preds))
+        except ValueError:  # cannot cast to number: a list has been specified
             pred_inds = sorted([int(pred_ind) for pred_ind in self.prinds.split(',')])
             if pred_inds[0] != 0:
                 pred_inds = [0] + pred_inds
