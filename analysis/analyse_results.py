@@ -174,7 +174,7 @@ def _setup_and_load():
 def evaluate():
     results = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    evaluator = Evaluator(split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.evaluate_predictions(results)
     evaluator.print_metrics(sort=True)
     evaluator.save(cfg.program.eval_res_file)

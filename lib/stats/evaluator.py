@@ -28,14 +28,14 @@ class BaseEvaluator:
 
 
 class Evaluator(BaseEvaluator):
-    def __init__(self, split: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, dataset_split: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
         self.num_hoi_thr = num_hoi_thr
 
-        self.split = split
-        self.dataset = split.hicodet
+        self.dataset_split = dataset_split
+        self.hicodet = dataset_split.hicodet
         self._init()
 
     def _init(self):
@@ -56,12 +56,12 @@ class Evaluator(BaseEvaluator):
 
     def evaluate_predictions(self, predictions: List[Dict]):
         self._init()
-        assert len(predictions) == self.split.num_images, (len(predictions), self.split.num_images)
+        assert len(predictions) == self.dataset_split.num_images, (len(predictions), self.dataset_split.num_images)
 
         Timer.get('Eval epoch').tic()
         Timer.get('Eval epoch', 'Predictions').tic()
         for i, res in enumerate(predictions):
-            ex = self.split.get_img_entry(i, read_img=False)
+            ex = self.dataset_split.get_img_entry(i, read_img=False)
             prediction = Prediction(res)
             self.process_prediction(i, ex, prediction)
         Timer.get('Eval epoch', 'Predictions').toc()
@@ -78,9 +78,9 @@ class Evaluator(BaseEvaluator):
 
         gt_hoi_classes_count = Counter(gt_hoi_classes.tolist())
 
-        ap = np.zeros(self.dataset.num_interactions)
-        recall = np.zeros(self.dataset.num_interactions)
-        for j in range(self.dataset.num_interactions):
+        ap = np.zeros(self.hicodet.num_interactions)
+        recall = np.zeros(self.hicodet.num_interactions)
+        for j in range(self.hicodet.num_interactions):
             p_hoi_scores = predict_hoi_scores[:, j]
             p_gt_ho_assignment = pred_gt_ho_assignment[:, j]
             if self.hoi_score_thr is not None:
@@ -103,10 +103,10 @@ class Evaluator(BaseEvaluator):
         lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.dataset_split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
-        hoi_triplets = self.split.hoi_triplets
-        hois = self.dataset.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
+        hoi_triplets = self.dataset_split.hoi_triplets
+        hois = self.hicodet.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
         assert np.all(hois >= 0)
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
@@ -120,7 +120,7 @@ class Evaluator(BaseEvaluator):
 
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
 
-            gt_hoi_classes = self.dataset.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
+            gt_hoi_classes = self.hicodet.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
             assert np.all(gt_hoi_classes) >= 0
 
             gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
@@ -128,7 +128,7 @@ class Evaluator(BaseEvaluator):
         else:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-        predict_hoi_scores = np.zeros([0, self.dataset.num_interactions])
+        predict_hoi_scores = np.zeros([0, self.hicodet.num_interactions])
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
         if prediction.obj_boxes is not None:
@@ -144,17 +144,22 @@ class Evaluator(BaseEvaluator):
                 if predict_hoi_scores is None:
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_scores is not None
-                    predict_action_scores = prediction.action_scores
+
+                    if self.dataset_split.active_predicates < self.hicodet.num_predicates:
+                        predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.hicodet.num_predicates))
+                        predict_action_scores[:, self.dataset_split.active_predicates] = prediction.action_scores
+                    else:
+                        predict_action_scores = prediction.action_scores
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
-                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.dataset.num_interactions])
-                    for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.hicodet.num_interactions])
+                    for iid, (pid, oid) in enumerate(self.hicodet.interactions):
                         predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
         else:
             assert prediction.ho_pairs is None
 
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.dataset.num_interactions), fill_value=-1, dtype=np.int)
+        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.hicodet.num_interactions), fill_value=-1, dtype=np.int)
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
             gt_pair_ious = np.zeros(num_gt_hois)
             for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
@@ -162,7 +167,7 @@ class Evaluator(BaseEvaluator):
                 iou_o = pred_gt_ious[po, go]
                 gt_pair_ious[gtidx] = min(iou_h, iou_o)
             if np.any(gt_pair_ious >= self.iou_thresh):
-                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.dataset.num_interactions))
+                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.hicodet.num_interactions))
                 gt_pair_ious_per_hoi[np.arange(num_gt_hois), gt_hoi_classes] = gt_pair_ious
                 gt_assignments = gt_pair_ious_per_hoi.argmax(axis=0)[np.any(gt_pair_ious_per_hoi >= self.iou_thresh, axis=0)]
                 gt_hoi_assignments = gt_hoi_classes[gt_assignments]
