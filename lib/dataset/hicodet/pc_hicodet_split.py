@@ -148,7 +148,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         # Filter HOIs. Object class filtering is currently not supported.
         if self.active_object_classes.size < self.hicodet.num_object_classes:
             raise NotImplementedError('Object class filtering is not supported.')
-        if len(self.active_predicates) < self.hicodet.num_predicates:
+        if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
             self.pc_hoi_mask = np.any(self.pc_action_labels, axis=1)
             # Note: boxes with no interactions are NOT filtered
