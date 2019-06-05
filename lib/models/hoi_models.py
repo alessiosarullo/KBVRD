@@ -164,11 +164,11 @@ class ZSModel(GenericModel):
         emb_dim = self.word_emb_dim
         hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
                                    self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
-                                   ], dim=2)
-        hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)
+                                   ], dim=2)  # N x P x 2*E
+        hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)  # N * D * P
 
         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
         # action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
-        action_output = ((visual_feats.unsqueeze(dim=1) - hoi_predictors) ** 2).sum(dim=2)  # for MSE
+        action_output = ((visual_feats.unsqueeze(dim=2) - hoi_predictors) ** 2).sum(dim=2)  # for MSE
 
         return action_output
