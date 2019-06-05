@@ -97,7 +97,7 @@ class ZSModel(GenericModel):
         self.num_predicates = dataset.num_predicates
         self.base_model = base_model
 
-        self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.t().detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
