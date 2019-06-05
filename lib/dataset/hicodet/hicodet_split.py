@@ -202,10 +202,6 @@ class HicoDetSplitBuilder:
             if cls.hicodet is None:
                 cls.hicodet = HicoDet()
 
-            # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
-            obj_inds = obj_inds or cfg.data.obj_inds
-            pred_inds = pred_inds or cfg.data.pred_inds
-
             split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
                                                                              filter_empty_imgs=split == Splits.TRAIN)
             assert len(split_data) == len(image_ids)

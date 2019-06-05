@@ -81,6 +81,10 @@ class Evaluator(BaseEvaluator):
         ap = np.zeros(self.hicodet.num_interactions)
         recall = np.zeros(self.hicodet.num_interactions)
         for j in range(self.hicodet.num_interactions):
+            num_gt_hois = gt_hoi_classes_count[j]
+            if num_gt_hois == 0:
+                continue
+
             p_hoi_scores = predict_hoi_scores[:, j]
             p_gt_ho_assignment = pred_gt_ho_assignment[:, j]
             if self.hoi_score_thr is not None:
@@ -90,7 +94,7 @@ class Evaluator(BaseEvaluator):
             if self.num_hoi_thr is not None:
                 p_hoi_scores = p_hoi_scores[:self.num_hoi_thr]
                 p_gt_ho_assignment = p_gt_ho_assignment[:self.num_hoi_thr]
-            rec_j, prec_j, ap_j = self.eval_interactions(p_hoi_scores, p_gt_ho_assignment, gt_hoi_classes_count[j])
+            rec_j, prec_j, ap_j = self.eval_interactions(p_hoi_scores, p_gt_ho_assignment, num_gt_hois)
             ap[j] = ap_j
             if rec_j.size > 0:
                 recall[j] = rec_j[-1]
