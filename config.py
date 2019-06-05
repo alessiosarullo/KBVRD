@@ -201,7 +201,6 @@ class OptimizerConfig(BaseConfigs):
         self.adam = False
         self.learning_rate = 1e-3
         self.momentum = 0.9
-        self.hoi_lr_coeff = 1.0
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
@@ -209,8 +208,6 @@ class OptimizerConfig(BaseConfigs):
         self.img_batch_size = 8
         self.hoi_batch_size = 64
         self.hoi_bg_ratio = 3
-
-        self.gamma = 2
 
 
 class Configs:

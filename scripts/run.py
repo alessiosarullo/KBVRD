@@ -81,15 +81,7 @@ class Launcher:
             # print("Continuing from epoch %d." % (start_epoch + 1))
 
     def get_optim(self):
-        hoi_lr_coeff = cfg.opt.hoi_lr_coeff
-        if hoi_lr_coeff != 1:
-            # Lower the learning rate of HOI layers..
-            red_lr_params = [p for n, p in self.detector.named_parameters() if n.startswith('hoi_branch') and p.requires_grad]
-            other_params = [p for n, p in self.detector.named_parameters() if not n.startswith('hoi_branch') and p.requires_grad]
-            params = [{'params': red_lr_params, 'lr': cfg.opt.learning_rate * hoi_lr_coeff}, {'params': other_params}]
-            print('LR of HOI branch (%d parameters) multiplied by %f.' % (len(params[0]['params']), hoi_lr_coeff))
-        else:
-            params = self.detector.parameters()
+        params = self.detector.parameters()
 
         if cfg.opt.adam:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.learning_rate, eps=1e-3)

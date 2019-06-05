@@ -55,6 +55,44 @@ class BaseModel(GenericModel):
     def act_repr_dim(self):
         return self._act_repr_dim
 
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                action_output = self._forward(vis_output, )
+            else:
+                assert inference
+                action_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if cfg.model.wnorm:
+                    losses['action_loss'] += torch.abs(torch.norm(self.act_output_fc.weight, dim=1) - 1).mean()
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
+
     def _forward(self, vis_output: VisualOutput, return_repr=False):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
@@ -80,10 +118,10 @@ class BaseModel(GenericModel):
         action_logits = self.act_output_fc(act_repr)
         return action_logits
 
-    def post_optim_step(self):
-        if cfg.model.wnorm:
-            with torch.no_grad():
-                self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
+    # def post_optim_step(self):
+    #     if cfg.model.wnorm:
+    #         with torch.no_grad():
+    #             self.act_output_fc.weight.div_(torch.norm(self.act_output_fc.weight, dim=1, keepdim=True))
 
 
 class ZSModel(GenericModel):
