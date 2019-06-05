@@ -22,22 +22,22 @@ class GenericModel(AbstractModel):
         super().__init__(**kwargs)
         self.dataset = dataset
         self.visual_module = VisualModule(dataset)
-
-        if cfg.model.csloss:
-            prcls_hist = Counter(dataset.hoi_triplets[:, 1])
-            prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
-            num_predicate_classes = prcls_hist.size
-            assert num_predicate_classes == dataset.num_predicates
-            cost_matrix = np.maximum(1, np.log2(prcls_hist[None, :] / prcls_hist[:, None]))
-            assert not np.any(np.isnan(cost_matrix))
-            cost_matrix[np.arange(num_predicate_classes), np.arange(num_predicate_classes)] = 0
-
-            tot_num_preds = sum(prcls_hist)
-            tot_other_preds = tot_num_preds - prcls_hist
-            expected_class_cost = (cost_matrix.dot(prcls_hist)) / tot_other_preds
-
-            self.class_pos_weights = torch.nn.Parameter(torch.from_numpy(expected_class_cost).view(1, -1), requires_grad=False)
-            self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
+        
+        # if cfg.model.csloss:
+        #     prcls_hist = Counter(dataset.hoi_triplets[:, 1])
+        #     prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
+        #     num_predicate_classes = prcls_hist.size
+        #     assert num_predicate_classes == dataset.num_predicates
+        #     cost_matrix = np.maximum(1, np.log2(prcls_hist[None, :] / prcls_hist[:, None]))
+        #     assert not np.any(np.isnan(cost_matrix))
+        #     cost_matrix[np.arange(num_predicate_classes), np.arange(num_predicate_classes)] = 0
+        #
+        #     tot_num_preds = sum(prcls_hist)
+        #     tot_other_preds = tot_num_preds - prcls_hist
+        #     expected_class_cost = (cost_matrix.dot(prcls_hist)) / tot_other_preds
+        #
+        #     self.class_pos_weights = torch.nn.Parameter(torch.from_numpy(expected_class_cost).view(1, -1), requires_grad=False)
+        #     self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
 
     @property
     def act_repr_dim(self):
