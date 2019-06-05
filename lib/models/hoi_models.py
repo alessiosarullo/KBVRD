@@ -113,9 +113,6 @@ class ZSModel(GenericModel):
                                                 nn.Dropout(0.5),
                                                 ])
 
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
-        torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
-
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
