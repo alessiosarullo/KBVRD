@@ -140,7 +140,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
 
     def __iter__(self):
         for batch in self.batches:
-            assert len(batch) == cfg.opt.hoi_batch_size
+            assert len(batch) == cfg.opt.hoi_batch_size, (len(batch), cfg.opt.hoi_batch_size)
             yield batch
         self.batches = self.get_all_batches()
 
