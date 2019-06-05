@@ -169,6 +169,6 @@ class ZSModel(GenericModel):
 
         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
         # action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
-        action_output = ((visual_feats.unsqueeze(dim=2) - hoi_predictors) ** 2).sum(dim=2)  # for MSE
+        action_output = ((visual_feats.unsqueeze(dim=2) - hoi_predictors) ** 2).sum(dim=1)  # for MSE
 
         return action_output
