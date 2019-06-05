@@ -39,6 +39,10 @@ class GenericModel(AbstractModel):
             self.class_pos_weights = torch.nn.Parameter(torch.from_numpy(expected_class_cost).view(1, -1), requires_grad=False)
             self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
 
+    @property
+    def act_repr_dim(self):
+        raise NotImplementedError()
+
     # def focal_loss(self, logits, labels):
     #     gamma = cfg.opt.gamma
     #     s = logits
@@ -84,7 +88,7 @@ class GenericModel(AbstractModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output)
+                action_output = self._forward(vis_output, )
             else:
                 assert inference
                 action_output = None
@@ -115,5 +119,5 @@ class GenericModel(AbstractModel):
 
                 return prediction
 
-    def _forward(self, vis_output: VisualOutput):
+    def _forward(self, vis_output: VisualOutput, **kwargs):
         raise NotImplementedError()
