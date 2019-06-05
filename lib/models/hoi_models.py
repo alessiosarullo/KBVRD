@@ -167,7 +167,7 @@ class ZSModel(GenericModel):
         hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)
 
         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
-        action_output = torch.bmm(visual_feats, hoi_predictors)
+        action_output = torch.bmm(visual_feats.unsqueeze(dim=1), hoi_predictors).squeeze(dim=1)
         # action_output = ((union_boxes_feats.unsqueeze(dim=1) - hoi_predictors) ** 2).sum(dim=2) # for MSE
 
         return action_output
