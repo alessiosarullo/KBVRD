@@ -22,7 +22,7 @@ class GenericModel(AbstractModel):
         super().__init__(**kwargs)
         self.dataset = dataset
         self.visual_module = VisualModule(dataset)
-        
+
         # if cfg.model.csloss:
         #     prcls_hist = Counter(dataset.hoi_triplets[:, 1])
         #     prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])

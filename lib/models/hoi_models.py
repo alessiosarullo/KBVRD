@@ -72,8 +72,7 @@ class BaseModel(GenericModel):
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
 
         if cfg.model.wnorm:
-            with torch.no_grad():
-                act_repr.div_(torch.norm(act_repr, dim=1, keepdim=True))
+            act_repr = act_repr / torch.norm(act_repr, dim=1, keepdim=True)
 
         if return_repr:
             return act_repr
