@@ -135,7 +135,8 @@ class ZSModel(GenericModel):
         self.num_predicates = dataset.num_predicates
         self.base_model = base_model
 
-        self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+        # self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
@@ -185,7 +186,7 @@ class ZSModel(GenericModel):
                     if vis_output.ho_infos is not None:
                         assert hoi_predictors is not None
                         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                        visual_feats = nn.functional.normalize(visual_feats, dim=2)
+                        # visual_feats = nn.functional.normalize(visual_feats, dim=2)
                         action_output = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
@@ -209,5 +210,6 @@ class ZSModel(GenericModel):
         hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
                                    self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
                                    ], dim=2)  # N x P x 2*E
-        hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
+        # hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
+        hoi_predictors = self.emb_to_predictor(hoi_word_embs)  # N x P x D
         return hoi_predictors
