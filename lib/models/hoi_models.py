@@ -158,7 +158,12 @@ class ZSModel(GenericModel):
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
         obj_word_embs = boxes_ext[hoi_infos[:, 2], 5:] @ self.obj_word_embs
-        hoi_word_embs = torch.cat([obj_word_embs[:, None, :], self.pred_word_embs[None, :, :]], dim=2)
+        batch_size = hoi_infos.shape[0]
+        num_preds = self.pred_word_embs.shape[0]
+        emb_dim = self.word_emb_dim
+        hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
+                                   self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
+                                   ], dim=2)
         hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)
 
         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
