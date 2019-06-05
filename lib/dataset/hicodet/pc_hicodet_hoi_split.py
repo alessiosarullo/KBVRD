@@ -55,30 +55,7 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
             precomp_boxes_ext = self.pc_boxes_ext[box_start:box_end, :]
             precomp_box_feats = self.pc_boxes_feats[box_start:box_end, :]
             precomp_masks = self.pc_masks[box_start:box_end, :, :]
-            box_inds = None
-
-            # TODO mapping of obj inds for rels
             precomp_box_labels = self.pc_box_labels[box_start:box_end].copy()
-
-            if self.obj_class_inds.size < self.num_object_classes:
-                precomp_boxes_ext = precomp_boxes_ext[:, np.concatenate([np.arange(5), 5 + self.obj_class_inds])]
-                num_boxes = precomp_box_labels.shape[0]
-                bg_box_mask = (precomp_box_labels < 0)
-
-                precomp_box_labels_one_hot = np.zeros([num_boxes, len(self.hicodet.objects)], dtype=precomp_box_labels.dtype)
-                precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
-                precomp_box_labels_one_hot[bg_box_mask, :] = 0
-                precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.obj_class_inds]
-                feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1) | bg_box_mask
-
-                box_inds = np.full_like(precomp_box_labels, fill_value=-1)
-                box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
-                precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
-                precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
-                precomp_masks = precomp_masks[feasible_box_labels_inds]
-                precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
-                precomp_box_labels = np.argmax(precomp_box_labels_one_hot, axis=1).astype(precomp_box_labels_one_hot.dtype)
-                precomp_box_labels[~np.any(precomp_box_labels_one_hot, axis=1)] = -1
 
             # HOI data
             img_hoi_inds = np.flatnonzero(self.pc_ho_im_inds == pc_im_idx)
@@ -90,12 +67,6 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
                 precomp_hoi_union_feats = self.pc_union_boxes_feats[hoi_start:hoi_end, :]
                 precomp_action_labels = self.pc_action_labels[hoi_start:hoi_end, :]
 
-                # # Check
-                # fg_hois_inds = np.flatnonzero(precomp_action_labels[:, 0] == 0)
-                # bg_hois_inds = np.flatnonzero(precomp_action_labels[:, 0] > 0)
-                # if bg_hois_inds.size > 0:
-                #     assert np.all(fg_hois_inds == np.arange(bg_hois_inds[0]))  # all positives, then all negatives
-
                 # Filter according to sample
                 assert isinstance(fg_inds, list) and isinstance(bg_inds, list)
                 inds = np.array(fg_inds + bg_inds) - hoi_start
@@ -103,36 +74,6 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
                 precomp_hoi_union_boxes = precomp_hoi_union_boxes[inds, :]
                 precomp_hoi_union_feats = precomp_hoi_union_feats[inds, :]
                 precomp_action_labels = precomp_action_labels[inds, :]
-
-                if self.action_class_inds.size < self.num_predicates:
-                    precomp_action_labels = precomp_action_labels[:, self.action_class_inds]
-
-                # Remap HOIs box indices
-                if box_inds is not None:
-                    precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                    precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-
-                # Filter out HOIs
-                if self.action_class_inds.size < self.num_predicates or box_inds is not None:
-                    feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
-                    assert np.any(feasible_hoi_labels_inds), (im_idx, pc_im_idx, img_id, im_data.filename)
-                    precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
-                    precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
-                    precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
-                    precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
-                    assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
-
-                    # Filter out boxes without interactions
-                    hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                    precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
-                    precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                    precomp_masks = precomp_masks[hoi_box_inds]
-                    precomp_box_labels = precomp_box_labels[hoi_box_inds]
-                    box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
-                    box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
-                    precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                    precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-                    assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
 
                 assert np.all(precomp_hoi_infos >= 0)
                 entry.precomp_action_labels = precomp_action_labels
@@ -166,6 +107,10 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
         neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
         assert np.all(pos_hois_mask != neg_hois_mask)
+        if dataset.pc_hoi_mask is None:
+            assert np.all(pos_hois_mask | neg_hois_mask)
+        else:
+            assert np.all(pos_hois_mask | neg_hois_mask | (~dataset.pc_hoi_mask))
         self.split_mask = np.array([dataset.pc_image_ids[im_ind] in image_ids for im_ind in dataset.pc_ho_im_inds])
         self.pos_hois_mask = pos_hois_mask & self.split_mask
         self.neg_hois_mask = neg_hois_mask & self.split_mask
@@ -193,6 +138,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
 
     def __iter__(self):
         for batch in self.batches:
+            assert len(batch) == cfg.opt.hoi_batch_size
             yield batch
         self.batches = self.get_all_batches()
 

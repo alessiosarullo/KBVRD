@@ -9,11 +9,11 @@ from typing import Dict, List
 
 
 class HicoDetImData:
-    def __init__(self, filename, boxes, box_classes, interactions, wnet_actions):
+    def __init__(self, filename, boxes, box_classes, hois, wnet_actions):
         self.filename = filename
         self.boxes = boxes
         self.box_classes = box_classes
-        self.interactions = interactions
+        self.hois = hois
         self.wnet_actions = wnet_actions
 
 
@@ -112,7 +112,7 @@ class HicoDet:
                 im_boxes = np.empty((0, 4), dtype=np.int)
                 im_box_classes = np.empty(0, dtype=np.int)
                 im_interactions = np.empty((0, 3), dtype=np.int)
-            split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, interactions=im_interactions,
+            split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, hois=im_interactions,
                                             wnet_actions=im_wn_actions))
 
         return split_data

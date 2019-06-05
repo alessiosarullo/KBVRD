@@ -100,12 +100,12 @@ class HicoDetSplit(Dataset):
 
         object_inds = sorted(object_inds)
         self.objects = [hicodet.objects[i] for i in object_inds]
-        self.obj_class_inds = np.array(object_inds, dtype=np.int)
+        self.active_object_classes = np.array(object_inds, dtype=np.int)
         self.object_index = {obj: i for i, obj in enumerate(self.objects)}
 
         predicate_inds = sorted(predicate_inds)
         self.predicates = [hicodet.predicates[i] for i in predicate_inds]
-        self.action_class_inds = np.array(predicate_inds, dtype=np.int)
+        self.active_predicates = np.array(predicate_inds, dtype=np.int)
         self.predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
 
         interactions = np.array([[self.predicate_index.get(self.hicodet.predicates[p], -1), self.object_index.get(self.hicodet.objects[o], -1)]
@@ -120,7 +120,7 @@ class HicoDetSplit(Dataset):
         # Compute HOI triplets. Each is [human, interaction, object].
         hoi_triplets = []
         for im_data in self._data:
-            box_classes, inters = im_data.box_classes, im_data.interactions
+            box_classes, inters = im_data.box_classes, im_data.hois
             im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
             assert np.all(im_hois[:, 0] == self.human_class)
             hoi_triplets.append(im_hois)
@@ -175,7 +175,7 @@ class HicoDetSplit(Dataset):
 
         entry.gt_boxes = im_data.boxes.astype(np.float, copy=False)
         entry.gt_obj_classes = im_data.box_classes.copy()
-        entry.gt_hois = im_data.interactions.copy()
+        entry.gt_hois = im_data.hois.copy()
         return entry
 
     def __getitem__(self, idx):
@@ -281,35 +281,54 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
 
     # Filter out unwanted predicates/object classes
     if obj_inds is None and pred_inds is None:
-        final_objects_inds = list(range(len(hicodet.objects)))
-        final_pred_inds = list(range(len(hicodet.predicates)))
+        final_objects_inds = list(range(hicodet.num_object_classes))
+        final_pred_inds = list(range(hicodet.num_predicates))
     else:
-        obj_inds = set(obj_inds or range(len(hicodet.objects)))
-        pred_inds = set(pred_inds or range(len(hicodet.predicates)))
+        obj_inds = set(obj_inds or range(hicodet.num_object_classes))
+        pred_inds = pred_inds or list(range(hicodet.num_predicates))
         assert 0 in pred_inds
+        pred_mapping = np.full(hicodet.num_predicates, fill_value=-1, dtype=np.int)
+        pred_mapping[pred_inds] = np.arange(len(pred_inds))
+
         new_im_inds, new_split_data = [], []
         pred_count = {}
         obj_count = {}
         for i, im_data in enumerate(split_data):
-            boxes, box_classes, interactions = im_data.boxes, im_data.box_classes, im_data.interactions
+            boxes, box_classes, hois = im_data.boxes, im_data.box_classes, im_data.hois
 
+            # Filter boxes of bad classes
             box_mask = np.array([c in obj_inds for i, c in enumerate(box_classes)], dtype=bool)
             boxes = boxes[box_mask, :]
             box_classes = box_classes[box_mask]
-            interactions[:, [0, 2]] = remap_box_pairs(interactions[:, [0, 2]], box_mask)
-            interactions = interactions[np.all(interactions >= 0, axis=1), :]
 
-            if interactions.size > 0:
-                for pred in interactions[:, 1]:
+            # Filter interactions of bad classes or between removed boxes
+            hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
+            hois[:, 1] = pred_mapping[hois[:, 1]]
+            interaction_mask = np.all(hois >= 0, axis=1)
+            hois = hois[interaction_mask, :]
+
+            if hois.size > 0:
+                # Filter boxes with no interactions
+                box_mask = np.zeros(boxes.shape[0], dtype=bool)
+                box_mask[np.unique(hois[:, [0, 2]])] = 1
+                boxes = boxes[box_mask, :]
+                box_classes = box_classes[box_mask]
+                hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
+                assert np.all(hois >= 0)
+
+                for pred in hois[:, 1]:
                     pred_count[pred] = pred_count.get(pred, 0) + 1
                 for obj in box_classes:
                     obj_count[obj] = obj_count.get(obj, 0) + 1
 
                 new_im_inds.append(i)
-                new_split_data.append(HicoDetImData(filename=im_data.filename, boxes=boxes, box_classes=box_classes, interactions=interactions))
+                new_split_data.append(HicoDetImData(filename=im_data.filename,
+                                                    boxes=boxes, box_classes=box_classes,
+                                                    hois=hois,
+                                                    wnet_actions=[im_data.wnet_actions[i] for i in np.flatnonzero(interaction_mask)]))
 
-        num_inters = sum([im_data.interactions.shape[0] for im_data in split_data])
-        diff_num_inters = num_inters - sum([im_data.interactions.shape[0] for im_data in new_split_data])
+        num_inters = sum([im_data.hois.shape[0] for im_data in split_data])
+        diff_num_inters = num_inters - sum([im_data.hois.shape[0] for im_data in new_split_data])
         if diff_num_inters > 0:
             print('%d/%d interaction%s been filtered out.' % (diff_num_inters, num_inters, ' has' if diff_num_inters == 1 else 's have'))
         if len(new_im_inds) < len(image_ids):
@@ -324,6 +343,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
         # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
         final_objects_inds = sorted(set(obj_count.keys()) | {hicodet.human_class})
         final_pred_inds = sorted(set(pred_count.keys()))
+        pred_inds = set(pred_inds)
         if pred_inds - set(pred_count.keys()):
             print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
                   ', '.join(['%s (%d)' % (hicodet.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
@@ -335,7 +355,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
     if filter_empty_imgs:
         im_with_interactions, new_split_data = [], []
         for i, im_data in enumerate(split_data):
-            if np.any(im_data.interactions[:, 1] != hicodet.predicate_index[hicodet.null_interaction]):
+            if np.any(im_data.hois[:, 1] != hicodet.predicate_index[hicodet.null_interaction]):
                 im_with_interactions.append(i)
                 new_split_data.append(im_data)
         split_data = new_split_data
