@@ -145,7 +145,7 @@ class Evaluator(BaseEvaluator):
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_scores is not None
 
-                    if self.dataset_split.active_predicates < self.hicodet.num_predicates:
+                    if len(self.dataset_split.active_predicates) < self.hicodet.num_predicates:
                         predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.hicodet.num_predicates))
                         predict_action_scores[:, self.dataset_split.active_predicates] = prediction.action_scores
                     else:
