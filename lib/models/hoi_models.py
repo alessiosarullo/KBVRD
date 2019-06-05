@@ -45,7 +45,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
+        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
     @property
@@ -71,6 +71,44 @@ class BaseModel(GenericModel):
             return act_repr
 
         action_logits = self.act_output_fc(act_repr)
+        return action_logits
+
+
+class CosModel(BaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'cos'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        act_weights = torch.empty((self.act_repr_dim, dataset.num_predicates))
+        torch.nn.init.xavier_normal_(act_weights, gain=1.0)
+        self.act_weights = nn.Parameter(act_weights, requires_grad=True)
+        self.act_output_cs = nn.CosineSimilarity(dim=1)
+
+    @property
+    def act_repr_dim(self):
+        return self._act_repr_dim
+
+    def _forward(self, vis_output: VisualOutput, return_repr=False):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        masks = vis_output.masks
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+
+        ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+        ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
+        union_repr = self.union_repr_mlp(union_boxes_feats)
+        act_repr = union_repr + ho_subj_repr + ho_obj_repr
+        if return_repr:
+            return act_repr
+
+        action_logits = self.act_output_cs(act_repr @ self.act_weights)
         return action_logits
 
 
