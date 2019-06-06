@@ -127,7 +127,10 @@ class Launcher:
 
                     self.detector.eval()
                     val_loss = self.loss_epoch(epoch, val_loader, val_stats)
-                    scheduler.step(val_loss)
+                    try:
+                        scheduler.step(metrics=val_loss)
+                    except TypeError:
+                        scheduler.step()
 
                     all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
 
