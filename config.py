@@ -199,10 +199,14 @@ class ModelConfig(BaseConfigs):
 class OptimizerConfig(BaseConfigs):
     def __init__(self):
         self.adam = False
-        self.lr = 1e-3
         self.momentum = 0.9
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
+
+        # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
+        self.lr = 1e-3
+        self.lr_gamma = 0
+        self.lr_decay_period = 2
 
         self.num_epochs = 10
         self.img_batch_size = 8

@@ -87,8 +87,12 @@ class Launcher:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, eps=1e-3)
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, momentum=cfg.opt.momentum)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
-        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+
+        lr_gamma = cfg.opt.lr_gamma
+        if lr_gamma > 0:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma)
+        else:
+            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
         return optimizer, scheduler
 
     def train(self):
