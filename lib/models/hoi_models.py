@@ -206,7 +206,10 @@ class ZSModel(GenericModel):
         masks = vis_output.masks
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
-        obj_word_embs = boxes_ext[hoi_infos[:, 2], 5:] @ self.obj_word_embs
+        if vis_output.box_labels is not None:
+            obj_word_embs = self.obj_word_embs[vis_output.box_labels][hoi_infos[:, 2]]
+        else:
+            obj_word_embs = boxes_ext[hoi_infos[:, 2], 5:] @ self.obj_word_embs
         batch_size = hoi_infos.shape[0]
         num_preds = self.pred_word_embs.shape[0]
         emb_dim = self.word_emb_dim
