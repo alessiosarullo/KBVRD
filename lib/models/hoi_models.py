@@ -2,7 +2,9 @@ from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
 from lib.models.hoi_branches import *
-from lib.models.obj_branches import *
+from lib.dump.obj_branches import *
+
+import os
 
 
 class BaseModel(GenericModel):
@@ -74,21 +76,40 @@ class BaseModel(GenericModel):
         return action_logits
 
 
-class CosModel(BaseModel):
+class EmbModel(BaseModel):
     @classmethod
     def get_cline_name(cls):
-        return 'cos'
+        return 'gemb'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        act_weights = torch.empty((self.act_repr_dim, dataset.num_predicates))
-        torch.nn.init.xavier_normal_(act_weights, gain=1.0)
-        self.act_weights = nn.Parameter(act_weights, requires_grad=True)
-        self.act_output_cs = nn.CosineSimilarity(dim=1)
 
-    @property
-    def act_repr_dim(self):
-        return self._act_repr_dim
+        self.act_emb_att_fc = nn.Sequential(nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False),
+                                            nn.Sigmoid())
+
+        self.act_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
+        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.act_repr_dim + self.act_embs.shape[1], self.act_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 ])
+        nn.init.xavier_normal_(self.act_only_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_only_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+    def get_act_graph_embs(self):
+        emb_path = 'cache/rotate_hico_act/'
+        entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
+        with open('cache/rotate/entities.dict', 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        act_embs = np.concatenate([np.zeros((1, entity_embs.shape[1])),
+                                   entity_embs[np.array([entity_inv_index[p] for p in self.dataset.get_preds_for_embs()[1:]])]
+                                   ], axis=0)
+        return act_embs
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
         if vis_output.box_labels is not None:
@@ -108,7 +129,11 @@ class CosModel(BaseModel):
         if return_repr:
             return act_repr
 
-        action_logits = self.act_output_cs(act_repr.unsqueeze(dim=2), self.act_weights.unsqueeze(dim=0))
+        act_scores = self.act_emb_att_fc(act_repr)
+        act_wavg_emb = act_scores @ self.act_embs
+        act_emb_repr = self.act_only_repr_mlp(torch.cat([act_repr, act_wavg_emb], dim=1))
+        action_logits = self.act_output_fc(act_emb_repr)
+
         return action_logits
 
 
