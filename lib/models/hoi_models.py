@@ -141,6 +141,7 @@ class WEmbModel(GEmbModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.word_emb_dim = 300
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         self.act_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
