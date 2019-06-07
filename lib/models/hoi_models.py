@@ -357,7 +357,7 @@ class PeyreModel(GenericModel):
 
                     if vis_output.ho_infos is not None:
                         assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
-                        hoi_overall_scores = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
+                        hoi_overall_scores = np.empty([hoi_logits.shape[0], self.dataset.hicodet.num_interactions])
                         for iid, (pid, oid) in enumerate(self.dataset.interactions):
                             hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
                             hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
