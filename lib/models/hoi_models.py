@@ -100,7 +100,7 @@ class EmbModel(BaseModel):
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
         entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
-        with open('cache/rotate/entities.dict', 'r') as f:
+        with open(os.path.join(emb_path, 'entities.dict'), 'r') as f:
             ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
             ecl_idx = [int(x) for x in ecl_idx]
             assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
