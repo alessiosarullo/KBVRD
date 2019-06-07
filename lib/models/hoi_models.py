@@ -306,31 +306,22 @@ class PeyreModel(GenericModel):
         self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
                                                                 nn.ReLU(),
                                                                 nn.Dropout(p=0.5),
-                                                                nn.Linear(output_dim, output_dim),
-                                                                nn.ReLU(),
-                                                                nn.Dropout(p=0.5)
-                                                                ) for k in ['sub', 'obj']})
+                                                                nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']})
         self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
                                                       nn.ReLU(),
                                                       nn.Dropout(p=0.5),
-                                                      nn.Linear(output_dim, output_dim),
-                                                      nn.ReLU(),
-                                                      nn.Dropout(p=0.5))
+                                                      nn.Linear(output_dim, output_dim))
         self.app_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
                                                     nn.ReLU(),
                                                     nn.Dropout(p=0.5),
-                                                    nn.Linear(output_dim, output_dim),
-                                                    nn.ReLU(),
-                                                    nn.Dropout(p=0.5))
+                                                    nn.Linear(output_dim, output_dim))
 
         self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_embs.dim, output_dim),
                                                                  nn.ReLU(),
-                                                                 nn.Linear(output_dim, output_dim),
-                                                                 nn.ReLU()) for k in ['sub', 'pred', 'obj']})
+                                                                 nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']})
         self.wemb_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(3 * self.word_embs.dim, output_dim),
                                                      nn.ReLU(),
-                                                     nn.Linear(output_dim, output_dim),
-                                                     nn.ReLU(), )
+                                                     nn.Linear(output_dim, output_dim))
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
