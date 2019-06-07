@@ -75,7 +75,7 @@ class BaseModel(GenericModel):
         return action_logits
 
 
-class EmbModel(BaseModel):
+class GEmbModel(BaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'gemb'
@@ -132,6 +132,18 @@ class EmbModel(BaseModel):
         action_logits = self.act_output_fc(act_emb_repr)
 
         return action_logits
+
+
+class WEmbModel(GEmbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'wemb'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        self.act_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
 
 
 class ZSModel(GenericModel):
