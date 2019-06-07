@@ -334,7 +334,7 @@ class PeyreModel(GenericModel):
                 action_labels = vis_output.action_labels
 
                 hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
-                for iid, (pid, oid) in enumerate(self.hicodet.interactions):
+                for iid, (pid, oid) in enumerate(self.dataset.hicodet.interactions):
                     hoi_labels[:, iid] = (hoi_obj_labels == oid) * action_labels[:, pid]
 
                 hoi_subj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot) * self.dataset.num_object_classes
