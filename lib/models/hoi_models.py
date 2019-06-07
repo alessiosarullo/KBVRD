@@ -196,8 +196,6 @@ class ZSModel(GenericModel):
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
                                                 ])
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
