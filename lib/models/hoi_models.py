@@ -105,9 +105,7 @@ class EmbModel(BaseModel):
             ecl_idx = [int(x) for x in ecl_idx]
             assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
             entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        act_embs = np.concatenate([np.zeros((1, entity_embs.shape[1])),
-                                   entity_embs[np.array([entity_inv_index[p] for p in self.dataset.get_preds_for_embs()[1:]])]
-                                   ], axis=0)
+        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.predicates])]
         return act_embs
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
