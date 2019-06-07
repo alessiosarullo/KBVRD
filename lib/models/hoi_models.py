@@ -251,97 +251,168 @@ class ZSModel(GenericModel):
             hoi_predictors = self.emb_to_predictor(hoi_word_embs)  # N x P x D
         return hoi_predictors
 
-# class PeyreModel(GenericModel):
-#     @classmethod
-#     def get_cline_name(cls):
-#         return 'peyre'
-#
-#     def __init__(self, dataset: HicoDetSplit, **kwargs):
-#         super().__init__(dataset, **kwargs)
-#
-#         self.word_embs = WordEmbeddings(source='word2vec')
-#         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
-#         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
-#
-#         interactions = dataset.hicodet.interactions  # each is [p, o]
-#         person_word_emb = np.tile(obj_word_embs[dataset.human_class], reps=[interactions.shape[0], 1])
-#         hoi_embs = np.concatenate([person_word_emb,
-#                                    pred_word_embs[interactions[:, 0]],
-#                                    obj_word_embs[interactions[:, 1]]], axis=1)
-#
-#         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-#         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-#         self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
-#
-#         appearance_dim = 300
-#         self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.visual_module.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
-#
-#         spatial_dim = 400
-#         self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
-#                                          nn.Linear(spatial_dim, spatial_dim))
-#
-#         output_dim = 1024
-#         self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
-#                                                                 nn.ReLU(),
-#                                                                 nn.Dropout(p=0.5),
-#                                                                 nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']})
-#         self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
-#                                                       nn.ReLU(),
-#                                                       nn.Dropout(p=0.5),
-#                                                       nn.Linear(output_dim, output_dim))
-#         self.app_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
-#                                                     nn.ReLU(),
-#                                                     nn.Dropout(p=0.5),
-#                                                     nn.Linear(output_dim, output_dim))
-#
-#         self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_embs.dim, output_dim),
-#                                                                  nn.ReLU(),
-#                                                                  nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']})
-#         self.wemb_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(3 * self.word_embs.dim, output_dim),
-#                                                      nn.ReLU(),
-#                                                      nn.Linear(output_dim, output_dim))
-#
-#     def _forward(self, boxes_ext, box_feats, hoi_infos):
-#         boxes = boxes_ext[:, 1:5]
-#         hoi_hum_inds = hoi_infos[:, 1]
-#         hoi_obj_inds = hoi_infos[:, 2]
-#         union_boxes = torch.cat([
-#             torch.min(boxes[:, :2][hoi_hum_inds], boxes[:, :2][hoi_obj_inds]),
-#             torch.max(boxes[:, 2:][hoi_hum_inds], boxes[:, 2:][hoi_obj_inds]),
-#         ], dim=1)
-#
-#         union_areas = (union_boxes[:, 2:] - union_boxes[:, :2]).prod(dim=1, keepdim=True)
-#         union_origin = union_boxes[:, :2].repeat(1, 2)
-#         hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
-#         hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
-#         spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
-#
-#         subj_appearance = self.vis_to_app_mlps['sub'](box_feats)
-#         subj_repr = self.app_to_repr_mlps['sub'](subj_appearance)
-#         subj_repr = torch.nn.functional.normalize(subj_repr)
-#         subj_emb = self.wemb_to_repr_mlps['sub'](self.obj_word_embs)
-#         subj_logits = subj_repr @ subj_emb.t()
-#         hoi_subj_logits = subj_logits[hoi_hum_inds, :]
-#
 
+class PeyreModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'peyre'
 
-#         obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
-#         obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
-#         obj_repr = torch.nn.functional.normalize(obj_repr)
-#         obj_emb = self.wemb_to_repr_mlps['obj'](self.obj_word_embs)
-#         obj_logits = obj_repr @ obj_emb.t()
-#         hoi_obj_logits = obj_logits[hoi_obj_inds, :]
-#
-#         hoi_subj_appearance = subj_appearance[hoi_hum_inds, :]
-#         hoi_obj_appearance = obj_appearance[hoi_obj_inds, :]
-#         hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-#         hoi_act_repr = torch.nn.functional.normalize(hoi_act_repr)
-#         hoi_act_emb = self.wemb_to_repr_mlps['pred'](self.pred_word_embs)
-#         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
-#
-#         hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-#         hoi_repr = torch.nn.functional.normalize(hoi_repr)
-#         hoi_emb = self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs)
-#         hoi_logits = hoi_repr @ hoi_emb.t()
-#
-#         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+
+        self.word_embs = WordEmbeddings(source='word2vec')
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+
+        interactions = dataset.hicodet.interactions  # each is [p, o]
+        person_word_emb = np.tile(obj_word_embs[dataset.human_class], reps=[interactions.shape[0], 1])
+        hoi_embs = np.concatenate([person_word_emb,
+                                   pred_word_embs[interactions[:, 0]],
+                                   obj_word_embs[interactions[:, 1]]], axis=1)
+
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
+
+        appearance_dim = 300
+        self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.visual_module.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
+
+        spatial_dim = 400
+        self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
+                                         nn.Linear(spatial_dim, spatial_dim))
+
+        output_dim = 1024
+        self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
+                                                                nn.ReLU(),
+                                                                nn.Dropout(p=0.5),
+                                                                nn.Linear(output_dim, output_dim),
+                                                                nn.ReLU(),
+                                                                nn.Dropout(p=0.5)
+                                                                ) for k in ['sub', 'obj']})
+        self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
+                                                      nn.ReLU(),
+                                                      nn.Dropout(p=0.5),
+                                                      nn.Linear(output_dim, output_dim),
+                                                      nn.ReLU(),
+                                                      nn.Dropout(p=0.5))
+        self.app_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
+                                                    nn.ReLU(),
+                                                    nn.Dropout(p=0.5),
+                                                    nn.Linear(output_dim, output_dim),
+                                                    nn.ReLU(),
+                                                    nn.Dropout(p=0.5))
+
+        self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_embs.dim, output_dim),
+                                                                 nn.ReLU(),
+                                                                 nn.Linear(output_dim, output_dim),
+                                                                 nn.ReLU()) for k in ['sub', 'pred', 'obj']})
+        self.wemb_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(3 * self.word_embs.dim, output_dim),
+                                                     nn.ReLU(),
+                                                     nn.Linear(output_dim, output_dim),
+                                                     nn.ReLU(), )
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = self._forward(vis_output, )
+            else:
+                assert inference
+                hoi_subj_logits = hoi_obj_logits = hoi_act_logits = hoi_logits = None
+
+            if not inference:
+                box_labels = vis_output.box_labels
+
+                hoi_subj_labels = box_labels[vis_output.ho_infos[:, 1]]
+                subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
+                subj_labels_1hot[torch.arange(subj_labels_1hot.shape[0]), hoi_subj_labels] = 1
+
+                hoi_obj_labels = box_labels[vis_output.ho_infos[:, 2]]
+                obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
+                obj_labels_1hot[torch.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
+
+                action_labels = vis_output.action_labels
+
+                hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
+                for iid, (pid, oid) in enumerate(self.hicodet.interactions):
+                    hoi_labels[:, iid] = (hoi_obj_labels == oid) * action_labels[:, pid]
+
+                hoi_subj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot) * self.dataset.num_object_classes
+                hoi_obj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_obj_logits, obj_labels_1hot) * self.dataset.num_object_classes
+                act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels) * self.dataset.num_predicates
+                hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_logits, hoi_labels) * self.dataset.num_interactions
+                return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
+                        hoi_overall_scores = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
+                        for iid, (pid, oid) in enumerate(self.dataset.interactions):
+                            hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
+                            hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
+                            hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
+                            hoi_prob = torch.sigmoid(hoi_logits[:, iid])
+                            hoi_overall_scores[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.hoi_scores = hoi_overall_scores
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
+
+        boxes = boxes_ext[:, 1:5]
+        hoi_hum_inds = hoi_infos[:, 1]
+        hoi_obj_inds = hoi_infos[:, 2]
+        union_boxes = torch.cat([
+            torch.min(boxes[:, :2][hoi_hum_inds], boxes[:, :2][hoi_obj_inds]),
+            torch.max(boxes[:, 2:][hoi_hum_inds], boxes[:, 2:][hoi_obj_inds]),
+        ], dim=1)
+
+        union_areas = (union_boxes[:, 2:] - union_boxes[:, :2]).prod(dim=1, keepdim=True)
+        union_origin = union_boxes[:, :2].repeat(1, 2)
+        hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
+        hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
+        spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
+
+        subj_appearance = self.vis_to_app_mlps['sub'](box_feats)
+        subj_repr = self.app_to_repr_mlps['sub'](subj_appearance)
+        subj_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['sub'](self.obj_word_embs))
+        subj_logits = subj_repr @ subj_emb.t()
+        hoi_subj_logits = subj_logits[hoi_hum_inds, :]
+
+        obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
+        obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
+        obj_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['obj'](self.obj_word_embs))
+        obj_logits = obj_repr @ obj_emb.t()
+        hoi_obj_logits = obj_logits[hoi_obj_inds, :]
+
+        hoi_subj_appearance = subj_appearance[hoi_hum_inds, :]
+        hoi_obj_appearance = obj_appearance[hoi_obj_inds, :]
+        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_act_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
+        hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
+
+        hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs))
+        hoi_logits = hoi_repr @ hoi_emb.t()
+
+        return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
