@@ -143,6 +143,9 @@ class MultiModalModel(GenericModel):
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
 
         action_logits = torch.einsum('nd,dpm->npm', (act_repr, self.act_output_mat))  # N x P x M
+        assert action_logits.shape[0] == act_repr.shape[0] and \
+               action_logits.shape[1] == self.dataset.num_predicates and \
+               action_logits.shape[2] == self.act_output_mat.shape[2]
         action_logits = action_logits.max(dim=2)[0]  # N x P
 
         return action_logits
