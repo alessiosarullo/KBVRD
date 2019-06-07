@@ -259,7 +259,6 @@ class PeyreModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-
         self.word_embs = WordEmbeddings(source='word2vec')
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
