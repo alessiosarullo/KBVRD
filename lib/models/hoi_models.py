@@ -168,6 +168,13 @@ class ZSModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
+                # obj_label_per_ho_pair = vis_output.box_labels[vis_output.ho_infos[:, 2]]
+                # act_nz = torch.nonzero(action_labels)
+                # hois = self.dataset.hicodet.op_pair_to_interaction[obj_label_per_ho_pair.cpu().numpy(), act_nz[:, 1].cpu().numpy()]
+                # assert np.all(hois >= 0)
+                # hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
+                # hoi_labels[act_nz[:, 0], torch.tensor(hois, device=hoi_labels.device)] = 1
+
                 target_classifiers = action_labels.unsqueeze(dim=2) * self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
                 losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors, target_classifiers, reduction='sum')}
                 # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
@@ -209,7 +216,7 @@ class ZSModel(GenericModel):
         if vis_output.box_labels is not None:
             obj_word_embs = self.obj_word_embs[vis_output.box_labels][hoi_infos[:, 2]]
         else:
-            obj_word_embs = boxes_ext[hoi_infos[:, 2], 5:] @ self.obj_word_embs
+            obj_word_embs = self.obj_word_embs[boxes_ext.argmax(dim=1)][hoi_infos[:, 2]]
         batch_size = hoi_infos.shape[0]
         num_preds = self.pred_word_embs.shape[0]
         emb_dim = self.word_emb_dim
