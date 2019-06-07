@@ -368,13 +368,13 @@ class PeyreModel(GenericModel):
 
                     if vis_output.ho_infos is not None:
                         assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
-                        hoi_overall_scores = np.empty([hoi_logits.shape[0], self.dataset.hicodet.num_interactions])
-                        for iid, (pid, oid) in enumerate(self.dataset.interactions):
-                            hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
-                            hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
-                            hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
-                            hoi_prob = torch.sigmoid(hoi_logits[:, iid])
-                            hoi_overall_scores[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
+                        interactions = self.dataset.hicodet.interactions
+                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class]) *\
+                                             torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
+                                             torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
+                                             torch.sigmoid(hoi_logits)
+                        assert hoi_overall_scores.shape[0] == vis_output.ho_infos.shape[0] and \
+                               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
