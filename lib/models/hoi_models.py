@@ -145,6 +145,15 @@ class WEmbModel(GEmbModel):
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         self.act_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
+        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.act_repr_dim + self.act_embs.shape[1], self.act_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 ])
+        nn.init.xavier_normal_(self.act_only_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_only_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
 
 class ZSModel(GenericModel):
