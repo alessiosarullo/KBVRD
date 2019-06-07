@@ -116,7 +116,7 @@ class MultiModalModel(GenericModel):
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         max_modes = 3
-        self.act_output_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)
+        self.act_output_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
         torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
 
         # self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
@@ -142,7 +142,9 @@ class MultiModalModel(GenericModel):
         union_repr = self.union_repr_mlp(union_boxes_feats)
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
 
-        action_logits = (act_repr @ self.act_output_mat).max(dim=2)[0]  # N x P
+        action_logits = torch.einsum('nd,dpm->npm', (act_repr, self.act_output_mat))  # N x P x M
+        action_logits = action_logits.max(dim=2)[0]  # N x P
+
         return action_logits
 
 
