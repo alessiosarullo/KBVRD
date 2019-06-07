@@ -340,7 +340,7 @@ class PeyreModel(GenericModel):
                 hoi_subj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot) * self.dataset.num_object_classes
                 hoi_obj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_obj_logits, obj_labels_1hot) * self.dataset.num_object_classes
                 act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels) * self.dataset.num_predicates
-                hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_logits, hoi_labels) * self.dataset.num_interactions
+                hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_logits, hoi_labels) * self.dataset.hicodet.num_interactions
                 return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
             else:
                 prediction = Prediction()
