@@ -232,11 +232,7 @@ class WEmbModel(GEmbModel):
         nn.init.xavier_normal_(self.act_only_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
 
-class ZSModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zs'
-
+class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
@@ -249,30 +245,7 @@ class ZSModel(GenericModel):
         base_model.load_state_dict(ckpt['state_dict'])
 
         self.predictor_dim = base_model.act_repr_dim
-
-        self.dataset = dataset
-        self.num_objects = dataset.num_object_classes
-        self.num_predicates = dataset.num_predicates
         self.base_model = base_model
-
-        if cfg.model.wnorm:
-            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
-        else:
-            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
-
-        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
-        pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
-        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-        # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2, self.predictor_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(self.predictor_dim, self.predictor_dim),
-                                                ])
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -324,6 +297,38 @@ class ZSModel(GenericModel):
 
                 return prediction
 
+
+class ZSModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zs'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.num_objects = dataset.num_object_classes
+        self.num_predicates = dataset.num_predicates
+
+        if cfg.model.wnorm:
+            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        else:
+            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
+        pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
+        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+        # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2, self.predictor_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                ])
+
     def _forward(self, vis_output: VisualOutput, **kwargs):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
@@ -346,6 +351,132 @@ class ZSModel(GenericModel):
         else:
             hoi_predictors = self.emb_to_predictor(hoi_word_embs)  # N x P x D
         return hoi_predictors
+
+
+class ZSAutoencoderModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsae'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.num_objects = dataset.num_object_classes
+        self.num_predicates = dataset.num_predicates
+
+        if cfg.model.wnorm:
+            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        else:
+            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
+        pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
+        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+        # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(self.predictor_dim, self.word_emb_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim, self.predictor_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                ])
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                act_embeddings, act_predictors = self._forward(vis_output)
+            else:
+                assert inference
+                act_embeddings = act_predictors = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                # obj_label_per_ho_pair = vis_output.box_labels[vis_output.ho_infos[:, 2]]
+                # act_nz = torch.nonzero(action_labels)
+                # hois = self.dataset.hicodet.op_pair_to_interaction[obj_label_per_ho_pair.cpu().numpy(), act_nz[:, 1].cpu().numpy()]
+                # assert np.all(hois >= 0)
+                # hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
+                # hoi_labels[act_nz[:, 0], torch.tensor(hois, device=hoi_labels.device)] = 1
+
+                target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(action_labels.shape[0], -1, -1)
+                emb_distances = ((act_embeddings - target_embeddings) ** 2).sum(dim=2)
+
+                target_classifiers = self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
+                cl_distances = ((act_predictors - target_classifiers) ** 2).sum(dim=2)
+
+                al_long = action_labels.long()
+                losses = {'a2emb_loss': nn.functional.multilabel_margin_loss(emb_distances, al_long, reduction='sum'),
+                          'emb2cl_loss': nn.functional.multilabel_margin_loss(cl_distances, al_long, reduction='sum'),
+                          }
+                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert act_predictors is not None
+                        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
+                        if cfg.model.wnorm:
+                            visual_feats = nn.functional.normalize(visual_feats, dim=2)
+                        action_output = torch.bmm(visual_feats, act_predictors.transpose(1, 2)).squeeze(dim=1)
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        # prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()  # For MSE
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        # boxes_ext = vis_output.boxes_ext
+        # masks = vis_output.masks
+        # hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+        #
+        # if vis_output.box_labels is not None:
+        #     obj_word_embs = self.obj_word_embs[vis_output.box_labels][hoi_infos[:, 2]]
+        # else:
+        #     obj_word_embs = self.obj_word_embs[boxes_ext.argmax(dim=1)][hoi_infos[:, 2]]
+        # batch_size = hoi_infos.shape[0]
+        # num_preds = self.pred_word_embs.shape[0]
+        # emb_dim = self.word_emb_dim
+        # hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
+        #                            self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
+        #                            ], dim=2)  # N x P x 2*E
+
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        if cfg.model.wnorm:
+            raise NotImplementedError()
+            # hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
+        else:
+            act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, self.num_predicates, -1)  # N x P x E
+            # if vis_output.action_labels is not None:
+            #     target_embs = self.pred_word_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * vis_output.action_labels.unsqueeze(dim=2)
+            #     act_predictors = self.emb_to_predictor(target_embs)  # N x P x D
+            # else:
+            act_predictors = self.emb_to_predictor(act_emb.detach())  # N x P x D
+        return act_emb, act_predictors
 
 
 class PeyreModel(GenericModel):
@@ -445,7 +576,7 @@ class PeyreModel(GenericModel):
                     if vis_output.ho_infos is not None:
                         assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
                         interactions = self.dataset.hicodet.interactions
-                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class]) *\
+                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class]) * \
                                              torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
                                              torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
                                              torch.sigmoid(hoi_logits)
