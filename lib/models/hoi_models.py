@@ -246,6 +246,7 @@ class ZSBaseModel(GenericModel):
 
         self.predictor_dim = base_model.act_repr_dim
         self.base_model = base_model
+        self.normalize = cfg.model.wnorm
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -286,7 +287,7 @@ class ZSBaseModel(GenericModel):
                     if vis_output.ho_infos is not None:
                         assert hoi_predictors is not None
                         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                        if cfg.model.wnorm:
+                        if self.normalize:
                             visual_feats = nn.functional.normalize(visual_feats, dim=2)
                         action_output = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
 
@@ -310,7 +311,7 @@ class ZSModel(ZSBaseModel):
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
-        if cfg.model.wnorm:
+        if self.normalize:
             self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
         else:
             self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
@@ -346,7 +347,7 @@ class ZSModel(ZSBaseModel):
         hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
                                    self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
                                    ], dim=2)  # N x P x 2*E
-        if cfg.model.wnorm:
+        if self.normalize:
             hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
         else:
             hoi_predictors = self.emb_to_predictor(hoi_word_embs)  # N x P x D
@@ -364,19 +365,22 @@ class ZSAutoencoderModel(ZSBaseModel):
         self.dataset = dataset
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
+        self.normalize = True  # FIXME
+        assert self.normalize
 
-        if cfg.model.wnorm:
+        if self.normalize:
             self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
         else:
             self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
-        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=self.normalize)
+        # obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
+        # self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+
         pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
-        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        # self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)  # P x E
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=False)  # E x P
 
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
                                             nn.ReLU(inplace=True),
@@ -394,31 +398,33 @@ class ZSAutoencoderModel(ZSBaseModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_embeddings, act_predictors = self._forward(vis_output)
+                act_embeddings, act_predictors, vrepr = self._forward(vis_output)
             else:
                 assert inference
                 act_embeddings = act_predictors = None
 
             if not inference:
-                action_labels = vis_output.action_labels
+                act_labels = vis_output.action_labels
                 # obj_label_per_ho_pair = vis_output.box_labels[vis_output.ho_infos[:, 2]]
-                # act_nz = torch.nonzero(action_labels)
+                # act_nz = torch.nonzero(act_labels)
                 # hois = self.dataset.hicodet.op_pair_to_interaction[obj_label_per_ho_pair.cpu().numpy(), act_nz[:, 1].cpu().numpy()]
                 # assert np.all(hois >= 0)
-                # hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
+                # hoi_labels = act_labels.new_zeros((act_labels.shape[0], self.dataset.hicodet.num_interactions))
                 # hoi_labels[act_nz[:, 0], torch.tensor(hois, device=hoi_labels.device)] = 1
 
-                target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(action_labels.shape[0], -1, -1)
-                emb_distances = ((act_embeddings - target_embeddings) ** 2).sum(dim=2)
+                act_embeddings = act_embeddings.transpose(2, 1)
+                target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(act_labels.shape[0], -1, -1)  # N x E x P
+                # emb_distances = ((act_embeddings - target_embeddings) ** 2).sum(dim=2)
 
-                target_classifiers = self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
-                cl_distances = ((act_predictors - target_classifiers) ** 2).sum(dim=2)
+                target_classifiers = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x P x D
+                # cl_distances = ((act_predictors - target_classifiers) ** 2).sum(dim=2)
 
-                al_long = action_labels.long()
-                losses = {'a2emb_loss': nn.functional.multilabel_margin_loss(emb_distances, al_long, reduction='sum'),
-                          'emb2cl_loss': nn.functional.multilabel_margin_loss(cl_distances, al_long, reduction='sum'),
+                losses = {'a2emb_loss': nn.functional.cosine_embedding_loss(act_embeddings, target_embeddings, 2 * act_labels - 1, reduction='sum'),
+                          # 'emb2cl_loss': nn.functional.multilabel_margin_loss(cl_distances, al_long, reduction='sum'),
+                          'emb2cl_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
+                                                                act_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')
                           }
-                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, act_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
@@ -435,10 +441,8 @@ class ZSAutoencoderModel(ZSBaseModel):
 
                     if vis_output.ho_infos is not None:
                         assert act_predictors is not None
-                        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                        if cfg.model.wnorm:
-                            visual_feats = nn.functional.normalize(visual_feats, dim=2)
-                        action_output = torch.bmm(visual_feats, act_predictors.transpose(1, 2)).squeeze(dim=1)
+
+                        action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
@@ -465,18 +469,19 @@ class ZSAutoencoderModel(ZSBaseModel):
         #                            self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
         #                            ], dim=2)  # N x P x 2*E
 
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        if cfg.model.wnorm:
-            raise NotImplementedError()
-            # hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
-        else:
-            act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, self.num_predicates, -1)  # N x P x E
-            # if vis_output.action_labels is not None:
-            #     target_embs = self.pred_word_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * vis_output.action_labels.unsqueeze(dim=2)
-            #     act_predictors = self.emb_to_predictor(target_embs)  # N x P x D
-            # else:
-            act_predictors = self.emb_to_predictor(act_emb.detach())  # N x P x D
-        return act_emb, act_predictors
+        vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
+        act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, self.num_predicates, -1)  # N x P x E
+        # if vis_output.action_labels is not None:
+        #     target_embs = self.pred_word_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * vis_output.action_labels.unsqueeze(dim=2)
+        #     act_predictors = self.emb_to_predictor(target_embs)  # N x P x D
+        # else:
+        act_predictors = self.emb_to_predictor(act_emb.detach())  # N x P x D
+        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+        if self.normalize:
+            act_emb = nn.functional.normalize(act_emb, dim=2)
+            act_predictors = nn.functional.normalize(act_predictors, dim=2)
+            vrepr = nn.functional.normalize(vrepr, dim=2)
+        return act_emb, act_predictors, vrepr
 
 
 class PeyreModel(GenericModel):
