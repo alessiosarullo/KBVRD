@@ -453,7 +453,7 @@ class ZSAutoencoderModel(ZSBaseModel):
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             act_predictors = self.emb_to_predictor(self.pred_word_embs)  # P x D
             act_predictors[torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
-            act_predictors = act_predictors.transpose(2, 1)
+            act_predictors = act_predictors.t()
         else:
             act_predictors = None
 
