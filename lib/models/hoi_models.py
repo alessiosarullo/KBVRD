@@ -319,7 +319,7 @@ class ZSModel(ZSBaseModel):
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg_norm_first')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-        self.trained_pred_word_embs = self.pred_word_embs[self.trained_pred_inds, :]
+        self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)
 
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2, self.predictor_dim),
                                                 nn.ReLU(inplace=True),
