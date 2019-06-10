@@ -24,6 +24,9 @@ def main():
     cfg.parse_args(fail_if_missing=False)
     cfg.data.val_ratio = 0
 
+    # FIXME delete, it's for RotatE
+    # self.entity_embedding = nn.Parameter(torch.from_numpy(np.load(os.path.join(emb_path, 'entity_embedding.npy'))))
+
     # train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TRAIN)  # type: PrecomputedHicoDetSplit
     test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)  # type: PrecomputedHicoDetSplit
     train_split = test_split

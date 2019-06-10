@@ -174,10 +174,6 @@ class GEmbModel(BaseModel):
         nn.init.xavier_normal_(self.act_only_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_only_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        # FIXME delete, it's for RotatE
-        # self.entity_embedding = nn.Parameter(torch.from_numpy(np.load(os.path.join(emb_path, 'entity_embedding.npy'))))
-
-
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
         entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
@@ -376,7 +372,7 @@ class ZSAutoencoderModel(ZSBaseModel):
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=self.normalize)
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg_norm_first')
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs.T), requires_grad=False)  # E x P
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)  # P x E
 
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
                                             nn.ReLU(inplace=True),
@@ -389,7 +385,7 @@ class ZSAutoencoderModel(ZSBaseModel):
                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
                                                 ])
 
-        self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)  # E x p
+        self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)  # p x E
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -404,8 +400,8 @@ class ZSAutoencoderModel(ZSBaseModel):
             if not inference:
                 act_labels = vis_output.action_labels
 
-                act_embeddings = act_embeddings.transpose(2, 1)
-                target_embeddings = self.trained_pred_word_embs.unsqueeze(dim=0).expand(act_labels.shape[0], -1, -1)  # N x E x p
+                # act_embeddings = act_embeddings.transpose(2, 1)
+                target_embeddings = self.trained_pred_word_embs.unsqueeze(dim=0).expand(act_labels.shape[0], -1, -1)  # N x p x E
                 target_classifiers = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
                 losses = {'a2emb_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_embeddings,
                                                                act_labels.unsqueeze(dim=2) * target_embeddings, reduction='sum'),
