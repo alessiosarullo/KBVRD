@@ -554,7 +554,7 @@ class ZSAutoencoderModel(ZSBaseModel):
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             num_preds = self.dataset.hicodet.num_predicates
             act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_preds, -1)  # N x P x E
-            act_predictors = self.emb_to_predictor(act_emb.detach())  # N x P x D
+            act_predictors = self.emb_to_predictor(act_emb)  # N x P x D
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             num_trained_preds = self.trained_pred_inds.size
             act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_trained_preds, -1)  # N x p x E
