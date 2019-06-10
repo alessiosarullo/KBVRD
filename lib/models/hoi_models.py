@@ -246,7 +246,7 @@ class ZSBaseModel(GenericModel):
         base_model = BaseModel(dataset)
         if torch.cuda.is_available():
             base_model.cuda()
-        ckpt = torch.load('output/base/2019-06-05_17-43-04_vanilla/final.tar')
+        ckpt = torch.load(cfg.model.zs_baseline)
         base_model.load_state_dict(ckpt['state_dict'])
 
         self.predictor_dim = base_model.act_repr_dim

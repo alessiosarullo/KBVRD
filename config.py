@@ -193,6 +193,7 @@ class ModelConfig(BaseConfigs):
     def __init__(self):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
+        self.zs_baseline = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
 
         self.proposal_thr = 0.
         self.relu = False
