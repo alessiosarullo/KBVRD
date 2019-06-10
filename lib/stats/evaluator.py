@@ -107,15 +107,16 @@ class Evaluator(BaseEvaluator):
         lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.hicodet.num_object_classes, self.dataset_split.obj_labels,
-                                               metrics=obj_metrics, gt_str='GT objects', sort=sort)
+        lines += mf.format_metric_and_gt_lines(self.dataset_split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort,
+                                               labels=list(range(self.hicodet.num_object_classes)))
 
         hois = self.dataset_split.hoi_triplets
         if zs_pred_inds is None:
             hois = self.hicodet.op_pair_to_interaction[hois[:, 2], hois[:, 1]]
             assert np.all(hois >= 0)
             hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-            lines += mf.format_metric_and_gt_lines(self.hicodet.num_interactions, hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+            lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort,
+                                                   labels=list(range(self.hicodet.num_interactions)))
         else:
             zs_pred_inds = np.array(zs_pred_inds).astype(np.int)
             zs_pred_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
@@ -127,8 +128,7 @@ class Evaluator(BaseEvaluator):
             hois = hois[zs_hoi_mask]
             assert np.all(hois >= 0)
             hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-            lines += mf.format_metric_and_gt_lines(zs_interaction_mask.sum(), hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort,
-                                                   add_unknown=False)
+            lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         print('\n'.join(lines))
 
@@ -255,16 +255,19 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, num_classes, gt_labels, metrics, gt_str, sort=False, add_unknown=True):
+    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False, labels=None):
         lines = []
         gt_label_hist = Counter(gt_labels)
         num_gt_examples = sum(gt_label_hist.values())
         if sort:
             inds = [p for p, num in gt_label_hist.most_common()]
-            if add_unknown:
-                inds += sorted(set(range(num_classes)) - set(gt_label_hist.keys()))
+            if labels is not None:
+                inds += sorted(set(labels) - set(gt_label_hist.keys()))
         else:
-            inds = range(num_classes)
+            if labels:
+                inds = labels
+            else:
+                inds = sorted(gt_label_hist.keys())
 
         pad = len(gt_str)
         if metrics:
