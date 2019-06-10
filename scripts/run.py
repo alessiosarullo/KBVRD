@@ -57,7 +57,7 @@ class Launcher:
 
         # Data
         if cfg.data.zsl:
-            pred_inds = pickle.load(pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred'])
+            pred_inds = pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
             obj_inds = cfg.data.obj_inds
         else:
             # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
