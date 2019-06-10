@@ -117,7 +117,7 @@ class Evaluator(BaseEvaluator):
             hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
             lines += mf.format_metric_and_gt_lines(self.hicodet.num_interactions, hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
         else:
-            zs_pred_inds = np.array(zs_pred_inds)
+            zs_pred_inds = np.array(zs_pred_inds).astype(np.int)
             zs_pred_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
             zs_pred_mask[zs_pred_inds] = True
             zs_interaction_mask = zs_pred_mask[self.hicodet.interactions[:, 0]]
