@@ -102,7 +102,7 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def print_metrics(self, sort=False):
+    def print_metrics(self, sort=False, zs_pred_inds=None):
         mf = MetricFormatter()
         lines = []
 
@@ -110,11 +110,24 @@ class Evaluator(BaseEvaluator):
         lines += mf.format_metric_and_gt_lines(self.hicodet.num_object_classes, self.dataset_split.obj_labels,
                                                metrics=obj_metrics, gt_str='GT objects', sort=sort)
 
-        hoi_triplets = self.dataset_split.hoi_triplets
-        hois = self.hicodet.op_pair_to_interaction[hoi_triplets[:, 2], hoi_triplets[:, 1]]
-        assert np.all(hois >= 0)
-        hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.hicodet.num_interactions, hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        hois = self.dataset_split.hoi_triplets
+        if zs_pred_inds is None:
+            hois = self.hicodet.op_pair_to_interaction[hois[:, 2], hois[:, 1]]
+            assert np.all(hois >= 0)
+            hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+            lines += mf.format_metric_and_gt_lines(self.hicodet.num_interactions, hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+        else:
+            zs_pred_inds = np.array(zs_pred_inds)
+            zs_pred_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
+            zs_pred_mask[zs_pred_inds] = True
+            zs_interaction_mask = zs_pred_mask[self.hicodet.interactions[:, 0]]
+
+            hois = self.hicodet.op_pair_to_interaction[hois[:, 2], hois[:, 1]]
+            zs_hoi_mask = zs_interaction_mask[hois]
+            hois = hois[zs_hoi_mask]
+            assert np.all(hois >= 0)
+            hoi_metrics = {k: v[:, zs_interaction_mask] for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+            lines += mf.format_metric_and_gt_lines(len(zs_pred_inds), hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         print('\n'.join(lines))
 

@@ -245,6 +245,10 @@ class Launcher:
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.program.eval_res_file)
         evaluator.print_metrics()
+        if cfg.data.zsl:
+            zs_preds = sorted(set(range(self.train_split.hicodet.num_predicates)) - set(self.train_split.active_predicates))
+            print('Zero-shot:')
+            evaluator.print_metrics(zs_pred_inds=zs_preds)
 
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in evaluator.metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
