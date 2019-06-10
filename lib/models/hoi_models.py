@@ -1,9 +1,10 @@
 import os
 
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
 from lib.models.hoi_branches import *
+import pickle
 
 
 class BaseModel(GenericModel):
@@ -252,6 +253,9 @@ class ZSBaseModel(GenericModel):
         else:
             self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
+        self.trained_pred_inds = pickle.load(open(cfg.program.ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
+        assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
+
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
@@ -264,13 +268,6 @@ class ZSBaseModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
-                # obj_label_per_ho_pair = vis_output.box_labels[vis_output.ho_infos[:, 2]]
-                # act_nz = torch.nonzero(action_labels)
-                # hois = self.dataset.hicodet.op_pair_to_interaction[obj_label_per_ho_pair.cpu().numpy(), act_nz[:, 1].cpu().numpy()]
-                # assert np.all(hois >= 0)
-                # hoi_labels = action_labels.new_zeros((action_labels.shape[0], self.dataset.hicodet.num_interactions))
-                # hoi_labels[act_nz[:, 0], torch.tensor(hois, device=hoi_labels.device)] = 1
-
                 target_classifiers = action_labels.unsqueeze(dim=2) * self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
                 losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors, target_classifiers, reduction='sum')}
                 # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
@@ -293,6 +290,10 @@ class ZSBaseModel(GenericModel):
                         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
                         if self.normalize:
                             visual_feats = nn.functional.normalize(visual_feats, dim=2)
+
+                        if cfg.data.zsl:
+                            hoi_predictors[:, torch.tensor(self.trained_pred_inds, device=hoi_predictors.device), :] = self.gt_classifiers
+
                         action_output = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
@@ -312,16 +313,13 @@ class ZSModel(ZSBaseModel):
         self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
-        self.num_objects = dataset.num_object_classes
-        self.num_predicates = dataset.num_predicates
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
-        pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
-        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
+        obj_word_embs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg_norm_last')
+        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg_norm_first')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-        # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.trained_pred_word_embs = self.pred_word_embs[self.trained_pred_inds, :]
 
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2, self.predictor_dim),
                                                 nn.ReLU(inplace=True),
@@ -340,12 +338,20 @@ class ZSModel(ZSBaseModel):
             obj_word_embs = self.obj_word_embs[vis_output.box_labels][hoi_infos[:, 2]]
         else:
             obj_word_embs = self.obj_word_embs[boxes_ext.argmax(dim=1)][hoi_infos[:, 2]]
-        batch_size = hoi_infos.shape[0]
-        num_preds = self.pred_word_embs.shape[0]
-        emb_dim = self.word_emb_dim
-        hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(batch_size, num_preds, emb_dim),
-                                   self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, num_preds, emb_dim)
-                                   ], dim=2)  # N x P x 2*E
+
+        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
+            batch_size = hoi_infos.shape[0]
+            num_preds = self.dataset.hicodet.num_predicates
+            hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(-1, num_preds, -1),
+                                       self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, -1, -1)
+                                       ], dim=2)  # N x P x 2*E
+        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            batch_size = hoi_infos.shape[0]
+            num_trained_preds = self.trained_pred_inds.size
+            hoi_word_embs = torch.cat([obj_word_embs.unsqueeze(dim=1).expand(-1, num_trained_preds, -1),
+                                       self.trained_pred_word_embs.unsqueeze(dim=0).expand(batch_size, -1, -1)
+                                       ], dim=2)  # N x P x 2*E
+
         if self.normalize:
             hoi_predictors = nn.functional.normalize(self.emb_to_predictor(hoi_word_embs), dim=2)  # N x P x D
         else:
@@ -362,8 +368,6 @@ class ZSVModel(ZSBaseModel):
         self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
-        self.num_objects = dataset.num_object_classes
-        self.num_predicates = dataset.num_predicates
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
