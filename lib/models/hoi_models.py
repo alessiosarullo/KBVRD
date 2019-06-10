@@ -268,7 +268,7 @@ class ZSBaseModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
-                target_classifiers =  self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
+                target_classifiers = self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
                 losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors,
                                                                 action_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')}
                 # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
@@ -403,13 +403,22 @@ class ZSAutoencoderModel(ZSBaseModel):
                 # act_embeddings = act_embeddings.transpose(2, 1)
                 target_embeddings = self.trained_pred_word_embs.unsqueeze(dim=0).expand(act_labels.shape[0], -1, -1)  # N x p x E
                 target_classifiers = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
-                losses = {'a2emb_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_embeddings,
-                                                               act_labels.unsqueeze(dim=2) * target_embeddings, reduction='sum'),
-                          # 'a2emb_loss': nn.functional.cosine_embedding_loss(act_embeddings, target_embeddings, 2 * act_labels - 1, reduction='sum'),
-                          'emb2cl_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
-                                                                act_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')
-                          }
-                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, act_labels) * action_output.shape[1]}
+                # losses = {'a2emb_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_embeddings,
+                #                                                act_labels.unsqueeze(dim=2) * target_embeddings, reduction='sum'),
+                #           # 'a2emb_loss': nn.functional.cosine_embedding_loss(act_embeddings, target_embeddings, 2 * act_labels - 1, reduction='sum'),
+                #           'emb2cl_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
+                #                                                 act_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')
+                #           }
+
+                losses = {
+                    'a2emb_loss': nn.functional.binary_cross_entropy_with_logits(
+                        torch.bmm(act_embeddings.unsqueeze(dim=1), target_embeddings.transpose(1, 2)).squeeze(dim=1),
+                        act_labels) * self.trained_pred_inds.size,
+                    # 'a2emb_loss': nn.functional.cosine_embedding_loss(act_embeddings, target_embeddings, 2 * act_labels - 1, reduction='sum'),
+                    'emb2cl_loss': nn.functional.binary_cross_entropy_with_logits(
+                        torch.bmm(act_predictors.unsqueeze(dim=1), target_classifiers.transpose(1, 2)).squeeze(dim=1),
+                        act_labels) * self.trained_pred_inds.size,
+                }
                 return losses
             else:
                 prediction = Prediction()
@@ -446,25 +455,12 @@ class ZSAutoencoderModel(ZSBaseModel):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
         vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
-
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            num_preds = self.dataset.hicodet.num_predicates
-            act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_preds, -1)  # N x P x E
-            act_predictors = self.emb_to_predictor(act_emb.detach())  # N x P x D
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            num_trained_preds = self.trained_pred_inds.size
-            act_emb = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_trained_preds, -1)  # N x p x E
-            # if vis_output.action_labels is not None:
-            #     target_embs = self.pred_word_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * vis_output.action_labels.unsqueeze(dim=2)
-            #     act_predictors = self.emb_to_predictor(target_embs)  # N x p x D
-            # else:
-            act_predictors = self.emb_to_predictor(act_emb.detach())  # N x p x D
-
-        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+        act_emb = self.vrepr_to_emb(vrepr)  # N x E
+        act_predictors = self.emb_to_predictor(act_emb.detach())  # N x D
         if self.normalize:
-            act_emb = nn.functional.normalize(act_emb, dim=2)
-            act_predictors = nn.functional.normalize(act_predictors, dim=2)
-            vrepr = nn.functional.normalize(vrepr, dim=2)
+            act_emb = nn.functional.normalize(act_emb, dim=1)
+            act_predictors = nn.functional.normalize(act_predictors, dim=1)
+            vrepr = nn.functional.normalize(vrepr, dim=1)
         return act_emb, act_predictors, vrepr
 
 
