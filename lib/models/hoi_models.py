@@ -246,7 +246,7 @@ class ZSBaseModel(GenericModel):
         base_model = BaseModel(dataset)
         if torch.cuda.is_available():
             base_model.cuda()
-        ckpt = torch.load(cfg.model.zs_baseline)
+        ckpt = torch.load(cfg.program.zs_baseline_model_file)
         base_model.load_state_dict(ckpt['state_dict'])
 
         self.predictor_dim = base_model.act_repr_dim
@@ -257,7 +257,7 @@ class ZSBaseModel(GenericModel):
         else:
             self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
-        self.trained_pred_inds = pickle.load(open(cfg.program.ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
+        self.trained_pred_inds = pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
         assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):

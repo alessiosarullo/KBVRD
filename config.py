@@ -45,6 +45,7 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
 
         self.model = None
+        self.zsdir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
 
         self.save_dir = ''
 
@@ -107,6 +108,16 @@ class ProgramConfig(BaseConfigs):
     @property
     def ds_inds_file(self):
         return os.path.join(self.output_path, 'ds_inds.pkl')
+
+    @property
+    def zs_baseline_model_file(self):
+        assert self.zsdir
+        return os.path.join(self.zsdir, 'final.tar')
+
+    @property
+    def zs_ds_inds_file(self):
+        assert self.zsdir
+        return os.path.join(self.zsdir, 'ds_inds.pkl')
 
     @property
     def tensorboard_dir(self):
@@ -193,7 +204,6 @@ class ModelConfig(BaseConfigs):
     def __init__(self):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
-        self.zs_baseline = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
 
         self.proposal_thr = 0.
         self.relu = False

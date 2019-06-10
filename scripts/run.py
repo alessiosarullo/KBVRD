@@ -55,19 +55,27 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
-        # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
-        obj_inds = cfg.data.obj_inds
-        pred_inds = cfg.data.pred_inds
+        # Data
+        if cfg.data.zsl:
+            pred_inds = pickle.load(pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred'])
+            obj_inds = cfg.data.obj_inds
+        else:
+            # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
+            obj_inds = cfg.data.obj_inds
+            pred_inds = cfg.data.pred_inds
+
         self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
         self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
-        if cfg.data.zsl:
-            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
-        else:
-            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST, obj_inds=obj_inds, pred_inds=pred_inds)
         pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
                      Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
                      }, open(cfg.program.ds_inds_file, 'wb'))
 
+        if cfg.data.zsl:
+            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+        else:
+            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST, obj_inds=obj_inds, pred_inds=pred_inds)
+
+        # Model
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():
             self.detector.cuda()
