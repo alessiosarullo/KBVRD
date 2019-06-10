@@ -268,10 +268,13 @@ class ZSBaseModel(GenericModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
+                visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
+                prediction = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
+
                 target_classifiers = self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
-                losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors,
-                                                                action_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')}
-                # losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                # losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors,
+                #                                                 action_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')}
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(prediction, action_labels) * action_labels.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
@@ -299,8 +302,7 @@ class ZSBaseModel(GenericModel):
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        # prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()  # For MSE
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
 
