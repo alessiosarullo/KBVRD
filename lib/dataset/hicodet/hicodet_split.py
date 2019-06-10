@@ -1,5 +1,6 @@
 import os
 from typing import Dict, List, Type, Union
+import pickle
 
 import cv2
 import numpy as np

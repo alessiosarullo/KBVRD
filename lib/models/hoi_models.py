@@ -247,6 +247,10 @@ class ZSBaseModel(GenericModel):
         self.predictor_dim = base_model.act_repr_dim
         self.base_model = base_model
         self.normalize = cfg.model.wnorm
+        if self.normalize:
+            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        else:
+            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -311,11 +315,6 @@ class ZSModel(ZSBaseModel):
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
 
-        if self.normalize:
-            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
-        else:
-            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
-
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
         pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
@@ -365,11 +364,6 @@ class ZSVModel(ZSBaseModel):
         self.dataset = dataset
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
-
-        if self.normalize:
-            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
-        else:
-            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
@@ -427,13 +421,7 @@ class ZSAutoencoderModel(ZSBaseModel):
         self.dataset = dataset
         self.num_objects = dataset.num_object_classes
         self.num_predicates = dataset.num_predicates
-        self.normalize = True  # FIXME
         assert self.normalize
-
-        if self.normalize:
-            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
-        else:
-            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=self.normalize)
         # obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')

@@ -11,8 +11,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.dataset.hicodet.pc_hicodet_hoi_split import PrecomputedHicoDetHOISplit
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
@@ -64,6 +64,9 @@ class Launcher:
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
         else:
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST, obj_inds=obj_inds, pred_inds=pred_inds)
+        pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
+                     Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
+                     }, cfg.program.ds_inds_file)
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():

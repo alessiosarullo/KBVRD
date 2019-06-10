@@ -101,12 +101,16 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'prediction_test.pkl')
 
     @property
-    def tensorboard_dir(self):
-        return os.path.join(self.output_path, 'tboard')
-
-    @property
     def eval_res_file(self):
         return os.path.join(self.output_path, 'eval_test.pkl')
+
+    @property
+    def ds_inds_file(self):
+        return os.path.join(self.output_path, 'ds_inds.pkl')
+
+    @property
+    def tensorboard_dir(self):
+        return os.path.join(self.output_path, 'tboard')
 
     @property
     def res_stats_path(self):
