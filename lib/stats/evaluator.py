@@ -126,7 +126,7 @@ class Evaluator(BaseEvaluator):
             zs_hoi_mask = zs_interaction_mask[hois]
             hois = hois[zs_hoi_mask]
             assert np.all(hois >= 0)
-            hoi_metrics = {k: v[:, zs_interaction_mask] for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+            hoi_metrics = {k: v[zs_interaction_mask] for k, v in self.metrics.items() if not k.lower().startswith('obj')}
             lines += mf.format_metric_and_gt_lines(len(zs_pred_inds), hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         print('\n'.join(lines))
