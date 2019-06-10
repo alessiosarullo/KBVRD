@@ -126,8 +126,9 @@ class Evaluator(BaseEvaluator):
             zs_hoi_mask = zs_interaction_mask[hois]
             hois = hois[zs_hoi_mask]
             assert np.all(hois >= 0)
-            hoi_metrics = {k: v[zs_interaction_mask] for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-            lines += mf.format_metric_and_gt_lines(len(zs_pred_inds), hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
+            hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+            lines += mf.format_metric_and_gt_lines(zs_interaction_mask.sum(), hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort,
+                                                   add_unknown=False)
 
         print('\n'.join(lines))
 
@@ -254,12 +255,14 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, num_classes, gt_labels, metrics, gt_str, sort=False):
+    def format_metric_and_gt_lines(self, num_classes, gt_labels, metrics, gt_str, sort=False, add_unknown=True):
         lines = []
         gt_label_hist = Counter(gt_labels)
         num_gt_examples = sum(gt_label_hist.values())
         if sort:
-            inds = [p for p, num in gt_label_hist.most_common()] + sorted(set(range(num_classes)) - set(gt_label_hist.keys()))
+            inds = [p for p, num in gt_label_hist.most_common()]
+            if add_unknown:
+                inds += sorted(set(range(num_classes)) - set(gt_label_hist.keys()))
         else:
             inds = range(num_classes)
 
@@ -268,7 +271,6 @@ class MetricFormatter:
             pad = max(pad, max([len(k) for k in metrics.keys()]))
 
         for k, v in metrics.items():
-            assert v.size == 1 or len(inds) == v.size
             lines += [self.format_metric(k, v[inds] if v.size > 1 else v, pad)]
         format_str = '%{}s %8s [%s]'.format(pad + 1)
         lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]

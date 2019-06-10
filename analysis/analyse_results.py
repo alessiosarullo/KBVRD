@@ -19,10 +19,9 @@ from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
-    # sys.argv[1:] = ['eval', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/actgemb/2019-05-21_11-39-01_vanilla']
-    sys.argv[1:] = ['vis', '--save_dir', 'output/actonly/2019-05-13_13-39-01_vanilla']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
+    # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
 
@@ -175,12 +174,16 @@ def evaluate():
     results = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
-    evaluator.evaluate_predictions(results)
-    evaluator.print_metrics(sort=True)
-    evaluator.save(cfg.program.eval_res_file)
+
+    # evaluator.evaluate_predictions(results)
+    evaluator.load(cfg.program.eval_res_file)
+
+    evaluator.print_metrics(sort=True, zs_pred_inds=list(set(range(117)) - {84}))
+    # evaluator.print_metrics(sort=True, zs_pred_inds=list(range(117)))
+
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     # stats.print_metrics(sort=True)
-    Timer.print()
+    # Timer.print()
 
 
 def stats():
