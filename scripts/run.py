@@ -66,7 +66,7 @@ class Launcher:
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST, obj_inds=obj_inds, pred_inds=pred_inds)
         pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
                      Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
-                     }, cfg.program.ds_inds_file)
+                     }, open(cfg.program.ds_inds_file, 'wb'))
 
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():
