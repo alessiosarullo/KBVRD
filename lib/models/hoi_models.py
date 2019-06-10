@@ -362,6 +362,108 @@ class ZSModel(ZSBaseModel):
         return hoi_predictors
 
 
+class ZSPModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsp'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)
+
+        appearance_dim = self.base_model.act_repr_dim
+
+        spatial_dim = 400
+        self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
+                                         nn.Linear(spatial_dim, spatial_dim))
+
+        output_dim = 1024
+        self.app_to_repr_mlps = nn.ModuleDict()
+        self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim + spatial_dim, output_dim),
+                                                      nn.ReLU(),
+                                                      nn.Dropout(p=0.5),
+                                                      nn.Linear(output_dim, output_dim))
+
+        self.wemb_to_repr_mlps = nn.ModuleDict({'pred': nn.Sequential(nn.Linear(word_embs.dim, output_dim),
+                                                                      nn.ReLU(),
+                                                                      nn.Linear(output_dim, output_dim))})
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                hoi_act_logits = self._forward(vis_output, )
+            else:
+                assert inference
+                hoi_act_logits = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels)
+                return {'action_loss': act_loss}
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert hoi_act_logits is not None
+                        interactions = self.dataset.hicodet.interactions
+                        hoi_overall_scores = torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]]
+                        assert hoi_overall_scores.shape[0] == vis_output.ho_infos.shape[0] and \
+                               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.hoi_scores = hoi_overall_scores
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
+        union_boxes = torch.tensor(vis_output.hoi_union_boxes.astype(np.float32), device=box_feats.device)
+        vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
+
+        boxes = boxes_ext[:, 1:5]
+        hoi_hum_inds = hoi_infos[:, 1]
+        hoi_obj_inds = hoi_infos[:, 2]
+
+        union_areas = (union_boxes[:, 2:] - union_boxes[:, :2]).prod(dim=1, keepdim=True)
+        union_origin = union_boxes[:, :2].repeat(1, 2)
+        hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
+        hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
+        spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
+
+        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
+            pred_word_embs = self.pred_word_embs
+        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            pred_word_embs = self.trained_pred_word_embs
+        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([vrepr, spatial_info], dim=1))
+        hoi_act_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['pred'](pred_word_embs))
+        hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
+
+        return hoi_act_logits
+
+
 class ZSAutoencoderModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):

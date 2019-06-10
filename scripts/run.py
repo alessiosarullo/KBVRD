@@ -66,10 +66,6 @@ class Launcher:
 
         self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
         self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
-        pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
-                     Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
-                     }, open(cfg.program.ds_inds_file, 'wb'))
-
         if cfg.data.zsl:
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
         else:
@@ -121,6 +117,9 @@ class Launcher:
 
         try:
             cfg.save()
+            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
+                         Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
+                         }, open(cfg.program.ds_inds_file, 'wb'))
             if cfg.opt.num_epochs == 0:
                 torch.save({'epoch': -1,
                             'state_dict': self.detector.state_dict()},
