@@ -354,6 +354,68 @@ class ZSModel(ZSBaseModel):
         return hoi_predictors
 
 
+class ZSVModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsv'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.word_emb_dim = 300
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.num_objects = dataset.num_object_classes
+        self.num_predicates = dataset.num_predicates
+
+        if self.normalize:
+            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
+        else:
+            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+
+        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
+        obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
+        pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
+        # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
+        # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2 + self.predictor_dim, self.predictor_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                # nn.ReLU(inplace=True),
+                                                # nn.Dropout(0.5),
+                                                # nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                ])
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        boxes_ext = vis_output.boxes_ext
+        masks = vis_output.masks
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        if vis_output.box_labels is not None:
+            obj_word_embs = self.obj_word_embs[vis_output.box_labels][hoi_infos[:, 2]]
+        else:
+            obj_word_embs = self.obj_word_embs[boxes_ext.argmax(dim=1)][hoi_infos[:, 2]]
+
+        batch_size = hoi_infos.shape[0]
+        num_preds = self.pred_word_embs.shape[0]
+
+        vrepr = self.base_model._forward(vis_output, return_repr=True).detach()  # N x D
+        repr = torch.cat([vrepr.unsqueeze(dim=1).expand(-1, num_preds, -1),
+                          obj_word_embs.unsqueeze(dim=1).expand(-1, num_preds, -1),
+                          self.pred_word_embs.unsqueeze(dim=0).expand(batch_size, -1, -1)
+                          ], dim=2)  # N x P x (2*E + D)
+
+        if self.normalize:
+            hoi_predictors = nn.functional.normalize(self.emb_to_predictor(repr), dim=2)  # N x P x D
+        else:
+            hoi_predictors = self.emb_to_predictor(repr)  # N x P x D
+        return hoi_predictors
+
+
 class ZSAutoencoderModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
