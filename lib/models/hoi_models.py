@@ -458,7 +458,7 @@ class ZSPModel(ZSBaseModel):
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             pred_word_embs = self.trained_pred_word_embs
         hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([vrepr, spatial_info], dim=1))
-        hoi_act_emb = torch.nn.functional.normalize(self.wemb_to_repr_mlps['pred'](pred_word_embs))
+        hoi_act_emb = self.wemb_to_repr_mlps['pred'](pred_word_embs)
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
 
         return hoi_act_logits
