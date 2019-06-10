@@ -392,10 +392,10 @@ class ZSAutoencoderModel(ZSBaseModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_embeddings, act_predictors, vrepr = self._forward(vis_output)
+                act_embeddings, act_repr, vrepr, act_predictors = self._forward(vis_output)
             else:
                 assert inference
-                act_embeddings = act_predictors = None
+                act_embeddings = act_repr = act_predictors = None
 
             if not inference:
                 act_labels = vis_output.action_labels
@@ -416,7 +416,7 @@ class ZSAutoencoderModel(ZSBaseModel):
                         act_labels) * self.trained_pred_inds.size,
                     # 'a2emb_loss': nn.functional.cosine_embedding_loss(act_embeddings, target_embeddings, 2 * act_labels - 1, reduction='sum'),
                     'emb2cl_loss': nn.functional.binary_cross_entropy_with_logits(
-                        torch.bmm(act_predictors.unsqueeze(dim=1), target_classifiers.transpose(1, 2)).squeeze(dim=1),
+                        torch.bmm(act_repr.unsqueeze(dim=1), target_classifiers.transpose(1, 2)).squeeze(dim=1),
                         act_labels) * self.trained_pred_inds.size,
                 }
                 return losses
@@ -434,21 +434,13 @@ class ZSAutoencoderModel(ZSBaseModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos is not None:
-                        assert act_predictors is not None
-                        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                        if self.normalize:
-                            visual_feats = nn.functional.normalize(visual_feats, dim=2)
+                        assert act_repr is not None
 
-                        if cfg.data.zsl:
-                            act_predictors[:, torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
-
-                        action_output = torch.bmm(visual_feats, act_predictors.transpose(1, 2)).squeeze(dim=1)
+                        action_output = torch.bmm(act_repr.unsqueeze(dim=1), act_predictors).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        # prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()  # For MSE
-
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
@@ -456,12 +448,20 @@ class ZSAutoencoderModel(ZSBaseModel):
             vis_output.filter_boxes()
         vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
         act_emb = self.vrepr_to_emb(vrepr)  # N x E
-        act_predictors = self.emb_to_predictor(act_emb.detach())  # N x D
+        act_repr = self.emb_to_predictor(act_emb.detach())  # N x D
+
+        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
+            act_predictors = self.emb_to_predictor(self.pred_word_embs)  # P x D
+            act_predictors[torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
+            act_predictors = act_predictors.transpose(2, 1)
+        else:
+            act_predictors = None
+
         if self.normalize:
             act_emb = nn.functional.normalize(act_emb, dim=1)
-            act_predictors = nn.functional.normalize(act_predictors, dim=1)
+            act_repr = nn.functional.normalize(act_repr, dim=1)
             vrepr = nn.functional.normalize(vrepr, dim=1)
-        return act_emb, act_predictors, vrepr
+        return act_emb, act_repr, vrepr, act_predictors
 
 
 class PeyreModel(GenericModel):
