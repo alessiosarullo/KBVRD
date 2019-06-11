@@ -448,7 +448,7 @@ class ZSVAEModel(ZSBaseModel):
             ecl_idx = [int(x) for x in ecl_idx]
             assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
             entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.predicates])]
+        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
 
     def reparametrize(self, mu, logvar):
