@@ -441,7 +441,7 @@ class ZSVAEModel(ZSBaseModel):
     def reparametrize(self, mu, logvar):
         var = logvar.exp()
         std = var.sqrt()
-        eps = torch.random.randn_like(std)
+        eps = torch.randn_like(std)
         return eps * std + mu
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
