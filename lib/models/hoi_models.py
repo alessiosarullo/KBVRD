@@ -475,8 +475,8 @@ class ZSVAEModel(ZSBaseModel):
                 target_predictors = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
                 losses = {'a2emb_loss': -0.5 * torch.sum(1 + act_emb_logvar - act_emb_mean.pow(2) - act_emb_logvar.exp()),
                           'emb2cl_loss': (nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
-                                                                act_labels.unsqueeze(dim=2) * target_predictors,
-                                                                reduction='none').mean(dim=2).sum(dim=1) / action_labels.sum(dim=1)).mean()
+                                                                 act_labels.unsqueeze(dim=2) * target_predictors,
+                                                                 reduction='none').mean(dim=2).sum(dim=1) / action_labels.sum(dim=1)).mean()
                           }
                 return losses
             else:
@@ -518,9 +518,8 @@ class ZSVAEModel(ZSBaseModel):
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             target_embeddings = self.trained_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
 
-        act_emb = target_embeddings + self.reparametrize(act_emb_mean.unsqueeze(dim=1).expand(-1, target_embeddings.shape[1], -1),
-                                                         act_emb_logvar.unsqueeze(dim=1).expand(-1, target_embeddings.shape[1], -1))  # N x P x E
-        act_predictors = self.emb_to_predictor(act_emb)  # N x P x D
+        act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
+        act_predictors = self.emb_to_predictor(target_embeddings + act_emb.unsqueeze(dim=1))  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         if self.normalize:
