@@ -434,7 +434,7 @@ class ZSVAEModel(ZSBaseModel):
                                             # nn.Dropout(0.5),
                                             nn.Linear(self.predictor_dim, 2 * self.emb_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.emb_dim, self.predictor_dim),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * self.emb_dim, self.predictor_dim),
                                                 nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
@@ -494,7 +494,7 @@ class ZSVAEModel(ZSBaseModel):
 
                     if vis_output.ho_infos is not None:
                         assert act_predictors is not None
-                        if cfg.data.zsl:
+                        if not cfg.data.fullzs:
                             act_predictors[:, torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
 
                         action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
@@ -519,7 +519,8 @@ class ZSVAEModel(ZSBaseModel):
             target_embeddings = self.trained_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
 
         act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
-        act_predictors = self.emb_to_predictor(target_embeddings + act_emb.unsqueeze(dim=1))  # N x P x D
+        predictor_input = torch.cat([target_embeddings + act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
+        act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         if self.normalize:

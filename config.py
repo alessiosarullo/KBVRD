@@ -164,7 +164,9 @@ class DataConfig(BaseConfigs):
         self.val_ratio = 0.1
         self.prinds = ''  # restrict the dataset to these predicates if not empty
         self.obinds = ''  # restrict the dataset to these objects if not empty
+
         self.zsl = False
+        self.fullzs = False
 
     @property
     def im_inds(self):
