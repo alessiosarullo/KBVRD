@@ -380,7 +380,7 @@ class VariationalAutoencoder(nn.Module):
     def reparametrize(self, mu, logvar):
         var = logvar.exp()
         std = var.sqrt()
-        eps = torch.random.randn_like(std)
+        eps = torch.randn_like(std)
         return eps.mul(std).add(mu)
 
     def forward(self, x):
@@ -464,9 +464,9 @@ class ZSVAEModel(ZSBaseModel):
                 # act_embeddings = act_embeddings.transpose(2, 1)
                 target_predictors = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
                 losses = {'a2emb_loss': -0.5 * torch.sum(1 + act_emb_logvar - act_emb_mean.pow(2) - act_emb_logvar.exp()),
-                          'emb2cl_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
+                          'emb2cl_loss': (nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
                                                                 act_labels.unsqueeze(dim=2) * target_predictors,
-                                                                reduction='none').sum(dim=1).mean() / action_labels.sum(dim=1, keepdim=True)
+                                                                reduction='none').mean(dim=2).sum(dim=1) / action_labels.sum(dim=1)).mean()
                           }
                 return losses
             else:
