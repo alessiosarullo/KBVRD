@@ -519,7 +519,7 @@ class ZSVAEModel(ZSBaseModel):
             target_embeddings = self.trained_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
 
         act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
-        predictor_input = torch.cat([target_embeddings + act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
+        predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
         act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
