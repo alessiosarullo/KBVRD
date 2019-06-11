@@ -362,10 +362,60 @@ class ZSModel(ZSBaseModel):
         return hoi_predictors
 
 
-class ZSPModel(ZSBaseModel):
+class VariationalAutoencoder(nn.Module):
+    def __init__(self, input_dim, latent_dim, hidden_dim=400):
+        super().__init__()
+        self.input_dim = input_dim
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, self.hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.hidden_dim, 2 * latent_dim))
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, self.hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(self.hidden_dim, input_dim))
+
+    def reparametrize(self, mu, logvar):
+        var = logvar.exp()
+        std = var.sqrt()
+        eps = torch.random.randn_like(std)
+        return eps.mul(std).add(mu)
+
+    def forward(self, x):
+        with torch.set_grad_enabled(self.training):
+            h = self.encoder(x)
+            mu = h[:, :self.latent_dim]
+            logvar = h[:, self.latent_dim:]
+            z = self.reparametrize(mu, logvar)
+            x_hat = self.decoder(z)
+            return x_hat, mu, logvar
+
+    def loss(self, x):
+        x_hat, mu, logvar = self(x)
+        cross_entropy = nn.functional.mse_loss(x_hat, x, reduction='sum')
+        kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return cross_entropy, kl_div
+
+    def generation_with_interpolation(self, x_one, x_two, alpha):
+        hidden_one = self.encoder(x_one)
+        hidden_two = self.encoder(x_two)
+        mu_one = hidden_one[:, :self.latent_dim]
+        logvar_one = hidden_one[:, self.latent_dim:]
+        mu_two = hidden_two[:, :self.latent_dim]
+        logvar_two = hidden_two[:, self.latent_dim:]
+        mu = (1 - alpha) * mu_one + alpha * mu_two
+        logvar = (1 - alpha) * logvar_one + alpha * logvar_two
+        z = self.reparametrize(mu, logvar)
+        generated_image = self.decoder(z)
+        return generated_image
+
+
+class ZSVAEModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zsp'
+        return 'zsvae'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.word_emb_dim = 300
@@ -377,37 +427,48 @@ class ZSPModel(ZSBaseModel):
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)
 
-        appearance_dim = self.base_model.act_repr_dim
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
+                                            nn.ReLU(inplace=True),
+                                            # nn.Dropout(0.5),
+                                            nn.Linear(self.predictor_dim, 2 * self.word_emb_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim, self.predictor_dim),
+                                                nn.ReLU(inplace=True),
+                                                # nn.Dropout(0.5),
+                                                nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                ])
 
-        spatial_dim = 400
-        self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
-                                         nn.Linear(spatial_dim, spatial_dim))
+        self.vae = VariationalAutoencoder(input_dim=self.base_model.act_repr_dim, latent_dim=self.word_emb_dim)
 
-        output_dim = 1024
-        self.app_to_repr_mlps = nn.ModuleDict()
-        self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim + spatial_dim, output_dim),
-                                                      nn.ReLU(),
-                                                      nn.Dropout(p=0.5),
-                                                      nn.Linear(output_dim, output_dim))
-
-        self.wemb_to_repr_mlps = nn.ModuleDict({'pred': nn.Sequential(nn.Linear(word_embs.dim, output_dim),
-                                                                      nn.ReLU(),
-                                                                      nn.Linear(output_dim, output_dim))})
+    def reparametrize(self, mu, logvar):
+        var = logvar.exp()
+        std = var.sqrt()
+        eps = torch.random.randn_like(std)
+        return eps * std + mu
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                hoi_act_logits = self._forward(vis_output, )
+                act_predictors, vrepr, act_emb_mean, act_emb_logvar = self._forward(vis_output, )
             else:
                 assert inference
-                hoi_act_logits = None
+                act_predictors = vrepr = act_emb_mean = act_emb_logvar = None
 
             if not inference:
                 action_labels = vis_output.action_labels
-                act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels)
-                return {'action_loss': act_loss}
+
+                act_labels = vis_output.action_labels
+
+                # act_embeddings = act_embeddings.transpose(2, 1)
+                target_predictors = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
+                losses = {'a2emb_loss': -0.5 * torch.sum(1 + act_emb_logvar - act_emb_mean.pow(2) - act_emb_logvar.exp()),
+                          'emb2cl_loss': nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
+                                                                act_labels.unsqueeze(dim=2) * target_predictors,
+                                                                reduction='none').sum(dim=1).mean() / action_labels.sum(dim=1, keepdim=True)
+                          }
+                return losses
             else:
                 prediction = Prediction()
 
@@ -422,46 +483,49 @@ class ZSPModel(ZSBaseModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos is not None:
-                        assert hoi_act_logits is not None
-                        interactions = self.dataset.hicodet.interactions
-                        hoi_overall_scores = torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]]
-                        assert hoi_overall_scores.shape[0] == vis_output.ho_infos.shape[0] and \
-                               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
+                        assert act_predictors is not None
+                        if cfg.data.zsl:
+                            act_predictors[:, torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
+
+                        action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        prediction.hoi_scores = hoi_overall_scores
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
-        union_boxes = torch.tensor(vis_output.hoi_union_boxes.astype(np.float32), device=box_feats.device)
         vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
 
-        boxes = boxes_ext[:, 1:5]
-        hoi_hum_inds = hoi_infos[:, 1]
-        hoi_obj_inds = hoi_infos[:, 2]
-
-        union_areas = (union_boxes[:, 2:] - union_boxes[:, :2]).prod(dim=1, keepdim=True)
-        union_origin = union_boxes[:, :2].repeat(1, 2)
-        hoi_hum_spatial_info = (boxes[hoi_hum_inds, :] - union_origin) / union_areas
-        hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
-        spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
-
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            pred_word_embs = self.pred_word_embs
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            pred_word_embs = self.trained_pred_word_embs
-        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([vrepr, spatial_info], dim=1))
-        hoi_act_emb = self.wemb_to_repr_mlps['pred'](pred_word_embs)
-        hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
+            num_preds = self.dataset.hicodet.num_predicates
 
-        return hoi_act_logits
+            act_emb_params = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_preds, -1)
+            act_emb_mean = act_emb_params[:, :self.word_emb_dim]  # N x P x E
+            act_emb_logvar = act_emb_params[:, self.word_emb_dim:]  # N x P x E
+            target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
+            act_emb = target_embeddings + self.reparametrize(act_emb_mean, act_emb_logvar)  # N x p x E
+
+            act_predictors = self.emb_to_predictor(act_emb)  # N x P x D
+        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            num_trained_preds = self.trained_pred_inds.size
+
+            act_emb_params = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_trained_preds, -1)
+            act_emb_mean = act_emb_params[:, :self.word_emb_dim]  # N x p x E
+            act_emb_logvar = act_emb_params[:, self.word_emb_dim:]  # N x p x E
+            target_embeddings = self.trained_pred_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x p x E
+            act_emb = target_embeddings + self.reparametrize(act_emb_mean, act_emb_logvar)  # N x p x E
+
+            act_predictors = self.emb_to_predictor(act_emb)  # N x p x D
+
+        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+        if self.normalize:
+            act_predictors = nn.functional.normalize(act_predictors, dim=2)
+            vrepr = nn.functional.normalize(vrepr, dim=2)
+        return act_predictors, vrepr, act_emb_mean, act_emb_logvar
 
 
 class ZSAutoencoderModel(ZSBaseModel):
