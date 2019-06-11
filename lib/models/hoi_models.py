@@ -235,7 +235,7 @@ class WEmbModel(GEmbModel):
 
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.word_emb_dim = 300
+        self.emb_dim = 300
         super().__init__(dataset, **kwargs)
 
         # FIXME
@@ -418,25 +418,38 @@ class ZSVAEModel(ZSBaseModel):
         return 'zsvae'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.word_emb_dim = 300
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
 
-        word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-        self.trained_pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs[self.trained_pred_inds, :]), requires_grad=False)
+        # emb_dim = 300
+        # word_embs = WordEmbeddings(source='glove', dim=emb_dim)
+        # pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
+        # self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
+        self.trained_word_embs = nn.Parameter(torch.from_numpy(self.pred_embs[self.trained_pred_inds, :]), requires_grad=False)
+        self.emb_dim = self.pred_embs.shape[1]
 
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
-                                            nn.Linear(self.predictor_dim, 2 * self.word_emb_dim),
+                                            nn.Linear(self.predictor_dim, 2 * self.emb_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim, self.predictor_dim),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.emb_dim, self.predictor_dim),
                                                 nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
                                                 ])
+
+    def get_act_graph_embs(self):
+        emb_path = 'cache/rotate_hico_act/'
+        entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
+        with open(os.path.join(emb_path, 'entities.dict'), 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.predicates])]
+        return act_embs
 
     def reparametrize(self, mu, logvar):
         var = logvar.exp()
@@ -459,7 +472,6 @@ class ZSVAEModel(ZSBaseModel):
 
                 act_labels = vis_output.action_labels
 
-                # act_embeddings = act_embeddings.transpose(2, 1)
                 target_predictors = self.gt_classifiers.expand(act_labels.shape[0], -1, -1)  # N x p x D
                 losses = {'a2emb_loss': -0.5 * torch.sum(1 + act_emb_logvar - act_emb_mean.pow(2) - act_emb_logvar.exp()),
                           'emb2cl_loss': (nn.functional.mse_loss(act_labels.unsqueeze(dim=2) * act_predictors,
@@ -497,27 +509,18 @@ class ZSVAEModel(ZSBaseModel):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
         vrepr = self.base_model._forward(vis_output, return_repr=True).detach()
+        act_emb_params = self.vrepr_to_emb(vrepr)
+        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
+        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            num_preds = self.dataset.hicodet.num_predicates
-
-            act_emb_params = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_preds, -1)
-            act_emb_mean = act_emb_params[:, :, :self.word_emb_dim]  # N x P x E
-            act_emb_logvar = act_emb_params[:, :, self.word_emb_dim:]  # N x P x E
-            target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
-            act_emb = target_embeddings + self.reparametrize(act_emb_mean, act_emb_logvar)  # N x p x E
-
-            act_predictors = self.emb_to_predictor(act_emb)  # N x P x D
+            target_embeddings = self.pred_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            num_trained_preds = self.trained_pred_inds.size
+            target_embeddings = self.trained_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
 
-            act_emb_params = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_trained_preds, -1)
-            act_emb_mean = act_emb_params[:, :, :self.word_emb_dim]  # N x p x E
-            act_emb_logvar = act_emb_params[:, :, self.word_emb_dim:]  # N x p x E
-            target_embeddings = self.trained_pred_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x p x E
-            act_emb = target_embeddings + self.reparametrize(act_emb_mean, act_emb_logvar)  # N x p x E
-
-            act_predictors = self.emb_to_predictor(act_emb)  # N x p x D
+        act_emb = target_embeddings + self.reparametrize(act_emb_mean.unsqueeze(dim=1).expand(-1, target_embeddings.shape[1], -1),
+                                                         act_emb_logvar.unsqueeze(dim=1).expand(-1, target_embeddings.shape[1], -1))  # N x P x E
+        act_predictors = self.emb_to_predictor(act_emb)  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         if self.normalize:
