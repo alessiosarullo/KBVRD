@@ -426,7 +426,7 @@ class ZSVAEModel(ZSBaseModel):
         # pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         # self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.trained_word_embs = self.pred_embs[self.trained_pred_inds, :]
+        self.trained_word_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :])
         self.emb_dim = self.pred_embs.shape[1]
 
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
