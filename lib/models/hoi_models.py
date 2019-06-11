@@ -362,54 +362,54 @@ class ZSModel(ZSBaseModel):
         return hoi_predictors
 
 
-class VariationalAutoencoder(nn.Module):
-    def __init__(self, input_dim, latent_dim, hidden_dim=400):
-        super().__init__()
-        self.input_dim = input_dim
-        self.latent_dim = latent_dim
-        self.hidden_dim = hidden_dim
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, self.hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.hidden_dim, 2 * latent_dim))
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_dim, self.hidden_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(self.hidden_dim, input_dim))
-
-    def reparametrize(self, mu, logvar):
-        var = logvar.exp()
-        std = var.sqrt()
-        eps = torch.randn_like(std)
-        return eps.mul(std).add(mu)
-
-    def forward(self, x):
-        with torch.set_grad_enabled(self.training):
-            h = self.encoder(x)
-            mu = h[:, :self.latent_dim]
-            logvar = h[:, self.latent_dim:]
-            z = self.reparametrize(mu, logvar)
-            x_hat = self.decoder(z)
-            return x_hat, mu, logvar
-
-    def loss(self, x):
-        x_hat, mu, logvar = self(x)
-        cross_entropy = nn.functional.mse_loss(x_hat, x, reduction='sum')
-        kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return cross_entropy, kl_div
-
-    def generation_with_interpolation(self, x_one, x_two, alpha):
-        hidden_one = self.encoder(x_one)
-        hidden_two = self.encoder(x_two)
-        mu_one = hidden_one[:, :self.latent_dim]
-        logvar_one = hidden_one[:, self.latent_dim:]
-        mu_two = hidden_two[:, :self.latent_dim]
-        logvar_two = hidden_two[:, self.latent_dim:]
-        mu = (1 - alpha) * mu_one + alpha * mu_two
-        logvar = (1 - alpha) * logvar_one + alpha * logvar_two
-        z = self.reparametrize(mu, logvar)
-        generated_image = self.decoder(z)
-        return generated_image
+# class VariationalAutoencoder(nn.Module):
+#     def __init__(self, input_dim, latent_dim, hidden_dim=400):
+#         super().__init__()
+#         self.input_dim = input_dim
+#         self.latent_dim = latent_dim
+#         self.hidden_dim = hidden_dim
+#         self.encoder = nn.Sequential(
+#             nn.Linear(input_dim, self.hidden_dim),
+#             nn.ReLU(inplace=True),
+#             nn.Linear(self.hidden_dim, 2 * latent_dim))
+#         self.decoder = nn.Sequential(
+#             nn.Linear(latent_dim, self.hidden_dim),
+#             nn.ReLU(inplace=True),
+#             nn.Linear(self.hidden_dim, input_dim))
+#
+#     def reparametrize(self, mu, logvar):
+#         var = logvar.exp()
+#         std = var.sqrt()
+#         eps = torch.randn_like(std)
+#         return eps.mul(std).add(mu)
+#
+#     def forward(self, x):
+#         with torch.set_grad_enabled(self.training):
+#             h = self.encoder(x)
+#             mu = h[:, :self.latent_dim]
+#             logvar = h[:, self.latent_dim:]
+#             z = self.reparametrize(mu, logvar)
+#             x_hat = self.decoder(z)
+#             return x_hat, mu, logvar
+#
+#     def loss(self, x):
+#         x_hat, mu, logvar = self(x)
+#         cross_entropy = nn.functional.mse_loss(x_hat, x, reduction='sum')
+#         kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+#         return cross_entropy, kl_div
+#
+#     def generation_with_interpolation(self, x_one, x_two, alpha):
+#         hidden_one = self.encoder(x_one)
+#         hidden_two = self.encoder(x_two)
+#         mu_one = hidden_one[:, :self.latent_dim]
+#         logvar_one = hidden_one[:, self.latent_dim:]
+#         mu_two = hidden_two[:, :self.latent_dim]
+#         logvar_two = hidden_two[:, self.latent_dim:]
+#         mu = (1 - alpha) * mu_one + alpha * mu_two
+#         logvar = (1 - alpha) * logvar_one + alpha * logvar_two
+#         z = self.reparametrize(mu, logvar)
+#         generated_image = self.decoder(z)
+#         return generated_image
 
 
 class ZSVAEModel(ZSBaseModel):
@@ -437,8 +437,6 @@ class ZSVAEModel(ZSBaseModel):
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
                                                 ])
-
-        self.vae = VariationalAutoencoder(input_dim=self.base_model.act_repr_dim, latent_dim=self.word_emb_dim)
 
     def reparametrize(self, mu, logvar):
         var = logvar.exp()
