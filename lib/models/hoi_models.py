@@ -502,8 +502,8 @@ class ZSVAEModel(ZSBaseModel):
             num_preds = self.dataset.hicodet.num_predicates
 
             act_emb_params = self.vrepr_to_emb(vrepr).unsqueeze(dim=1).expand(-1, num_preds, -1)
-            act_emb_mean = act_emb_params[:, :self.word_emb_dim]  # N x P x E
-            act_emb_logvar = act_emb_params[:, self.word_emb_dim:]  # N x P x E
+            act_emb_mean = act_emb_params[:, :, :self.word_emb_dim]  # N x P x E
+            act_emb_logvar = act_emb_params[:, :, self.word_emb_dim:]  # N x P x E
             target_embeddings = self.pred_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
             act_emb = target_embeddings + self.reparametrize(act_emb_mean, act_emb_logvar)  # N x p x E
 
