@@ -558,10 +558,10 @@ class ZSAEModel(ZSBaseModel):
                         if not cfg.data.fullzs:
                             act_predictors[:, torch.tensor(self.trained_pred_inds, device=act_predictors.device), :] = self.gt_classifiers
 
-                        action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
-
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+
+                        action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
                         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
@@ -570,7 +570,7 @@ class ZSAEModel(ZSBaseModel):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr.detach())
+        act_emb_params = self.vrepr_to_emb(vrepr)
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
