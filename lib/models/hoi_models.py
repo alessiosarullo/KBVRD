@@ -488,12 +488,12 @@ class ZSAEModel(ZSBaseModel):
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
 
-        # emb_dim = 300
-        # word_embs = WordEmbeddings(source='glove', dim=emb_dim)
-        # pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
-        # self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-        self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.trained_word_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :])
+        emb_dim = 300
+        word_embs = WordEmbeddings(source='glove', dim=emb_dim)
+        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
+        self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
+        self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :])
         self.emb_dim = self.pred_embs.shape[1]
 
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
@@ -577,7 +577,7 @@ class ZSAEModel(ZSBaseModel):
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             target_embeddings = self.pred_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_word_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
+            target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
 
         act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
         predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
