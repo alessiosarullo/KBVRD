@@ -502,7 +502,6 @@ class ZSAEModel(GenericModel):
         # self.normalize = cfg.model.wnorm
 
         self.trained_pred_inds = pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
-        assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
 
         self.dataset = dataset
 
