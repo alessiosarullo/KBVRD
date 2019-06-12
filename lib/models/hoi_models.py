@@ -13,8 +13,8 @@ class BaseModel(GenericModel):
         return 'base'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
         self._act_repr_dim = 600
+        super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
@@ -491,7 +491,7 @@ class ZSAEModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         # FIXME
-        base_model = BaseModel(dataset)
+        base_model = BaseModel(dataset, _act_repr_dim=1024)
         if torch.cuda.is_available():
             base_model.cuda()
         # ckpt = torch.load(cfg.program.zs_baseline_model_file)
@@ -517,10 +517,14 @@ class ZSAEModel(GenericModel):
         hidden_dim = (input_dim + latent_dim) // 2
         # input_dim = self.visual_module.vis_feat_dim
         # hidden_dim = 1024
+        print(input_dim, hidden_dim, latent_dim)
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.LeakyReLU(inplace=True),
                                             # nn.Dropout(0.5),
                                             nn.Linear(hidden_dim, latent_dim),
+                                            # nn.LeakyReLU(inplace=True),
+                                            # # nn.Dropout(0.5),
+                                            # nn.Linear(hidden_dim, latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * latent_dim, hidden_dim),
                                                 nn.LeakyReLU(inplace=True),
@@ -538,12 +542,6 @@ class ZSAEModel(GenericModel):
             entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
         act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
-
-    # def reparametrize(self, mu, logvar):
-    #     var = logvar.exp()
-    #     std = var.sqrt()
-    #     eps = torch.randn_like(std)
-    #     return eps * std + mu
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -592,12 +590,6 @@ class ZSAEModel(GenericModel):
             vis_output.filter_boxes()
 
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        # vrepr = vis_output.hoi_union_boxes_feats
-
-        # act_emb_params = self.vrepr_to_emb(vrepr)
-        # act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        # act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
-        # act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
         act_emb = self.vrepr_to_emb(vrepr)
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
