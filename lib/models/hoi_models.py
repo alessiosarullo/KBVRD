@@ -120,8 +120,11 @@ class MultiModalModel(GenericModel):
         self.act_output_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
         torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
 
-        # self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
-        # torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+        # # TODO enable
+        # self.act_output_centroid = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates)), requires_grad=True)  # D x P
+        # self.act_output_var_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
+        # torch.nn.init.xavier_normal_(self.act_output_centroid, gain=1.0)
+        # torch.nn.init.xavier_uniform_(self.act_output_var_mat, gain=1.0)
 
     @property
     def act_repr_dim(self):
@@ -144,6 +147,8 @@ class MultiModalModel(GenericModel):
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
 
         action_logits = torch.einsum('nd,dpm->npm', (act_repr, self.act_output_mat))  # N x P x M
+        # action_logits = (act_repr @ self.act_output_centroid).unsqueeze(dim=2) + \
+        #                 torch.einsum('nd,dpm->npm', (act_repr, self.act_output_var_mat))  # N x P x M
         assert action_logits.shape[0] == act_repr.shape[0] and \
                action_logits.shape[1] == self.dataset.num_predicates and \
                action_logits.shape[2] == self.act_output_mat.shape[2]
@@ -499,7 +504,7 @@ class ZSAEModel(ZSBaseModel):
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
-                                            nn.Linear(self.predictor_dim, 2 * self.emb_dim),
+                                            nn.Linear(self.predictor_dim, self.emb_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * self.emb_dim, self.predictor_dim),
                                                 nn.ReLU(inplace=True),
@@ -518,21 +523,21 @@ class ZSAEModel(ZSBaseModel):
         act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
 
-    def reparametrize(self, mu, logvar):
-        var = logvar.exp()
-        std = var.sqrt()
-        eps = torch.randn_like(std)
-        return eps * std + mu
+    # def reparametrize(self, mu, logvar):
+    #     var = logvar.exp()
+    #     std = var.sqrt()
+    #     eps = torch.randn_like(std)
+    #     return eps * std + mu
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_predictors, vrepr, act_emb_mean, act_emb_logvar = self._forward(vis_output, )
+                act_predictors, vrepr = self._forward(vis_output, )
             else:
                 assert inference
-                act_predictors = vrepr = act_emb_mean = act_emb_logvar = None
+                act_predictors = vrepr = None
 
             if not inference:
                 action_labels = vis_output.action_labels
@@ -570,21 +575,22 @@ class ZSAEModel(ZSBaseModel):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+        # act_emb_params = self.vrepr_to_emb(vrepr)
+        # act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
+        # act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+        # act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
+        act_emb = self.vrepr_to_emb(vrepr)
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
+            target_embeddings = self.pred_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(act_emb_params.shape[0], -1, -1)  # N x P x E
+            target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
 
-        act_emb = self.reparametrize(act_emb_mean, act_emb_logvar)  # N x E
         predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
         act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
-        return act_predictors, vrepr, act_emb_mean, act_emb_logvar
+        return act_predictors, vrepr
 
 
 
