@@ -14,15 +14,15 @@ class BaseModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
         self._act_repr_dim = 600
+        vis_feat_dim = self.visual_module.vis_feat_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                # nn.ReLU(inplace=True),
+                                                # nn.Dropout(0.5),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -31,8 +31,8 @@ class BaseModel(GenericModel):
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(0.5),
                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(0.5),
+                                               # nn.ReLU(inplace=True),
+                                               # nn.Dropout(0.5),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -41,8 +41,8 @@ class BaseModel(GenericModel):
                                               nn.ReLU(inplace=True),
                                               nn.Dropout(0.5),
                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(0.5),
+                                              # nn.ReLU(inplace=True),
+                                              # nn.Dropout(0.5),
                                               ])
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -483,13 +483,27 @@ class ZSVAEModel(ZSBaseModel):
         return act_predictors, vrepr, act_emb_mean, act_emb_logvar
 
 
-class ZSAEModel(ZSBaseModel):
+class ZSAEModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsae'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        # FIXME
+        base_model = BaseModel(dataset)
+        if torch.cuda.is_available():
+            base_model.cuda()
+        # ckpt = torch.load(cfg.program.zs_baseline_model_file)
+        # base_model.load_state_dict(ckpt['state_dict'])
+
+        self.predictor_dim = base_model.act_repr_dim
+        self.base_model = base_model
+        # self.normalize = cfg.model.wnorm
+
+        self.trained_pred_inds = pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred']
+        assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
+
         self.dataset = dataset
 
         emb_dim = 300
@@ -505,13 +519,13 @@ class ZSAEModel(ZSBaseModel):
         # input_dim = self.visual_module.vis_feat_dim
         # hidden_dim = 1024
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.LeakyReLU(inplace=True),
+                                            # nn.Dropout(0.5),
                                             nn.Linear(hidden_dim, latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * latent_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.LeakyReLU(inplace=True),
+                                                # nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
                                                 ])
 

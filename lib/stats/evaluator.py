@@ -131,6 +131,7 @@ class Evaluator(BaseEvaluator):
             lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
 
         print('\n'.join(lines))
+        return obj_metrics, hoi_metrics
 
     def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
