@@ -40,7 +40,7 @@ class GenericModel(AbstractModel):
         #     self.class_neg_weights = torch.nn.Parameter(torch.from_numpy(cost_matrix), requires_grad=False)
 
     @property
-    def act_repr_dim(self):
+    def final_repr_dim(self):
         raise NotImplementedError()
 
     # def focal_loss(self, logits, labels):

@@ -79,6 +79,13 @@ class WordEmbeddings:
                     repl_word = tokens[-1]
                     replacements[word] = repl_word
                     emb = self.embedding(repl_word, none_on_miss=True)
+                elif retry == 'avg_norm':
+                    embs = [self.embedding(token, none_on_miss=True) for token in tokens]
+                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
+                    if embs:
+                        emb = sum(embs) / len(embs)
+                    else:
+                        emb = None
                 elif retry == 'avg_norm_first':
                     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
                     embs = [e / np.linalg.norm(e) for e in embs if e is not None]

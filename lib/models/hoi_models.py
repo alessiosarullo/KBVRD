@@ -17,41 +17,41 @@ class BaseModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
-                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 # nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(0.5),
-                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                # nn.ReLU(inplace=True),
                                                # nn.Dropout(0.5),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
+        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                               nn.ReLU(inplace=True),
                                               nn.Dropout(0.5),
-                                              nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                               # nn.ReLU(inplace=True),
                                               # nn.Dropout(0.5),
                                               ])
         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False)
+        self.act_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
     @property
-    def act_repr_dim(self):
+    def final_repr_dim(self):
         return self._act_repr_dim
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
@@ -86,30 +86,30 @@ class MultiModalModel(GenericModel):
         vis_feat_dim = self.visual_module.vis_feat_dim
         self._act_repr_dim = 600
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
-                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(0.5),
-                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(0.5),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
+        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                               nn.ReLU(inplace=True),
                                               nn.Dropout(0.5),
-                                              nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                               nn.ReLU(inplace=True),
                                               nn.Dropout(0.5),
                                               ])
@@ -117,7 +117,7 @@ class MultiModalModel(GenericModel):
         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
         max_modes = 3
-        self.act_output_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
+        self.act_output_mat = nn.Parameter(torch.empty((self.final_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
         torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
 
         # # TODO enable
@@ -127,7 +127,7 @@ class MultiModalModel(GenericModel):
         # torch.nn.init.xavier_uniform_(self.act_output_var_mat, gain=1.0)
 
     @property
-    def act_repr_dim(self):
+    def final_repr_dim(self):
         return self._act_repr_dim
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
@@ -165,14 +165,14 @@ class GEmbModel(BaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-        self.act_emb_att_fc = nn.Sequential(nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=False),
+        self.act_emb_att_fc = nn.Sequential(nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False),
                                             nn.Sigmoid())
 
         self.act_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.act_repr_dim + self.act_embs.shape[1], self.act_repr_dim),
+        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.final_repr_dim + self.act_embs.shape[1], self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
-                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
                                                  ])
@@ -227,10 +227,10 @@ class WEmbModel(GEmbModel):
 
         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
         self.act_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.predicates)), requires_grad=False)
-        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.act_repr_dim + self.act_embs.shape[1], self.act_repr_dim),
+        self.act_only_repr_mlp = nn.Sequential(*[nn.Linear(self.final_repr_dim + self.act_embs.shape[1], self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
-                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
                                                  ])
@@ -249,7 +249,7 @@ class ZSBaseModel(GenericModel):
         ckpt = torch.load(cfg.program.zs_baseline_model_file)
         base_model.load_state_dict(ckpt['state_dict'])
 
-        self.predictor_dim = base_model.act_repr_dim
+        self.predictor_dim = base_model.final_repr_dim
         self.base_model = base_model
         self.normalize = cfg.model.wnorm
         if self.normalize:
@@ -497,7 +497,7 @@ class ZSAEModel(GenericModel):
         # ckpt = torch.load(cfg.program.zs_baseline_model_file)
         # base_model.load_state_dict(ckpt['state_dict'])
 
-        self.predictor_dim = base_model.act_repr_dim
+        self.predictor_dim = base_model.final_repr_dim
         self.base_model = base_model
         # self.normalize = cfg.model.wnorm
 
@@ -519,15 +519,15 @@ class ZSAEModel(GenericModel):
         # hidden_dim = 1024
         print(input_dim, hidden_dim, latent_dim)
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.LeakyReLU(inplace=True),
+                                            nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                             # nn.Dropout(0.5),
                                             nn.Linear(hidden_dim, latent_dim),
-                                            # nn.LeakyReLU(inplace=True),
+                                            # nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                             # # nn.Dropout(0.5),
                                             # nn.Linear(hidden_dim, latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * latent_dim, hidden_dim),
-                                                nn.LeakyReLU(inplace=True),
+                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
                                                 ])
@@ -602,6 +602,99 @@ class ZSAEModel(GenericModel):
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr
+
+
+class KatoModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'kato'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self._hoi_repr_dim = 600
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
+
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                               nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                               nn.Dropout(0.5),
+                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                               ])
+        nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
+
+        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
+                                              nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                              nn.Dropout(0.5),
+                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                              ])
+        nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
+
+        self.gcn_branch = KatoGCNBranch(dataset, self._hoi_repr_dim, gc_dims=(512, 200))
+
+    @property
+    def final_repr_dim(self):
+        return self._hoi_repr_dim
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                hoi_output = self._forward(vis_output, )
+            else:
+                assert inference
+                hoi_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'hoi_loss': nn.functional.binary_cross_entropy_with_logits(hoi_output, action_labels) * hoi_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert hoi_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy()
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        if vis_output.box_labels is not None:
+            vis_output.filter_boxes()
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        masks = vis_output.masks
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+
+        ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+        ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
+        union_repr = self.union_repr_mlp(union_boxes_feats)
+        hoi_repr = union_repr + ho_subj_repr + ho_obj_repr
+
+        hoi_logits = self.gcn_branch(hoi_repr)
+        return hoi_logits
 
 
 class PeyreModel(GenericModel):
