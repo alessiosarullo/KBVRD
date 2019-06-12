@@ -240,7 +240,7 @@ class WEmbModel(GEmbModel):
 
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 300
+        self.latent_dim = 300
         super().__init__(dataset, **kwargs)
 
         # FIXME
@@ -499,17 +499,21 @@ class ZSAEModel(ZSBaseModel):
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
         self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :])
-        self.emb_dim = self.pred_embs.shape[1]
 
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, self.predictor_dim),
+        # input_dim = self.predictor_dim
+        # hidden_dim = self.predictor_dim
+        input_dim = self.visual_module.vis_feat_dim
+        hidden_dim = 1024
+        self.latent_dim = self.pred_embs.shape[1]
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
-                                            nn.Linear(self.predictor_dim, self.emb_dim),
+                                            nn.Linear(hidden_dim, self.latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * self.emb_dim, self.predictor_dim),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * self.latent_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
-                                                nn.Linear(self.predictor_dim, self.predictor_dim),
+                                                nn.Linear(hidden_dim, input_dim),
                                                 ])
 
     def get_act_graph_embs(self):
@@ -574,7 +578,10 @@ class ZSAEModel(ZSBaseModel):
     def _forward(self, vis_output: VisualOutput, **kwargs):
         if vis_output.box_labels is not None:
             vis_output.filter_boxes()
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
+
+        # vrepr = self.base_model._forward(vis_output, return_repr=True)
+        vrepr = vis_output.hoi_union_boxes_feats
+
         # act_emb_params = self.vrepr_to_emb(vrepr)
         # act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
         # act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
