@@ -212,10 +212,10 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=False)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
 
-        self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim, ldim),
+        self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i-1], gc_dims[i]),
                                                       nn.LeakyReLU(inplace=True),
                                                       nn.Dropout(p=0.5))
-                                        for ldim in gc_dims])
+                                        for i in range(len(gc_dims))])
 
         self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + input_repr_dim, 512),
                                        nn.LeakyReLU(inplace=True),

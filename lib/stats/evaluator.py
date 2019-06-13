@@ -251,17 +251,19 @@ class Evaluator(BaseEvaluator):
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
 
-    def sort_and_filter(self, gt_hois, metrics, sort=False, keep_inds=None):
+    def sort_and_filter(self, gt_hois, metrics, sort=False, keep_inds=None, all_hoi_classes=None):
         gt_hois_hist = Counter(gt_hois)
+        if all_hoi_classes:
+            for
         if sort:
-         inds = [p for p, num in gt_hois_hist.most_common()]
-         if labels is not None:
-             inds += sorted(set(labels) - set(gt_hois_hist.keys()))
+            inds = [p for p, num in gt_hois_hist.most_common()]
+            if labels is not None:
+                inds += sorted(set(labels) - set(gt_hois_hist.keys()))
         else:
-         if labels:
-             inds = labels
-         else:
-             inds = sorted(gt_hois_hist.keys())
+            if labels:
+                inds = labels
+            else:
+                inds = sorted(gt_hois_hist.keys())
 
         hoi_metrics = {k: v[inds] if v.size > 1 else v for k, v in metrics.items()}
 
