@@ -83,72 +83,28 @@ class MultiModalModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-        self._act_repr_dim = 600
-
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                ])
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
-
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(0.5),
-                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(0.5),
-                                               ])
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
-
-        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(0.5),
-                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(0.5),
-                                              ])
-        nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+        self.base_model = BaseModel(dataset)
 
         max_modes = 3
-        self.act_output_mat = nn.Parameter(torch.empty((self.final_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
-        torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
+        # self.act_output_mat = nn.Parameter(torch.empty((self.final_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
+        # torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
 
-        # # TODO enable
-        # self.act_output_centroid = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates)), requires_grad=True)  # D x P
-        # self.act_output_var_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
-        # torch.nn.init.xavier_normal_(self.act_output_centroid, gain=1.0)
-        # torch.nn.init.xavier_uniform_(self.act_output_var_mat, gain=1.0)
+        # TODO enable
+        self.act_output_centroid = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates)), requires_grad=True)  # D x P
+        self.act_output_var_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
+        torch.nn.init.xavier_normal_(self.act_output_centroid, gain=1.0)
+        torch.nn.init.xavier_uniform_(self.act_output_var_mat, gain=1.0)
 
     @property
     def final_repr_dim(self):
-        return self._act_repr_dim
+        return self.base_model.final_repr_dim
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+        act_repr = self.base_model._forward(vis_output, return_repr=True)
 
-        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
-
-        ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
-        ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        union_repr = self.union_repr_mlp(union_boxes_feats)
-        act_repr = union_repr + ho_subj_repr + ho_obj_repr
-
-        action_logits = torch.einsum('nd,dpm->npm', (act_repr, self.act_output_mat))  # N x P x M
-        # action_logits = (act_repr @ self.act_output_centroid).unsqueeze(dim=2) + \
-        #                 torch.einsum('nd,dpm->npm', (act_repr, self.act_output_var_mat))  # N x P x M
+        # action_logits = torch.einsum('nd,dpm->npm', (act_repr, self.act_output_mat))  # N x P x M
+        action_logits = (act_repr @ self.act_output_centroid).unsqueeze(dim=2) + \
+                        torch.einsum('nd,dpm->npm', (act_repr, self.act_output_var_mat))  # N x P x M
         assert action_logits.shape[0] == act_repr.shape[0] and \
                action_logits.shape[1] == self.dataset.num_predicates and \
                action_logits.shape[2] == self.act_output_mat.shape[2]
