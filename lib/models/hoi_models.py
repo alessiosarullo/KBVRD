@@ -506,7 +506,7 @@ class ZSAEModel(GenericModel):
         self.dataset = dataset
 
         emb_dim = 300
-        word_embs = WordEmbeddings(source='glove', dim=emb_dim)
+        word_embs = WordEmbeddings(source='glove', dim=emb_dim, normalize=True)
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
@@ -526,7 +526,7 @@ class ZSAEModel(GenericModel):
                                             # # nn.Dropout(0.5),
                                             # nn.Linear(hidden_dim, latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * latent_dim, hidden_dim),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
                                                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
@@ -597,7 +597,9 @@ class ZSAEModel(GenericModel):
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
 
-        predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
+        act_emb = act_emb / act_emb.detach().norm(dim=1, keepdim=True)
+        # predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
+        predictor_input = target_embeddings + act_emb.unsqueeze(dim=1).expand_as(target_embeddings)  # N x P x 2*E
         act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
 
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
