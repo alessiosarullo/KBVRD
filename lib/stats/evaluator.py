@@ -251,7 +251,20 @@ class Evaluator(BaseEvaluator):
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
 
-     
+    def sort_and_filter(self, gt_hois, metrics, sort=False, keep_inds=None):
+        gt_label_hist = Counter(gt_labels)
+        if sort:
+         inds = [p for p, num in gt_label_hist.most_common()]
+         if labels is not None:
+             inds += sorted(set(labels) - set(gt_label_hist.keys()))
+        else:
+         if labels:
+             inds = labels
+         else:
+             inds = sorted(gt_label_hist.keys())
+
+        hoi_metrics = {k: v[inds] if v.size > 1 else v for k, v in metrics.items()}
+
 
 class MetricFormatter:
     def __init__(self):
