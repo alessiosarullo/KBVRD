@@ -430,7 +430,7 @@ class ZSProbModel(GenericModel):
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             target_embeddings = self.pred_embs  # N x P
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_word_embs  # N x P
+            target_embeddings = self.trained_embs  # N x P
         target_embeddings = target_embeddings.unsqueeze(dim=0)
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
