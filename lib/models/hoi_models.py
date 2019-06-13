@@ -56,8 +56,6 @@ class BaseModel(GenericModel):
         return self._act_repr_dim
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -148,8 +146,6 @@ class GEmbModel(BaseModel):
         return act_embs
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -301,8 +297,7 @@ class ZSAttModel(ZSBaseModel):
                                                 ])
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
+
         boxes_ext = vis_output.boxes_ext
         masks = vis_output.masks
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
@@ -357,12 +352,12 @@ class ZSProbModel(GenericModel):
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                            nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
                                             nn.Linear(hidden_dim, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                                nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
                                                 ])
@@ -420,8 +415,7 @@ class ZSProbModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
+
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
@@ -436,6 +430,7 @@ class ZSProbModel(GenericModel):
         target_emb_logprobs = -act_emb_logvar.prod(dim=2) - \
                               0.5 * ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) / act_emb_logvar.exp()).norm(dim=2) ** 2
 
+        print(target_emb_logprobs.shape)
         act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr
@@ -540,9 +535,6 @@ class ZSAEModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
-
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb = self.vrepr_to_emb(vrepr)
 
@@ -665,8 +657,6 @@ class ZSRModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
 
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb = self.vrepr_to_emb(vrepr)
@@ -759,8 +749,7 @@ class KatoModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
+
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -891,8 +880,7 @@ class PeyreModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        if vis_output.box_labels is not None:
-            vis_output.filter_boxes()
+
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
