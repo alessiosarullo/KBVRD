@@ -45,7 +45,7 @@ class ProgramConfig(BaseConfigs):
         self.randomize = False
 
         self.model = None
-        self.zsdir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
+        self.baseline_dir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/'
 
         self.save_dir = ''
 
@@ -110,14 +110,14 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'ds_inds.pkl')
 
     @property
-    def zs_baseline_model_file(self):
-        assert self.zsdir
-        return os.path.join(self.zsdir, 'final.tar')
+    def baseline_model_file(self):
+        assert self.baseline_dir
+        return os.path.join(self.baseline_dir, 'final.tar')
 
     @property
-    def zs_ds_inds_file(self):
-        assert self.zsdir
-        return os.path.join(self.zsdir, 'ds_inds.pkl')
+    def active_classes_file(self):
+        assert self.baseline_dir
+        return os.path.join(self.baseline_dir, 'ds_inds.pkl')
 
     @property
     def tensorboard_dir(self):

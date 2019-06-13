@@ -56,8 +56,8 @@ class Launcher:
         print('RNG seed:', seed)
 
         # Data
-        if cfg.data.zsl:
-            pred_inds = sorted(pickle.load(open(cfg.program.zs_ds_inds_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
+        if cfg.program.baseline_dir:
+            pred_inds = sorted(pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
             obj_inds = cfg.data.obj_inds
         else:
             # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
@@ -66,10 +66,7 @@ class Launcher:
 
         self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
         self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
-        if cfg.data.zsl:
-            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
-        else:
-            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST, obj_inds=obj_inds, pred_inds=pred_inds)
+        self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         # Model
         self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
@@ -251,7 +248,7 @@ class Launcher:
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.program.eval_res_file)
         metric_dicts = evaluator.output_metrics()
-        if cfg.data.zsl:
+        if self.train_split.active_predicates.size < self.train_split.hicodet.num_predicates:
             trained_on_preds = sorted(self.train_split.active_predicates)
             print('Trained on:')
             _, tr_hoi_metrics = evaluator.output_metrics(actions_to_keep=trained_on_preds)
