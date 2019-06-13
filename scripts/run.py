@@ -250,11 +250,11 @@ class Launcher:
         evaluator = Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.program.eval_res_file)
-        metric_dicts = evaluator.print_metrics()
+        metric_dicts = evaluator.output_metrics()
         if cfg.data.zsl:
             zs_preds = sorted(set(range(self.train_split.hicodet.num_predicates)) - set(self.train_split.active_predicates))
             print('Zero-shot:')
-            _, zs_hoi_metrics = evaluator.print_metrics(zs_pred_inds=zs_preds)
+            _, zs_hoi_metrics = evaluator.output_metrics(actions_to_keep=zs_preds)
             zs_hoi_metrics = {f'zs_{k}': v for k, v in zs_hoi_metrics.items()}
             metric_dicts = list(metric_dicts) + [zs_hoi_metrics]
 

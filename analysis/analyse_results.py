@@ -178,9 +178,9 @@ def evaluate():
     # evaluator.evaluate_predictions(results)
     evaluator.load(cfg.program.eval_res_file)
 
-    evaluator.print_metrics(sort=True, zs_pred_inds=[1, 2, 84])
-    # evaluator.print_metrics(sort=True, zs_pred_inds=list(set(range(117)) - {84}))
-    # evaluator.print_metrics(sort=True, zs_pred_inds=list(range(117)))
+    evaluator.output_metrics(sort=True, actions_to_keep=[1, 2, 84])
+    # evaluator.output_metrics(sort=True, actions_to_keep=list(set(range(117)) - {84}))
+    # evaluator.output_metrics(sort=True, actions_to_keep=list(range(117)))
 
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     # stats.print_metrics(sort=True)

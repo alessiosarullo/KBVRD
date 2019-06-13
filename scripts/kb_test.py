@@ -116,7 +116,7 @@ def main():
 
             print('Predictions computed.')
             evaluator.evaluate_predictions(all_predictions)
-            evaluator.print_metrics()
+            evaluator.output_metrics()
 
             results.append(evaluator.metrics['M-mAP'])
 

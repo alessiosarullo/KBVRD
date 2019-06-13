@@ -102,35 +102,34 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def print_metrics(self, sort=False, zs_pred_inds=None):
+    def output_metrics(self, sort=False, actions_to_keep=None):
         mf = MetricFormatter()
-        lines = []
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        lines += mf.format_metric_and_gt_lines(self.dataset_split.obj_labels, metrics=obj_metrics, gt_str='GT objects', sort=sort,
-                                               labels=list(range(self.hicodet.num_object_classes)))
+        gt_obj_class_hist, obj_metrics, obj_class_inds = self.sort_and_filter(metrics=obj_metrics,
+                                                                              gt_labels=self.dataset_split.obj_labels,
+                                                                              all_classes=list(range(self.hicodet.num_object_classes)),
+                                                                              sort=sort)
+        mf.format_metric_and_gt_lines(gt_obj_class_hist, obj_metrics, obj_class_inds, gt_str='GT objects')
 
-        hois = self.dataset_split.hoi_triplets
-        if zs_pred_inds is None:
-            hois = self.hicodet.op_pair_to_interaction[hois[:, 2], hois[:, 1]]
-            assert np.all(hois >= 0)
-            hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-            lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort,
-                                                   labels=list(range(self.hicodet.num_interactions)))
-        else:
-            zs_pred_inds = np.array(zs_pred_inds).astype(np.int)
-            zs_pred_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
-            zs_pred_mask[zs_pred_inds] = True
-            zs_interaction_mask = zs_pred_mask[self.hicodet.interactions[:, 0]]
+        gt_hoi_triplets = self.dataset_split.hoi_triplets
+        gt_hoi_labels = self.hicodet.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
+        hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+        interactions_to_keep = None
+        if actions_to_keep is not None:
+            act_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
+            act_mask[np.array(actions_to_keep).astype(np.int)] = True
+            interaction_mask = act_mask[self.hicodet.interactions[:, 0]]
+            gt_hoi_labels = gt_hoi_labels[interaction_mask[gt_hoi_labels]]
+            interactions_to_keep = set(np.flatnonzero(interaction_mask).tolist())
+        assert np.all(gt_hoi_labels >= 0)
+        gt_hoi_class_hist, hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=hoi_metrics,
+                                                                              gt_labels=gt_hoi_labels,
+                                                                              all_classes=list(range(self.hicodet.num_interactions)),
+                                                                              sort=sort,
+                                                                              keep_inds=interactions_to_keep)
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
-            hois = self.hicodet.op_pair_to_interaction[hois[:, 2], hois[:, 1]]
-            zs_hoi_mask = zs_interaction_mask[hois]
-            hois = hois[zs_hoi_mask]
-            assert np.all(hois >= 0)
-            hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-            lines += mf.format_metric_and_gt_lines(hois, metrics=hoi_metrics, gt_str='GT HOIs', sort=sort)
-
-        print('\n'.join(lines))
         return obj_metrics, hoi_metrics
 
     def match_prediction_to_gt(self, im_id, gt_entry: Example, prediction: Prediction):
@@ -251,50 +250,45 @@ class Evaluator(BaseEvaluator):
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
 
-    def sort_and_filter(self, gt_hois, metrics, sort=False, keep_inds=None, all_hoi_classes=None):
-        gt_hois_hist = Counter(gt_hois)
-        if all_hoi_classes:
-            for
-        if sort:
-            inds = [p for p, num in gt_hois_hist.most_common()]
-            if labels is not None:
-                inds += sorted(set(labels) - set(gt_hois_hist.keys()))
-        else:
-            if labels:
-                inds = labels
-            else:
-                inds = sorted(gt_hois_hist.keys())
+    def sort_and_filter(self, metrics, gt_labels, all_classes, sort=False, keep_inds=None):
+        gt_labels_hist = Counter(gt_labels)
+        for c in all_classes:
+            gt_labels_hist.setdefault(c, 0)
 
-        hoi_metrics = {k: v[inds] if v.size > 1 else v for k, v in metrics.items()}
+        if keep_inds:
+            del_inds = set(gt_labels_hist.keys()) - set(keep_inds)
+            for k in del_inds:
+                del gt_labels_hist[k]
+
+        if sort:
+            class_inds = [p for p, num in gt_labels_hist.most_common()]
+        else:
+            class_inds = sorted(gt_labels_hist.keys())
+            assert class_inds == sorted(all_classes)
+
+        metrics = {k: v[class_inds] if v.size > 1 else v for k, v in metrics.items()}
+        return gt_labels_hist, metrics, class_inds
 
 
 class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, gt_labels, metrics, gt_str, sort=False, labels=None):
-        lines = []
-        gt_label_hist = Counter(gt_labels)
+    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str, print_out=True):
         num_gt_examples = sum(gt_label_hist.values())
-        if sort:
-            inds = [p for p, num in gt_label_hist.most_common()]
-            if labels is not None:
-                inds += sorted(set(labels) - set(gt_label_hist.keys()))
-        else:
-            if labels:
-                inds = labels
-            else:
-                inds = sorted(gt_label_hist.keys())
-
         pad = len(gt_str)
         if metrics:
             pad = max(pad, max([len(k) for k in metrics.keys()]))
 
+        lines = []
         for k, v in metrics.items():
-            lines += [self.format_metric(k, v[inds] if v.size > 1 else v, pad)]
+            lines += [self.format_metric(k, v, pad)]
         format_str = '%{}s %8s [%s]'.format(pad + 1)
-        lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in inds]))]
-        lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in inds]))]
+        lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in class_inds]))]
+        lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in class_inds]))]
+
+        if print_out:
+            print('\n'.join(lines))
         return lines
 
     def format_metric(self, metric_name, data, metric_str_len=None):
