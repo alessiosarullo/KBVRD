@@ -237,8 +237,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         z_a = self.gc_layers[0](self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
         for i in range(1, len(self.gc_layers)):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
-            z_n = self.gc_layers[i](self.adj_nn @ prev_z_n + self.adj_an.T @ prev_z_a)
-            z_v = self.gc_layers[i](self.adj_vv @ prev_z_v + self.adj_av.T @ prev_z_a)
+            z_n = self.gc_layers[i](self.adj_nn @ prev_z_n + self.adj_an.t() @ prev_z_a)
+            z_v = self.gc_layers[i](self.adj_vv @ prev_z_v + self.adj_av.t() @ prev_z_a)
             z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
 
         output_logits = self.score_mlp(torch.cat([input_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),

@@ -252,16 +252,16 @@ class Evaluator(BaseEvaluator):
         return rec, prec, ap
 
     def sort_and_filter(self, gt_hois, metrics, sort=False, keep_inds=None):
-        gt_label_hist = Counter(gt_labels)
+        gt_hois_hist = Counter(gt_hois)
         if sort:
-         inds = [p for p, num in gt_label_hist.most_common()]
+         inds = [p for p, num in gt_hois_hist.most_common()]
          if labels is not None:
-             inds += sorted(set(labels) - set(gt_label_hist.keys()))
+             inds += sorted(set(labels) - set(gt_hois_hist.keys()))
         else:
          if labels:
              inds = labels
          else:
-             inds = sorted(gt_label_hist.keys())
+             inds = sorted(gt_hois_hist.keys())
 
         hoi_metrics = {k: v[inds] if v.size > 1 else v for k, v in metrics.items()}
 
