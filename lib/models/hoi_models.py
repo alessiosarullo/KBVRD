@@ -593,10 +593,10 @@ class ZSRModel(GenericModel):
         wemb_input_dim = self.pred_embs.shape[1]
         wemb_hidden_dim = (wemb_input_dim + latent_dim) // 2
         self.wemb_to_emb = nn.Sequential(*[nn.Linear(wemb_input_dim, wemb_hidden_dim),
-                                            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(wemb_hidden_dim, latent_dim),
-                                            ])
+                                           nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                           # nn.Dropout(0.5),
+                                           nn.Linear(wemb_hidden_dim, latent_dim),
+                                           ])
 
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
@@ -781,6 +781,8 @@ class KatoModel(GenericModel):
 
 
 class PeyreModel(GenericModel):
+    # FIXME this is not 0-shot
+
     @classmethod
     def get_cline_name(cls):
         return 'peyre'

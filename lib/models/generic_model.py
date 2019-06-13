@@ -113,6 +113,12 @@ class GenericModel(AbstractModel):
                     if vis_output.ho_infos is not None:
                         assert action_output is not None
 
+                        if action_output.shape[1] < self.dataset.hicodet.num_predicates:
+                            assert action_output.shape[1] == self.dataset.num_predicates
+                            restricted_action_output = action_output
+                            action_output = restricted_action_output.new_zeros((action_output.shape[0], self.dataset.hicodet.num_predicates))
+                            action_output[:, self.dataset.active_predicates] = restricted_action_output
+
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
                         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
