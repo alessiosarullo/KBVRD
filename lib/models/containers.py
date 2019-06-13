@@ -48,7 +48,7 @@ class VisualOutput:
         obj_labels_1hot = self.action_labels.new_zeros((hoi_obj_labels.shape[0], dataset.num_object_classes)).scatter_(1, hoi_obj_labels, 1.)
         hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * self.action_labels[:, interactions[:, 0]]
         assert hoi_labels.shape[0] == self.action_labels.shape[0] and hoi_labels.shape[1] == dataset.hicodet.num_interactions
-        return  hoi_labels
+        return hoi_labels
 
     def filter_boxes(self, valid_box_mask=None):
         assert self.boxes_ext is not None
