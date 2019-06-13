@@ -90,8 +90,8 @@ class MultiModalModel(GenericModel):
         # torch.nn.init.xavier_normal_(self.act_output_mat, gain=1.0)
 
         # TODO enable
-        self.act_output_centroid = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates)), requires_grad=True)  # D x P
-        self.act_output_var_mat = nn.Parameter(torch.empty((self.act_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
+        self.act_output_centroid = nn.Parameter(torch.empty((self.final_repr_dim, dataset.num_predicates)), requires_grad=True)  # D x P
+        self.act_output_var_mat = nn.Parameter(torch.empty((self.final_repr_dim, dataset.num_predicates, max_modes)), requires_grad=True)  # D x P x M
         torch.nn.init.xavier_normal_(self.act_output_centroid, gain=1.0)
         torch.nn.init.xavier_uniform_(self.act_output_var_mat, gain=1.0)
 

@@ -277,6 +277,7 @@ class Configs:
         pydet.cfg_from_file(cfg_file)
         pydet.cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS = False  # Don't need to load imagenet pretrained weights
         pydet.cfg.MODEL.NUM_CLASSES = len(pydet.COCO_CLASSES)
+        pydet.cfg.DETECTIONS_PER_IM = 64
         pydet.assert_and_infer_cfg()
 
         cls.data.pixel_mean = pydet.cfg.PIXEL_MEANS
