@@ -264,7 +264,6 @@ class Evaluator(BaseEvaluator):
             class_inds = [p for p, num in gt_labels_hist.most_common()]
         else:
             class_inds = sorted(gt_labels_hist.keys())
-            assert class_inds == sorted(all_classes)
 
         metrics = {k: v[class_inds] if v.size > 1 else v for k, v in metrics.items()}
         return gt_labels_hist, metrics, class_inds

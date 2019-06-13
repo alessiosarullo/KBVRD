@@ -464,14 +464,13 @@ class ZSAEModel(GenericModel):
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :])
+        self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :], requires_grad=False)
 
         latent_dim = self.pred_embs.shape[1]
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
         # input_dim = self.visual_module.vis_feat_dim
         # hidden_dim = 1024
-        print(input_dim, hidden_dim, latent_dim)
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                             # nn.Dropout(0.5),
