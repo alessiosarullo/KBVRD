@@ -346,8 +346,8 @@ class ZSProbModel(GenericModel):
 
         self.dataset = dataset
 
-        emb_dim = 200
-        word_embs = WordEmbeddings(source='glove', dim=emb_dim, normalize=True)
+        self.emb_dim = 200
+        word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
@@ -356,8 +356,6 @@ class ZSProbModel(GenericModel):
         latent_dim = self.pred_embs.shape[1]
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
-        # input_dim = self.visual_module.vis_feat_dim
-        # hidden_dim = 1024
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.LeakyReLU(negative_slope=0.2, inplace=True),
                                             # nn.Dropout(0.5),
