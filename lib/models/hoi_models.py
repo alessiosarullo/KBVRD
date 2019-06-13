@@ -428,16 +428,15 @@ class ZSProbModel(GenericModel):
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs  # N x P
+            target_embeddings = self.pred_embs  # P x E
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs  # N x P
-        target_embeddings = target_embeddings.unsqueeze(dim=0)
+            target_embeddings = self.trained_embs  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = -act_emb_logvar.prod(dim=2) - 0.5 * ((target_embeddings - act_emb_mean) / act_emb_logvar.exp()).norm(dim=2) ** 2
-
-        act_predictors = self.emb_to_predictor(target_emb_logprobs)  # N x P x D
-
+        target_emb_logprobs = -act_emb_logvar.prod(dim=2) - \
+                              0.5 * ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) / act_emb_logvar.exp()).norm(dim=2) ** 2
+        
+        act_predictors = self.emb_to_predictor(target_emb_logprobs.exp() * target_embeddings.unsqueeze(dim=0))  # N x P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr
 
