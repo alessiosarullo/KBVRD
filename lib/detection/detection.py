@@ -5,7 +5,7 @@ from lib.detection.box_utils import bbox_transform, clip_tiled_boxes
 from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils
 
 
-def im_detect_boxes(model, inputs):
+def im_detect_boxes(model, inputs, unscaled_img_sizes):
     """
     Returned `masks`, `box_feats` and `feat_map` are Torch, the rest is NumPy
     """
@@ -16,10 +16,9 @@ def im_detect_boxes(model, inputs):
     assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
-    im_info = inputs['im_info']
-
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)  # NOTE: boxes are scaled back to the image size
+    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, unscaled_img_sizes)
     assert nonnms_boxes.shape[0] > 0
+    # NOTE: at this point boxes are scaled back to the image size
 
     nonnms_scores = nonnms_scores.cpu().numpy()
     nonnms_boxes = nonnms_boxes.cpu().numpy()
@@ -35,55 +34,18 @@ def im_detect_boxes(model, inputs):
     boxes = boxes[u_idx, :]
 
     scores = nonnms_scores[u_box_inds, :]
-    im_ids = nonnms_im_ids[u_box_inds].astype(np.int, copy=False)
+    im_ids = nonnms_im_ids[u_box_inds]
     u_im_ids = np.unique(im_ids)
-    assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
+    assert np.all(u_nonnms_im_ids == u_im_ids), (u_nonnms_im_ids, u_im_ids)
+
+    # Filter out 0-area boxes
+    nonzero_area_boxes = (boxes[:, 0] < boxes[:, 2]) & (boxes[:, 1] < boxes[:, 3])
+    boxes = boxes[nonzero_area_boxes, :]
+    im_ids = im_ids[nonzero_area_boxes]
+    scores = scores[nonzero_area_boxes, :]
 
     assert boxes.shape[0] == im_ids.shape[0] == scores.shape[0]
     return im_ids, boxes, scores, feat_map
-
-
-def im_detect_all_with_feats(model, inputs, feat_dim=2048):
-    """
-    Returned `masks`, `box_feats` and `feat_map` are Torch, the rest is NumPy
-    """
-    # TODO docs
-
-    assert not cfg.TEST.BBOX_AUG.ENABLED
-    assert not cfg.MODEL.KEYPOINTS_ON
-    assert cfg.MODEL.MASK_ON
-    assert not cfg.TEST.MASK_AUG.ENABLED
-
-    im_info = inputs['im_info']
-
-    nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, im_info)
-    assert nonnms_boxes.shape[0] > 0  # this might not be true
-
-    nonnms_scores = nonnms_scores.cpu().numpy()
-    nonnms_boxes = nonnms_boxes.cpu().numpy()
-    u_nonnms_im_ids = np.unique(nonnms_im_ids)
-
-    box_inds, boxes, box_classes, box_class_scores = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes, nonnms_im_ids)
-    scores = nonnms_scores[box_inds, :]
-    im_ids = nonnms_im_ids[box_inds].astype(np.int, copy=False)
-    u_im_ids = np.unique(im_ids)
-    assert np.all(u_nonnms_im_ids.astype(np.int, copy=False) == u_im_ids), (u_nonnms_im_ids, u_im_ids)
-
-    if boxes.shape[0] > 0:
-        im_scales = im_info[:, 2].cpu().numpy()
-        boxes = boxes * im_scales[im_ids, None]
-
-        box_feats = get_rois_feats(model, feat_map, boxes)
-        assert box_feats.shape[1] == feat_dim
-        masks = im_detect_mask(model, im_ids, boxes, feat_map)
-
-        assert box_class_scores.shape[0] == boxes.shape[0] == box_classes.shape[0] == im_ids.shape[0] == \
-               masks.shape[0] == scores.shape[0] == box_feats.shape[0]
-    else:
-        masks = feat_map.new_zeros((0, scores.shape[1], cfg.MRCNN.RESOLUTION, cfg.MRCNN.RESOLUTION))
-        box_feats = feat_map.new_zeros((0, feat_dim))
-
-    return box_class_scores, boxes, box_classes, im_ids, masks, feat_map, box_feats, scores
 
 
 def get_rois_feats(model, fmap, rois):
@@ -95,7 +57,7 @@ def get_rois_feats(model, fmap, rois):
     return rois_feats
 
 
-def _im_detect_bbox(model, inputs, im_info):
+def _im_detect_bbox(model, inputs, unscaled_img_sizes):
     """Prepare the bbox for testing"""
 
     assert not cfg.PYTORCH_VERSION_LESS_THAN_040
@@ -104,26 +66,22 @@ def _im_detect_bbox(model, inputs, im_info):
     assert not cfg.MODEL.CLS_AGNOSTIC_BBOX_REG
     assert not cfg.TRAIN.BBOX_NORMALIZE_TARGETS_PRECOMPUTED
 
-    im_scales = im_info[:, 2]
+    im_scales = inputs['im_info'][:, 2]
     return_dict = model(**inputs)
     box_deltas = return_dict['bbox_pred']
     scores = return_dict['cls_score']  # cls prob (activations after softmax)
 
     boxes = box_deltas.new_tensor(return_dict['rois'][:, 1:5])
-    im_inds = return_dict['rois'][:, 0]
+    im_inds = return_dict['rois'][:, 0].astype(np.int)
 
-    boxes /= im_scales[torch.from_numpy(im_inds).long()].view(-1, 1)  # unscale back to raw image space
+    boxes /= im_scales[torch.from_numpy(im_inds)].view(-1, 1)  # unscale back to raw image space
     scores = scores.view([-1, scores.shape[-1]])  # In case there is 1 proposal
     box_deltas = box_deltas.view([-1, box_deltas.shape[-1]])  # In case there is 1 proposal
 
     # Apply bounding-box regression deltas
     pred_boxes = bbox_transform(boxes, box_deltas, cfg.MODEL.BBOX_REG_WEIGHTS, cfg.BBOX_XFORM_CLIP)
 
-    # FIXME Boxes are clipped to max image size, not their own. This doesn't actually make a difference because box detection is performed on a
-    #  single image, though.
-    # TODO check if the size given here is the correct one (scaled vs unscaled). Pretty sure it's scaled, which is wrong because boxes are not.
-    pred_boxes = clip_tiled_boxes(pred_boxes, inputs['data'][0].shape[1:])
-    # TODO filter 0-area boxes
+    pred_boxes = clip_tiled_boxes(pred_boxes, torch.from_numpy(unscaled_img_sizes[im_inds]).to(pred_boxes))
 
     return scores, pred_boxes, return_dict['blob_conv'], im_inds  # NOTE: pred_boxes are scaled back to the image size
 

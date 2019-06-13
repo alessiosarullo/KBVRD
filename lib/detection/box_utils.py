@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 
 def bbox_transform(boxes, deltas, weights, bbox_xform_clip):
@@ -40,11 +41,11 @@ def bbox_transform(boxes, deltas, weights, bbox_xform_clip):
     return pred_boxes
 
 
-def clip_tiled_boxes(boxes, im_shape):
+def clip_tiled_boxes(boxes, im_shapes):
     """Clip boxes to image boundaries. im_shape is [height, width] and boxes has shape (N, 4 * num_tiled_boxes)."""
     assert boxes.shape[1] % 4 == 0, 'boxes.shape[1] is {:d}, but must be divisible by 4.'.format(boxes.shape[1])
-    boxes[:, 0::4] = boxes[:, 0::4].clamp(min=0, max=im_shape[1] - 1)  # x1 >= 0
-    boxes[:, 1::4] = boxes[:, 1::4].clamp(min=0, max=im_shape[0] - 1)  # y1 >= 0
-    boxes[:, 2::4] = boxes[:, 2::4].clamp(min=0, max=im_shape[1] - 1)  # x2 < im_shape[1]
-    boxes[:, 3::4] = boxes[:, 3::4].clamp(min=0, max=im_shape[0] - 1)  # y2 < im_shape[0]
+    boxes = boxes.clamp(min=0)
+    boxes[:, 0::2] = torch.min(boxes[:, 0::2], im_shapes[:, [1]] - 1)
+    boxes[:, 1::2] = torch.min(boxes[:, 1::2], im_shapes[:, [0]] - 1)
+    # boxes[:, 3::4] = boxes[:, 3::4].clamp(max=im_shapes[:, 0] - 1)  # y2 < im_shape[0]
     return boxes

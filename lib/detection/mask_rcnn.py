@@ -51,9 +51,11 @@ class MaskRCNN(nn.Module):
 
         assert self.allow_train or not self.training
         with torch.set_grad_enabled(self.training):
-            box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs={'data': x.imgs, 'im_info': x.img_infos})
+            detect_inputs = {'data': x.imgs, 'im_info': x.img_infos}
+            unscaled_img_sizes = np.array([d['im_size'] for d in x.other_ex_data])
+            box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs=detect_inputs, unscaled_img_sizes=unscaled_img_sizes)
             im_scales = x.img_infos[:, 2].cpu().numpy()
-            boxes = boxes * im_scales[box_im_ids, None]  # Note: this can introduce numerical errors! Box might be bigger than image.
+            boxes = boxes * im_scales[box_im_ids, None]
             boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)

@@ -20,7 +20,7 @@ def save_feats():
 
     train_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
     test_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    assert Splits.VAL not in HicoDetSplit.splits
+    assert Splits.VAL not in HicoDetSplitBuilder.splits[HicoDetSplit]
 
     vm = VisualModule(dataset=train_split)
     if torch.cuda.is_available():
