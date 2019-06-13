@@ -654,8 +654,8 @@ class KatoModel(GenericModel):
                 hoi_output = None
 
             if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'hoi_loss': nn.functional.binary_cross_entropy_with_logits(hoi_output, action_labels) * hoi_output.shape[1]}
+                hoi_labels = vis_output.get_hoi_labels(self.dataset)
+                losses = {'hoi_loss': nn.functional.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
