@@ -63,7 +63,7 @@ class Evaluator(BaseEvaluator):
         for i, res in enumerate(predictions):
             ex = self.dataset_split.get_img_entry(i, read_img=False)
             prediction = Prediction(res)
-            self.process_prediction(i, ex, prediction)
+            self.match_prediction_to_gt(i, ex, prediction)
         Timer.get('Eval epoch', 'Predictions').toc()
         Timer.get('Eval epoch', 'Metrics').tic()
         self.compute_metrics()
@@ -94,7 +94,7 @@ class Evaluator(BaseEvaluator):
             if self.num_hoi_thr is not None:
                 p_hoi_scores = p_hoi_scores[:self.num_hoi_thr]
                 p_gt_ho_assignment = p_gt_ho_assignment[:self.num_hoi_thr]
-            rec_j, prec_j, ap_j = self.eval_interactions(p_hoi_scores, p_gt_ho_assignment, num_gt_hois)
+            rec_j, prec_j, ap_j = self.eval_single_interaction_class(p_hoi_scores, p_gt_ho_assignment, num_gt_hois)
             ap[j] = ap_j
             if rec_j.size > 0:
                 recall[j] = rec_j[-1]
@@ -133,7 +133,7 @@ class Evaluator(BaseEvaluator):
         print('\n'.join(lines))
         return obj_metrics, hoi_metrics
 
-    def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
+    def match_prediction_to_gt(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
             gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
             num_gt_hois = gt_hoi_triplets.shape[0]
@@ -199,7 +199,7 @@ class Evaluator(BaseEvaluator):
         self.predict_hoi_scores.append(predict_hoi_scores)
         self.pred_gt_assignment_per_hoi.append(pred_gt_assignment_per_hoi)
 
-    def eval_interactions(self, predicted_conf_scores, pred_gtid_assignment, num_hoi_gt_positives):
+    def eval_single_interaction_class(self, predicted_conf_scores, pred_gtid_assignment, num_hoi_gt_positives):
         num_predictions = predicted_conf_scores.shape[0]
         tp = np.zeros(num_predictions)
 
@@ -251,6 +251,7 @@ class Evaluator(BaseEvaluator):
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
 
+     
 
 class MetricFormatter:
     def __init__(self):

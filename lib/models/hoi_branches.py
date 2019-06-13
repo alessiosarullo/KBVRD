@@ -226,7 +226,7 @@ class KatoGCNBranch(AbstractHOIBranch):
                                        nn.Linear(200, 1)
                                        )
 
-    def _forward(self, input_repr, hoi_infos):
+    def _forward(self, input_repr):
         z_n = self.z_n
         z_v = self.z_v
         # z_a is 0
