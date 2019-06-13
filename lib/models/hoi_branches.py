@@ -213,15 +213,15 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
 
         self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i-1], gc_dims[i]),
-                                                      nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                                      nn.ReLU(inplace=True),
                                                       nn.Dropout(p=0.5))
                                         for i in range(len(gc_dims))])
 
         self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + input_repr_dim, 512),
-                                       nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                       nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),
                                        nn.Linear(512, 200),
-                                       nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                                       nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),
                                        nn.Linear(200, 1)
                                        )
