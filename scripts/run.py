@@ -252,11 +252,17 @@ class Launcher:
         evaluator.save(cfg.program.eval_res_file)
         metric_dicts = evaluator.output_metrics()
         if cfg.data.zsl:
+            trained_on_preds = sorted(self.train_split.active_predicates)
+            print('Trained on:')
+            _, tr_hoi_metrics = evaluator.output_metrics(actions_to_keep=trained_on_preds)
+            tr_hoi_metrics = {f'tr_{k}': v for k, v in tr_hoi_metrics.items()}
+
             zs_preds = sorted(set(range(self.train_split.hicodet.num_predicates)) - set(self.train_split.active_predicates))
             print('Zero-shot:')
             _, zs_hoi_metrics = evaluator.output_metrics(actions_to_keep=zs_preds)
             zs_hoi_metrics = {f'zs_{k}': v for k, v in zs_hoi_metrics.items()}
-            metric_dicts = list(metric_dicts) + [zs_hoi_metrics]
+
+            metric_dicts = list(metric_dicts) + [tr_hoi_metrics, zs_hoi_metrics]
 
         metrics = {k: v for md in metric_dicts for k, v in md.items()}
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in metrics.items()}})

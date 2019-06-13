@@ -448,8 +448,6 @@ class ZSAEModel(GenericModel):
         super().__init__(dataset, **kwargs)
         # FIXME
         base_model = BaseModel(dataset, _act_repr_dim=1024)
-        if torch.cuda.is_available():
-            base_model.cuda()
         # ckpt = torch.load(cfg.program.zs_baseline_model_file)
         # base_model.load_state_dict(ckpt['state_dict'])
 
@@ -553,7 +551,6 @@ class ZSAEModel(GenericModel):
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
 
-        act_emb = act_emb / act_emb.detach().norm(dim=1, keepdim=True)
         # predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
         predictor_input = target_embeddings + act_emb.unsqueeze(dim=1).expand_as(target_embeddings)  # N x P x 2*E
         act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
