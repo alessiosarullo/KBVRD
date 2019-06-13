@@ -113,6 +113,7 @@ class PrecomputedMinibatch:
         for ex in examples:
             minibatch.append(ex)
         minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        assert minibatch.pc_ho_infos.shape[0] == cfg.opt.hoi_batch_size, minibatch.pc_ho_infos.shape[0]
         return minibatch
 
 
