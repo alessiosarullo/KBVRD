@@ -123,10 +123,10 @@ class ZSBaseModel(GenericModel):
 
         if not cfg.data.fullzs:
             ckpt = torch.load(cfg.program.baseline_model_file)
-            self.pretrained_base_model = BaseModel(dataset)
-            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_base_model.eval()
-            self.pretrained_predictors = self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+            pretrained_base_model = BaseModel(dataset)
+            pretrained_base_model.load_state_dict(ckpt['state_dict'])
+            self.pretrained_predictors = nn.Parameter(pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
+                                                      requires_grad=False)  # 1 x P x D
             assert len(self.trained_pred_inds) == self.pretrained_predictors.shape[1]
             self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
