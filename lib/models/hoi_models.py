@@ -370,8 +370,8 @@ class ZSProbModel(GenericModel):
             target_embeddings = self.trained_embs  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (np.log(2 * PI) + act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                                         act_emb_logvar.exp()).norm(dim=2) ** 2)
+        target_emb_logprobs = - 0.5 * (np.log(2 * PI).item() + act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+                                                                                             act_emb_logvar.exp()).norm(dim=2) ** 2)
 
         act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
