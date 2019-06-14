@@ -42,7 +42,7 @@ def main():
     model = 'e2e_mask_rcnn_R-50-C4_2x'
     sys.argv += ['--cfg', 'pydetectron/configs/baselines/%s.yaml' % model,
                  '--load_detectron', 'data/pretrained_model/%s.pkl' % model,
-                 '--image_dir', 'data/HICO-DET/images/train2015',
+                 '--image_dir', 'data/HICO-DET/images/test2015',
                  '--num_imgs', 0,
                  ]
 
@@ -82,9 +82,9 @@ def main():
 
     timers = defaultdict(Timer)
     for i in range(num_images):
-        print('img', i)
-        if not imglist[i].endswith('HICO_train2015_00001418.jpg'):
+        if not imglist[i].endswith('HICO_test2015_00001996.jpg'):
             continue
+        print('img', i)
         im = cv2.imread(imglist[i])
         assert im is not None
 

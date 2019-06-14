@@ -52,6 +52,8 @@ def save_feats():
             ho_cache = {k: [] for k in feat_file if k.startswith('union')}
             inference = (split == Splits.TEST)
             for im_i, im_data in enumerate(hd_loader):
+                # if im_i != 1951:
+                #     continue
                 im_data = im_data  # type: Minibatch
                 assert len(im_data.other_ex_data) == 1
 
@@ -119,7 +121,7 @@ def save_feats():
                             feat_file[k][-num_ho_pairs:, :] = v
                     ho_cache = {k: [] for k in ho_cache.keys()}
 
-                    torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
 
             all_union_boxes = np.concatenate([x for x in all_union_boxes if x is not None], axis=0)
             all_ho_infos = np.concatenate([x for x in all_ho_infos if x is not None], axis=0)
