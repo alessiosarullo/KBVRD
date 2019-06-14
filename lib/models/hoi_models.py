@@ -194,94 +194,16 @@ class WEmbModel(GEmbModel):
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-
-        # FIXME
-        base_model = BaseModel(dataset)
-        if torch.cuda.is_available():
-            base_model.cuda()
-        ckpt = torch.load(cfg.program.baseline_model_file)
-        base_model.load_state_dict(ckpt['state_dict'])
-
-        self.predictor_dim = base_model.final_repr_dim
-        self.base_model = base_model
-        self.normalize = cfg.model.wnorm
-        if self.normalize:
-            self.gt_classifiers = nn.functional.normalize(self.base_model.act_output_fc.weight.detach(), dim=1).unsqueeze(dim=0)  # 1 x P x D
-        else:
-            self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
-
-        self.trained_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
-
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos is not None:
-                hoi_predictors = self._forward(vis_output, )
-            else:
-                assert inference
-                hoi_predictors = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                prediction = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
-
-                target_classifiers = self.gt_classifiers.expand(action_labels.shape[0], -1, -1)  # N x P x D
-                # losses = {'action_loss': nn.functional.mse_loss(action_labels.unsqueeze(dim=2) * hoi_predictors,
-                #                                                 action_labels.unsqueeze(dim=2) * target_classifiers, reduction='sum')}
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(prediction, action_labels) * action_labels.shape[1]}
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos is not None:
-                        assert hoi_predictors is not None
-                        visual_feats = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)  # N x 1 x D
-                        if self.normalize:
-                            visual_feats = nn.functional.normalize(visual_feats, dim=2)
-
-                        if cfg.data.zsl:
-                            hoi_predictors[:, torch.tensor(self.trained_pred_inds, device=hoi_predictors.device), :] = self.gt_classifiers
-
-                        action_output = torch.bmm(visual_feats, hoi_predictors.transpose(1, 2)).squeeze(dim=1)
-
-                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
-
-
-class ZSProbModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsp'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        base_model = BaseModel(dataset)
-        # ckpt = torch.load(cfg.program.zs_baseline_model_file)
-        # base_model.load_state_dict(ckpt['state_dict'])
-
-        self.predictor_dim = base_model.final_repr_dim
-        self.base_model = base_model
-        # self.normalize = cfg.model.wnorm
-
-        self.trained_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-
         self.dataset = dataset
+        self.base_model = BaseModel(dataset)
+        self.predictor_dim = self.base_model.final_repr_dim
+
+        self.trained_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+
+        # ckpt = torch.load(cfg.program.baseline_model_file)
+        # self.base_model.load_state_dict(ckpt['state_dict'])
+        # self.gt_classifiers = self.base_model.act_output_fc.weight.detach().unsqueeze(dim=0)  # 1 x P x D
+        # assert len(self.trained_pred_inds) == self.gt_classifiers.shape[1]
 
         self.emb_dim = 200
         word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
@@ -289,20 +211,6 @@ class ZSProbModel(GenericModel):
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
         self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :], requires_grad=False)
-
-        latent_dim = self.pred_embs.shape[1]
-        input_dim = self.predictor_dim
-        hidden_dim = (input_dim + latent_dim) // 2
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                # nn.Dropout(0.5),
-                                                nn.Linear(hidden_dim, input_dim),
-                                                ])
 
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
@@ -355,6 +263,28 @@ class ZSProbModel(GenericModel):
                         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
+
+
+class ZSProbModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsp'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        latent_dim = self.pred_embs.shape[1]
+        input_dim = self.predictor_dim
+        hidden_dim = (input_dim + latent_dim) // 2
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            # nn.Dropout(0.5),
+                                            nn.Linear(hidden_dim, 2 * latent_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                # nn.Dropout(0.5),
+                                                nn.Linear(hidden_dim, input_dim),
+                                                ])
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
         PI = 3.14159265358979323846
@@ -424,16 +354,16 @@ class ZSAEModel(GenericModel):
                                                 nn.Linear(hidden_dim, input_dim),
                                                 ])
 
-    def get_act_graph_embs(self):
-        emb_path = 'cache/rotate_hico_act/'
-        entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
-        with open(os.path.join(emb_path, 'entities.dict'), 'r') as f:
-            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
-            ecl_idx = [int(x) for x in ecl_idx]
-            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
-            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
-        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
-        return act_embs
+    # def get_act_graph_embs(self):
+    #     emb_path = 'cache/rotate_hico_act/'
+    #     entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
+    #     with open(os.path.join(emb_path, 'entities.dict'), 'r') as f:
+    #         ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+    #         ecl_idx = [int(x) for x in ecl_idx]
+    #         assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+    #         entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+    #     act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
+    #     return act_embs
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
