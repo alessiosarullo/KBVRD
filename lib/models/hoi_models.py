@@ -251,20 +251,20 @@ class ZSLatentModel(ZSBaseModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        latent_dim = 64
+        self.latent_dim = 64
         input_dim = self.predictor_dim
-        hidden_dim = (input_dim + latent_dim) // 2
+        hidden_dim = (input_dim + self.latent_dim) // 2
         self.wemb_to_emb = nn.Sequential(*[nn.Linear(self.emb_dim, hidden_dim),
                                            nn.ReLU(inplace=True),
                                            # nn.Dropout(0.5),
-                                           nn.Linear(hidden_dim, 2 * latent_dim),
+                                           nn.Linear(hidden_dim, self.latent_dim),
                                            ])
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * latent_dim),
+                                            nn.Linear(hidden_dim, 2 * self.latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.latent_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
@@ -273,8 +273,8 @@ class ZSLatentModel(ZSBaseModel):
     def _forward(self, vis_output: VisualOutput, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+        act_emb_mean = act_emb_params[:, :self.latent_dim]  # N x E
+        act_emb_logvar = act_emb_params[:, self.latent_dim:]  # N x E
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             target_embeddings = self.pred_embs  # P x E
