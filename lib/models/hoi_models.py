@@ -244,6 +244,16 @@ class ZSProbModel(ZSBaseModel):
         return act_predictors, vrepr
 
 
+class ZSProbNoiseModel(ZSProbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsp-n'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.pred_embs = nn.Parameter(torch.empty_like(self.pred_embs).normal_(), requires_grad=False)
+        self.trained_embs = nn.Parameter(torch.empty_like(self.trained_embs).normal_(), requires_grad=False)
+
 class ZSAEModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
