@@ -332,7 +332,7 @@ class ZSDirModel(ZSBaseModel):
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         target_emb_logprobs += - 0.5 * np.log(2 * PI).item()
-        return target_emb_logprobs
+        return target_emb_logprobs.exp()
 
 
 class ZSObjProbModel(ZSBaseModel):
