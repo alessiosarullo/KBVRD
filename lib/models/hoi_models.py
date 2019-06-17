@@ -119,23 +119,26 @@ class ZSBaseModel(GenericModel):
         self.base_model = BaseModel(dataset)
         self.predictor_dim = self.base_model.final_repr_dim
 
-        self.trained_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(train_pred_inds.tolist())))
+        self.torch_train_pred_inds = nn.Parameter(torch.tensor(train_pred_inds), requires_grad=False)
+        self.torch_zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
 
         if not cfg.data.fullzs:
             ckpt = torch.load(cfg.program.baseline_model_file)
-            pretrained_base_model = BaseModel(dataset)
-            pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_predictors = nn.Parameter(pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
+            self.pretrained_base_model = BaseModel(dataset)
+            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
                                                       requires_grad=False)  # 1 x P x D
-            assert len(self.trained_pred_inds) == self.pretrained_predictors.shape[1]
-            self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+            assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
+            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
         self.emb_dim = 200
         word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
         pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
         # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.trained_embs = nn.Parameter(self.pred_embs[self.trained_pred_inds, :], requires_grad=False)
+        self.trained_embs = nn.Parameter(self.pred_embs[train_pred_inds, :], requires_grad=False)
 
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
@@ -155,8 +158,16 @@ class ZSBaseModel(GenericModel):
             if vis_output.ho_infos is not None:
                 act_predictors, vrepr = self._forward(vis_output)
                 if inference and not cfg.data.fullzs:
-                    act_predictors[:, self.torch_trained_pred_inds, :] = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
-                    action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
+                    pretrained_vrepr = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
+                    pretrained_act_predictors = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
+                    pretrained_action_output = torch.bmm(pretrained_vrepr, pretrained_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pt
+
+                    zs_act_predictors = act_predictors[:, self.torch_zs_pred_inds, :]
+                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)
+
+                    action_output = zs_action_output.new_empty((zs_action_output.shape[0], self.dataset.hicodet.num_predicates))
+                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
+                    action_output[:, self.torch_zs_pred_inds] = zs_action_output
                 else:
                     action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
             else:
@@ -214,8 +225,6 @@ class ZSProbModel(ZSBaseModel):
                                                 ])
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
-        PI = 3.14159265358979323846
-
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
@@ -227,10 +236,8 @@ class ZSProbModel(ZSBaseModel):
             target_embeddings = self.trained_embs  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        # target_emb_logprobs = - 0.5 * (np.log(2 * PI).item() + act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-        #                                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)
         target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)
+                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
