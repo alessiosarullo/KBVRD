@@ -284,7 +284,8 @@ class ZSProb2Model(ZSBaseModel):
                     action_output[:, self.torch_train_pred_inds] = pretrained_action_output
                     action_output[:, self.torch_zs_pred_inds] = zs_action_output
                 else:
-                    action_output = target_emb_logprobs + torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
+                    action_output = target_emb_logprobs + \
+                                    torch.bmm(vrepr, act_predictors.unsqueeze(dim=0).expand_as(vrepr).transpose(1, 2)).squeeze(dim=1)
             else:
                 assert inference
                 action_output = None
@@ -332,7 +333,7 @@ class ZSProb2Model(ZSBaseModel):
         target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
-        act_predictors = self.emb_to_predictor(target_embeddings.unsqueeze(dim=0))  # N x P x D
+        act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr, target_emb_logprobs
 
