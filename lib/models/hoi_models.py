@@ -158,12 +158,12 @@ class ZSBaseModel(GenericModel):
             if vis_output.ho_infos is not None:
                 act_predictors, vrepr = self._forward(vis_output)
                 if inference and not cfg.data.fullzs:
-                    pretrained_vrepr = self.base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
                     pretrained_act_predictors = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
                     pretrained_action_output = torch.bmm(pretrained_vrepr, pretrained_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pt
 
                     zs_act_predictors = act_predictors[:, self.torch_zs_pred_inds, :]
-                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)
+                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pi
 
                     action_output = zs_action_output.new_empty((zs_action_output.shape[0], self.dataset.hicodet.num_predicates))
                     action_output[:, self.torch_train_pred_inds] = pretrained_action_output
