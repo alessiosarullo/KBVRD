@@ -252,8 +252,7 @@ class ZSObjProbModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         obj_word_embs = self.word_embs.get_embeddings(dataset.hicodet.objects, retry='last')
-        self.obj_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-        self.op_emb_sims = self.obj_embs @ self.pred_embs.t()
+        self.op_emb_sims = nn.Parameter(torch.from_numpy(torch.from_numpy(obj_word_embs) @ self.pred_embs.t()), requires_grad=False)
 
         latent_dim = self.pred_embs.shape[1]
         input_dim = self.predictor_dim
