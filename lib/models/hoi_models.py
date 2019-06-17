@@ -276,18 +276,19 @@ class ZSObjProbModel(ZSBaseModel):
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=vrepr.device)
+        hoi_obj_scores = self.obj_score_mpl(vis_output.boxes_ext[:, 5:])[hoi_infos[:, 2]]
+
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             act_embeddings = self.pred_embs  # P x E
+            obj_induced_scores = hoi_obj_scores @ self.op_emb_sims  # N x P
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = self.trained_embs  # P x E
+            obj_induced_scores = hoi_obj_scores @ self.op_emb_sims[:, self.torch_train_pred_inds]  # N x P
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
         target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
-
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=vrepr.device)
-        hoi_obj_scores = self.obj_score_mpl(vis_output.boxes_ext[:, 5:])[hoi_infos[:, 2]]
-        obj_induced_scores = hoi_obj_scores @ self.op_emb_sims  # N x P
 
         w_act_embeddings = obj_induced_scores.unsqueeze(dim=2) * target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0)
         act_predictors = self.emb_to_predictor(w_act_embeddings)  # N x P x D
