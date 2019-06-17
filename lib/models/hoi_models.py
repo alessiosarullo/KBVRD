@@ -243,6 +243,7 @@ class ZSProbModel(ZSBaseModel):
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr
 
+
 class ZSDirModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
@@ -342,14 +343,15 @@ class ZSObjProbModel(ZSBaseModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.hicodet.objects, retry='last')
-        self.op_emb_sims = nn.Parameter(torch.from_numpy(obj_word_embs) @ self.pred_embs.t(), requires_grad=False)
-
         latent_dim = self.pred_embs.shape[1]
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
-        self.obj_score_mpl = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.num_object_classes)
-                                             ])
+
+        self.obj_to_emb = nn.Sequential(*[nn.Linear(self.visual_module.vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
+                                          nn.ReLU(inplace=True),
+                                          # nn.Dropout(0.5),
+                                          nn.Linear(hidden_dim, 2 * latent_dim),
+                                          ])
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
@@ -368,20 +370,28 @@ class ZSObjProbModel(ZSBaseModel):
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
         hoi_infos = torch.tensor(vis_output.ho_infos, device=vrepr.device)
-        hoi_obj_scores = self.obj_score_mpl(vis_output.boxes_ext[:, 5:])[hoi_infos[:, 2]]
+        hoi_obj_params = self.obj_to_emb(torch.cat([vis_output.box_feats, vis_output.boxes_ext[:, 5:]], dim=1))[hoi_infos[:, 2]]
+        hoi_obj_emb_mean = hoi_obj_params[:, :self.emb_dim]  # N x E
+        hoi_obj_emb_logvar = hoi_obj_params[:, self.emb_dim:]  # N x E
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
             act_embeddings = self.pred_embs  # P x E
-            obj_induced_scores = hoi_obj_scores @ self.op_emb_sims  # N x P
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = self.trained_embs  # P x E
-            obj_induced_scores = hoi_obj_scores @ self.op_emb_sims[:, self.torch_train_pred_inds]  # N x P
+
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
+        target_emb_logprobs_act = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+                                                                         act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
-        w_act_embeddings = obj_induced_scores.unsqueeze(dim=2) * target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0)
+        hoi_obj_emb_mean = hoi_obj_emb_mean.unsqueeze(dim=1)
+        hoi_obj_emb_logvar = hoi_obj_emb_logvar.unsqueeze(dim=1)
+        target_emb_logprobs_obj = - 0.5 * (hoi_obj_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - hoi_obj_emb_mean) /
+                                                                             hoi_obj_emb_logvar.exp()).norm(dim=2) ** 2)  # same
+
+        target_emb_logprobs = target_emb_logprobs_obj + target_emb_logprobs_act
+
+        w_act_embeddings = target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0)
         act_predictors = self.emb_to_predictor(w_act_embeddings)  # N x P x D
         vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         return act_predictors, vrepr
@@ -396,6 +406,7 @@ class ZSProbNoiseModel(ZSProbModel):
         super().__init__(dataset, **kwargs)
         self.pred_embs = nn.Parameter(torch.empty_like(self.pred_embs).normal_(), requires_grad=False)
         self.trained_embs = nn.Parameter(torch.empty_like(self.trained_embs).normal_(), requires_grad=False)
+
 
 class ZSAEModel(ZSBaseModel):
     @classmethod
