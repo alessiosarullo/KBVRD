@@ -220,7 +220,7 @@ class ZSProbModel(ZSBaseModel):
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                # nn.Dropout(0.5),
+                                                nn.Dropout(0.5),
                                                 nn.Linear(hidden_dim, input_dim),
                                                 ])
 
