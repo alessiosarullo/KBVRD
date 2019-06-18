@@ -21,7 +21,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = adj_nv  # top right
         adj[self.num_objects:, :self.num_objects] = adj_nv.t()  # bottom left
-        self.adj = nn.Parameter((1 / torch.diag(adj.sum(dim=1)).sqrt()) @ adj @ (1 / torch.diag(adj.sum(dim=0)).sqrt()),
+        self.adj = nn.Parameter(torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt()),
                                 requires_grad=False)
 
         # Starting representation
@@ -79,9 +79,9 @@ class KatoGCNBranch(AbstractHOIBranch):
         # this, but the paper is not clear at all.
         self.adj_vv = nn.Parameter(adj_vv, requires_grad=False)
         self.adj_nn = nn.Parameter(adj_nn, requires_grad=False)
-        self.adj_an = nn.Parameter((1 / torch.diag(adj_an.sum(dim=1)).sqrt()) @ adj_an @ (1 / torch.diag(adj_an.sum(dim=0)).sqrt()),
+        self.adj_an = nn.Parameter(torch.diag(1 / adj_an.sum(dim=1).sqrt()) @ adj_an @ torch.diag(1 / adj_an.sum(dim=0).sqrt()),
                                    requires_grad=False)
-        self.adj_av = nn.Parameter((1 / torch.diag(adj_av.sum(dim=1)).sqrt()) @ adj_av @ (1 / torch.diag(adj_av.sum(dim=0)).sqrt()),
+        self.adj_av = nn.Parameter(torch.diag(1 / adj_av.sum(dim=1).sqrt()) @ adj_av @ torch.diag(1 / adj_av.sum(dim=0).sqrt()),
                                    requires_grad=False)
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
