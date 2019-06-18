@@ -436,7 +436,7 @@ class ZSGCModel(GenericModel):
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
-        act_embeddings = self.gcn()  # P x E
+        _, act_embeddings = self.gcn()  # P x E
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
