@@ -284,7 +284,7 @@ class ZSProb2Model(ZSBaseModel):
                     action_output[:, self.torch_train_pred_inds] = pretrained_action_output
                     action_output[:, self.torch_zs_pred_inds] = zs_action_output
                 else:
-                    action_output = target_emb_logprobs + (vrepr @ act_predictors.t())
+                    action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant: min = log(1e-6)
             else:
                 assert inference
                 action_output = None
