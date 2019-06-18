@@ -43,7 +43,7 @@ class VisualOutput:
         self.action_labels = None  # N x #actions
 
     def get_hoi_labels(self, dataset):
-        interactions = dataset.hicodet.interactions
+        interactions = torch.from_numpy(dataset.hicodet.interactions).to(device=self.action_labels.device)
         hoi_obj_labels = self.box_labels[self.ho_infos[:, 2]].unsqueeze(dim=1)
         obj_labels_1hot = self.action_labels.new_zeros((hoi_obj_labels.shape[0], dataset.num_object_classes)).scatter_(1, hoi_obj_labels, 1.)
         hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * self.action_labels[:, interactions[:, 0]]
