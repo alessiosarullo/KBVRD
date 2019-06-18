@@ -40,6 +40,9 @@ class WordEmbeddings:
             norms = np.linalg.norm(self._embeddings, axis=1)
             norms[norms == 0] = 1
             self._embeddings /= norms[:, None]
+            self.normalised = True
+        else:
+            self.normalised = False
 
         self.word_index = {v: i for i, v in enumerate(self.vocabulary)}
         self.dim = self._embeddings.shape[1]
@@ -79,29 +82,30 @@ class WordEmbeddings:
                     repl_word = tokens[-1]
                     replacements[word] = repl_word
                     emb = self.embedding(repl_word, none_on_miss=True)
-                elif retry == 'avg_norm':
+                elif retry == 'avg':
+                    if not self.normalised:
+                        raise ValueError('Average embeddings requires normalisation.')
                     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
-                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
                     if embs:
                         emb = sum(embs) / len(embs)
                     else:
                         emb = None
-                elif retry == 'avg_norm_first':
-                    embs = [self.embedding(token, none_on_miss=True) for token in tokens]
-                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
-                    if embs:
-                        weights = [2 ** (-i) for i in range(len(embs))]
-                        emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
-                    else:
-                        emb = None
-                elif retry == 'avg_norm_last':
-                    embs = [self.embedding(token, none_on_miss=True) for token in tokens]
-                    embs = [e / np.linalg.norm(e) for e in embs if e is not None]
-                    if embs:
-                        weights = [2 ** (len(embs) - 1 - i) for i in range(len(embs))]
-                        emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
-                    else:
-                        emb = None
+                # elif retry == 'avg_norm_first':
+                #     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
+                #     embs = [e / np.linalg.norm(e) for e in embs if e is not None]
+                #     if embs:
+                #         weights = [2 ** (-i) for i in range(len(embs))]
+                #         emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
+                #     else:
+                #         emb = None
+                # elif retry == 'avg_norm_last':
+                #     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
+                #     embs = [e / np.linalg.norm(e) for e in embs if e is not None]
+                #     if embs:
+                #         weights = [2 ** (len(embs) - 1 - i) for i in range(len(embs))]
+                #         emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
+                #     else:
+                #         emb = None
                 else:
                     raise ValueError(retry)
 

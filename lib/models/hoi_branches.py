@@ -8,6 +8,48 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractHOIBranch
 
 
+class CheatGCNBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+        super().__init__(**kwargs)
+        num_gc_layers = len(gc_dims)
+        self.gc_dims = gc_dims
+
+        # Normalised adjacency matrix
+        adj_nv = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float))
+        adj = torch.eye(dataset.hicodet.num_object_classes + dataset.hicodet.num_predicates).float()
+        adj[:dataset.hicodet.num_object_classes, dataset.hicodet.num_object_classes:] = adj_nv  # top right
+        adj[dataset.hicodet.num_object_classes:, :dataset.hicodet.num_object_classes] = adj_nv.t()  # bottom left
+        self.adj = nn.Parameter((1 / torch.diag(adj.sum(dim=1)).sqrt()) @ adj @ (1 / torch.diag(adj.sum(dim=0)).sqrt()),
+                                requires_grad=False)
+
+        # Starting representation
+        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_,
+                              requires_grad=True)
+
+        gc_layers = []
+        for i in range(num_gc_layers):
+            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
+            out_dim = gc_dims[i]
+            if i < num_gc_layers - 1:
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
+            else:
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+
+        self.gc_layers = nn.ModuleList(gc_layers)
+
+    @property
+    def output_dim(self):
+        raise self.gc_dims[-1]
+
+    def _forward(self, input_repr):
+        z = self.z
+        for gcl in self.gc_layers:
+            z = gcl(self.adj @ z)
+        return z
+
+
 class KatoGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetSplit, input_repr_dim, gc_dims=(512, 200), **kwargs):
         self.word_emb_dim = 300

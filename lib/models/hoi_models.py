@@ -114,6 +114,7 @@ class MultiModalModel(GenericModel):
 
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.emb_dim = 200
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
         self.base_model = BaseModel(dataset)
@@ -133,7 +134,6 @@ class ZSBaseModel(GenericModel):
             assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
-        self.emb_dim = 200
         self.word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
         pred_word_embs = self.word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
         self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
@@ -250,7 +250,7 @@ class ZSProb2Model(ZSBaseModel):
         return 'zsp2'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
+        super().__init__(dataset, emb_dim=100)
         latent_dim = self.pred_embs.shape[1]
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
@@ -334,6 +334,120 @@ class ZSProb2Model(ZSBaseModel):
 
         act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
         return act_predictors, vrepr, target_emb_logprobs
+
+
+class ZSGCModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsgc'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.base_model = BaseModel(dataset)
+        self.predictor_dim = self.base_model.final_repr_dim
+
+        train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(train_pred_inds.tolist())))
+        self.torch_train_pred_inds = nn.Parameter(torch.tensor(train_pred_inds), requires_grad=False)
+        self.torch_zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
+
+        if not cfg.data.fullzs:
+            ckpt = torch.load(cfg.program.baseline_model_file)
+            self.pretrained_base_model = BaseModel(dataset)
+            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
+                                                      requires_grad=False)  # 1 x P x D
+            assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
+            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+
+        self.emb_dim = 200
+        gcn = CheatGCNBranch(dataset, input_repr_dim=256, gc_dims=(128, 64))
+
+        latent_dim = self.pred_embs.shape[1]
+        input_dim = self.predictor_dim
+        hidden_dim = (input_dim + latent_dim) // 2
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            # nn.Dropout(0.5),
+                                            nn.Linear(hidden_dim, 2 * latent_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(hidden_dim, input_dim),
+                                                ])
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                act_predictors, vrepr, target_emb_logprobs = self._forward(vis_output)
+                if inference and not cfg.data.fullzs:
+                    assert False
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
+                    pretrained_act_predictors = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
+                    pretrained_action_output = torch.bmm(pretrained_vrepr, pretrained_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pt
+
+                    zs_act_predictors = act_predictors[:, self.torch_zs_pred_inds, :]
+                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pi
+
+                    action_output = zs_action_output.new_empty((zs_action_output.shape[0], self.dataset.hicodet.num_predicates))
+                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
+                    action_output[:, self.torch_zs_pred_inds] = zs_action_output
+                else:
+                    action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant: min = log(1e-6)
+            else:
+                assert inference
+                action_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        act_emb_params = self.vrepr_to_emb(vrepr)
+        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
+        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+
+        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
+            target_embeddings = self.pred_embs  # P x E
+        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            target_embeddings = self.trained_embs  # P x E
+        act_emb_mean = act_emb_mean.unsqueeze(dim=1)
+        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
+        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
+
+        act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
+        return act_predictors, vrepr, target_emb_logprobs
+
 
 class ZSLatentModel(ZSBaseModel):
     @classmethod
@@ -447,6 +561,17 @@ class ZSProbNoiseModel(ZSProbModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsp-n'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.pred_embs = nn.Parameter(torch.empty_like(self.pred_embs).normal_(), requires_grad=False)
+        self.trained_embs = nn.Parameter(torch.empty_like(self.trained_embs).normal_(), requires_grad=False)
+
+
+class ZSProb2NoiseModel(ZSProb2Model):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsp2-n'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
