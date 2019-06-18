@@ -336,7 +336,7 @@ class ZSProb2Model(ZSBaseModel):
         return act_predictors, vrepr, target_emb_logprobs
 
 
-class ZSGCModel(ZSBaseModel):
+class ZSGCModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsgc'
@@ -361,10 +361,10 @@ class ZSGCModel(ZSBaseModel):
             assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
-        self.emb_dim = 200
-        gcn = CheatGCNBranch(dataset, input_repr_dim=256, gc_dims=(128, 64))
+        self.emb_dim = 128
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=256, gc_dims=(192, self.emb_dim))
 
-        latent_dim = self.pred_embs.shape[1]
+        latent_dim = self.emb_dim
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
@@ -436,16 +436,16 @@ class ZSGCModel(ZSBaseModel):
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
         act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
 
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs  # P x E
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs  # P x E
+        act_embeddings = self.gcn()  # P x E
+        if not (cfg.data.zsl and vis_output.action_labels is None):
+            # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
-        act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
+        act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
         return act_predictors, vrepr, target_emb_logprobs
 
 

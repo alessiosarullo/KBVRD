@@ -13,12 +13,14 @@ class CheatGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
+        self.num_objects = dataset.hicodet.num_object_classes
+        self.num_predicates = dataset.hicodet.num_predicates
 
         # Normalised adjacency matrix
         adj_nv = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float))
-        adj = torch.eye(dataset.hicodet.num_object_classes + dataset.hicodet.num_predicates).float()
-        adj[:dataset.hicodet.num_object_classes, dataset.hicodet.num_object_classes:] = adj_nv  # top right
-        adj[dataset.hicodet.num_object_classes:, :dataset.hicodet.num_object_classes] = adj_nv.t()  # bottom left
+        adj = torch.eye(self.num_objects + self.num_predicates).float()
+        adj[:self.num_objects, self.num_objects:] = adj_nv  # top right
+        adj[self.num_objects:, :self.num_objects] = adj_nv.t()  # bottom left
         self.adj = nn.Parameter((1 / torch.diag(adj.sum(dim=1)).sqrt()) @ adj @ (1 / torch.diag(adj.sum(dim=0)).sqrt()),
                                 requires_grad=False)
 
@@ -43,11 +45,16 @@ class CheatGCNBranch(AbstractHOIBranch):
     def output_dim(self):
         raise self.gc_dims[-1]
 
-    def _forward(self, input_repr):
-        z = self.z
+    def _forward(self, input_repr=None):
+        if input_repr is not None:
+            z = input_repr
+        else:
+            z = self.z
         for gcl in self.gc_layers:
             z = gcl(self.adj @ z)
-        return z
+        obj_embs = z[:self.num_objects]
+        pred_embs = z[self.num_objects:]
+        return obj_embs, pred_embs
 
 
 class KatoGCNBranch(AbstractHOIBranch):
