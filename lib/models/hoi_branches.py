@@ -59,7 +59,7 @@ class CheatGCNBranch(AbstractHOIBranch):
 
 class KatoGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetSplit, input_repr_dim, gc_dims=(512, 200), **kwargs):
-        self.word_emb_dim = 300
+        self.word_emb_dim = 200
         super().__init__(**kwargs)
 
         interactions = dataset.hicodet.interactions  # each is [p, o]
@@ -84,9 +84,9 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.adj_av = nn.Parameter(torch.diag(1 / adj_av.sum(dim=1).sqrt()) @ adj_av @ torch.diag(1 / adj_av.sum(dim=0).sqrt()),
                                    requires_grad=False)
 
-        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects, retry='avg_norm')
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg_norm')
+        self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=True)
+        obj_word_embs = self.word_embs.get_embeddings(dataset.objects, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg')
 
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=False)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
