@@ -25,7 +25,7 @@ class CheatGCNBranch(AbstractHOIBranch):
                                 requires_grad=False)
 
         # Starting representation
-        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_,
+        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(),
                               requires_grad=True)
 
         gc_layers = []
