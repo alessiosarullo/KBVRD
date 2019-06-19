@@ -156,8 +156,7 @@ class ZSBaseModel(GenericModel):
                     if cfg.model.bare:
                         action_output = vrepr @ act_predictors.t()
                     else:
-                        action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant:min=log(1e-6)
-                        # action_output = target_emb_logprobs + vrepr @ act_predictors.t()
+                        action_output = target_emb_logprobs + vrepr @ act_predictors.t()
 
                 if inference and not cfg.data.fullzs:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
