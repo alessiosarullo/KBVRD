@@ -212,6 +212,8 @@ class ModelConfig(BaseConfigs):
 
         self.wnorm = False
 
+        self.attw = False
+
 
 class OptimizerConfig(BaseConfigs):
     def __init__(self):

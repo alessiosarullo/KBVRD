@@ -144,30 +144,29 @@ class ZSBaseModel(GenericModel):
         act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
 
-
-class ZSBaseMultipredModel(ZSBaseModel):
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_predictors, vrepr = self._forward(vis_output)
-                if inference and not cfg.data.fullzs:
-                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
-                    pretrained_act_predictors = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
-                    pretrained_action_output = torch.bmm(pretrained_vrepr, pretrained_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pt
-
-                    zs_act_predictors = act_predictors[:, self.torch_zs_pred_inds, :]
-                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pi
-
-                    action_output = zs_action_output.new_empty((zs_action_output.shape[0], self.dataset.hicodet.num_predicates))
-                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
-                    action_output[:, self.torch_zs_pred_inds] = zs_action_output
-                else:
+                act_predictors, vrepr, target_emb_logprobs = self._forward(vis_output)
+                if cfg.model.attw:
                     action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
+                else:
+                    # action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant:min=log(1e-6)
+                    action_output = target_emb_logprobs + vrepr @ act_predictors.t()
+
+                if inference and not cfg.data.fullzs:
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+                    pretrained_act_predictors = self.pretrained_predictors
+                    if cfg.model.attw:
+                        pretrained_action_output = torch.bmm(pretrained_vrepr.unsqueeze(dim=1),
+                                                             pretrained_act_predictors.expand(act_predictors.shape[0], -1, -1).transpose(1, 2)
+                                                             ).squeeze(dim=1)  # N x Pt
+                    else:
+                        pretrained_action_output = pretrained_vrepr @ pretrained_act_predictors.t()  # N x Pt
+
+                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
             else:
                 assert inference
                 action_output = None
@@ -201,9 +200,39 @@ class ZSBaseMultipredModel(ZSBaseModel):
                 return prediction
 
 
-class ZSBaseAttpredModel(ZSBaseModel):
+class ZSDualBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.base_model = BaseModel(dataset)
+        self.predictor_dim = self.base_model.final_repr_dim
+
+        self.train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(self.train_pred_inds.tolist())))
+        self.torch_train_pred_inds = nn.Parameter(torch.tensor(self.train_pred_inds), requires_grad=False)
+        self.torch_zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
+
+        if not cfg.data.fullzs:
+            ckpt = torch.load(cfg.program.baseline_model_file)
+            self.pretrained_base_model = BaseModel(dataset)
+            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
+                                                      requires_grad=False)  # 1 x P x D
+            assert len(self.train_pred_inds) == self.pretrained_predictors.shape[1]
+            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+
+        assert not cfg.model.attw
+
+    def get_act_graph_embs(self):
+        emb_path = 'cache/rotate_hico_act/'
+        entity_embs = np.load(os.path.join(emb_path, 'entity_embedding.npy'))
+        with open(os.path.join(emb_path, 'entities.dict'), 'r') as f:
+            ecl_idx, entity_classes = zip(*[l.strip().split('\t') for l in f.readlines()])  # the index is loaded just for assertion check.
+            ecl_idx = [int(x) for x in ecl_idx]
+            assert np.all(np.arange(len(ecl_idx)) == np.array(ecl_idx))
+            entity_inv_index = {e: i for i, e in enumerate(entity_classes)}
+        act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
+        return act_embs
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -211,31 +240,35 @@ class ZSBaseAttpredModel(ZSBaseModel):
 
             if vis_output.ho_infos is not None:
                 act_predictors, vrepr, target_emb_logprobs = self._forward(vis_output)
-                if inference and not cfg.data.fullzs:
-                    assert False
-                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach().unsqueeze(dim=1)
-                    pretrained_act_predictors = self.pretrained_predictors.expand(act_predictors.shape[0], -1, -1)
-                    pretrained_action_output = torch.bmm(pretrained_vrepr, pretrained_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pt
-
-                    zs_act_predictors = act_predictors[:, self.torch_zs_pred_inds, :]
-                    zs_action_output = torch.bmm(vrepr, zs_act_predictors.transpose(1, 2)).squeeze(dim=1)  # N x Pi
-
-                    action_output = zs_action_output.new_empty((zs_action_output.shape[0], self.dataset.hicodet.num_predicates))
-                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
-                    action_output[:, self.torch_zs_pred_inds] = zs_action_output
+                if cfg.model.attw:
+                    action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
                 else:
-                    # action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant: min = log(1e-6)
+                    # action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant:min=log(1e-6)
                     action_output = vrepr @ act_predictors.t()
+
+                if inference and not cfg.data.fullzs:
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+                    pretrained_act_predictors = self.pretrained_predictors
+                    if cfg.model.attw:
+                        pretrained_action_output = torch.bmm(pretrained_vrepr.unsqueeze(dim=1),
+                                                             pretrained_act_predictors.expand(act_predictors.shape[0], -1, -1).transpose(1, 2)
+                                                             ).squeeze(dim=1)  # N x Pt
+                    else:
+                        pretrained_action_output = pretrained_vrepr @ pretrained_act_predictors.t()  # N x Pt
+
+                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
             else:
                 assert inference
                 action_output = None
 
             if not inference:
                 action_labels = vis_output.action_labels
-
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'act_d_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1],
+                          'act_p_loss': nn.functional.binary_cross_entropy_with_logits(target_emb_logprobs, action_labels) * action_output.shape[1]}
                 return losses
             else:
+                action_output += target_emb_logprobs
+
                 prediction = Prediction()
 
                 if vis_output.boxes_ext is not None:
@@ -259,7 +292,7 @@ class ZSBaseAttpredModel(ZSBaseModel):
                 return prediction
 
 
-class ZSProbModel(ZSBaseMultipredModel):
+class ZSProbModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsp'
@@ -302,59 +335,15 @@ class ZSProbModel(ZSBaseMultipredModel):
         target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
-        act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
-        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
-        return act_predictors, vrepr
-
-
-class ZSProb2Model(ZSBaseAttpredModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsp2'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset)
-        self.emb_dim = 200
-        self.word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
-        self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-        # self.pred_embs = nn.Parameter(torch.from_numpy(self.get_act_graph_embs()), requires_grad=False)
-        self.trained_embs = nn.Parameter(self.pred_embs[self.train_pred_inds, :], requires_grad=False)
-
-        latent_dim = self.pred_embs.shape[1]
-        input_dim = self.predictor_dim
-        hidden_dim = (input_dim + latent_dim) // 2
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(hidden_dim, input_dim),
-                                                ])
-
-    def _forward(self, vis_output: VisualOutput, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
-
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs  # P x E
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs  # P x E
-        act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
-
-        act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
+        if cfg.model.attw:
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
+            vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+        else:
+            act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
         return act_predictors, vrepr, target_emb_logprobs
 
 
-class ZSGCModel(ZSBaseAttpredModel):
+class ZSGCModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsgc'
@@ -393,181 +382,12 @@ class ZSGCModel(ZSBaseAttpredModel):
         target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
-        act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
+        if cfg.model.attw:
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0))  # N x P x D
+            vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+        else:
+            act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
         return act_predictors, vrepr, target_emb_logprobs
-
-
-class ZSLatentModel(ZSBaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsl'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.latent_dim = 64
-        input_dim = self.predictor_dim
-        hidden_dim = (input_dim + self.latent_dim) // 2
-        self.wemb_to_emb = nn.Sequential(*[nn.Linear(self.emb_dim, hidden_dim),
-                                           nn.ReLU(inplace=True),
-                                           # nn.Dropout(0.5),
-                                           nn.Linear(hidden_dim, self.latent_dim),
-                                           ])
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * self.latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.latent_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(hidden_dim, input_dim),
-                                                ])
-
-    def _forward(self, vis_output: VisualOutput, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :self.latent_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.latent_dim:]  # N x E
-
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs  # P x E
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs  # P x E
-        target_embeddings = self.wemb_to_emb(target_embeddings)
-        act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
-
-        act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
-        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
-        return act_predictors, vrepr
-
-
-class ZSObjProbModel(ZSBaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsop'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        latent_dim = self.pred_embs.shape[1]
-        input_dim = self.predictor_dim
-        hidden_dim = (input_dim + latent_dim) // 2
-
-        self.obj_to_emb = nn.Sequential(*[nn.Linear(self.visual_module.vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
-                                          nn.ReLU(inplace=True),
-                                          # nn.Dropout(0.5),
-                                          nn.Linear(hidden_dim, 2 * latent_dim),
-                                          ])
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(hidden_dim, input_dim),
-                                                ])
-
-    def _forward(self, vis_output: VisualOutput, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
-
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=vrepr.device)
-        hoi_obj_params = self.obj_to_emb(torch.cat([vis_output.box_feats, vis_output.boxes_ext[:, 5:]], dim=1))[hoi_infos[:, 2]]
-        hoi_obj_emb_mean = hoi_obj_params[:, :self.emb_dim]  # N x E
-        hoi_obj_emb_logvar = hoi_obj_params[:, self.emb_dim:]  # N x E
-
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            act_embeddings = self.pred_embs  # P x E
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            act_embeddings = self.trained_embs  # P x E
-
-        act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs_act = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                         act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
-
-        hoi_obj_emb_mean = hoi_obj_emb_mean.unsqueeze(dim=1)
-        hoi_obj_emb_logvar = hoi_obj_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs_obj = - 0.5 * (hoi_obj_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - hoi_obj_emb_mean) /
-                                                                             hoi_obj_emb_logvar.exp()).norm(dim=2) ** 2)  # same
-
-        target_emb_logprobs = target_emb_logprobs_obj + target_emb_logprobs_act
-
-        w_act_embeddings = target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0)
-        act_predictors = self.emb_to_predictor(w_act_embeddings)  # N x P x D
-        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
-        return act_predictors, vrepr
-
-
-class ZSProbNoiseModel(ZSProbModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsp-n'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.pred_embs = nn.Parameter(torch.empty_like(self.pred_embs).normal_(), requires_grad=False)
-        self.trained_embs = nn.Parameter(torch.empty_like(self.trained_embs).normal_(), requires_grad=False)
-
-
-class ZSProb2NoiseModel(ZSProb2Model):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsp2-n'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.pred_embs = nn.Parameter(torch.empty_like(self.pred_embs).normal_(), requires_grad=False)
-        self.trained_embs = nn.Parameter(torch.empty_like(self.trained_embs).normal_(), requires_grad=False)
-
-
-class ZSAEModel(ZSBaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsae'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        latent_dim = self.pred_embs.shape[1]
-        input_dim = self.predictor_dim
-        hidden_dim = (input_dim + latent_dim) // 2
-        # input_dim = self.visual_module.vis_feat_dim
-        # hidden_dim = 1024
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
-                                            nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                            # nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, latent_dim),
-                                            # nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                            # # nn.Dropout(0.5),
-                                            # nn.Linear(hidden_dim, latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                                # nn.Dropout(0.5),
-                                                nn.Linear(hidden_dim, input_dim),
-                                                ])
-
-    def _forward(self, vis_output: VisualOutput, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb = self.vrepr_to_emb(vrepr)
-
-        if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
-        else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1)  # N x P x E
-
-        # predictor_input = torch.cat([target_embeddings, act_emb.unsqueeze(dim=1).expand_as(target_embeddings)], dim=2)  # N x P x 2*E
-        predictor_input = target_embeddings + act_emb.unsqueeze(dim=1).expand_as(target_embeddings)  # N x P x 2*E
-        act_predictors = self.emb_to_predictor(predictor_input)  # N x P x D
-
-        vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
-        return act_predictors, vrepr
 
 
 class KatoModel(GenericModel):
