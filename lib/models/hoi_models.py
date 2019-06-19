@@ -153,8 +153,11 @@ class ZSBaseModel(GenericModel):
                 if cfg.model.attw:
                     action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
                 else:
-                    action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant:min=log(1e-6)
-                    # action_output = target_emb_logprobs + vrepr @ act_predictors.t()
+                    if cfg.model.bare:
+                        action_output = vrepr @ act_predictors.t()
+                    else:
+                        action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant:min=log(1e-6)
+                        # action_output = target_emb_logprobs + vrepr @ act_predictors.t()
 
                 if inference and not cfg.data.fullzs:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
@@ -336,7 +339,8 @@ class ZSProbModel(ZSBaseModel):
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * target_embeddings.unsqueeze(dim=0))  # N x P x D
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.softmax(dim=1).unsqueeze(dim=2) *
+                                                   target_embeddings.unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
             act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
@@ -383,7 +387,8 @@ class ZSGCModel(ZSBaseModel):
                                                                      act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) * act_embeddings.unsqueeze(dim=0))  # N x P x D
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.softmax(dim=1).unsqueeze(dim=2) *
+                                                   act_embeddings.unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D

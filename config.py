@@ -213,6 +213,7 @@ class ModelConfig(BaseConfigs):
         self.wnorm = False
 
         self.attw = False
+        self.bare = False
 
 
 class OptimizerConfig(BaseConfigs):
