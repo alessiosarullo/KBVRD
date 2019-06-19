@@ -374,16 +374,16 @@ class ZSGCModel(ZSBaseModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+        act_emb_logstd = act_emb_params[:, self.emb_dim:]  # N x E
 
         _, act_embeddings = self.gcn()  # P x E
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
+        act_emb_logstd = act_emb_logstd.unsqueeze(dim=1)
+        target_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+                                                                        act_emb_logstd.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(nn.functional.softmax(target_emb_logprobs, dim=1).unsqueeze(dim=2) *
