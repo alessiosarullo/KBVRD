@@ -326,23 +326,23 @@ class ZSProbModel(ZSBaseModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
         act_emb_mean = act_emb_params[:, :self.emb_dim]  # N x E
-        act_emb_logvar = act_emb_params[:, self.emb_dim:]  # N x E
+        act_emb_logstd = act_emb_params[:, self.emb_dim:]  # N x E
 
         if cfg.data.zsl and vis_output.action_labels is None:  # inference during ZSL: predict everything
-            target_embeddings = self.pred_embs  # P x E
+            act_embeddings = self.pred_embs  # P x E
         else:  # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            target_embeddings = self.trained_embs  # P x E
+            act_embeddings = self.trained_embs  # P x E
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logvar = act_emb_logvar.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (act_emb_logvar.prod(dim=2) + ((target_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                     act_emb_logvar.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
+        act_emb_logstd = act_emb_logstd.unsqueeze(dim=1)
+        target_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
+                                                                        act_emb_logstd.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(nn.functional.softmax(target_emb_logprobs, dim=1).unsqueeze(dim=2) *
-                                                   target_embeddings.unsqueeze(dim=0))  # N x P x D
+                                                   act_embeddings.unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
-            act_predictors = self.emb_to_predictor(target_embeddings)  # P x D
+            act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
         return act_predictors, vrepr, target_emb_logprobs
 
 
