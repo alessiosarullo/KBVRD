@@ -361,8 +361,8 @@ class ZSGCModel(GenericModel):
             assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
-        self.emb_dim = 128
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=256, gc_dims=(192, self.emb_dim))
+        self.emb_dim = 200
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -397,7 +397,8 @@ class ZSGCModel(GenericModel):
                     action_output[:, self.torch_train_pred_inds] = pretrained_action_output
                     action_output[:, self.torch_zs_pred_inds] = zs_action_output
                 else:
-                    action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant: min = log(1e-6)
+                    # action_output = target_emb_logprobs.clamp(min=-13.8155) + (vrepr @ act_predictors.t())  # FIXME magic constant: min = log(1e-6)
+                    action_output = vrepr @ act_predictors.t()
             else:
                 assert inference
                 action_output = None
