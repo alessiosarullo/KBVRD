@@ -483,7 +483,7 @@ class ZSxGCModel(ZSBaseModel):
                                            ((act_embeddings.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
         act_probs = (vrepr_act_dist_logprobs / self.gamma).exp()
 
-        self.value_log_hist += np.histogram(vrepr_act_dist_logprobs, bins=self.hist_bins)[0]
+        self.value_log_hist += np.histogram(vrepr_act_dist_logprobs.detach().cpu().numpy(), bins=self.hist_bins)[0]
         self.value_log_hist[0] += (act_probs < 10 ** self.hist_min).sum()
 
         return act_probs
