@@ -418,7 +418,7 @@ class ZSxGCModel(ZSBaseModel):
 
         self.hist_min, hist_max = -10, 0
         self.hist_bins = np.array(np.logspace(self.hist_min, hist_max, hist_max - self.hist_min + 1))
-        self.value_log_hist = np.zeros_like(self.hist_bins)
+        self.value_log_hist = np.zeros(self.hist_bins.size - 1)
 
         self.dist_gcn = CheatGCNBranch(dataset, input_repr_dim=600, gc_dims=(500, 2 * self.emb_dim))
 
