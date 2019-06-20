@@ -339,7 +339,7 @@ class ZSProbModel(ZSBaseModel):
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) *
-                                                   act_embeddings.unsqueeze(dim=0))  # N x P x D
+                                                   nn.functional.normalize(act_embeddings, dim=1).unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
@@ -399,7 +399,7 @@ class ZSGCModel(ZSBaseModel):
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) *
-                                                   act_embeddings.unsqueeze(dim=0))  # N x P x D
+                                                   nn.functional.normalize(act_embeddings, dim=1).unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
@@ -414,6 +414,12 @@ class ZSxGCModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.emb_dim = 200
+        self.gamma = 2
+
+        self.hist_min, hist_max = -10, 0
+        self.hist_bins = np.array(np.logspace(self.hist_min, hist_max, hist_max - self.hist_min + 1))
+        self.value_log_hist = np.zeros_like(self.hist_bins)
+
         self.dist_gcn = CheatGCNBranch(dataset, input_repr_dim=600, gc_dims=(500, 2 * self.emb_dim))
 
         hidden_dim = (self.predictor_dim + self.emb_dim) // 2
@@ -475,8 +481,12 @@ class ZSxGCModel(ZSBaseModel):
         vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
                                            2 * act_dist_logstd.sum(dim=2) +
                                            ((act_embeddings.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
+        act_probs = (vrepr_act_dist_logprobs / self.gamma).exp()
 
-        return vrepr_act_dist_logprobs.exp()
+        self.value_log_hist += np.histogram(vrepr_act_dist_logprobs, bins=self.hist_bins)[0]
+        self.value_log_hist[0] += (act_probs < 10 ** self.hist_min).sum()
+
+        return act_probs
 
 
 class KatoModel(GenericModel):
