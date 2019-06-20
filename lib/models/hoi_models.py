@@ -435,7 +435,7 @@ class ZSxGCModel(ZSBaseModel):
 
             if vis_output.ho_infos is not None:
                 action_output = self._forward(vis_output)
-                # assert (action_output >= 0).all() and (action_output <= 1).all(), action_output.detach().cpu().numpy()
+                assert (action_output >= 0).all() and (action_output <= 1).all(), action_output.detach().cpu().numpy()
             else:
                 assert inference
                 action_output = None
@@ -443,7 +443,7 @@ class ZSxGCModel(ZSBaseModel):
             if not inference:
                 action_labels = vis_output.action_labels
 
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                losses = {'action_loss': nn.functional.binary_cross_entropy(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
@@ -483,7 +483,7 @@ class ZSxGCModel(ZSBaseModel):
         # norm_const = self.predictor_dim * np.log(2 * np.pi).item()
         vrepr_act_dist_logprobs = - 0.5 * (2 * act_dist_logstd.sum(dim=2) +  # norm_const +
                                            ((act_embeddings.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
-        act_output = vrepr_act_dist_logprobs
+        act_output = nn.functional.softmax(vrepr_act_dist_logprobs, dim=1)
 
         # act_output = (vrepr_act_dist_logprobs / self.gamma).exp()
         # self.value_log_hist += np.histogram(vrepr_act_dist_logprobs.detach().cpu().numpy(), bins=self.hist_bins)[0]
