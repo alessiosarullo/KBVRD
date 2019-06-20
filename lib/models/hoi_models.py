@@ -406,6 +406,81 @@ class ZSGCModel(ZSBaseModel):
         return act_predictors, vrepr, target_emb_logprobs
 
 
+class ZSxGCModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsxgc'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.emb_dim = 200
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+
+        latent_dim = self.emb_dim
+        output_dim = 2 * self.predictor_dim
+        hidden_dim = (output_dim + latent_dim) // 2
+        self.emb_to_predictor_dist = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
+                                                     nn.ReLU(inplace=True),
+                                                     nn.Dropout(0.5),
+                                                     nn.Linear(hidden_dim, output_dim),
+                                                     ])
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                action_probs = self._forward(vis_output)
+                assert (action_probs >= 0).all() and (action_probs <= 1).all(), action_probs.detach().cpu().numpy()
+            else:
+                assert inference
+                action_probs = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+
+                losses = {'action_loss': nn.functional.binary_cross_entropy(action_probs, action_labels) * action_probs.shape[1]}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_probs is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+
+                        prediction.action_scores = action_probs.cpu().numpy()
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, **kwargs):
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+
+        _, act_embeddings = self.gcn()  # P x E
+        if not (cfg.data.zsl and vis_output.action_labels is None):
+            # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
+            act_embeddings = act_embeddings[self.torch_train_pred_inds, :]
+        act_dist_params = self.emb_to_predictor_dist(act_embeddings)
+        act_dist_mean = act_dist_params[:, :self.predictor_dim].unsqueeze(dim=1)  # N x 1 x D
+        act_dist_logstd = act_dist_params[:, self.predictor_dim:].unsqueeze(dim=1)  # N x 1 x D
+        vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
+                                           2 * act_dist_logstd.sum(dim=2) +
+                                           ((vrepr.unsqueeze(dim=0) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
+
+        return vrepr_act_dist_logprobs.exp()
+
+
 class KatoModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
