@@ -414,16 +414,14 @@ class ZSxGCModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.emb_dim = 200
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+        self.dist_gcn = CheatGCNBranch(dataset, input_repr_dim=600, gc_dims=(500, 2 * self.emb_dim))
 
-        latent_dim = self.emb_dim
-        output_dim = 2 * self.predictor_dim
-        hidden_dim = (output_dim + latent_dim) // 2
-        self.emb_to_predictor_dist = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-                                                     nn.ReLU(inplace=True),
-                                                     nn.Dropout(0.5),
-                                                     nn.Linear(hidden_dim, output_dim),
-                                                     ])
+        hidden_dim = (self.predictor_dim + self.emb_dim) // 2
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(self.predictor_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            # nn.Dropout(0.5),
+                                            nn.Linear(hidden_dim, self.emb_dim),
+                                            ])
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -466,17 +464,17 @@ class ZSxGCModel(ZSBaseModel):
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
+        act_embeddings = self.vrepr_to_emb(vrepr)
 
-        _, act_embeddings = self.gcn()  # P x E
+        _, act_dist_params = self.dist_gcn()  # P x 2E
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            act_embeddings = act_embeddings[self.torch_train_pred_inds, :]
-        act_dist_params = self.emb_to_predictor_dist(act_embeddings)
-        act_dist_mean = act_dist_params[:, :self.predictor_dim].unsqueeze(dim=0)  # 1 x P x D
-        act_dist_logstd = act_dist_params[:, self.predictor_dim:].unsqueeze(dim=0)  # 1 x P x D
+            act_dist_params = act_dist_params[self.torch_train_pred_inds, :]
+        act_dist_mean = act_dist_params[:, :self.predictor_dim].unsqueeze(dim=0)  # 1 x P x E
+        act_dist_logstd = act_dist_params[:, self.predictor_dim:].unsqueeze(dim=0)  # 1 x P x E
         vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
                                            2 * act_dist_logstd.sum(dim=2) +
-                                           ((vrepr.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
+                                           ((act_embeddings.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
 
         return vrepr_act_dist_logprobs.exp()
 
