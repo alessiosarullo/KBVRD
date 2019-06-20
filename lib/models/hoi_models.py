@@ -485,6 +485,8 @@ class ZSxGCModel(ZSBaseModel):
 
         self.value_log_hist += np.histogram(vrepr_act_dist_logprobs.detach().cpu().numpy(), bins=self.hist_bins)[0]
         self.value_log_hist[0] += (act_probs < 10 ** self.hist_min).sum()
+        print('Bins:', self.hist_bins)
+        print('Hist:', self.value_log_hist)
 
         return act_probs
 
