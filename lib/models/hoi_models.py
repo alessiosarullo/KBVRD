@@ -406,7 +406,7 @@ class ZSGCModel(ZSBaseModel):
         return act_predictors, vrepr, target_emb_logprobs
 
 
-class ZSxGCModel(ZSBaseModel):
+class ZSxGCModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsxgc'
