@@ -472,11 +472,11 @@ class ZSxGCModel(ZSBaseModel):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = act_embeddings[self.torch_train_pred_inds, :]
         act_dist_params = self.emb_to_predictor_dist(act_embeddings)
-        act_dist_mean = act_dist_params[:, :self.predictor_dim].unsqueeze(dim=1)  # N x 1 x D
-        act_dist_logstd = act_dist_params[:, self.predictor_dim:].unsqueeze(dim=1)  # N x 1 x D
+        act_dist_mean = act_dist_params[:, :self.predictor_dim].unsqueeze(dim=0)  # 1 x P x D
+        act_dist_logstd = act_dist_params[:, self.predictor_dim:].unsqueeze(dim=0)  # 1 x P x D
         vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
                                            2 * act_dist_logstd.sum(dim=2) +
-                                           ((vrepr.unsqueeze(dim=0) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
+                                           ((vrepr.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
 
         return vrepr_act_dist_logprobs.exp()
 
