@@ -464,13 +464,13 @@ class ZSxGCModel(ZSBaseModel):
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_embeddings = nn.functional.normalize(self.vrepr_to_emb(vrepr))
+        act_embeddings = nn.functional.normalize(self.vrepr_to_emb(vrepr), dim=1)
 
         _, act_dist_params = self.dist_gcn()  # P x 2E
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_dist_params = act_dist_params[self.torch_train_pred_inds, :]
-        act_dist_mean = nn.functional.normalize(act_dist_params[:, :act_dist_params.shape[1] // 2]).unsqueeze(dim=0)  # 1 x P x E
+        act_dist_mean = nn.functional.normalize(act_dist_params[:, :act_dist_params.shape[1] // 2], dim=1).unsqueeze(dim=0)  # 1 x P x E
         act_dist_logstd = act_dist_params[:, act_dist_params.shape[1] // 2:].unsqueeze(dim=0)  # 1 x P x E
         vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
                                            2 * act_dist_logstd.sum(dim=2) +
