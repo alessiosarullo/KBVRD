@@ -346,6 +346,18 @@ class ZSProbModel(ZSBaseModel):
         return act_predictors, vrepr, target_emb_logprobs
 
 
+class ZSProbNoiseModel(ZSProbModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsp-n'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.emb_dim = 200
+        self.pred_embs = nn.Parameter(torch.empty((dataset.hicodet.num_predicates, self.emb_dim)).normal_(), requires_grad=False)
+        self.trained_embs = nn.Parameter(torch.empty((dataset.num_predicates, self.emb_dim)).normal_(), requires_grad=False)
+
+
 class ZSGCModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
