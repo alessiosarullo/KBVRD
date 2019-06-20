@@ -338,7 +338,7 @@ class ZSProbModel(ZSBaseModel):
                                                                         act_emb_logstd.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(nn.functional.softmax(target_emb_logprobs, dim=1).unsqueeze(dim=2) *
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) *
                                                    act_embeddings.unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
@@ -398,7 +398,7 @@ class ZSGCModel(ZSBaseModel):
                                                                         act_emb_logstd.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(nn.functional.softmax(target_emb_logprobs, dim=1).unsqueeze(dim=2) *
+            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) *
                                                    act_embeddings.unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
