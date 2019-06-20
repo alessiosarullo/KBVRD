@@ -179,7 +179,7 @@ class Launcher:
 
             # torch.cuda.empty_cache()  # Otherwise after some epochs the GPU goes out of memory. Seems to be a bug in PyTorch 0.4.1.
 
-        try:
+        try:  # FIXME remove
             print('Bins:', self.detector.hist_bins, 'Hist:', self.detector.value_log_hist)
         except AttributeError:
             pass

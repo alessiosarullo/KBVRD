@@ -414,11 +414,11 @@ class ZSxGCModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.emb_dim = 200
-        self.gamma = 2
 
-        self.hist_min, hist_max = -20, 0
-        self.hist_bins = np.array(np.logspace(self.hist_min, hist_max, (hist_max - self.hist_min) // 2 + 1))
-        self.value_log_hist = np.zeros(self.hist_bins.size - 1)
+        # self.gamma = 2
+        # self.hist_min, hist_max = -20, 0
+        # self.hist_bins = np.array(np.logspace(self.hist_min, hist_max, (hist_max - self.hist_min) // 2 + 1))
+        # self.value_log_hist = np.zeros(self.hist_bins.size - 1)
 
         self.dist_gcn = CheatGCNBranch(dataset, input_repr_dim=600, gc_dims=(500, 2 * self.emb_dim))
 
@@ -434,16 +434,16 @@ class ZSxGCModel(ZSBaseModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_probs = self._forward(vis_output)
-                assert (action_probs >= 0).all() and (action_probs <= 1).all(), action_probs.detach().cpu().numpy()
+                action_output = self._forward(vis_output)
+                # assert (action_output >= 0).all() and (action_output <= 1).all(), action_output.detach().cpu().numpy()
             else:
                 assert inference
-                action_probs = None
+                action_output = None
 
             if not inference:
                 action_labels = vis_output.action_labels
 
-                losses = {'action_loss': nn.functional.binary_cross_entropy(action_probs, action_labels) * action_probs.shape[1]}
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
                 prediction = Prediction()
@@ -459,12 +459,12 @@ class ZSxGCModel(ZSBaseModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos is not None:
-                        assert action_probs is not None
+                        assert action_output is not None
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
 
-                        prediction.action_scores = action_probs.cpu().numpy()
+                        prediction.action_scores = action_output.cpu().numpy()
 
                 return prediction
 
@@ -478,17 +478,20 @@ class ZSxGCModel(ZSBaseModel):
             act_dist_params = act_dist_params[self.torch_train_pred_inds, :]
         act_dist_mean = nn.functional.normalize(act_dist_params[:, :act_dist_params.shape[1] // 2], dim=1).unsqueeze(dim=0)  # 1 x P x E
         act_dist_logstd = act_dist_params[:, act_dist_params.shape[1] // 2:].unsqueeze(dim=0)  # 1 x P x E
-        vrepr_act_dist_logprobs = - 0.5 * (self.predictor_dim * np.log(2 * np.pi).item() +
-                                           2 * act_dist_logstd.sum(dim=2) +
+
+        # The normalisation constant is too large and squashes everything. Do not add.
+        # norm_const = self.predictor_dim * np.log(2 * np.pi).item()
+        vrepr_act_dist_logprobs = - 0.5 * (2 * act_dist_logstd.sum(dim=2) +  # norm_const +
                                            ((act_embeddings.unsqueeze(dim=1) - act_dist_mean) / act_dist_logstd.exp()).norm(dim=2) ** 2)
-        act_probs = (vrepr_act_dist_logprobs / self.gamma).exp()
+        act_output = vrepr_act_dist_logprobs
 
-        self.value_log_hist += np.histogram(vrepr_act_dist_logprobs.detach().cpu().numpy(), bins=self.hist_bins)[0]
-        self.value_log_hist[0] += (act_probs < 10 ** self.hist_min).sum()
-        print('Bins:', self.hist_bins)
-        print('Hist:', self.value_log_hist)
+        # act_output = (vrepr_act_dist_logprobs / self.gamma).exp()
+        # self.value_log_hist += np.histogram(vrepr_act_dist_logprobs.detach().cpu().numpy(), bins=self.hist_bins)[0]
+        # self.value_log_hist[0] += (act_output < 10 ** self.hist_min).sum()
+        # print('Bins:', self.hist_bins)
+        # print('Hist:', self.value_log_hist)
 
-        return act_probs
+        return act_output
 
 
 class KatoModel(GenericModel):
