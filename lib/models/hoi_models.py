@@ -201,7 +201,7 @@ class ZSEmbModel(ZSBaseModel):
         hidden_dim = (input_dim + latent_dim) // 2
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
+                                            nn.Dropout(0.5),
                                             nn.Linear(hidden_dim, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
@@ -234,7 +234,7 @@ class ZSEmbModel(ZSBaseModel):
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
-        
+
         if cfg.model.enorm:
             act_emb_mean = nn.functional.normalize(act_emb_mean, dim=1)
             act_embeddings = nn.functional.normalize(act_embeddings, dim=1)

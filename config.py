@@ -224,8 +224,8 @@ class OptimizerConfig(BaseConfigs):
 
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3
-        self.lr_gamma = 0.0
-        self.lr_decay_period = 2
+        self.lr_gamma = 0.5
+        self.lr_decay_period = 4
 
         self.num_epochs = 5
         self.img_batch_size = 8
