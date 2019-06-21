@@ -210,8 +210,7 @@ class ModelConfig(BaseConfigs):
         self.proposal_thr = 0.
         self.relu = False
 
-        self.wnorm = False
-
+        self.enorm = False
         self.attw = False
         self.bare = False
 

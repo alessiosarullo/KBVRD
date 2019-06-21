@@ -138,14 +138,14 @@ class ZSBaseModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_predictors, vrepr, target_emb_logprobs = self._forward(vis_output)
+                act_predictors, vrepr, act_emb_logprobs = self._forward(vis_output)
                 if cfg.model.attw:
                     action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
                 else:
                     if cfg.model.bare:
                         action_output = vrepr @ act_predictors.t()
                     else:
-                        action_output = target_emb_logprobs + vrepr @ act_predictors.t()
+                        action_output = act_emb_logprobs + vrepr @ act_predictors.t()
 
                 if inference and not cfg.data.fullzs:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
@@ -221,9 +221,6 @@ class ZSEmbModel(ZSBaseModel):
         act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
 
-    def init_embeddings(self, dataset, emb_dim):
-        raise NotImplementedError
-
     def get_embeddings(self, vis_output: VisualOutput):
         raise NotImplementedError
 
@@ -237,18 +234,23 @@ class ZSEmbModel(ZSBaseModel):
         if not (cfg.data.zsl and vis_output.action_labels is None):
             # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
             act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
+        
+        if cfg.model.enorm:
+            act_emb_mean = nn.functional.normalize(act_emb_mean, dim=1)
+            act_embeddings = nn.functional.normalize(act_embeddings, dim=1)
+
         act_emb_mean = act_emb_mean.unsqueeze(dim=1)
         act_emb_logstd = act_emb_logstd.unsqueeze(dim=1)
-        target_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) + ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) /
-                                                                        act_emb_logstd.exp()).norm(dim=2) ** 2)  # NOTE: constant term is missing
+        act_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                    ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) / act_emb_logstd.exp()).norm(dim=2) ** 2)
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(target_emb_logprobs.exp().unsqueeze(dim=2) *
+            act_predictors = self.emb_to_predictor(act_emb_logprobs.exp().unsqueeze(dim=2) *
                                                    nn.functional.normalize(act_embeddings, dim=1).unsqueeze(dim=0))  # N x P x D
             vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
         else:
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
-        return act_predictors, vrepr, target_emb_logprobs
+        return act_predictors, vrepr, act_emb_logprobs
 
 
 class ZSProbModel(ZSEmbModel):
