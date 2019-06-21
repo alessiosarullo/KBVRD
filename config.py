@@ -227,7 +227,7 @@ class OptimizerConfig(BaseConfigs):
         self.lr_gamma = 0.5
         self.lr_decay_period = 4
 
-        self.num_epochs = 5
+        self.num_epochs = 10
         self.img_batch_size = 8
         self.hoi_batch_size = 64
         self.hoi_bg_ratio = 3
