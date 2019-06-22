@@ -192,7 +192,8 @@ class ZSEmbModel(ZSBaseModel):
 
         if cfg.model.softlabels:
             # make sure embeddings are normalised!
-            self.act_similarity = (self.pred_word_embs[self.train_pred_inds, :] @ self.pred_word_embs[self.zs_pred_inds, :].t()).clamp(min=0)
+            act_similarity = self.pred_word_embs[self.train_pred_inds, :] @ self.pred_word_embs[self.zs_pred_inds, :].t()
+            self.act_similarity = nn.Parameter(act_similarity.clamp(min=0), requires_grad=False)
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
