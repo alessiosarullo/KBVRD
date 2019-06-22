@@ -119,10 +119,10 @@ class ZSBaseModel(GenericModel):
         self.base_model = BaseModel(dataset)
         self.predictor_dim = self.base_model.final_repr_dim
 
-        self.train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(self.train_pred_inds.tolist())))
-        self.torch_train_pred_inds = nn.Parameter(torch.tensor(self.train_pred_inds), requires_grad=False)
-        self.torch_zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
+        train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(train_pred_inds.tolist())))
+        self.train_pred_inds = nn.Parameter(torch.tensor(train_pred_inds), requires_grad=False)
+        self.zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
 
         if cfg.model.zsload:
             ckpt = torch.load(cfg.program.baseline_model_file)
@@ -130,7 +130,7 @@ class ZSBaseModel(GenericModel):
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
             self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
                                                       requires_grad=False)  # 1 x P x D
-            assert len(self.train_pred_inds) == self.pretrained_predictors.shape[1]
+            assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -149,7 +149,7 @@ class ZSBaseModel(GenericModel):
                     else:
                         pretrained_action_output = pretrained_vrepr @ pretrained_act_predictors.t()  # N x Pt
 
-                    action_output[:, self.torch_train_pred_inds] = pretrained_action_output
+                    action_output[:, self.train_pred_inds] = pretrained_action_output
             else:
                 assert inference
                 action_output = action_labels = None
@@ -191,7 +191,8 @@ class ZSEmbModel(ZSBaseModel):
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
 
         if cfg.model.softlabels:
-            self.act_similarity = self.pred_word_embs[self.torch_train_pred_inds, :] @ self.pred_word_embs[self.torch_zs_pred_inds, :].t()
+            # make sure embeddings are normalised!
+            self.act_similarity = (self.pred_word_embs[self.train_pred_inds, :] @ self.pred_word_embs[self.zs_pred_inds, :].t()).clamp(min=0)
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -232,12 +233,12 @@ class ZSEmbModel(ZSBaseModel):
             if cfg.model.softlabels:
                 tr_action_labels = vis_output.action_labels
                 action_labels = tr_action_labels.new_empty(tr_action_labels.shape[0], self.dataset.hicodet.num_predicates)
-                action_labels[:, self.torch_train_pred_inds] = tr_action_labels
+                action_labels[:, self.train_pred_inds] = tr_action_labels
 
-                action_labels[:, self.torch_zs_pred_inds] = (tr_action_labels @ self.act_similarity) / tr_action_labels.sum(dim=1, keepdim=True)
+                action_labels[:, self.zs_pred_inds] = (tr_action_labels @ self.act_similarity) / tr_action_labels.sum(dim=1, keepdim=True)
                 action_labels = action_labels.detach()
             else:  # restrict training to seen predicates only
-                act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
+                act_embeddings = act_embeddings[self.train_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
         else:
             action_labels = None
