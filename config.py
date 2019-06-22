@@ -203,6 +203,8 @@ class ModelConfig(BaseConfigs):
     def __init__(self):
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
         self.mask_resolution = None
+        self.hum_thr = 0.7
+        self.obj_thr = 0.3
 
         self.proposal_thr = 0.
         self.relu = False

@@ -38,13 +38,11 @@ def im_detect_boxes(model, inputs, unscaled_img_sizes):
     u_im_ids = np.unique(im_ids)
     assert np.all(u_nonnms_im_ids == u_im_ids), (u_nonnms_im_ids, u_im_ids)
 
-    # Filter out boxes
-    keep = (boxes[:, 0] < boxes[:, 2]) & (boxes[:, 1] < boxes[:, 3])  # non-zero area
-
-
-    boxes = boxes[keep, :]
-    im_ids = im_ids[keep]
-    scores = scores[keep, :]
+    # Filter out 0-area boxes
+    nonzero_area_boxes = (boxes[:, 0] < boxes[:, 2]) & (boxes[:, 1] < boxes[:, 3])
+    boxes = boxes[nonzero_area_boxes, :]
+    im_ids = im_ids[nonzero_area_boxes]
+    scores = scores[nonzero_area_boxes, :]
 
     assert boxes.shape[0] == im_ids.shape[0] == scores.shape[0]
     return im_ids, boxes, scores, feat_map

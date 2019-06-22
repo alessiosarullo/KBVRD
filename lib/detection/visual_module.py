@@ -77,7 +77,7 @@ class VisualModule(nn.Module):
 
                         hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_infos[:, 1:])
                         hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map,
-                                                                                     rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
+                                                                              rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
                         assert ho_infos.shape[0] == hoi_union_boxes_feats.shape[0]
                         output.hoi_union_boxes = hoi_union_boxes
                         output.hoi_union_boxes_feats = hoi_union_boxes_feats
@@ -116,12 +116,9 @@ class VisualModule(nn.Module):
         else:
             # Keep foreground object only (according to the object detector), then map from COCO classes to HICO ones by swapping columns.
             coco_box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
-            if np.all(coco_box_classes == 0):  # all boxes would be discarded. Keep just the first one.
-                boxes_ext_np = boxes_ext_np[:1, :]
-            else:
-                boxes_ext_np = boxes_ext_np[coco_box_classes > 0, :]
-            assert boxes_ext_np.shape[0] > 0
             boxes_ext_np = boxes_ext_np[:, np.concatenate([np.arange(5), 5 + self.dataset.hico_to_coco_mapping])]
+            boxes_ext_np = self.filter_boxes(boxes_ext_np, coco_box_classes)
+            assert boxes_ext_np.shape[0] > 0
             box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
 
             # Sort by image
@@ -137,6 +134,24 @@ class VisualModule(nn.Module):
         assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
 
         return boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels
+
+    def filter_boxes(self, boxes_ext_np, coco_box_classes=None):
+        keep = np.ones(boxes_ext_np.shape[0], dtype=bool)
+
+        if coco_box_classes is not None:
+            keep &= (coco_box_classes > 0)  # only keep foreground detections
+
+        if cfg.model.hum_thr > 0 or cfg.model.obj_thr > 0:  # only keep detections above a certain threshold
+            box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
+            max_scores = np.max(boxes_ext_np[:, 5:], axis=1)
+            human_boxes = (box_classes == self.dataset.human_class)
+            keep &= (human_boxes & (max_scores >= cfg.model.hum_thr)) | (~human_boxes & (max_scores >= cfg.model.obj_thr))
+
+        if not np.any(keep):  # all boxes would be discarded. Keep just the first one.
+            boxes_ext_np = boxes_ext_np[:1, :]
+        else:
+            boxes_ext_np = boxes_ext_np[keep, :]
+        return boxes_ext_np
 
     def box_gt_assignment(self, batch: Minibatch, boxes_ext):
         gt_rois = np.concatenate([batch.gt_box_im_ids[:, None], batch.gt_boxes], axis=1)

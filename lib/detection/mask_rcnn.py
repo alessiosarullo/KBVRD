@@ -22,38 +22,34 @@ class MaskRCNN(nn.Module):
         self.mask_resolution = cfg.model.mask_resolution
         self.output_feat_dim = 2048  # this is hardcoded in `ResNet_roi_conv5_head_for_masks()`, so I can't actually read it from configs
         self.mask_rcnn = Generalized_RCNN()
-        self._load_weights()
         self.allow_train = False
 
-        for param in self.parameters():
-            param.requires_grad = self.allow_train
-
-    def _load_weights(self):
         weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
         print("Loading Mask-RCNN's weights from {}.".format(weight_file))
         load_detectron_weight(self.mask_rcnn, weight_file)
+
+        for param in self.parameters():
+            param.requires_grad = self.allow_train
 
     def train(self, mode=True):
         super().train(mode=self.allow_train and mode)
 
     def forward(self, x: Minibatch, **kwargs):
         """
-        :param x:
-        :param kwargs:
-        :return: - scores [array]:
-                 - boxes [array]:
-                 - box_classes [array]: NOTE: classes here include BG one, not present in HICO
-                 - box_im_ids [array]:
-                 - masks [tensor]:
-                 - feat_map [tensor]:
+        :return: - scores [array]
+                 - boxes [array]
+                 - box_classes [array] NOTE: classes here include BG one, not present in HICO
+                 - box_im_ids [array]
+                 - masks [tensor]
+                 - feat_map [tensor]
         """
-        # TODO docs
 
         assert self.allow_train or not self.training
         with torch.set_grad_enabled(self.training):
             detect_inputs = {'data': x.imgs, 'im_info': x.img_infos}
             unscaled_img_sizes = np.array([d['im_size'] for d in x.other_ex_data])
             box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs=detect_inputs, unscaled_img_sizes=unscaled_img_sizes)
+
             im_scales = x.img_infos[:, 2].cpu().numpy()
             boxes = boxes * im_scales[box_im_ids, None]
             boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
