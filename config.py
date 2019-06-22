@@ -165,9 +165,6 @@ class DataConfig(BaseConfigs):
         self.prinds = ''  # restrict the dataset to these predicates if not empty
         self.obinds = ''  # restrict the dataset to these objects if not empty
 
-        self.zsl = False
-        self.fullzs = False
-
     @property
     def im_inds(self):
         return list(range(self.num_images)) if self.num_images > 0 else None
@@ -212,7 +209,9 @@ class ModelConfig(BaseConfigs):
 
         self.enorm = False
         self.attw = False
-        self.bare = False
+        self.bare = False  # unused
+        self.zsload = False
+        self.softlabels = False
 
 
 class OptimizerConfig(BaseConfigs):

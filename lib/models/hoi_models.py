@@ -124,7 +124,7 @@ class ZSBaseModel(GenericModel):
         self.torch_train_pred_inds = nn.Parameter(torch.tensor(self.train_pred_inds), requires_grad=False)
         self.torch_zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
 
-        if not cfg.data.fullzs:
+        if cfg.model.zsload:
             ckpt = torch.load(cfg.program.baseline_model_file)
             self.pretrained_base_model = BaseModel(dataset)
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
@@ -138,21 +138,13 @@ class ZSBaseModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_predictors, vrepr, act_emb_logprobs = self._forward(vis_output)
-                if cfg.model.attw:
-                    action_output = torch.bmm(vrepr, act_predictors.transpose(1, 2)).squeeze(dim=1)
-                else:
-                    if cfg.model.bare:
-                        action_output = vrepr @ act_predictors.t()
-                    else:
-                        action_output = act_emb_logprobs + vrepr @ act_predictors.t()
-
-                if inference and not cfg.data.fullzs:
+                action_output, action_labels = self._forward(vis_output)
+                if inference and cfg.model.zsload:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_act_predictors = self.pretrained_predictors
                     if cfg.model.attw:
                         pretrained_action_output = torch.bmm(pretrained_vrepr.unsqueeze(dim=1),
-                                                             pretrained_act_predictors.expand(act_predictors.shape[0], -1, -1).transpose(1, 2)
+                                                             pretrained_act_predictors.expand(action_output.shape[0], -1, -1).transpose(1, 2)
                                                              ).squeeze(dim=1)  # N x Pt
                     else:
                         pretrained_action_output = pretrained_vrepr @ pretrained_act_predictors.t()  # N x Pt
@@ -160,11 +152,9 @@ class ZSBaseModel(GenericModel):
                     action_output[:, self.torch_train_pred_inds] = pretrained_action_output
             else:
                 assert inference
-                action_output = None
+                action_output = action_labels = None
 
             if not inference:
-                action_labels = vis_output.action_labels
-
                 losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 return losses
             else:
@@ -195,6 +185,13 @@ class ZSEmbModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.emb_dim = 200
         super().__init__(dataset, **kwargs)
+
+        word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
+        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+
+        if cfg.model.softlabels:
+            self.act_similarity = self.pred_word_embs[self.torch_train_pred_inds, :] @ self.pred_word_embs[self.torch_zs_pred_inds, :].t()
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -231,9 +228,19 @@ class ZSEmbModel(ZSBaseModel):
         act_emb_logstd = act_emb_params[:, act_emb_params.shape[1] // 2:]  # N x E
 
         act_embeddings = self.get_embeddings(vis_output)  # P x E
-        if not (cfg.data.zsl and vis_output.action_labels is None):
-            # either inference in non-ZSL setting or training: only predict predicates already trained on (to learn the mapping)
-            act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
+        if vis_output.action_labels is not None:
+            if cfg.model.softlabels:
+                tr_action_labels = vis_output.action_labels
+                action_labels = tr_action_labels.new_empty(tr_action_labels.shape[0], self.dataset.hicodet.num_predicates)
+                action_labels[:, self.torch_train_pred_inds] = tr_action_labels
+
+                action_labels[:, self.torch_zs_pred_inds] = (tr_action_labels @ self.act_similarity) / tr_action_labels.sum(dim=1, keepdim=True)
+                action_labels = action_labels.detach()
+            else:  # restrict training to seen predicates only
+                act_embeddings = act_embeddings[self.torch_train_pred_inds, :]  # P x E
+                action_labels = vis_output.action_labels
+        else:
+            action_labels = None
 
         if cfg.model.enorm:
             act_emb_mean = nn.functional.normalize(act_emb_mean, dim=1)
@@ -247,10 +254,12 @@ class ZSEmbModel(ZSBaseModel):
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(act_emb_logprobs.exp().unsqueeze(dim=2) *
                                                    nn.functional.normalize(act_embeddings, dim=1).unsqueeze(dim=0))  # N x P x D
-            vrepr = vrepr.unsqueeze(dim=1)  # N x 1 x D
+            action_output = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
         else:
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
-        return act_predictors, vrepr, act_emb_logprobs
+            action_output = vrepr @ act_predictors.t()
+
+        return action_output, action_labels
 
 
 class ZSProbModel(ZSEmbModel):
@@ -260,12 +269,9 @@ class ZSProbModel(ZSEmbModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, emb_dim=None, **kwargs)
-        word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
-        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
-        self.pred_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
 
     def get_embeddings(self, vis_output: VisualOutput):
-        return self.pred_embs
+        return self.pred_word_embs
 
 
 class ZSGCModel(ZSEmbModel):
