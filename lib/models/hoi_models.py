@@ -186,15 +186,6 @@ class ZSEmbModel(ZSBaseModel):
         self.emb_dim = 200
         super().__init__(dataset, **kwargs)
 
-        word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
-        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-
-        if cfg.model.softlabels:
-            # make sure embeddings are normalised!
-            act_similarity = self.pred_word_embs[self.train_pred_inds, :] @ self.pred_word_embs[self.zs_pred_inds, :].t()
-            self.act_similarity = nn.Parameter(act_similarity.clamp(min=0), requires_grad=False)
-
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
@@ -223,6 +214,9 @@ class ZSEmbModel(ZSBaseModel):
     def get_embeddings(self, vis_output: VisualOutput):
         raise NotImplementedError
 
+    def get_soft_labels(self, vis_output: VisualOutput):
+        raise NotImplementedError
+
     def _forward(self, vis_output: VisualOutput, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         act_emb_params = self.vrepr_to_emb(vrepr)
@@ -232,12 +226,7 @@ class ZSEmbModel(ZSBaseModel):
         act_embeddings = self.get_embeddings(vis_output)  # P x E
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
-                tr_action_labels = vis_output.action_labels
-                action_labels = tr_action_labels.new_empty(tr_action_labels.shape[0], self.dataset.hicodet.num_predicates)
-                action_labels[:, self.train_pred_inds] = tr_action_labels
-
-                action_labels[:, self.zs_pred_inds] = (tr_action_labels @ self.act_similarity) / tr_action_labels.sum(dim=1, keepdim=True)
-                action_labels = action_labels.detach()
+                action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 act_embeddings = act_embeddings[self.train_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
@@ -271,6 +260,9 @@ class ZSProbModel(ZSEmbModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, emb_dim=None, **kwargs)
+        word_embs = WordEmbeddings(source='glove', dim=self.emb_dim, normalize=True)
+        pred_word_embs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='first')
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
 
     def get_embeddings(self, vis_output: VisualOutput):
         return self.pred_word_embs
@@ -284,6 +276,19 @@ class ZSGCModel(ZSEmbModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, emb_dim=None, **kwargs)
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+
+        if cfg.model.softlabels:
+            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+
+    def get_soft_labels(self, vis_output: VisualOutput):
+        ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
+        ho_box_labels = vis_output.box_labels[ho_infos[:, 2]]
+        action_labels = 0.5 * self.obj_act_feasibility[ho_box_labels]
+
+        action_labels[:, self.train_pred_inds] = vis_output.action_labels
+
+        action_labels = action_labels.detach()
+        return action_labels
 
     def get_embeddings(self, vis_output: VisualOutput):
         _, act_embeddings = self.gcn()  # P x E

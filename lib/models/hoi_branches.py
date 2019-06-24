@@ -17,10 +17,10 @@ class CheatGCNBranch(AbstractHOIBranch):
         self.num_predicates = dataset.hicodet.num_predicates
 
         # Normalised adjacency matrix
-        adj_nv = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float))
+        self.noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float))
         adj = torch.eye(self.num_objects + self.num_predicates).float()
-        adj[:self.num_objects, self.num_objects:] = adj_nv  # top right
-        adj[self.num_objects:, :self.num_objects] = adj_nv.t()  # bottom left
+        adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
+        adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
         self.adj = nn.Parameter(torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt()),
                                 requires_grad=False)
 
