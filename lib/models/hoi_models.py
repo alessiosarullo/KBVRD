@@ -14,7 +14,7 @@ class BaseModel(GenericModel):
         return 'base'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self._act_repr_dim = 600
+        self.act_repr_dim = 600
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
 
@@ -53,7 +53,7 @@ class BaseModel(GenericModel):
 
     @property
     def final_repr_dim(self):
-        return self._act_repr_dim
+        return self.act_repr_dim
 
     def _forward(self, vis_output: VisualOutput, return_repr=False):
         boxes_ext = vis_output.boxes_ext
@@ -116,7 +116,7 @@ class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
-        self.base_model = BaseModel(dataset)
+        self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = self.base_model.final_repr_dim
 
         train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
@@ -184,15 +184,18 @@ class ZSBaseModel(GenericModel):
 class ZSEmbModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.emb_dim = 200
-        super().__init__(dataset, **kwargs)
+        super().__init__(dataset, act_repr_dim=1024, **kwargs)
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
         hidden_dim = (input_dim + latent_dim) // 2
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, hidden_dim),
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(0.5),
-                                            nn.Linear(hidden_dim, 2 * latent_dim),
+                                            nn.Linear(800, 600),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(600, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),

@@ -17,7 +17,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         self.num_predicates = dataset.hicodet.num_predicates
 
         # Normalised adjacency matrix
-        self.noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float))
+        self.noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32))
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
