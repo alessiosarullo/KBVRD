@@ -270,7 +270,7 @@ class ZSEmbModel(ZSBaseModel):
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
             reconstructed_vrepr = self.vrepr_decoder(act_emb_params)
-            recon_loss = cfg.model.aereg * ((reconstructed_vrepr - vrepr) ** 2).sum()  # squared Frobenius norm
+            recon_loss = cfg.model.aereg * ((reconstructed_vrepr - vrepr.detach()) ** 2).sum()  # squared Frobenius norm
         else:
             recon_loss = None
 
