@@ -209,7 +209,7 @@ class ZSEmbModel(ZSBaseModel):
                                                 ])
 
         if cfg.model.aereg > 0:
-            self.vrepr_decoder = nn.Sequential(*[nn.Linear(latent_dim, 600),
+            self.vrepr_decoder = nn.Sequential(*[nn.Linear(2 * latent_dim, 600),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
                                                  nn.Linear(600, 800),
@@ -269,7 +269,7 @@ class ZSEmbModel(ZSBaseModel):
             action_output = vrepr @ act_predictors.t()
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
-            reconstructed_vrepr = self.vrepr_decoder(act_emb_mean)
+            reconstructed_vrepr = self.vrepr_decoder(act_emb_params)
             recon_loss = cfg.model.aereg * ((reconstructed_vrepr - vrepr) ** 2).sum()  # squared Frobenius norm
         else:
             recon_loss = None
