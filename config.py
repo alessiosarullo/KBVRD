@@ -214,6 +214,7 @@ class ModelConfig(BaseConfigs):
         self.bare = False  # unused
         self.zsload = False
         self.softlabels = False
+        self.aereg = 0.0
 
 
 class OptimizerConfig(BaseConfigs):

@@ -138,7 +138,7 @@ class ZSBaseModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output, action_labels = self._forward(vis_output)
+                action_output, action_labels, reg_loss = self._forward(vis_output)
                 if inference and cfg.model.zsload:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_act_predictors = self.pretrained_predictors
@@ -156,6 +156,8 @@ class ZSBaseModel(GenericModel):
 
             if not inference:
                 losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
                 return losses
             else:
                 prediction = Prediction()
@@ -184,7 +186,7 @@ class ZSBaseModel(GenericModel):
 class ZSEmbModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.emb_dim = 200
-        super().__init__(dataset, act_repr_dim=1024, **kwargs)
+        super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -205,11 +207,16 @@ class ZSEmbModel(ZSBaseModel):
                                                 nn.Dropout(0.5),
                                                 nn.Linear(800, input_dim),
                                                 ])
-        # self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, hidden_dim),
-        #                                         nn.ReLU(inplace=True),
-        #                                         nn.Dropout(0.5),
-        #                                         nn.Linear(hidden_dim, input_dim),
-        #                                         ])
+
+        if cfg.model.aereg > 0:
+            self.vrepr_decoder = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(600, 800),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(800, input_dim),
+                                                 ])
 
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
@@ -261,7 +268,13 @@ class ZSEmbModel(ZSBaseModel):
             act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
             action_output = vrepr @ act_predictors.t()
 
-        return action_output, action_labels
+        if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
+            reconstructed_vrepr = self.vrepr_decoder(act_embeddings)
+            recon_loss = cfg.model.aereg * ((reconstructed_vrepr - vrepr) ** 2).sum()  # squared Frobenius norm
+        else:
+            recon_loss = None
+
+        return action_output, action_labels, recon_loss
 
 
 class ZSProbModel(ZSEmbModel):
@@ -294,7 +307,7 @@ class ZSGCModel(ZSEmbModel):
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
         ho_box_labels = vis_output.box_labels[ho_infos[:, 2]]
-        action_labels = 0.5 * self.obj_act_feasibility[ho_box_labels] + 0.25
+        action_labels = 0.5 * self.obj_act_feasibility[ho_box_labels]
 
         action_labels[:, self.train_pred_inds] = vis_output.action_labels
 
