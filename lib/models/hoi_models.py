@@ -14,7 +14,7 @@ class BaseModel(GenericModel):
         return 'base'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.act_repr_dim = 600
+        self.act_repr_dim = 1024
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
 
