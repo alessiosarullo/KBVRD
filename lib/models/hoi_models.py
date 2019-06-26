@@ -252,7 +252,7 @@ class ZSCprobModel(ZSBaseModel):
         return 'zsc'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
+        self.emb_dim = 300
         super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
@@ -274,13 +274,13 @@ class ZSCprobModel(ZSBaseModel):
                                                 nn.Linear(800, input_dim),
                                                 ])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(512, 2 * self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(800, 2 * self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
         if cfg.model.aereg > 0:
-            self.reg_decoder = CheatGCNBranch(dataset, input_repr_dim=2 * self.emb_dim, gc_dims=(512, 512))
+            self.reg_decoder = CheatGCNBranch(dataset, input_repr_dim=2 * self.emb_dim, gc_dims=(800, 1024))
 
     def get_act_graph_embs(self):
         emb_path = 'cache/rotate_hico_act/'
@@ -306,7 +306,8 @@ class ZSCprobModel(ZSBaseModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         instance_embs = self.vrepr_to_emb(vrepr)
 
-        obj_params, class_params = self.gcn()
+        obj_params, class_params_all = self.gcn()
+        class_params = class_params_all
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
@@ -335,13 +336,10 @@ class ZSCprobModel(ZSBaseModel):
             act_predictors = self.emb_to_predictor(class_mean)  # P x D
             action_output = vrepr @ act_predictors.t()
 
-        if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
-            if epoch >= 1:
-                _, reconstructed_act_gc_emb = self.reg_decoder(input_repr=torch.cat([obj_params, class_params], dim=0))
-                reg_loss = cfg.model.aereg * \
-                           ((self.gcn.z[self.gcn.num_objects:].detach() - reconstructed_act_gc_emb) ** 2).sum()  # squared Frobenius norm
-            else:
-                reg_loss = 0
+        if cfg.model.aereg > 0 and vis_output.action_labels is not None and epoch >= 1:  # add reconstruction regularisation term to loss
+            _, reconstructed_act_gc_emb = self.reg_decoder(input_repr=torch.cat([obj_params, class_params_all], dim=0))
+            reg_loss = cfg.model.aereg * \
+                       ((self.gcn.z[self.gcn.num_objects:].detach() - reconstructed_act_gc_emb) ** 2).sum()  # squared Frobenius norm
         else:
             reg_loss = None
 
