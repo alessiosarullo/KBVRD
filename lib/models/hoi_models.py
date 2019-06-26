@@ -306,7 +306,7 @@ class ZSGCModel(ZSEmbModel):
 
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
-        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] * self.obj_act_feasibility
+        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
 
         action_labels[:, self.train_pred_inds] = vis_output.action_labels
 
