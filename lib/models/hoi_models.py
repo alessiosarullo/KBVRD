@@ -419,10 +419,13 @@ class ZSDualProbModel(ZSBaseModel):
             class_mean = nn.functional.normalize(class_mean, dim=1)
             instance_mean = nn.functional.normalize(instance_mean, dim=1)
 
+        instance_std = instance_std.unsqueeze(dim=1)
+        class_logstd = class_logstd.unsqueeze(dim=0)
+
         if cfg.model.attw:
-            instance_logprobs = - 0.5 * (2 * class_logstd.unsqueeze(dim=0).sum(dim=2) +  # NOTE: constant term is missing
+            instance_logprobs = - 0.5 * (2 * class_logstd.sum(dim=2) +  # NOTE: constant term is missing
                                          ((instance_mean.unsqueeze(dim=1) - class_mean.unsqueeze(dim=0)) /
-                                          class_logstd.unsqueeze(dim=0).exp()).norm(dim=2) ** 2)
+                                          class_logstd.exp()).norm(dim=2) ** 2)
             action_predictors = self.emb_to_predictor(instance_logprobs.exp().unsqueeze(dim=2) *
                                                       nn.functional.normalize(class_mean, dim=1).unsqueeze(dim=0))  # N x P x D
             action_output = torch.bmm(vrepr.unsqueeze(dim=1), action_predictors.transpose(1, 2)).squeeze(dim=1)
@@ -431,7 +434,7 @@ class ZSDualProbModel(ZSBaseModel):
             action_output = vrepr @ action_predictors.t()
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None and epoch >= 1:  # add reconstruction regularisation term to loss
-            reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean - instance_mean) ** 2, dim=1) +
+            reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean.unsqueeze(dim=0) - instance_mean.unsqueeze(dim=1)) ** 2, dim=2) +
                                                     torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1)).sum()
         else:
             reg_loss = None
