@@ -174,7 +174,7 @@ class ZSModel(ZSBaseModel):
                                                 nn.Linear(800, input_dim),
                                                 ])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(512, self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
