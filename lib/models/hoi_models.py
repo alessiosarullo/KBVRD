@@ -277,10 +277,10 @@ class ZSEmbModel(ZSBaseModel):
         return action_output, action_labels, recon_loss
 
 
-class ZSProbModel(ZSEmbModel):
+class ZSWordEmbModel(ZSEmbModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zsp'
+        return 'zswe'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, emb_dim=None, **kwargs)
@@ -306,8 +306,7 @@ class ZSGCModel(ZSEmbModel):
 
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
-        ho_box_labels = vis_output.box_labels[ho_infos[:, 2]]
-        action_labels = 0.5 * self.obj_act_feasibility[ho_box_labels]
+        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] * self.obj_act_feasibility
 
         action_labels[:, self.train_pred_inds] = vis_output.action_labels
 
