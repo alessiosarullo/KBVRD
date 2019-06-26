@@ -185,7 +185,7 @@ class ZSBaseModel(GenericModel):
 
 class ZSEmbModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
+        self.emb_dim = 300
         super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
@@ -197,7 +197,7 @@ class ZSEmbModel(ZSBaseModel):
                                             nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(0.5),
-                                            nn.Linear(600, 2 * latent_dim),
+                                            nn.Linear(600, latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                 nn.ReLU(inplace=True),
@@ -209,6 +209,7 @@ class ZSEmbModel(ZSBaseModel):
                                                 ])
 
         if cfg.model.aereg > 0:
+            raise NotImplementedError
             self.vrepr_decoder = nn.Sequential(*[nn.Linear(2 * latent_dim, 600),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(0.5),
@@ -237,38 +238,40 @@ class ZSEmbModel(ZSBaseModel):
 
     def _forward(self, vis_output: VisualOutput, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        act_emb_params = self.vrepr_to_emb(vrepr)
-        act_emb_mean = act_emb_params[:, :act_emb_params.shape[1] // 2]  # N x E
-        act_emb_logstd = act_emb_params[:, act_emb_params.shape[1] // 2:]  # N x E
+        act_instance_emb = self.vrepr_to_emb(vrepr)
 
-        act_embeddings = self.get_embeddings(vis_output)  # P x E
+        act_emb_params = self.get_embeddings(vis_output)  # P x E
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
-                act_embeddings = act_embeddings[self.train_pred_inds, :]  # P x E
+                act_emb_params = act_emb_params[self.train_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
         else:
             action_labels = None
 
+        act_emb_mean = act_emb_params[:, :act_emb_params.shape[1] // 2]  # P x E
+        act_emb_logstd = act_emb_params[:, act_emb_params.shape[1] // 2:]  # P x E
+
         if cfg.model.enorm:
             act_emb_mean = nn.functional.normalize(act_emb_mean, dim=1)
-            act_embeddings = nn.functional.normalize(act_embeddings, dim=1)
+            act_instance_emb = nn.functional.normalize(act_instance_emb, dim=1)
 
-        act_emb_mean = act_emb_mean.unsqueeze(dim=1)
-        act_emb_logstd = act_emb_logstd.unsqueeze(dim=1)
-        act_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                    ((act_embeddings.unsqueeze(dim=0) - act_emb_mean) / act_emb_logstd.exp()).norm(dim=2) ** 2)
+        act_emb_mean = act_emb_mean.unsqueeze(dim=0)
+        act_emb_logstd = act_emb_logstd.unsqueeze(dim=0)
+        act_instance_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                    ((act_instance_emb.unsqueeze(dim=1) - act_emb_mean) / act_emb_logstd.exp()).norm(dim=2) ** 2)
 
         if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(act_emb_logprobs.exp().unsqueeze(dim=2) *
-                                                   nn.functional.normalize(act_embeddings, dim=1).unsqueeze(dim=0))  # N x P x D
+            act_predictors = self.emb_to_predictor(act_instance_emb_logprobs.exp().unsqueeze(dim=2) *
+                                                   nn.functional.normalize(act_emb_mean, dim=1).unsqueeze(dim=0))  # N x P x D
             action_output = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
         else:
-            act_predictors = self.emb_to_predictor(act_embeddings)  # P x D
+            act_predictors = self.emb_to_predictor(act_emb_mean)  # P x D
             action_output = vrepr @ act_predictors.t()
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
+            raise NotImplementedError
             reconstructed_vrepr = self.vrepr_decoder(act_emb_params)
             recon_loss = cfg.model.aereg * ((reconstructed_vrepr - vrepr.detach()) ** 2).sum()  # squared Frobenius norm
         else:
@@ -299,7 +302,7 @@ class ZSGCModel(ZSEmbModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, emb_dim=None, **kwargs)
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(800, 2 * self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
