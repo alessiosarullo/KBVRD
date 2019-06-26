@@ -430,12 +430,9 @@ class ZSDualProbModel(ZSBaseModel):
             action_predictors = self.emb_to_predictor(class_mean)  # P x D
             action_output = vrepr @ action_predictors.t()
 
-        if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
-            if epoch >= 1:
-                reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean - instance_mean) ** 2, dim=1) +
-                                                        torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1)).sum()
-            else:
-                reg_loss = 0
+        if cfg.model.aereg > 0 and vis_output.action_labels is not None and epoch >= 1:  # add reconstruction regularisation term to loss
+            reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean - instance_mean) ** 2, dim=1) +
+                                                    torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1)).sum()
         else:
             reg_loss = None
 
