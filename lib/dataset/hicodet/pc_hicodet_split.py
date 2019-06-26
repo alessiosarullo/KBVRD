@@ -46,6 +46,9 @@ class PrecomputedMinibatch:
         self.pc_box_labels = []
         self.pc_action_labels = []
 
+        self.epoch = None
+        self.iter = None
+
     def append(self, ex: PrecomputedExample):
         im_id_in_batch = len(self.img_infos)
         self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]

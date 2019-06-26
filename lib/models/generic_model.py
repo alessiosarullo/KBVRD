@@ -88,7 +88,7 @@ class GenericModel(AbstractModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output = self._forward(vis_output, )
+                action_output = self._forward(vis_output, epoch=x.epoch, iter=x.iter)
             else:
                 assert inference
                 action_output = None
@@ -125,5 +125,5 @@ class GenericModel(AbstractModel):
 
                 return prediction
 
-    def _forward(self, vis_output: VisualOutput, **kwargs):
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         raise NotImplementedError()
