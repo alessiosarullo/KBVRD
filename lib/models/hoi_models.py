@@ -372,9 +372,9 @@ class ZSDualProbModel(ZSBaseModel):
                                             nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(0.5),
-                                            nn.Linear(600, latent_dim),
+                                            nn.Linear(600, 2 * latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(2 * latent_dim, 600),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
                                                 nn.Linear(600, 800),
@@ -383,17 +383,10 @@ class ZSDualProbModel(ZSBaseModel):
                                                 nn.Linear(800, input_dim),
                                                 ])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(512, 2 * self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, 2 * self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-
-        if cfg.model.aereg > 0:
-            self.reg_decoder = CheatGCNBranch(dataset, input_repr_dim=2 * self.emb_dim, gc_dims=(512, 512))
-
-    def get_embeddings(self, vis_output: VisualOutput):
-        self._obj_embeddings, act_embeddings = self.gcn()  # P x E
-        return act_embeddings
 
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
@@ -410,7 +403,7 @@ class ZSDualProbModel(ZSBaseModel):
         instance_mean = instance_params[:, :instance_params.shape[1] // 2]  # P x E
         instance_std = instance_params[:, instance_params.shape[1] // 2:]  # P x E
 
-        class_params = self.get_embeddings(vis_output)  # P x E
+        _, class_params = self.gcn()  # P x E
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
@@ -422,7 +415,6 @@ class ZSDualProbModel(ZSBaseModel):
 
         class_mean = class_params[:, :class_params.shape[1] // 2]  # P x E
         class_logstd = class_params[:, class_params.shape[1] // 2:]  # P x E
-
         if cfg.model.enorm:
             class_mean = nn.functional.normalize(class_mean, dim=1)
             instance_mean = nn.functional.normalize(instance_mean, dim=1)
@@ -440,8 +432,8 @@ class ZSDualProbModel(ZSBaseModel):
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
             if epoch >= 1:
-                reg_loss = torch.sqrt(torch.sum((class_mean - instance_mean) ** 2, dim=1) +
-                                      torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1))
+                reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean - instance_mean) ** 2, dim=1) +
+                                                        torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1))
             else:
                 reg_loss = 0
         else:
