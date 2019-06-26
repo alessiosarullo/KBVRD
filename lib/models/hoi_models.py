@@ -257,10 +257,9 @@ class ZSEmbModel(ZSBaseModel):
             act_emb_mean = nn.functional.normalize(act_emb_mean, dim=1)
             act_instance_emb = nn.functional.normalize(act_instance_emb, dim=1)
 
-        act_emb_mean = act_emb_mean.unsqueeze(dim=0)
         act_emb_logstd = act_emb_logstd.unsqueeze(dim=0)
         act_instance_emb_logprobs = - 0.5 * (2 * act_emb_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                    ((act_instance_emb.unsqueeze(dim=1) - act_emb_mean) / act_emb_logstd.exp()).norm(dim=2) ** 2)
+                                    ((act_instance_emb.unsqueeze(dim=1) - act_emb_mean.unsqueeze(dim=0)) / act_emb_logstd.exp()).norm(dim=2) ** 2)
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(act_instance_emb_logprobs.exp().unsqueeze(dim=2) *
