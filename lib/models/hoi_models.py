@@ -293,15 +293,6 @@ class ZSCprobModel(ZSBaseModel):
         act_embs = entity_embs[np.array([entity_inv_index[p] for p in self.dataset.hicodet.predicates])]
         return act_embs
 
-    def get_embeddings(self, vis_output: VisualOutput):
-        self._obj_embeddings, act_embeddings = self.gcn()  # P x E
-        return act_embeddings
-
-    def get_reg_loss(self, act_emb_params, act_instance_emb, vis_output: VisualOutput, step=None, epoch=None):
-        _, reconstructed_act_gc_emb = self.reg_decoder(input_repr=torch.cat([self._obj_embeddings, act_emb_params], dim=0))
-        reg_loss = cfg.model.aereg * ((self.gcn.z.detach() - reconstructed_act_gc_emb) ** 2).sum()  # squared Frobenius norm
-        return reg_loss
-
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
         action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
@@ -315,7 +306,7 @@ class ZSCprobModel(ZSBaseModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         instance_embs = self.vrepr_to_emb(vrepr)
 
-        class_params = self.get_embeddings(vis_output)  # P x E
+        obj_params, class_params = self.gcn()
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
@@ -346,7 +337,9 @@ class ZSCprobModel(ZSBaseModel):
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
             if epoch >= 1:
-                reg_loss = self.get_reg_loss(class_params, instance_embs, vis_output, step, epoch)
+                _, reconstructed_act_gc_emb = self.reg_decoder(input_repr=torch.cat([obj_params, class_params], dim=0))
+                reg_loss = cfg.model.aereg * \
+                           ((self.gcn.z[self.gcn.num_objects:].detach() - reconstructed_act_gc_emb) ** 2).sum()  # squared Frobenius norm
             else:
                 reg_loss = 0
         else:
@@ -435,7 +428,7 @@ class ZSDualProbModel(ZSBaseModel):
 
         if cfg.model.aereg > 0 and vis_output.action_labels is not None and epoch >= 1:  # add reconstruction regularisation term to loss
             reg_loss = cfg.model.aereg * torch.sqrt(torch.sum((class_mean.unsqueeze(dim=0) - instance_mean.unsqueeze(dim=1)) ** 2, dim=2) +
-                                                    torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=1)).sum()
+                                                    torch.sum((class_logstd.exp() - instance_std.exp()) ** 2, dim=2)).sum()
         else:
             reg_loss = None
 
