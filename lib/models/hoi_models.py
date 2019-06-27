@@ -145,18 +145,24 @@ class ZSxModel(ZSBaseModel):
         return 'zsx'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 128
+        self.emb_dim = 512
         super().__init__(dataset, **kwargs)
         assert cfg.model.zsload
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(512, 256))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(768, 512))
 
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(256, 256), requires_grad=True)
-        self.instance_gcn_w2 = nn.Parameter(torch.empty(256, 128), requires_grad=True)
-        self.instance_gcn_w3 = nn.Parameter(torch.empty(128, 1), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
+        self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 1), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w2, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w3, gain=nn.init.calculate_gain('linear'))
+
+        # self.act_fc = nn.Sequential(*[nn.Linear(256, 256),
+        #                               nn.ReLU(inplace=True),
+        #                               nn.Dropout(0.5),
+        #                               nn.Linear(256, 1),
+        #                               ])
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
 
@@ -175,11 +181,11 @@ class ZSxModel(ZSBaseModel):
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
                                       torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=1)
-        z = torch.nn.functional.relu(z, inplace=True)
+        z = torch.nn.functional.dropout(torch.nn.functional.relu(z, inplace=True), training=self.training)
         z = torch.bmm(z, self.instance_gcn_w2.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E2
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
                                       torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=1)
-        z = torch.nn.functional.relu(z, inplace=True)
+        z = torch.nn.functional.dropout(torch.nn.functional.relu(z, inplace=True), training=self.training)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
 
         action_output = z[:, self.gcn.num_objects:]
