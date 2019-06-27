@@ -1,11 +1,10 @@
 import os
+import pickle
 
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
 from lib.models.hoi_branches import *
-from torch.distributions.multivariate_normal import MultivariateNormal
-import pickle
 
 
 class BaseModel(GenericModel):
@@ -55,7 +54,7 @@ class BaseModel(GenericModel):
     def final_repr_dim(self):
         return self.act_repr_dim
 
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False):
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False, return_obj=False):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
@@ -69,6 +68,8 @@ class BaseModel(GenericModel):
         union_repr = self.union_repr_mlp(union_boxes_feats)
         act_repr = union_repr + ho_subj_repr + ho_obj_repr
         if return_repr:
+            if return_obj:
+                return act_repr, ho_obj_repr
             return act_repr
 
         action_logits = self.act_output_fc(act_repr)
@@ -151,7 +152,7 @@ class ZSxModel(ZSBaseModel):
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(768, 512))
 
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(2048, 1024), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(1024, 1024), requires_grad=True)
         self.instance_gcn_w2 = nn.Parameter(torch.empty(1024, 512), requires_grad=True)
         self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
@@ -165,9 +166,9 @@ class ZSxModel(ZSBaseModel):
         #                               ])
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        hoi_feats = vis_output.hoi_union_boxes_feats  # N x P
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=hoi_feats .device)
-        obj_feats = vis_output.box_feats[hoi_infos[:, 2], :]  # N x O
+        act_repr, ho_obj_repr = self.base_model._forward(vis_output, return_repr=True, return_obj=True)
+
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=act_repr.device)
         num_ho_pairs = hoi_infos.shape[0]
 
         obj_scores = vis_output.boxes_ext[hoi_infos[:, 2], 5:]  # N x O
@@ -175,10 +176,10 @@ class ZSxModel(ZSBaseModel):
 
         instance_adj_nv = self.gcn.adj_nv.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1) * obj_scores.unsqueeze(dim=2)  # N x O x P
         instance_adj_nv[:, :, self.train_pred_inds] = instance_adj_nv[:, :, self.train_pred_inds] * act_scores.unsqueeze(dim=1)
-        adj_diag = 1 / (1 + torch.cat([instance_adj_nv.sum(dim=2), instance_adj_nv.sum(dim=1)], dim=1).unsqueeze(dim=2))  # 1 x (O+P) x 1
+        adj_diag = 1 / (1 + torch.cat([instance_adj_nv.sum(dim=2), instance_adj_nv.sum(dim=1)], dim=1).unsqueeze(dim=2))  # N x (O+P) x 1
 
-        z = torch.cat([obj_feats.unsqueeze(dim=1).expand(-1, self.gcn.num_objects, -1),
-                       hoi_feats.unsqueeze(dim=1).expand(-1, self.gcn.num_predicates, -1)], dim=1)  # N x (O + P) x F
+        z = torch.cat([ho_obj_repr.unsqueeze(dim=1).expand(-1, self.gcn.num_objects, -1),
+                       act_repr.unsqueeze(dim=1).expand(-1, self.gcn.num_predicates, -1)], dim=1)  # N x (O + P) x F
 
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
