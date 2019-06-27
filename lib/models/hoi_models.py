@@ -154,6 +154,7 @@ class ZSxModel(ZSBaseModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         self.emb_dim = 200
         super().__init__(dataset, **kwargs)
+        assert cfg.model.zsload
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -176,31 +177,12 @@ class ZSxModel(ZSBaseModel):
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
-        if cfg.model.softlabels:
-            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-
-        if cfg.model.aereg > 0:
-            self.emb_to_vrepr = nn.Sequential(*[nn.Linear(2 * latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
-                                                ])
-
-    def get_embeddings(self, vis_output: VisualOutput):
-        self._obj_embeddings, act_embeddings = self.gcn()  # P x E
-        return act_embeddings
-
-    def get_soft_labels(self, vis_output: VisualOutput):
-        ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
-        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
-
-        action_labels[:, self.train_pred_inds] = vis_output.action_labels
-
-        action_labels = action_labels.detach()
-        return action_labels
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
+        nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
@@ -208,23 +190,16 @@ class ZSxModel(ZSBaseModel):
         instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
         instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
 
-        class_embs = self.get_embeddings(vis_output)  # P x E
-        if vis_output.action_labels is not None:
-            if cfg.model.softlabels:
-                action_labels = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                class_embs = class_embs[self.train_pred_inds, :]  # P x E
-                action_labels = vis_output.action_labels
-        else:
-            action_labels = None
-
-        if cfg.model.enorm:
-            class_embs = nn.functional.normalize(class_embs, dim=1)
-            instance_means = nn.functional.normalize(instance_means, dim=1)
-
+        _, class_embs = self.gcn()
         instance_logstd = instance_logstd.unsqueeze(dim=1)
         class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
                                   ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
+
+        act_scores = torch.sigmoid(self.pretrained_base_model._forward(vis_output, return_repr=False).detach())  # N x P
+        obj_scores = vis_output.boxes_ext[torch.tensor(vis_output.ho_infos, device=vrepr.device)[:, 2], 5:]  # N x O
+        adj_nv, adj_diag = self.gcn.adj_nv, self.gcn.adj_diag
+        instance_adj_nv = adj_nv.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * obj_scores.unsqueeze(dim=2) * act_scores.unsqueeze(dim=1)
+
 
         if cfg.model.attw:
             act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
@@ -234,15 +209,12 @@ class ZSxModel(ZSBaseModel):
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
             action_output = vrepr @ act_predictors.t()
 
-        if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
-            if epoch >= 1:
-                reconstructed_vrepr = self.emb_to_vrepr(instance_params)
-                reg_loss = cfg.model.aereg * ((vrepr.detach() - reconstructed_vrepr) ** 2).sum()  # squared Frobenius norm
-            else:
-                reg_loss = 0
+        if vis_output.action_labels is not None:
+            action_output = action_output[:, self.train_pred_inds]
+            action_labels = vis_output.action_labels
         else:
-            reg_loss = None
-
+            action_labels = None
+        reg_loss = None
         return action_output, action_labels, reg_loss
 
 
