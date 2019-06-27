@@ -102,8 +102,8 @@ class CheatGCNBranch(AbstractHOIBranch):
         else:
             z = self.z
         for gcl in self.gc_layers:
-            z = gcl(z * self.adj_diag + torch.cat([self.adj_nv @ z[self.num_objects:],
-                                                   self.adj_nv.t() @ z[:self.num_objects]], dim=0))
+            z = gcl(z * self.adj_diag.unsqueeze(dim=1) + torch.cat([self.adj_nv @ z[self.num_objects:],
+                                                                    self.adj_nv.t() @ z[:self.num_objects]], dim=0))
         obj_embs = z[:self.num_objects]
         pred_embs = z[self.num_objects:]
         return obj_embs, pred_embs
