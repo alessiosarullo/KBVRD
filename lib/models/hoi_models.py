@@ -145,15 +145,15 @@ class ZSxModel(ZSBaseModel):
         return 'zsx'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 256
+        self.emb_dim = 128
         super().__init__(dataset, **kwargs)
         assert cfg.model.zsload
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(800, 600))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(512, 256))
 
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(600, 512), requires_grad=True)
-        self.instance_gcn_w2 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
-        self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 1), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(256, 256), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(256, 128), requires_grad=True)
+        self.instance_gcn_w3 = nn.Parameter(torch.empty(128, 1), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w2, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w3, gain=nn.init.calculate_gain('linear'))
@@ -399,29 +399,29 @@ class ZSDualProbModel(ZSBaseModel):
         return 'zsd'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 128
+        self.emb_dim = 256
         super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 600),
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(0.5),
-                                            nn.Linear(600, 300),
+                                            nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
                                             # nn.Dropout(0.5),
-                                            nn.Linear(300, 2 * latent_dim),
+                                            nn.Linear(600, 2 * latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 300),
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                 nn.ReLU(inplace=True),
                                                 # nn.Dropout(0.5),
-                                                nn.Linear(300, 600),
+                                                nn.Linear(600, 800),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
-                                                nn.Linear(600, input_dim),
+                                                nn.Linear(800, input_dim),
                                                 ])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(512, 2 * self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(768, 2 * self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
