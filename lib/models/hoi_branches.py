@@ -21,8 +21,11 @@ class CheatGCNBranch(AbstractHOIBranch):
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
-        self.adj = nn.Parameter(torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt()),
-                                requires_grad=False)
+        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+
+        self.adj = nn.Parameter(adj, requires_grad=False)
+        self.adj_nv = nn.Parameter(adj[:self.num_objects, self.num_objects:], requires_grad=False)
+        self.adj_diag = nn.Parameter(adj.diag(), requires_grad=False)
 
         # Starting representation
         self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(),

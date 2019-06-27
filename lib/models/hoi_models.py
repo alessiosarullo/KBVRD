@@ -152,62 +152,43 @@ class ZSxModel(ZSBaseModel):
         return 'zsx'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
+        self.emb_dim = 256
         super().__init__(dataset, **kwargs)
         assert cfg.model.zsload
 
-        latent_dim = self.emb_dim
-        input_dim = self.predictor_dim
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
-                                            nn.Linear(800, 600),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
-                                            nn.Linear(600, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
-                                                ])
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(512, 256))
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
-        self.instance_gcn_w2 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(self.emb_dim, 600), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(256, 256), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(256, 128), requires_grad=True)
+        self.instance_gcn_w3 = nn.Parameter(torch.empty(128, 1), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
-        nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self.instance_gcn_w2, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(self.instance_gcn_w3, gain=nn.init.calculate_gain('linear'))
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        instance_params = self.vrepr_to_emb(vrepr)
-        instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
-        instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
-
-        _, class_embs = self.gcn()
-        instance_logstd = instance_logstd.unsqueeze(dim=1)
-        class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                  ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
 
         act_scores = torch.sigmoid(self.pretrained_base_model._forward(vis_output, return_repr=False).detach())  # N x P
-        obj_scores = vis_output.boxes_ext[torch.tensor(vis_output.ho_infos, device=vrepr.device)[:, 2], 5:]  # N x O
-        adj_nv, adj_diag = self.gcn.adj_nv, self.gcn.adj_diag
-        instance_adj_nv = adj_nv.unsqueeze(dim=0).expand(vrepr.shape[0], -1, -1) * obj_scores.unsqueeze(dim=2) * act_scores.unsqueeze(dim=1)
+        obj_scores = vis_output.boxes_ext[torch.tensor(vis_output.ho_infos, device=act_scores.device)[:, 2], 5:]  # N x O
 
+        obj_class_embs, class_embs = self.gcn()
+        num_ho_pairs = act_scores.shape[0]
 
-        if cfg.model.attw:
-            act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
-                                                   nn.functional.normalize(class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
-            action_output = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
-        else:
-            act_predictors = self.emb_to_predictor(class_embs)  # P x D
-            action_output = vrepr @ act_predictors.t()
+        instance_adj_nv = self.gcn.adj_nv.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1) * obj_scores.unsqueeze(dim=2)  # N x O x P
+        instance_adj_nv[:, :, self.train_pred_inds] = instance_adj_nv[:, :, self.train_pred_inds] * act_scores.unsqueeze(dim=1)
+        adj_diag = self.gcn.adj_diag.unsqueeze(dim=1).unsqueeze(dim=0)  # 1 x (O + P) x 1
+
+        z = torch.cat([obj_class_embs, class_embs], dim=0).unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)  # N x (O + P) x E
+
+        z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
+        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[self.gcn.num_objects:]),
+                                      torch.bmm(instance_adj_nv.t(), z[:self.gcn.num_objects])], dim=0)
+        z = torch.nn.functional.relu(z, inplace=True)
+        z = torch.bmm(z, self.instance_gcn_w2.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E2
+        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[self.gcn.num_objects:]),
+                                      torch.bmm(instance_adj_nv.t(), z[:self.gcn.num_objects])], dim=0)
+        z = torch.nn.functional.relu(z, inplace=True)
+        z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
+        action_output = torch.sigmoid(z[self.gcn.num_objects:])
 
         if vis_output.action_labels is not None:
             action_output = action_output[:, self.train_pred_inds]
