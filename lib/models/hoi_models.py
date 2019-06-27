@@ -156,11 +156,11 @@ class ZSxModel(ZSBaseModel):
         super().__init__(dataset, **kwargs)
         assert cfg.model.zsload
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(512, 256))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(800, 600))
 
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(256, 256), requires_grad=True)
-        self.instance_gcn_w2 = nn.Parameter(torch.empty(256, 128), requires_grad=True)
-        self.instance_gcn_w3 = nn.Parameter(torch.empty(128, 1), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(600, 512), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
+        self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 1), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w2, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w3, gain=nn.init.calculate_gain('linear'))
@@ -189,6 +189,7 @@ class ZSxModel(ZSBaseModel):
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
         action_output = torch.sigmoid(z[:, self.gcn.num_objects:])
+        print(action_output.requires_grad)
 
         if vis_output.action_labels is not None:
             action_output = action_output[:, self.train_pred_inds]
