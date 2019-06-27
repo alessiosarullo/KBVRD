@@ -180,12 +180,12 @@ class ZSxModel(ZSBaseModel):
         z = torch.cat([obj_class_embs, class_embs], dim=0).unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)  # N x (O + P) x E
 
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
-        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[self.gcn.num_objects:]),
-                                      torch.bmm(instance_adj_nv.t(), z[:self.gcn.num_objects])], dim=0)
+        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
+                                      torch.bmm(instance_adj_nv.t(), z[:, :self.gcn.num_objects, :])], dim=0)
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w2.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E2
-        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[self.gcn.num_objects:]),
-                                      torch.bmm(instance_adj_nv.t(), z[:self.gcn.num_objects])], dim=0)
+        z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
+                                      torch.bmm(instance_adj_nv.t(), z[:, :self.gcn.num_objects, :])], dim=0)
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
         action_output = torch.sigmoid(z[self.gcn.num_objects:])
@@ -405,7 +405,7 @@ class ZSDualProbModel(ZSBaseModel):
         return 'zsd'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 64
+        self.emb_dim = 128
         super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
@@ -427,7 +427,7 @@ class ZSDualProbModel(ZSBaseModel):
                                                 nn.Linear(600, input_dim),
                                                 ])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(256, 2 * self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(512, 2 * self.emb_dim))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
