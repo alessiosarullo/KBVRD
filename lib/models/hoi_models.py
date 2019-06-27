@@ -91,9 +91,8 @@ class ZSBaseModel(GenericModel):
             ckpt = torch.load(cfg.program.baseline_model_file)
             self.pretrained_base_model = BaseModel(dataset)
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach().unsqueeze(dim=0),
-                                                      requires_grad=False)  # 1 x P x D
-            assert len(train_pred_inds) == self.pretrained_predictors.shape[1]
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach(), requires_grad=False)  # P x D
+            assert len(train_pred_inds) == self.pretrained_predictors.shape[0]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -104,13 +103,7 @@ class ZSBaseModel(GenericModel):
                 action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, iter=x.iter)
                 if inference and cfg.model.zsload:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-                    pretrained_act_predictors = self.pretrained_predictors
-                    if cfg.model.attw:
-                        pretrained_action_output = torch.bmm(pretrained_vrepr.unsqueeze(dim=1),
-                                                             pretrained_act_predictors.expand(action_output.shape[0], -1, -1).transpose(1, 2)
-                                                             ).squeeze(dim=1)  # N x Pt
-                    else:
-                        pretrained_action_output = pretrained_vrepr @ pretrained_act_predictors.t()  # N x Pt
+                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
 
                     action_output[:, self.train_pred_inds] = pretrained_action_output
             else:
@@ -188,7 +181,7 @@ class ZSxModel(ZSBaseModel):
                                       torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=1)
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
-        
+
         action_output = z[:, self.gcn.num_objects:]
 
         if vis_output.action_labels is not None:
