@@ -181,11 +181,11 @@ class ZSxModel(ZSBaseModel):
 
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
-                                      torch.bmm(instance_adj_nv.t(), z[:, :self.gcn.num_objects, :])], dim=0)
+                                      torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=0)
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w2.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E2
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
-                                      torch.bmm(instance_adj_nv.t(), z[:, :self.gcn.num_objects, :])], dim=0)
+                                      torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=0)
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
         action_output = torch.sigmoid(z[self.gcn.num_objects:])
