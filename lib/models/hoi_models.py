@@ -165,6 +165,14 @@ class ZSxModel(ZSBaseModel):
                                             nn.Dropout(0.5),
                                             nn.Linear(600, 2 * latent_dim),
                                             ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(600, 800),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(800, input_dim),
+                                                ])
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
