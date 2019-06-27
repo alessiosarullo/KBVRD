@@ -151,9 +151,9 @@ class ZSxModel(ZSBaseModel):
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=1024, gc_dims=(768, 512))
 
-        self.instance_gcn_w1 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
-        self.instance_gcn_w2 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
-        self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 1), requires_grad=True)
+        self.instance_gcn_w1 = nn.Parameter(torch.empty(2048, 1024), requires_grad=True)
+        self.instance_gcn_w2 = nn.Parameter(torch.empty(1024, 512), requires_grad=True)
+        self.instance_gcn_w3 = nn.Parameter(torch.empty(512, 512), requires_grad=True)
         nn.init.xavier_uniform_(self.instance_gcn_w1, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w2, gain=nn.init.calculate_gain('relu'))
         nn.init.xavier_uniform_(self.instance_gcn_w3, gain=nn.init.calculate_gain('linear'))
@@ -165,18 +165,20 @@ class ZSxModel(ZSBaseModel):
         #                               ])
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        hoi_feats = vis_output.hoi_union_boxes_feats  # N x P
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=hoi_feats .device)
+        obj_feats = vis_output.box_feats[hoi_infos[:, 2], :]  # N x O
+        num_ho_pairs = hoi_infos.shape[0]
 
-        act_scores = torch.sigmoid(self.pretrained_base_model._forward(vis_output, return_repr=False).detach())  # N x P
-        obj_scores = vis_output.boxes_ext[torch.tensor(vis_output.ho_infos, device=act_scores.device)[:, 2], 5:]  # N x O
-
-        obj_class_embs, class_embs = self.gcn()
-        num_ho_pairs = act_scores.shape[0]
+        obj_scores = vis_output.boxes_ext[hoi_infos[:, 2], 5:]  # N x O
+        act_scores = torch.sigmoid(self.pretrained_base_model._forward(vis_output, return_repr=False))
 
         instance_adj_nv = self.gcn.adj_nv.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1) * obj_scores.unsqueeze(dim=2)  # N x O x P
         instance_adj_nv[:, :, self.train_pred_inds] = instance_adj_nv[:, :, self.train_pred_inds] * act_scores.unsqueeze(dim=1)
         adj_diag = self.gcn.adj_diag.unsqueeze(dim=1).unsqueeze(dim=0)  # 1 x (O + P) x 1
 
-        z = torch.cat([obj_class_embs, class_embs], dim=0).unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)  # N x (O + P) x E
+        z = torch.cat([obj_feats.unsqueeze(dim=1).expand(-1, self.dataset.num_object_classes, -1),
+                       hoi_feats.unsqueeze(dim=1).expand(-1, self.dataset.num_predicates, -1)], dim=0)  # N x (O + P) x F
 
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
@@ -186,9 +188,12 @@ class ZSxModel(ZSBaseModel):
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
                                       torch.bmm(instance_adj_nv.transpose(1, 2), z[:, :self.gcn.num_objects, :])], dim=1)
         z = torch.nn.functional.dropout(torch.nn.functional.relu(z, inplace=True), training=self.training)
-        z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
+        z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x D
 
-        action_output = z[:, self.gcn.num_objects:]
+        _, class_embs = self.gcn()  # P x D
+        action_repr = z[:, self.gcn.num_objects:, :]  # N x P x D
+
+        action_output = (action_repr * class_embs.unsqueeze(dim=0)).sum(dim=2)
 
         if vis_output.action_labels is not None:
             action_output = action_output[:, self.train_pred_inds]
