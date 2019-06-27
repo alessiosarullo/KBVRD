@@ -165,14 +165,6 @@ class ZSxModel(ZSBaseModel):
                                             nn.Dropout(0.5),
                                             nn.Linear(600, 2 * latent_dim),
                                             ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
-                                                ])
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
@@ -471,7 +463,7 @@ class ZSDualProbModel(ZSBaseModel):
                                                 nn.Linear(300, 600),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
+                                                nn.Linear(600, input_dim),
                                                 ])
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(256, 2 * self.emb_dim))
@@ -491,8 +483,8 @@ class ZSDualProbModel(ZSBaseModel):
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         instance_params = self.vrepr_to_emb(vrepr)
-        instance_mean = instance_params[:, :instance_params.shape[1] // 2]  # P x E
-        instance_std = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+        instance_mean = instance_params[:, :instance_params.shape[1] // 2]  # N x E
+        instance_std = instance_params[:, instance_params.shape[1] // 2:]  # N x E
 
         _, class_params = self.gcn()  # P x E
         if vis_output.action_labels is not None:
