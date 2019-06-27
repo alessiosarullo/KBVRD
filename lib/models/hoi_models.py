@@ -177,8 +177,8 @@ class ZSxModel(ZSBaseModel):
         instance_adj_nv[:, :, self.train_pred_inds] = instance_adj_nv[:, :, self.train_pred_inds] * act_scores.unsqueeze(dim=1)
         adj_diag = self.gcn.adj_diag.unsqueeze(dim=1).unsqueeze(dim=0)  # 1 x (O + P) x 1
 
-        z = torch.cat([obj_feats.unsqueeze(dim=1).expand(-1, self.dataset.num_object_classes, -1),
-                       hoi_feats.unsqueeze(dim=1).expand(-1, self.dataset.num_predicates, -1)], dim=1)  # N x (O + P) x F
+        z = torch.cat([obj_feats.unsqueeze(dim=1).expand(-1, self.gcn.num_objects, -1),
+                       hoi_feats.unsqueeze(dim=1).expand(-1, self.gcn.num_predicates, -1)], dim=1)  # N x (O + P) x F
 
         z = torch.bmm(z, self.instance_gcn_w1.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1))  # N x (O + P) x E1
         z = z * adj_diag + torch.cat([torch.bmm(instance_adj_nv, z[:, self.gcn.num_objects:, :]),
