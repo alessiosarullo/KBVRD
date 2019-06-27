@@ -189,7 +189,6 @@ class ZSxModel(ZSBaseModel):
         z = torch.nn.functional.relu(z, inplace=True)
         z = torch.bmm(z, self.instance_gcn_w3.unsqueeze(dim=0).expand(num_ho_pairs, -1, -1)).squeeze(dim=2)  # N x (O + P)
         action_output = torch.sigmoid(z[:, self.gcn.num_objects:])
-        print(action_output.requires_grad)
 
         if vis_output.action_labels is not None:
             action_output = action_output[:, self.train_pred_inds]
