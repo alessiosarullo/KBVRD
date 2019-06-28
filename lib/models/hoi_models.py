@@ -337,7 +337,7 @@ class ZSHoiModel(ZSBaseModel):
             hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
             hoi_logits = vrepr @ hoi_predictors.t()
 
-        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.hoi_union_boxes_feats[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
+        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
         hoi_logits = hoi_logits * ho_obj_inter_prior
 
         act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
