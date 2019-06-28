@@ -328,7 +328,8 @@ class ZSModel(ZSBaseModel):
             act_prior_logits = 0
         else:
             action_labels = None
-            act_prior = (vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:] @ self.gcn.adj_nv).clamp(min=1e-6)
+            obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:].max(dim=1)
+            act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-6)
             act_prior_logits = act_prior.log() - (1 - act_prior).log()
 
         if cfg.model.attw:
