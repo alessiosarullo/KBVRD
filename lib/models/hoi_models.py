@@ -325,8 +325,11 @@ class ZSModel(ZSBaseModel):
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.train_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
+            act_prior_logits = 0
         else:
             action_labels = None
+            act_prior = (vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:] @ self.gcn.adj_nv).clamp(min=1e-6)
+            act_prior_logits = act_prior.log() - (1 - act_prior).log()
 
         if cfg.model.attw:
             instance_params = self.vrepr_to_emb(vrepr)
@@ -341,9 +344,6 @@ class ZSModel(ZSBaseModel):
         else:
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
             action_logits = vrepr @ act_predictors.t()
-
-        act_prior = (vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:] @ self.gcn.adj_nv).clamp(min=1e-6)
-        act_prior_logits = act_prior.log() - (1 - act_prior).log()
 
         action_logits = action_logits + act_prior_logits
 
