@@ -87,16 +87,16 @@ class MultiModel(GenericModel):
         vis_feat_dim = self.visual_module.vis_feat_dim
 
         # Action through object
-        self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                                ])
-        nn.init.xavier_normal_(self.act_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.act_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+        self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                 ])
+        nn.init.xavier_normal_(self.act_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.act_obj_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
-        torch.nn.init.xavier_normal_(self.act_obj_output_fc.weight, gain=1.0)
+        self.act_subj_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.act_subj_output_fc.weight, gain=1.0)
 
         # Action
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
@@ -195,8 +195,8 @@ class MultiModel(GenericModel):
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
 
-        act_obj_repr = self.act_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        act_obj_logits = self.act_obj_output_fc(act_obj_repr)
+        act_subj_repr = self.act_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+        act_subj_logits = self.act_subj_output_fc(act_subj_repr)
 
         act_repr = self.act_repr_mlp(union_boxes_feats)
         act_logits = self.act_output_fc(act_repr)
@@ -206,7 +206,7 @@ class MultiModel(GenericModel):
         hoi_act_repr = self.hoi_act_repr_mlp(union_boxes_feats)
         act_hoi_repr = hoi_act_repr + hoi_subj_repr + hoi_obj_repr
         act_hoi_logits = self.act_hoi_output_fc(act_hoi_repr)
-        return act_hoi_logits, act_logits, act_obj_logits
+        return act_hoi_logits, act_logits, act_subj_logits
 
 
 class ZSBaseModel(GenericModel):
