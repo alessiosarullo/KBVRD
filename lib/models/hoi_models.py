@@ -99,7 +99,7 @@ class MultiModel(GenericModel):
         torch.nn.init.xavier_normal_(self.act_obj_output_fc.weight, gain=1.0)
 
         # Action
-        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(0.5),
                                             nn.Linear(self.final_repr_dim, self.final_repr_dim),
