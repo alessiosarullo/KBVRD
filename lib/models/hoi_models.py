@@ -209,6 +209,82 @@ class MultiModel(GenericModel):
         return act_hoi_logits, act_logits, act_subj_logits
 
 
+
+class ZSHoiModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsh'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.emb_dim = 200
+        super().__init__(dataset, **kwargs)
+
+        latent_dim = self.emb_dim
+        input_dim = self.predictor_dim
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(800, 600),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(600, 2 * latent_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(600, 800),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(800, input_dim),
+                                                ])
+
+        self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+        adj_av = (self.gcn.adj_av >= 0).float()
+        self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
+
+        if cfg.model.softlabels:
+            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+
+    def get_soft_labels(self, vis_output: VisualOutput):
+        raise NotImplementedError
+
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+
+        hoi_class_embs, _, _ = self.gcn()  # I x E
+        if vis_output.action_labels is not None:
+            if cfg.model.softlabels:
+                action_labels = self.get_soft_labels(vis_output)
+            else:  # restrict training to seen predicates only
+                action_labels = vis_output.action_labels
+        else:
+            action_labels = None
+
+        if cfg.model.attw:
+            instance_params = self.vrepr_to_emb(vrepr)
+            instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
+            instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+            instance_logstd = instance_logstd.unsqueeze(dim=1)
+            instance_class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                      ((instance_means.unsqueeze(dim=1) - hoi_class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
+            hoi_predictors = self.emb_to_predictor(instance_class_logprobs.exp().unsqueeze(dim=2) *
+                                                   nn.functional.normalize(hoi_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+            hoi_logits = torch.bmm(vrepr.unsqueeze(dim=1), hoi_predictors.transpose(1, 2)).squeeze(dim=1)
+        else:
+            hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
+            hoi_logits = vrepr @ hoi_predictors.t()
+
+        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.hoi_union_boxes_feats[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
+        hoi_logits = hoi_logits * ho_obj_inter_prior
+
+        act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
+
+        if vis_output.action_labels is not None and not cfg.model.softlabels:  # restrict training to seen predicates only
+            act_logits = act_logits[:, self.seen_pred_inds]
+
+        reg_loss = None
+        return act_logits, action_labels, reg_loss
+
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
@@ -216,17 +292,17 @@ class ZSBaseModel(GenericModel):
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = self.base_model.final_repr_dim
 
-        train_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        zs_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(train_pred_inds.tolist())))
-        self.train_pred_inds = nn.Parameter(torch.tensor(train_pred_inds), requires_grad=False)
-        self.zs_pred_inds = nn.Parameter(torch.tensor(zs_pred_inds), requires_grad=False)
+        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
+        self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
+        self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
         if cfg.model.zsload:
             ckpt = torch.load(cfg.program.baseline_model_file)
             self.pretrained_base_model = BaseModel(dataset)
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
             self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach(), requires_grad=False)  # P x D
-            assert len(train_pred_inds) == self.pretrained_predictors.shape[0]
+            assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -239,7 +315,7 @@ class ZSBaseModel(GenericModel):
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
 
-                    action_output[:, self.train_pred_inds] = pretrained_action_output
+                    action_output[:, self.seen_pred_inds] = pretrained_action_output
             else:
                 assert inference
                 action_output = action_labels = None
@@ -310,7 +386,7 @@ class ZSModel(ZSBaseModel):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
         action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
 
-        action_labels[:, self.train_pred_inds] = vis_output.action_labels
+        action_labels[:, self.seen_pred_inds] = vis_output.action_labels
 
         action_labels = action_labels.detach()
         return action_labels
@@ -323,7 +399,7 @@ class ZSModel(ZSBaseModel):
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
-                class_embs = class_embs[self.train_pred_inds, :]  # P x E
+                class_embs = class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
             act_prior_logits = 0
         else:
@@ -397,7 +473,7 @@ class ZSObjModel(ZSBaseModel):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
         action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
 
-        action_labels[:, self.train_pred_inds] = vis_output.action_labels
+        action_labels[:, self.seen_pred_inds] = vis_output.action_labels
 
         action_labels = action_labels.detach()
         return action_labels
@@ -412,7 +488,7 @@ class ZSObjModel(ZSBaseModel):
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
 
-                    action_output[:, self.train_pred_inds] = pretrained_action_output
+                    action_output[:, self.seen_pred_inds] = pretrained_action_output
             else:
                 assert inference
                 action_output = action_labels = None
@@ -466,7 +542,7 @@ class ZSObjModel(ZSBaseModel):
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
-                act_class_embs = act_class_embs[self.train_pred_inds, :]  # P x E
+                act_class_embs = act_class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
         else:
             action_labels = ho_obj_output = ho_obj_labels = None

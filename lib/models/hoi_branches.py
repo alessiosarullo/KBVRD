@@ -60,57 +60,57 @@ class CheatGCNBranch(AbstractHOIBranch):
         return obj_embs, pred_embs
 
 
-#
-# class CheatGCNBranch(AbstractHOIBranch):
-#     def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
-#         super().__init__(**kwargs)
-#         num_gc_layers = len(gc_dims)
-#         self.gc_dims = gc_dims
-#         self.num_objects = dataset.hicodet.num_object_classes
-#         self.num_predicates = dataset.hicodet.num_predicates
-#
-#         # Normalised adjacency matrix
-#         self.noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32))
-#         adj = torch.eye(self.num_objects + self.num_predicates).float()
-#         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
-#         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
-#         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
-#
-#         self.adj_nv = nn.Parameter(adj[:self.num_objects, self.num_objects:], requires_grad=False)
-#         self.adj_diag = nn.Parameter(adj.diag(), requires_grad=False)
-#
-#         # Starting representation
-#         self.z = nn.Parameter(torch.empty(adj.shape[0], input_repr_dim).normal_(), requires_grad=True)
-#
-#         gc_layers = []
-#         for i in range(num_gc_layers):
-#             in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
-#             out_dim = gc_dims[i]
-#             if i < num_gc_layers - 1:
-#                 gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
-#                                                nn.ReLU(inplace=True),
-#                                                nn.Dropout(p=0.5)))
-#             else:
-#                 gc_layers.append(nn.Linear(in_dim, out_dim))
-#
-#         self.gc_layers = nn.ModuleList(gc_layers)
-#
-#     @property
-#     def output_dim(self):
-#         raise self.gc_dims[-1]
-#
-#     def _forward(self, input_repr=None):
-#         if input_repr is not None:
-#             z = input_repr
-#         else:
-#             z = self.z
-#
-#         for gcl in self.gc_layers:
-#             z = gcl(z * self.adj_diag.unsqueeze(dim=1) + torch.cat([self.adj_nv @ z[self.num_objects:],
-#                                                                     self.adj_nv.t() @ z[:self.num_objects]], dim=0))
-#         obj_embs = z[:self.num_objects]
-#         pred_embs = z[self.num_objects:]
-#         return obj_embs, pred_embs
+class CheatHoiGCNBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+        super().__init__(**kwargs)
+        num_gc_layers = len(gc_dims)
+        self.gc_dims = gc_dims
+        self.num_objects = dataset.hicodet.num_object_classes
+        self.num_predicates = dataset.hicodet.num_predicates
+        self.num_interactions = dataset.hicodet.num_interactions
+
+        interactions = dataset.hicodet.interactions  # each is [p, o]
+        assert self.num_interactions == interactions.shape[0] == 600
+        interactions_to_obj = np.zeros((self.num_interactions, self.num_objects))
+        interactions_to_obj[np.arange(self.num_interactions), interactions[:, 1]] = 1
+        interactions_to_preds = np.zeros((self.num_interactions, self.num_predicates))
+        interactions_to_preds[np.arange(self.num_interactions), interactions[:, 0]] = 1
+
+        adj_an = torch.from_numpy(interactions_to_obj).float()
+        adj_av = torch.from_numpy(interactions_to_preds).float()
+
+        # Normalise.
+        self.adj_an = nn.Parameter(torch.diag(1 / (1 + adj_an.sum(dim=1)).sqrt()) @ adj_an @ torch.diag(1 / (1 + adj_an.sum(dim=0)).sqrt()),
+                                   requires_grad=False)
+        self.adj_av = nn.Parameter(torch.diag(1 / (1 + adj_av.sum(dim=1)).sqrt()) @ adj_av @ torch.diag(1 / (1 + adj_av.sum(dim=0)).sqrt()),
+                                   requires_grad=False)
+
+        self.z_n = nn.Parameter(torch.empty(self.num_objects, input_repr_dim).normal_(), requires_grad=True)
+        self.z_v = nn.Parameter(torch.empty(self.num_predicates, input_repr_dim).normal_(), requires_grad=True)
+        self.z_a = nn.Parameter(torch.empty(self.num_interactions, input_repr_dim).normal_(), requires_grad=True)
+
+        gc_layers = []
+        for i in range(num_gc_layers):
+            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
+            out_dim = gc_dims[i]
+            if i < num_gc_layers - 1:
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
+            else:
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+        self.gc_layers = nn.ModuleList(gc_layers)
+
+    def _forward(self, input_repr):
+        z_n = self.z_n
+        z_v = self.z_v
+        z_a = self.z_a
+        for i in range(len(self.gc_layers)):
+            prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
+            z_n = self.gc_layers[i](prev_z_n + self.adj_an.t() @ prev_z_a)
+            z_v = self.gc_layers[i](prev_z_v + self.adj_av.t() @ prev_z_a)
+            z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
+        return z_a, z_v, z_n
 
 
 class KatoGCNBranch(AbstractHOIBranch):
