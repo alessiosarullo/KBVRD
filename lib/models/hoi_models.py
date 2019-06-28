@@ -209,8 +209,71 @@ class MultiModel(GenericModel):
         return act_hoi_logits, act_logits, act_subj_logits
 
 
+class ZSBaseModel(GenericModel):
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.base_model = BaseModel(dataset, **kwargs)
+        self.predictor_dim = self.base_model.final_repr_dim
 
-class ZSHoiModel(GenericModel):
+        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
+        self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
+        self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
+
+        if cfg.model.zsload:
+            ckpt = torch.load(cfg.program.baseline_model_file)
+            self.pretrained_base_model = BaseModel(dataset)
+            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach(), requires_grad=False)  # P x D
+            assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
+            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+                if inference and cfg.model.zsload:
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
+
+                    action_output[:, self.seen_pred_inds] = pretrained_action_output
+            else:
+                assert inference
+                action_output = action_labels = None
+
+            if not inference:
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
+
+
+class ZSHoiModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsh'
@@ -284,70 +347,6 @@ class ZSHoiModel(GenericModel):
 
         reg_loss = None
         return act_logits, action_labels, reg_loss
-
-class ZSBaseModel(GenericModel):
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.dataset = dataset
-        self.base_model = BaseModel(dataset, **kwargs)
-        self.predictor_dim = self.base_model.final_repr_dim
-
-        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
-        self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
-        self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
-
-        if cfg.model.zsload:
-            ckpt = torch.load(cfg.program.baseline_model_file)
-            self.pretrained_base_model = BaseModel(dataset)
-            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_fc.weight.detach(), requires_grad=False)  # P x D
-            assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
-            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
-
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos is not None:
-                action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                if inference and cfg.model.zsload:
-                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
-
-                    action_output[:, self.seen_pred_inds] = pretrained_action_output
-            else:
-                assert inference
-                action_output = action_labels = None
-
-            if not inference:
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
-
 
 class ZSModel(ZSBaseModel):
     @classmethod
