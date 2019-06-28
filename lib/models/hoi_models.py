@@ -76,6 +76,139 @@ class BaseModel(GenericModel):
         return action_logits
 
 
+class MultiModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'multi'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.act_repr_dim = 1024
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+
+        # Action through object
+        self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.act_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+        self.act_obj_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.act_obj_output_fc.weight, gain=1.0)
+
+        # Action
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+        self.act_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+
+        # Action through HOI
+        self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(0.5),
+                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                 ])
+        nn.init.xavier_normal_(self.hoi_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.hoi_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+        self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.hoi_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.hoi_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+        self.hoi_act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.hoi_act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.hoi_act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
+        self.act_hoi_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.act_hoi_output_fc.weight, gain=1.0)
+
+    @property
+    def final_repr_dim(self):
+        return self.act_repr_dim
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                act_hoi_output, act_output, act_obj_output = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+            else:
+                assert inference
+                act_hoi_output = act_output = act_obj_output = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(act_output, action_labels) * act_output.shape[1],
+                          'action_obj_loss': nn.functional.binary_cross_entropy_with_logits(act_obj_output, action_labels) * act_obj_output.shape[1],
+                          'action_hoi_loss': nn.functional.binary_cross_entropy_with_logits(act_hoi_output, action_labels) * act_hoi_output.shape[1],
+                          }
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        act_score = (torch.sigmoid(act_hoi_output) +
+                                     torch.sigmoid(act_output) +
+                                     torch.sigmoid(act_obj_output)).cpu().numpy() / 3
+
+                        if act_output.shape[1] < self.dataset.hicodet.num_predicates:
+                            raise NotImplementedError
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+                        prediction.action_scores =act_score
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        masks = vis_output.masks
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+
+        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+
+        act_obj_repr = self.act_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
+        act_obj_logits = self.act_obj_output_fc(act_obj_repr)
+
+        act_repr = self.act_repr_mlp(union_boxes_feats)
+        act_logits = self.act_output_fc(act_repr)
+
+        hoi_subj_repr = self.hoi_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+        hoi_obj_repr = self.hoi_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
+        hoi_act_repr = self.hoi_act_repr_mlp(union_boxes_feats)
+        act_hoi_repr = hoi_act_repr + hoi_subj_repr + hoi_obj_repr
+        act_hoi_logits = self.act_hoi_output_fc(act_hoi_repr)
+        return act_hoi_logits, act_logits, act_obj_logits
+
+
 class ZSBaseModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
@@ -101,7 +234,7 @@ class ZSBaseModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, iter=x.iter)
+                action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
                 if inference and cfg.model.zsload:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
