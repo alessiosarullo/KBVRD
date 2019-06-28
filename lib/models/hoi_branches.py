@@ -101,7 +101,7 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
                 gc_layers.append(nn.Linear(in_dim, out_dim))
         self.gc_layers = nn.ModuleList(gc_layers)
 
-    def _forward(self, input_repr):
+    def _forward(self):
         z_n = self.z_n
         z_v = self.z_v
         z_a = self.z_a
