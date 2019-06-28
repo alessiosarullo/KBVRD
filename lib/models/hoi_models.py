@@ -454,6 +454,9 @@ class ZSObjModel(ZSBaseModel):
             ho_obj_output = ho_obj_vrepr @ obj_predictors.t()
             ho_infos = torch.tensor(vis_output.ho_infos, device=ho_obj_vrepr.device)
             ho_obj_labels = vis_output.box_labels[ho_infos[:, 2]]
+            fg_objs = (ho_obj_labels >= 0)
+            ho_obj_output = ho_obj_output[fg_objs, :]
+            ho_obj_labels = ho_obj_labels[fg_objs]
 
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
