@@ -306,20 +306,6 @@ class ZSModel(ZSBaseModel):
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
-        if cfg.model.aereg > 0:
-            self.emb_to_vrepr = nn.Sequential(*[nn.Linear(2 * latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
-                                                ])
-
-    def get_embeddings(self, vis_output: VisualOutput):
-        self._obj_embeddings, act_embeddings = self.gcn()  # P x E
-        return act_embeddings
-
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
         action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
@@ -335,7 +321,7 @@ class ZSModel(ZSBaseModel):
         instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
         instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
 
-        class_embs = self.get_embeddings(vis_output)  # P x E
+        _, class_embs = self.gcn(vis_output)  # P x E
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
@@ -344,10 +330,6 @@ class ZSModel(ZSBaseModel):
                 action_labels = vis_output.action_labels
         else:
             action_labels = None
-
-        if cfg.model.enorm:
-            class_embs = nn.functional.normalize(class_embs, dim=1)
-            instance_means = nn.functional.normalize(instance_means, dim=1)
 
         instance_logstd = instance_logstd.unsqueeze(dim=1)
         class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
@@ -361,16 +343,141 @@ class ZSModel(ZSBaseModel):
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
             action_output = vrepr @ act_predictors.t()
 
-        if cfg.model.aereg > 0 and vis_output.action_labels is not None:  # add reconstruction regularisation term to loss
-            if epoch >= 1:
-                reconstructed_vrepr = self.emb_to_vrepr(instance_params)
-                reg_loss = cfg.model.aereg * ((vrepr.detach() - reconstructed_vrepr) ** 2).sum()  # squared Frobenius norm
-            else:
-                reg_loss = 0
-        else:
-            reg_loss = None
-
+        reg_loss = None
         return action_output, action_labels, reg_loss
+
+
+class ZSObjModel(ZSBaseModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zso'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        self.emb_dim = 200
+        super().__init__(dataset, **kwargs)
+
+        latent_dim = self.emb_dim
+        input_dim = self.predictor_dim
+        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(800, 600),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(0.5),
+                                            nn.Linear(600, 2 * latent_dim),
+                                            ])
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(600, 800),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(800, input_dim),
+                                                ])
+        self.emb_to_obj_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(600, 800),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(0.5),
+                                                nn.Linear(800, input_dim),
+                                                ])
+
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+
+        if cfg.model.softlabels:
+            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+
+    def get_soft_labels(self, vis_output: VisualOutput):
+        ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
+        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
+
+        action_labels[:, self.train_pred_inds] = vis_output.action_labels
+
+        action_labels = action_labels.detach()
+        return action_labels
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos is not None:
+                action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+                if inference and cfg.model.zsload:
+                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
+
+                    action_output[:, self.train_pred_inds] = pretrained_action_output
+            else:
+                assert inference
+                action_output = action_labels = None
+
+            if not inference:
+                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1],
+                          'obj_loss': nn.functional.cross_entropy(ho_obj_output, ho_obj_labels),
+                          }
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2].cpu().numpy()
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
+
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        act_vrepr, ho_obj_vrepr = self.base_model._forward(vis_output, return_repr=True, return_obj=True)
+        act_instance_params = self.vrepr_to_emb(act_vrepr)
+        act_instance_means = act_instance_params[:, :act_instance_params.shape[1] // 2]  # P x E
+        act_instance_logstd = act_instance_params[:, act_instance_params.shape[1] // 2:]  # P x E
+
+        obj_class_embs, act_class_embs = self.gcn(vis_output)  # P x E
+        if vis_output.action_labels is not None:
+            obj_predictors = self.emb_to_obj_predictor(obj_class_embs)  # P x D
+            ho_obj_output = ho_obj_vrepr @ obj_predictors.t()
+            ho_infos = torch.tensor(vis_output.ho_infos, device=ho_obj_vrepr.device)
+            ho_obj_labels = vis_output.box_labels[ho_infos[:, 2]]
+
+            if cfg.model.softlabels:
+                action_labels = self.get_soft_labels(vis_output)
+            else:  # restrict training to seen predicates only
+                act_class_embs = act_class_embs[self.train_pred_inds, :]  # P x E
+                action_labels = vis_output.action_labels
+        else:
+            action_labels = ho_obj_output = ho_obj_labels = None
+
+        act_instance_logstd = act_instance_logstd.unsqueeze(dim=1)
+        class_logprobs = - 0.5 * (2 * act_instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                  ((act_instance_means.unsqueeze(dim=1) - act_class_embs.unsqueeze(dim=0)) /
+                                   act_instance_logstd.exp()).norm(dim=2) ** 2)
+
+        if cfg.model.attw:
+            act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
+                                                   nn.functional.normalize(act_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+            action_output = torch.bmm(act_vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
+        else:
+            act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
+            action_output = act_vrepr @ act_predictors.t()
+
+        reg_loss = None
+        return action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels
 
 
 class KatoModel(GenericModel):
