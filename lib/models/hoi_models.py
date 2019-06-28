@@ -321,7 +321,7 @@ class ZSModel(ZSBaseModel):
         instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
         instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
 
-        _, class_embs = self.gcn(vis_output)  # P x E
+        _, class_embs = self.gcn()  # P x E
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
@@ -448,7 +448,7 @@ class ZSObjModel(ZSBaseModel):
         act_instance_means = act_instance_params[:, :act_instance_params.shape[1] // 2]  # P x E
         act_instance_logstd = act_instance_params[:, act_instance_params.shape[1] // 2:]  # P x E
 
-        obj_class_embs, act_class_embs = self.gcn(vis_output)  # P x E
+        obj_class_embs, act_class_embs = self.gcn()  # P x E
         if vis_output.action_labels is not None:
             obj_predictors = self.emb_to_obj_predictor(obj_class_embs)  # P x D
             ho_obj_output = ho_obj_vrepr @ obj_predictors.t()
