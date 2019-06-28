@@ -147,15 +147,15 @@ class MultiModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                act_hoi_output, act_output, act_obj_output = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+                act_hoi_output, act_output, act_sub_output = self._forward(vis_output, epoch=x.epoch, step=x.iter)
             else:
                 assert inference
-                act_hoi_output = act_output = act_obj_output = None
+                act_hoi_output = act_output = act_sub_output = None
 
             if not inference:
                 action_labels = vis_output.action_labels
                 losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(act_output, action_labels) * act_output.shape[1],
-                          'action_obj_loss': nn.functional.binary_cross_entropy_with_logits(act_obj_output, action_labels) * act_obj_output.shape[1],
+                          'action_subj_loss': nn.functional.binary_cross_entropy_with_logits(act_sub_output, action_labels) * act_sub_output.shape[1],
                           'action_hoi_loss': nn.functional.binary_cross_entropy_with_logits(act_hoi_output, action_labels) * act_hoi_output.shape[1],
                           }
                 return losses
@@ -175,7 +175,7 @@ class MultiModel(GenericModel):
                     if vis_output.ho_infos is not None:
                         act_score = (torch.sigmoid(act_hoi_output) +
                                      torch.sigmoid(act_output) +
-                                     torch.sigmoid(act_obj_output)).cpu().numpy() / 3
+                                     torch.sigmoid(act_sub_output)).cpu().numpy() / 3
 
                         if act_output.shape[1] < self.dataset.hicodet.num_predicates:
                             raise NotImplementedError
@@ -317,9 +317,6 @@ class ZSModel(ZSBaseModel):
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        instance_params = self.vrepr_to_emb(vrepr)
-        instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
-        instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
 
         _, class_embs = self.gcn()  # P x E
         if vis_output.action_labels is not None:
@@ -331,20 +328,27 @@ class ZSModel(ZSBaseModel):
         else:
             action_labels = None
 
-        instance_logstd = instance_logstd.unsqueeze(dim=1)
-        class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                  ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
-
         if cfg.model.attw:
+            instance_params = self.vrepr_to_emb(vrepr)
+            instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
+            instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+            instance_logstd = instance_logstd.unsqueeze(dim=1)
+            class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                      ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
             act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
                                                    nn.functional.normalize(class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
-            action_output = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
+            action_logits = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
         else:
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
-            action_output = vrepr @ act_predictors.t()
+            action_logits = vrepr @ act_predictors.t()
+
+        act_prior = (vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:] @ self.gcn.adj_nv).clamp(min=1e-6)
+        act_prior_logits = act_prior.log() - (1 - act_prior).log()
+
+        action_logits = action_logits + act_prior_logits
 
         reg_loss = None
-        return action_output, action_labels, reg_loss
+        return action_logits, action_labels, reg_loss
 
 
 class ZSObjModel(ZSBaseModel):
