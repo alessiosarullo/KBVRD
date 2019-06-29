@@ -397,10 +397,11 @@ class ZSModel(ZSBaseModel):
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
+                act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
-            act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
+                act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
             act_logprior = act_prior.log()
         else:
             action_labels = None
