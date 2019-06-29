@@ -336,10 +336,10 @@ class ZSHoiModel(ZSBaseModel):
             hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
             hoi_logits = vrepr @ hoi_predictors.t()
 
-        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
-        hoi_logits = hoi_logits + ho_obj_inter_prior.log()
+        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]].clamp(min=1e-10)
+        ho_obj_inter_logprior = ho_obj_inter_prior.log()
 
-        act_logits = (hoi_logits.unsqueeze(dim=2) * self.adj_av_norm.unsqueeze(dim=0)).max(dim=1)[0]
+        act_logits = ((hoi_logits + ho_obj_inter_logprior).unsqueeze(dim=2) * self.adj_av_norm.unsqueeze(dim=0)).max(dim=1)[0]
 
         if vis_output.action_labels is not None and not cfg.model.softlabels:  # restrict training to seen predicates only
             act_logits = act_logits[:, self.seen_pred_inds]
