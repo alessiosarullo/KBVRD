@@ -302,8 +302,7 @@ class ZSHoiModel(ZSBaseModel):
                                                 ])
 
         self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-        adj_av = (self.gcn.adj_av >= 0).float()
-        self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
+        self.adj_av_norm = nn.Parameter((self.gcn.adj_av >= 0).float())
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
@@ -340,13 +339,14 @@ class ZSHoiModel(ZSBaseModel):
         ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
         hoi_logits = hoi_logits * ho_obj_inter_prior
 
-        act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
+        act_logits = (hoi_logits.unsqueeze(dim=2) * self.adj_av_norm.unsqueeze(dim=0)).max(dim=1)[0]
 
         if vis_output.action_labels is not None and not cfg.model.softlabels:  # restrict training to seen predicates only
             act_logits = act_logits[:, self.seen_pred_inds]
 
         reg_loss = None
         return act_logits, action_labels, reg_loss
+
 
 class ZSModel(ZSBaseModel):
     @classmethod
@@ -400,12 +400,13 @@ class ZSModel(ZSBaseModel):
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
-            act_prior_logits = 0
+            act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
+            act_logprior = act_prior.log()
         else:
             action_labels = None
             obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:].max(dim=1)
-            act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-6)
-            act_prior_logits = act_prior.log() - (1 - act_prior).log()
+            act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
+            act_logprior = act_prior.log()
 
         if cfg.model.attw:
             instance_params = self.vrepr_to_emb(vrepr)
@@ -421,7 +422,8 @@ class ZSModel(ZSBaseModel):
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
             action_logits = vrepr @ act_predictors.t()
 
-        action_logits = action_logits + act_prior_logits
+        if cfg.model.oprior:
+            action_logits = action_logits + act_logprior
 
         reg_loss = None
         return action_logits, action_labels, reg_loss

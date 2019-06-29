@@ -211,7 +211,7 @@ class ModelConfig(BaseConfigs):
 
         self.enorm = False
         self.attw = False
-        self.bare = False  # unused
+        self.oprior = False
         self.zsload = False
         self.softlabels = False
         self.aereg = 0.0
