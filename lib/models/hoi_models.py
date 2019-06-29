@@ -337,7 +337,7 @@ class ZSHoiModel(ZSBaseModel):
             hoi_logits = vrepr @ hoi_predictors.t()
 
         ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
-        hoi_logits = hoi_logits * ho_obj_inter_prior
+        hoi_logits = hoi_logits + ho_obj_inter_prior.log()
 
         act_logits = (hoi_logits.unsqueeze(dim=2) * self.adj_av_norm.unsqueeze(dim=0)).max(dim=1)[0]
 
