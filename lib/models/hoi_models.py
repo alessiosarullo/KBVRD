@@ -302,7 +302,8 @@ class ZSHoiModel(ZSBaseModel):
                                                 ])
 
         self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-        self.adj_av_norm = nn.Parameter((self.gcn.adj_av > 0).float(), requires_grad=False)
+        adj_av = (self.gcn.adj_av > 0).float()
+        self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
@@ -336,10 +337,10 @@ class ZSHoiModel(ZSBaseModel):
             hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
             hoi_logits = vrepr @ hoi_predictors.t()
 
-        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]].clamp(min=1e-10)
-        ho_obj_inter_logprior = ho_obj_inter_prior.log()
+        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
+        hoi_logits = hoi_logits * ho_obj_inter_prior
 
-        act_logits = ((hoi_logits + ho_obj_inter_logprior).unsqueeze(dim=2) * self.adj_av_norm.unsqueeze(dim=0)).max(dim=1)[0]
+        act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
 
         if vis_output.action_labels is not None and not cfg.model.softlabels:  # restrict training to seen predicates only
             act_logits = act_logits[:, self.seen_pred_inds]
