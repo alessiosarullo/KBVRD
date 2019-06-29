@@ -402,7 +402,7 @@ class ZSModel(ZSBaseModel):
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
                 act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
-            act_logprior = act_prior.log()
+            act_logprior = act_prior[vis_output.ho_infos[:, 2], :].log()
         else:
             action_labels = None
             obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:].max(dim=1)
