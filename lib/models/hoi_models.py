@@ -302,7 +302,7 @@ class ZSHoiModel(ZSBaseModel):
                                                 ])
 
         self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-        self.adj_av_norm = nn.Parameter((self.gcn.adj_av >= 0).float())
+        self.adj_av_norm = nn.Parameter((self.gcn.adj_av > 0).float(), requires_grad=False)
 
         if cfg.model.softlabels:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
