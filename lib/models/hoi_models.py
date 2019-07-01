@@ -64,9 +64,8 @@ class BaseModel(GenericModel):
         box_feats = vis_output.box_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
 
-        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
-        subj_ho_feats = box_feats_ext[hoi_infos[:, 1], :]
-        obj_ho_feats = box_feats_ext[hoi_infos[:, 2], :]
+        subj_ho_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
+        obj_ho_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
 
         ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
         ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
