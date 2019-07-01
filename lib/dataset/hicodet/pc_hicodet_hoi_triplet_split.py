@@ -145,6 +145,7 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         for n in range(int(np.ceil(self.neg_pos_ratio * self.pos_samples.shape[0] / self.neg_samples.shape[0]))):
             ns = np.random.permutation(self.neg_samples) if self.shuffle else self.neg_samples
             neg_samples.append(ns)
+        neg_samples = np.concatenate(neg_samples, axis=0)
         batch_idx = 0
         for sample in neg_samples:
             if batch_idx == len(batches):
