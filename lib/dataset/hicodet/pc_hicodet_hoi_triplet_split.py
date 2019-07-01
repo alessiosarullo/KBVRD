@@ -20,7 +20,7 @@ class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
             im_idx = np.flatnonzero(self.image_ids == pc_im_id).tolist()  # type: List
             assert len(im_idx) == 1, im_idx
-            assert pc_im_id not in self.im_id_to_pc_im_idx
+            assert pc_im_id not in self.pc_im_idx_to_im_idx
             self.pc_im_idx_to_im_idx[pc_im_idx] = im_idx[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
