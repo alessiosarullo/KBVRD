@@ -41,8 +41,9 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
     def __len__(self):
         return self.num_precomputed_hois
 
-    def __getitem__(self, pc_hoi_idx) -> PrecomputedExample:
+    def __getitem__(self, idx) -> PrecomputedExample:
         Timer.get('GetBatch').tic()
+        pc_hoi_idx, hoi_label = idx
 
         pc_im_idx = self.pc_ho_im_idxs[pc_hoi_idx]
         im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
@@ -60,7 +61,11 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
         # HOI data
         entry.precomp_hoi_infos = self.pc_ho_infos[pc_hoi_idx, :].copy()
         entry.precomp_hoi_union_boxes = self.pc_union_boxes[pc_hoi_idx, :].copy()
-        entry.precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :].copy()
+        precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :]
+        assert precomp_action_labels[hoi_label] == 1
+        precomp_action_labels[:] = 0
+        precomp_action_labels[hoi_label] = 1
+        entry.precomp_action_labels = precomp_action_labels
 
         # Object data
         img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)

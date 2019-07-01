@@ -65,7 +65,8 @@ class BaseModel(GenericModel):
 
         ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
         ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
-        concat_repr = self.concat_repr_mlp(torch.cat([subj_ho_feats, obj_ho_feats], dim=1))
+        concat_repr = self.concat_repr_mlp(torch.cat([box_feats[hoi_infos[:, 1], :],
+                                                      box_feats[hoi_infos[:, 2], :]], dim=1))
         act_repr = ho_subj_repr + ho_obj_repr + concat_repr
         if return_repr:
             if return_obj:
