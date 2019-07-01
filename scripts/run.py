@@ -22,6 +22,14 @@ from lib.stats.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
 
 
+try:  # PyCharm debugging
+    import pydevd_pycharm
+    pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
+except:
+    print('Remote debugging is off.')
+    pass
+
+
 class Launcher:
     # FIXME general: rename "object" in SPO triplets as "target" or something else to avoid ambiguity. Also "verb" might be better than "predicate"
     def __init__(self):
