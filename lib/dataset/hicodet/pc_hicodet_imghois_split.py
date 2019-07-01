@@ -8,7 +8,7 @@ from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
+class PrecomputedHicoDetImgHOISplit(PrecomputedHicoDetSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.split == Splits.TEST:
@@ -89,7 +89,7 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
 
 
 class BalancedImgSampler(torch.utils.data.BatchSampler):
-    def __init__(self, dataset: PrecomputedHicoDetHOISplit, hoi_batch_size, drop_last, shuffle):
+    def __init__(self, dataset: PrecomputedHicoDetImgHOISplit, hoi_batch_size, drop_last, shuffle):
         sampler = torch.utils.data.RandomSampler(dataset) if shuffle else torch.utils.data.SequentialSampler(dataset)
         super().__init__(sampler, hoi_batch_size, drop_last)
         if not drop_last:
@@ -204,7 +204,7 @@ def main():
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-    s = PrecomputedHicoDetHOISplit.get_split(split=Splits.TRAIN)
+    s = PrecomputedHicoDetImgHOISplit.get_split(split=Splits.TRAIN)
     ld = s.get_loader(batch_size=64)
 
     for i, x in enumerate(ld):

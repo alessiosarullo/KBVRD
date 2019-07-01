@@ -1,8 +1,8 @@
+from typing import List
+
 import numpy as np
 import torch
 import torch.utils.data
-from typing import List
-from collections import Counter
 
 from config import cfg
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample
@@ -10,7 +10,7 @@ from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
+class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.split == Splits.TEST:
@@ -42,9 +42,8 @@ class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
     def __len__(self):
         return self.num_precomputed_hois
 
-    def __getitem__(self, idx) -> PrecomputedExample:
+    def __getitem__(self, pc_hoi_idx) -> PrecomputedExample:
         Timer.get('GetBatch').tic()
-        pc_hoi_idx, hoi_label = idx
 
         pc_im_idx = self.pc_ho_im_idxs[pc_hoi_idx]
         im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
@@ -76,18 +75,14 @@ class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
         hoi_infos[1:] = [0, 1]
         entry.precomp_hoi_infos = hoi_infos[None, :]
         entry.precomp_hoi_union_boxes = self.pc_union_boxes[[pc_hoi_idx], :].copy()
-        precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :].copy()
-        assert precomp_action_labels[hoi_label] == 1, (pc_hoi_idx, hoi_label, precomp_action_labels)
-        precomp_action_labels[:] = 0
-        precomp_action_labels[hoi_label] = 1
-        entry.precomp_action_labels = precomp_action_labels[None, :]
+        entry.precomp_action_labels = self.pc_action_labels[[pc_hoi_idx], :].copy()
 
         Timer.get('GetBatch').toc()
         return entry
 
 
 class BalancedTripletSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PrecomputedHicoDetPureHOISplit, hoi_batch_size, drop_last, shuffle):
+    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, hoi_batch_size, drop_last, shuffle):
         super().__init__(dataset)
         if not drop_last:
             raise NotImplementedError()
@@ -113,16 +108,10 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         split_mask = split_ids_mask[pc_ho_im_ids]
 
         pos_hois_mask = pos_hois_mask & split_mask
-        pos_samples_mask_inds, pos_samples_labels = np.where(self.dataset.pc_action_labels[pos_hois_mask, :])
-        pos_hois_ids = np.flatnonzero(pos_hois_mask)
-        self.pos_samples = np.stack([pos_hois_ids[pos_samples_mask_inds], pos_samples_labels], axis=1)
-        assert np.all(self.pos_samples[:, 1] > 0)
+        self.pos_samples = np.flatnonzero(pos_hois_mask)
 
         neg_hois_mask = neg_hois_mask & split_mask
-        neg_samples_mask_inds, neg_samples_labels = np.where(self.dataset.pc_action_labels[neg_hois_mask, :])
-        neg_hois_ids = np.flatnonzero(neg_hois_mask)
-        self.neg_samples = np.stack([neg_hois_ids[neg_samples_mask_inds], neg_samples_labels], axis=1)
-        assert np.all(self.neg_samples[:, 1] == 0)
+        self.neg_samples = np.flatnonzero(neg_hois_mask)
 
         self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
         pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
@@ -148,7 +137,7 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         pos_samples = np.random.permutation(self.pos_samples) if self.shuffle else self.pos_samples
         batch = []
         for sample in pos_samples:
-            batch.append(sample.tolist())
+            batch.append(sample)
             if len(batch) >= self.pos_per_batch:
                 assert len(batch) == self.pos_per_batch
                 batches.append(batch)
@@ -165,7 +154,7 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
             if batch_idx == len(batches):
                 break
             batch = batches[batch_idx]
-            batch.append(sample.tolist())
+            batch.append(sample)
             if len(batch) >= self.batch_size:
                 assert len(batch) == self.batch_size
                 batch_idx += 1
