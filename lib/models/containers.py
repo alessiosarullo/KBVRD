@@ -31,7 +31,7 @@ class VisualOutput:
         # Object attributes
         self.boxes_ext = None  # N x 85, each [img_id, x1, y1, x2, y2, scores]
         self.box_feats = None  # N x F, where F is the dimensionality of visual features
-        self.masks = None  # N x M x M (of floats), where M is the mask resolution
+        # self.masks = None  # N x M x M (of floats), where M is the mask resolution
 
         # Human-object pair attributes
         self.ho_infos = None  # R x 3, each [img_id, human_ind, obj_ind]
@@ -62,17 +62,14 @@ class VisualOutput:
 
         discarded_boxes_ext = self.boxes_ext[~valid_box_mask, :]
         discarded_box_feats = self.box_feats[~valid_box_mask, :]
-        discarded_masks = self.masks[~valid_box_mask, :]
 
         if not valid_box_mask.any():
             self.boxes_ext = None
             self.box_feats = None
-            self.masks = None
             self.box_labels = None
         else:
             self.boxes_ext = self.boxes_ext[valid_box_mask, :]
             self.box_feats = self.box_feats[valid_box_mask, :]
-            self.masks = self.masks[valid_box_mask, :]
             if self.box_labels is not None:
                 self.box_labels = self.box_labels[valid_box_mask]
 
@@ -99,4 +96,4 @@ class VisualOutput:
                     valid_hoi_mask = (torch.from_numpy(valid_hoi_mask.astype(np.uint8)) > 0)
                     self.action_labels = self.action_labels[valid_hoi_mask, :]
 
-        return discarded_boxes_ext, discarded_box_feats, discarded_masks
+        return discarded_boxes_ext, discarded_box_feats

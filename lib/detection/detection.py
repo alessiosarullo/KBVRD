@@ -6,11 +6,6 @@ from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils
 
 
 def im_detect_boxes(model, inputs, unscaled_img_sizes):
-    """
-    Returned `masks`, `box_feats` and `feat_map` are Torch, the rest is NumPy
-    """
-    # TODO docs
-
     assert not cfg.TEST.BBOX_AUG.ENABLED
     assert not cfg.MODEL.KEYPOINTS_ON
     assert cfg.MODEL.MASK_ON

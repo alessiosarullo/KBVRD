@@ -54,7 +54,6 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
 
             precomp_boxes_ext = self.pc_boxes_ext[box_start:box_end, :]
             precomp_box_feats = self.pc_boxes_feats[box_start:box_end, :]
-            precomp_masks = self.pc_masks[box_start:box_end, :, :]
             precomp_box_labels = self.pc_box_labels[box_start:box_end].copy()
 
             # HOI data
@@ -82,7 +81,6 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
 
             entry.precomp_boxes_ext = precomp_boxes_ext
             entry.precomp_box_feats = precomp_box_feats
-            entry.precomp_masks = precomp_masks
             entry.precomp_box_labels = precomp_box_labels
         assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
                (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)

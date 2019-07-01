@@ -42,7 +42,6 @@ class VisualModule(nn.Module):
                 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
                 output.boxes_ext = torch.tensor(boxes_ext_np, device=device)
                 output.box_feats = torch.tensor(batch.pc_box_feats, device=device)
-                output.masks = torch.tensor(batch.pc_masks, device=device)
                 output.hoi_union_boxes = batch.pc_ho_union_boxes
 
                 if ho_infos.shape[0] > 0:
@@ -63,10 +62,9 @@ class VisualModule(nn.Module):
                 # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
 
                 if boxes_ext_np.shape[0] > 0 or training:
-                    boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels = self.process_boxes(batch, inference, feat_map, boxes_ext_np)
+                    boxes_ext_np, box_feats, ho_infos, box_labels, action_labels = self.process_boxes(batch, inference, feat_map, boxes_ext_np)
                     output.boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
                     output.box_feats = box_feats
-                    output.masks = masks
                     output.box_labels = box_labels
                     output.action_labels = action_labels
 
@@ -127,11 +125,12 @@ class VisualModule(nn.Module):
             ho_infos = self.get_all_pairs(boxes_ext_np, box_classes)
             box_labels = action_labels = None
 
-        masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
+        # masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
+        # assert boxes_ext_np.shape[0] == masks.shape[0]
         box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, :5])
-        assert boxes_ext_np.shape[0] == box_feats.shape[0] == masks.shape[0]
+        assert boxes_ext_np.shape[0] == box_feats.shape[0]
 
-        return boxes_ext_np, box_feats, masks, ho_infos, box_labels, action_labels
+        return boxes_ext_np, box_feats, ho_infos, box_labels, action_labels
 
     def filter_boxes(self, boxes_ext_np, coco_box_classes=None):
         keep = np.ones(boxes_ext_np.shape[0], dtype=bool)

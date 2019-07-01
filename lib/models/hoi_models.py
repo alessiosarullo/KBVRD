@@ -47,8 +47,7 @@ class BaseModel(GenericModel):
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False, return_obj=False):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
 
@@ -177,8 +176,7 @@ class MultiModel(GenericModel):
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
         subj_ho_feats = box_feats_ext[hoi_infos[:, 1], :]
@@ -634,8 +632,7 @@ class KatoModel(GenericModel):
 
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
-        masks = vis_output.masks
-        hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+        hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
 

@@ -43,7 +43,6 @@ def save_feats():
         feat_file = h5py.File(precomputed_feats_fn, 'w')
         feat_file.create_dataset('box_feats', shape=(0, vm.vis_feat_dim), maxshape=(None, vm.vis_feat_dim))
         feat_file.create_dataset('boxes_ext', shape=(0, hds.num_object_classes + 5), maxshape=(None, hds.num_object_classes + 5))
-        feat_file.create_dataset('masks', shape=(0, vm.mask_resolution, vm.mask_resolution), maxshape=(None, vm.mask_resolution, vm.mask_resolution))
 
         try:
             all_union_boxes, all_ho_infos, all_box_labels, all_action_labels, all_img_infos = empty_lists(5, len(hd_loader))
@@ -61,7 +60,6 @@ def save_feats():
                 vout = vm(im_data, inference)  # type: VisualOutput
                 boxes_ext = vout.boxes_ext
                 box_feats = vout.box_feats
-                masks = vout.masks
                 ho_infos = vout.ho_infos
                 union_boxes = vout.hoi_union_boxes
                 box_labels = vout.box_labels
@@ -69,7 +67,6 @@ def save_feats():
                 if boxes_ext is not None:
                     boxes_ext = boxes_ext.cpu().numpy()
                     box_feats = box_feats.cpu().numpy()
-                    masks = masks.cpu().numpy()
                 if box_labels is not None:
                     box_labels = box_labels.cpu().numpy()
                 if action_labels is not None:
@@ -80,7 +77,6 @@ def save_feats():
                     boxes_ext[:, 0] = im_i
                     obj_cache['box_feats'].append(box_feats)
                     obj_cache['boxes_ext'].append(boxes_ext)
-                    obj_cache['masks'].append(masks)
 
                     if ho_infos is not None:
                         assert np.all(ho_infos[:, 0] == 0)

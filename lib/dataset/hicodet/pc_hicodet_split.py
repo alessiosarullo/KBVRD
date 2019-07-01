@@ -23,7 +23,6 @@ class PrecomputedExample:
 
         self.precomp_boxes_ext = None
         self.precomp_box_feats = None
-        self.precomp_masks = None
 
         self.precomp_hoi_infos = None
         self.precomp_hoi_union_boxes = None
@@ -38,7 +37,6 @@ class PrecomputedMinibatch:
         self.other_ex_data = []
         self.pc_boxes_ext = []
         self.pc_box_feats = []
-        self.pc_masks = []
         self.pc_ho_infos = []
         self.pc_ho_union_boxes = []
         self.pc_box_labels = []
@@ -64,7 +62,6 @@ class PrecomputedMinibatch:
             boxes_ext[:, 0] = im_id_in_batch
             self.pc_boxes_ext += [boxes_ext]
             self.pc_box_feats += [ex.precomp_box_feats]
-            self.pc_masks += [ex.precomp_masks]
 
             self.pc_box_labels += [ex.precomp_box_labels]
 
@@ -85,7 +82,7 @@ class PrecomputedMinibatch:
                     v = [np.empty(0)]
                 self.__dict__[k] = np.concatenate(v, axis=0)
 
-        assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
+        assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0]
         assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0]
 
         img_infos = np.stack(self.img_infos, axis=0)
@@ -131,7 +128,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
         self.pc_boxes_ext = pc_feats_file['boxes_ext'][:]
         self.pc_boxes_feats = pc_feats_file['box_feats']
-        self.pc_masks = pc_feats_file['masks']
         try:
             self.pc_box_labels = pc_feats_file['box_labels'][:]
         except KeyError:
@@ -219,7 +215,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
             precomp_boxes_ext = self.pc_boxes_ext[start:end, :]
             precomp_box_feats = self.pc_boxes_feats[start:end, :]
-            precomp_masks = self.pc_masks[start:end, :, :]
             box_inds = None
             if self.pc_box_labels is not None:
                 # TODO mapping of obj inds for rels
@@ -240,7 +235,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                     box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
                     precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
                     precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
-                    precomp_masks = precomp_masks[feasible_box_labels_inds]
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
                     precomp_box_labels = np.argmax(precomp_box_labels_one_hot, axis=1).astype(precomp_box_labels_one_hot.dtype)
                     precomp_box_labels[~np.any(precomp_box_labels_one_hot, axis=1)] = -1
@@ -288,7 +282,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                         hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
                         precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
                         precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                        precomp_masks = precomp_masks[hoi_box_inds]
                         precomp_box_labels = precomp_box_labels[hoi_box_inds]
                         box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
                         box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
@@ -305,7 +298,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
             entry.precomp_boxes_ext = precomp_boxes_ext
             entry.precomp_box_feats = precomp_box_feats
-            entry.precomp_masks = precomp_masks
             entry.precomp_box_labels = precomp_box_labels
         assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
                (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
