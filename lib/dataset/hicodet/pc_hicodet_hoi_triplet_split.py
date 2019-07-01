@@ -103,7 +103,7 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
             assert not np.any(pos_hois_mask & neg_hois_mask)
 
         pc_ho_im_ids = dataset.pc_image_ids[dataset.pc_ho_im_idxs]
-        split_ids_mask = np.zeros(max(np.max(pc_ho_im_ids), np.max(dataset.image_ids)), dtype=bool)
+        split_ids_mask = np.zeros(max(np.max(pc_ho_im_ids), np.max(dataset.image_ids)) + 1, dtype=bool)
         split_ids_mask[dataset.image_ids] = True
         split_mask = split_ids_mask[pc_ho_im_ids]
 

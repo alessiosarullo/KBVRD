@@ -30,11 +30,12 @@ class Launcher:
 
         if cfg.program.debug:
             try:  # PyCharm debugging
+                print('Starting remote debugging (resume from debug server)')
                 import pydevd_pycharm
                 pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
                 print('Remote debugging activated.')
             except:
-                print('Remote debugging is off.')
+                print('Remote debugging failed.')
                 raise
 
         if cfg.program.load_train_output:
