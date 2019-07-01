@@ -110,12 +110,12 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         assert np.all(self.neg_samples[:, 1] == 0)
         assert np.all(self.pos_samples[:, 1] > 0)
 
-        neg_pos_ratio = cfg.opt.hoi_bg_ratio
-        pos_per_batch = hoi_batch_size / (neg_pos_ratio + 1)
+        self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
+        pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
         self.pos_per_batch = int(pos_per_batch)
         self.neg_per_batch = hoi_batch_size - self.pos_per_batch
         assert pos_per_batch == self.pos_per_batch
-        assert neg_pos_ratio == int(neg_pos_ratio)
+        assert self.neg_pos_ratio == int(self.neg_pos_ratio)
 
         self.batches = self.get_all_batches()
 
@@ -128,13 +128,10 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         return len(self.batches)
 
     def get_all_batches(self):
-        pos_samples = self.pos_samples
-        neg_samples = self.neg_samples
-        if self.shuffle:
-            pos_samples = np.random.permutation(pos_samples)
-            neg_samples = np.random.permutation(neg_samples)
-
         batches = []
+
+        # Positive samples
+        pos_samples = np.random.permutation(self.pos_samples) if self.shuffle else self.pos_samples
         batch = []
         for sample in pos_samples:
             batch.append(sample.tolist())
@@ -143,6 +140,11 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
                 batches.append(batch)
                 batch = []
 
+        # Negative samples
+        neg_samples = []
+        for n in range(int(np.ceil(self.neg_pos_ratio * self.pos_samples.shape[0] / self.neg_samples.shape[0]))):
+            ns = np.random.permutation(self.neg_samples) if self.shuffle else self.neg_samples
+            neg_samples.append(ns)
         batch_idx = 0
         for sample in neg_samples:
             if batch_idx == len(batches):
@@ -152,9 +154,13 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
             if len(batch) >= self.batch_size:
                 assert len(batch) == self.batch_size
                 batch_idx += 1
+        assert batch_idx == len(batches)
 
         # Check
         for i, batch in enumerate(batches):
-            assert len(batch) == self.batch_size, (i, len(batch), len(batches))
+            # assert len(batch) == self.batch_size, (i, len(batch), len(batches))
+            if len(batch) != self.batch_size:
+                print(i, len(batch), len(batches))
+        exit(0)
 
         return batches
