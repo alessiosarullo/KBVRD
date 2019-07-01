@@ -43,14 +43,14 @@ class BaseModel(GenericModel):
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(0.5),
                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(0.5),
-                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                               # nn.ReLU(inplace=True),
+                                               # nn.Dropout(0.5),
+                                               # nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                ])
         nn.init.xavier_normal_(self.concat_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
-        # nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        nn.init.xavier_normal_(self.concat_repr_mlp[6].weight, gain=torch.nn.init.calculate_gain('linear'))
+        # nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        # nn.init.xavier_normal_(self.concat_repr_mlp[6].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         self.act_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
