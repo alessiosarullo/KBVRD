@@ -12,7 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits
 from lib.dataset.hicodet.pc_hicodet_hoi_triplet_split import PrecomputedHicoDetPureHOISplit
-# from lib.dataset.hicodet.pc_hicodet_hoi_split import PrecomputedHicoDetHOISplit
+from lib.dataset.hicodet.pc_hicodet_hoi_split import PrecomputedHicoDetHOISplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
@@ -65,8 +65,13 @@ class Launcher:
             obj_inds = cfg.data.obj_inds
             pred_inds = cfg.data.pred_inds
 
-        self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetPureHOISplit, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
-        self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetPureHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
+        if cfg.opt.group:
+            self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
+            self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
+        else:
+            self.train_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetPureHOISplit, split=Splits.TRAIN, obj_inds=obj_inds,
+                                                             pred_inds=pred_inds)
+            self.val_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetPureHOISplit, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
         self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         # Model

@@ -224,6 +224,8 @@ class OptimizerConfig(BaseConfigs):
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
+        self.group = True
+
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3
         self.lr_gamma = 0.5
