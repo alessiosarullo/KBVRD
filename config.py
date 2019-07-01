@@ -42,6 +42,8 @@ class ProgramConfig(BaseConfigs):
         self.sync = False
         self.verbose = False
 
+        self.debug = False
+
         self.randomize = False
 
         self.model = None
