@@ -127,7 +127,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         self.pc_image_infos = pc_feats_file['img_infos'][:]
 
         self.pc_boxes_ext = pc_feats_file['boxes_ext'][:]
-        self.pc_boxes_feats = pc_feats_file['box_feats']
+        self.pc_boxes_feats = pc_feats_file['box_feats'][:]
         try:
             self.pc_box_labels = pc_feats_file['box_labels'][:]
         except KeyError:
@@ -151,8 +151,8 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             self.pc_hoi_mask = None
 
         # Derived
-        self.pc_box_im_inds = self.pc_boxes_ext[:, 0].astype(np.int)
-        self.pc_ho_im_inds = self.pc_ho_infos[:, 0]
+        self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)
+        self.pc_ho_im_idxs = self.pc_ho_infos[:, 0]
 
         # Map image IDs to indices over the precomputed image IDs
         assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
@@ -192,6 +192,9 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         )
         return data_loader
 
+    def __len__(self):
+        return self.num_images
+
     def __getitem__(self, idx) -> PrecomputedExample:
         Timer.get('GetBatch').tic()
         im_data = self._data[idx]
@@ -208,7 +211,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         entry.scale = img_infos[2]
 
         # Object data
-        img_box_inds = np.flatnonzero(self.pc_box_im_inds == pc_im_idx)
+        img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)
         if img_box_inds.size > 0:
             start, end = img_box_inds[0], img_box_inds[-1] + 1
             assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
@@ -242,7 +245,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 precomp_box_labels = None
 
             # HOI data
-            img_hoi_inds = np.flatnonzero(self.pc_ho_im_inds == pc_im_idx)
+            img_hoi_inds = np.flatnonzero(self.pc_ho_im_idxs == pc_im_idx)
             if img_hoi_inds.size > 0:
                 start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
@@ -303,6 +306,3 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
         Timer.get('GetBatch').toc()
         return entry
-
-    def __len__(self):
-        return self.num_images

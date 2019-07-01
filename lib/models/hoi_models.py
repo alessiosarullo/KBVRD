@@ -37,6 +37,16 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
+        self.concat_repr_mlp = nn.Sequential(*[nn.Linear(2 * vis_feat_dim, self.final_repr_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(0.5),
+                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                               # nn.ReLU(inplace=True),
+                                               # nn.Dropout(0.5),
+                                               ])
+        nn.init.xavier_normal_(self.concat_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+
         self.act_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
@@ -44,20 +54,68 @@ class BaseModel(GenericModel):
     def final_repr_dim(self):
         return self.act_repr_dim
 
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False, return_obj=False):
+    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None, return_repr=False, return_obj=False):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=box_feats.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+        subj_ho_feats = box_feats_ext[hoi_infos[:, 1], :]
+        obj_ho_feats = box_feats_ext[hoi_infos[:, 2], :]
 
-        ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
-        ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        act_repr = ho_subj_repr + ho_obj_repr
+        ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
+        ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
+        concat_repr = self.concat_repr_mlp(torch.cat([subj_ho_feats, obj_ho_feats], dim=1))
+        act_repr = ho_subj_repr + ho_obj_repr + concat_repr
         if return_repr:
             if return_obj:
                 return act_repr, ho_obj_repr
             return act_repr
+
+        # im_sizes = torch.tensor(np.array([d['im_size'][::-1] * d['im_scale'] for d in batch.other_ex_data]).astype(np.float32),
+        #                         device=box_feats.device)
+        # im_areas = im_sizes.prod(dim=1)
+        #
+        # box_im_inds = boxes_ext[:, 0].long()
+        # box_im_sizes = im_sizes[box_im_inds, :]
+        # # boxes_ext[:, 3] = torch.min(boxes_ext[:, 3], box_im_sizes[:, 0])
+        # # boxes_ext[:, 4] = torch.min(boxes_ext[:, 4], box_im_sizes[:, 1])
+        #
+        # norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
+        # assert (0 <= norm_boxes).all(), \
+        #     (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(),
+        #      im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
+        # # norm_boxes.clamp_(max=1)  # Needed for numerical errors
+        # assert (norm_boxes <= 1).all(), \
+        #     (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(),
+        #      im_sizes.detach().cpu().numpy(), norm_boxes.detach().cpu().numpy())
+        #
+        # box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
+        # box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
+        # norm_box_areas = box_widths * box_heights / im_areas[box_im_inds]
+        # assert (0 < norm_box_areas).all(), \
+        #     (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
+        # # norm_box_areas.clamp_(max=1)  # Needed for numerical errors
+        # assert (norm_box_areas <= 1).all(), \
+        #     (box_im_inds.detach().cpu().numpy(), boxes_ext[:, 1:5].detach().cpu().numpy(), norm_box_areas.detach().cpu().numpy())
+        #
+        # hum_inds = hoi_infos[:, 1]
+        # obj_inds = hoi_infos[:, 2]
+        # obj_widths = box_widths[obj_inds]
+        # obj_heights = box_widths[obj_inds]
+        #
+        # h_dist = (boxes_ext[hum_inds, 1] - boxes_ext[obj_inds, 1]) / obj_widths
+        # v_dist = (boxes_ext[hum_inds, 2] - boxes_ext[obj_inds, 2]) / obj_heights
+        #
+        # h_ratio = (box_widths[hum_inds] / obj_widths).log()
+        # v_ratio = (box_widths[hum_inds] / obj_heights).log()
+        #
+        # geo_feats = torch.cat([norm_boxes[hum_inds, :],
+        #                        norm_box_areas[hum_inds, None],
+        #                        norm_boxes[obj_inds, :],
+        #                        norm_box_areas[obj_inds, None],
+        #                        h_dist[:, None], v_dist[:, None], h_ratio[:, None], v_ratio[:, None]
+        #                        ], dim=1)
 
         action_logits = self.act_output_fc(act_repr)
         return action_logits

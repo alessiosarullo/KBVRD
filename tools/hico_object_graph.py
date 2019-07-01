@@ -34,8 +34,8 @@ def main():
     box_classes = np.concatenate([train_split.pc_box_labels,
                                   np.argmax(test_split.pc_boxes_ext[:, 5:], axis=1)
                                   ])
-    box_im_ids = np.concatenate([train_split.pc_box_im_inds,
-                                 test_split.pc_box_im_inds,
+    box_im_ids = np.concatenate([train_split.pc_box_im_idxs,
+                                 test_split.pc_box_im_idxs,
                                  ])
     im_ids, num_boxes_per_img = np.unique(box_im_ids, return_counts=True)
     assert np.all(im_ids == np.arange(im_ids.size))
@@ -43,7 +43,7 @@ def main():
     assert cum_num_boxes_per_img[-1] == box_im_ids.shape[0]
     cum_num_boxes_per_img[1:] = cum_num_boxes_per_img[:-1]
     cum_num_boxes_per_img[0] = 0
-    ho_infos = cum_num_boxes_per_img[train_split.pc_ho_im_inds, :] + train_split.pc_ho_infos[:, 1:]
+    ho_infos = cum_num_boxes_per_img[train_split.pc_ho_im_idxs, :] + train_split.pc_ho_infos[:, 1:]
 
     persons_per_interaction = {iid: [] for iid in range(train_split.hicodet.num_interactions)}
     for int_idx in range(train_split.pc_ho_infos.shape[0]):
