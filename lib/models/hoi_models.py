@@ -37,16 +37,6 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 
-        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(0.5),
-                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                              # nn.ReLU(inplace=True),
-                                              # nn.Dropout(0.5),
-                                              ])
-        nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
-
         self.act_output_fc = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
 
@@ -58,15 +48,13 @@ class BaseModel(GenericModel):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
 
         ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        union_repr = self.union_repr_mlp(union_boxes_feats)
-        act_repr = union_repr + ho_subj_repr + ho_obj_repr
+        act_repr = ho_subj_repr + ho_obj_repr
         if return_repr:
             if return_obj:
                 return act_repr, ho_obj_repr
@@ -190,22 +178,21 @@ class MultiModel(GenericModel):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+        subj_ho_feats = box_feats_ext[hoi_infos[:, 1], :]
+        obj_ho_feats = box_feats_ext[hoi_infos[:, 2], :]
 
-        act_subj_repr = self.act_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+        act_subj_repr = self.act_subj_repr_mlp(subj_ho_feats)
         act_subj_logits = self.act_subj_output_fc(act_subj_repr)
 
-        act_repr = self.act_repr_mlp(union_boxes_feats)
+        act_repr = self.act_repr_mlp(subj_ho_feats + obj_ho_feats)
         act_logits = self.act_output_fc(act_repr)
 
-        hoi_subj_repr = self.hoi_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
-        hoi_obj_repr = self.hoi_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        hoi_act_repr = self.hoi_act_repr_mlp(union_boxes_feats)
-        act_hoi_repr = hoi_act_repr + hoi_subj_repr + hoi_obj_repr
-        act_hoi_logits = self.act_hoi_output_fc(act_hoi_repr)
+        hoi_subj_repr = self.hoi_subj_repr_mlp(subj_ho_feats)
+        hoi_obj_repr = self.hoi_obj_repr_mlp(obj_ho_feats)
+        act_hoi_logits = self.act_hoi_output_fc(hoi_subj_repr + hoi_obj_repr)
         return act_hoi_logits, act_logits, act_subj_logits
 
 
@@ -601,13 +588,6 @@ class KatoModel(GenericModel):
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
 
-        self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
-                                              nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                              nn.Dropout(0.5),
-                                              nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                              ])
-        nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
-
         self.gcn_branch = KatoGCNBranch(dataset, self._hoi_repr_dim, gc_dims=(512, 200))
 
     @property
@@ -655,15 +635,13 @@ class KatoModel(GenericModel):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         masks = vis_output.masks
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
 
         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
 
         ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        union_repr = self.union_repr_mlp(union_boxes_feats)
-        hoi_repr = union_repr + ho_subj_repr + ho_obj_repr
+        hoi_repr = ho_subj_repr + ho_obj_repr
 
         hoi_logits = self.gcn_branch(hoi_repr)
         return hoi_logits

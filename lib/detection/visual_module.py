@@ -44,7 +44,6 @@ class VisualModule(nn.Module):
                 output.box_feats = torch.tensor(batch.pc_box_feats, device=device)
                 output.masks = torch.tensor(batch.pc_masks, device=device)
                 output.hoi_union_boxes = batch.pc_ho_union_boxes
-                output.hoi_union_boxes_feats = torch.tensor(batch.pc_ho_union_feats, device=device)
 
                 if ho_infos.shape[0] > 0:
                     ho_infos = ho_infos.astype(np.int, copy=False)
@@ -76,11 +75,10 @@ class VisualModule(nn.Module):
                         output.ho_infos = ho_infos
 
                         hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_infos[:, 1:])
-                        hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map,
-                                                                              rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
-                        assert ho_infos.shape[0] == hoi_union_boxes_feats.shape[0]
+                        # hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map,
+                        #                                                       rois=np.concatenate([ho_infos[:, :1], hoi_union_boxes], axis=1))
+                        # assert ho_infos.shape[0] == hoi_union_boxes_feats.shape[0]
                         output.hoi_union_boxes = hoi_union_boxes
-                        output.hoi_union_boxes_feats = hoi_union_boxes_feats
                     else:
                         assert inference
 

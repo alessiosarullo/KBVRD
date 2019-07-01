@@ -27,7 +27,6 @@ class PrecomputedExample:
 
         self.precomp_hoi_infos = None
         self.precomp_hoi_union_boxes = None
-        self.precomp_hoi_union_feats = None
 
         self.precomp_box_labels = None
         self.precomp_action_labels = None
@@ -42,7 +41,6 @@ class PrecomputedMinibatch:
         self.pc_masks = []
         self.pc_ho_infos = []
         self.pc_ho_union_boxes = []
-        self.pc_ho_union_feats = []
         self.pc_box_labels = []
         self.pc_action_labels = []
 
@@ -77,7 +75,6 @@ class PrecomputedMinibatch:
                 hoi_infos[:, 1:] += num_boxes
                 self.pc_ho_infos += [hoi_infos]
                 self.pc_ho_union_boxes += [ex.precomp_hoi_union_boxes]
-                self.pc_ho_union_feats += [ex.precomp_hoi_union_feats]
 
                 self.pc_action_labels += [ex.precomp_action_labels]
 
@@ -89,7 +86,7 @@ class PrecomputedMinibatch:
                 self.__dict__[k] = np.concatenate(v, axis=0)
 
         assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0] == self.pc_masks.shape[0]
-        assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0] == self.pc_ho_union_feats.shape[0]
+        assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0]
 
         img_infos = np.stack(self.img_infos, axis=0)
         img_infos[:, 0] = max(img_infos[:, 0])
@@ -127,7 +124,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                                                                             (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
         print('Loading precomputed feats for %s split from %s.' % (self.split.value, precomputed_feats_fn))
         pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
-        assert pc_feats_file['box_feats'].shape[1] == pc_feats_file['union_boxes_feats'].shape[1] == 2048  # FIXME magic constant
+        assert pc_feats_file['box_feats'].shape[1] == 2048  # FIXME magic constant
 
         self.pc_image_ids = pc_feats_file['image_ids'][:]
         self.pc_image_infos = pc_feats_file['img_infos'][:]
@@ -142,7 +139,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
 
         self.pc_ho_infos = pc_feats_file['ho_infos'][:].astype(np.int)
         self.pc_union_boxes = pc_feats_file['union_boxes'][:]
-        self.pc_union_boxes_feats = pc_feats_file['union_boxes_feats']
         try:
             self.pc_action_labels = pc_feats_file['action_labels'][:]
         except KeyError:
@@ -258,7 +254,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
                 precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
                 precomp_hoi_union_boxes = self.pc_union_boxes[start:end, :]
-                precomp_hoi_union_feats = self.pc_union_boxes_feats[start:end, :]
                 if self.pc_action_labels is not None:
                     precomp_action_labels = self.pc_action_labels[start:end, :]
                 else:
@@ -277,7 +272,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                         img_hoi_mask = self.pc_hoi_mask[start:end]
                         precomp_hoi_infos = precomp_hoi_infos[img_hoi_mask, :]
                         precomp_hoi_union_boxes = precomp_hoi_union_boxes[img_hoi_mask, :]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[img_hoi_mask, :]
                         if precomp_action_labels is not None:
                             precomp_action_labels = precomp_action_labels[img_hoi_mask, :]
 
@@ -287,7 +281,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                         assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, im_data.filename)
                         precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
                         precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
                         precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
                         assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
 
@@ -307,7 +300,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 entry.precomp_action_labels = precomp_action_labels
                 entry.precomp_hoi_infos = precomp_hoi_infos
                 entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
-                entry.precomp_hoi_union_feats = precomp_hoi_union_feats
             else:
                 assert self.split == Splits.TEST, (idx, pc_im_idx, img_id, im_data.filename)
 
