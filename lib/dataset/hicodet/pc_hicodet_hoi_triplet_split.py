@@ -145,9 +145,12 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
 
         batch_idx = 0
         for sample in neg_samples:
+            if batch_idx == len(batches):
+                break
             batch = batches[batch_idx]
             batch.append(sample.tolist())
             if len(batch) >= self.batch_size:
+                assert len(batch) == self.batch_size
                 batch_idx += 1
 
         # Check
