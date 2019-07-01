@@ -10,7 +10,7 @@ from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
+class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.split == Splits.TEST:
@@ -61,7 +61,7 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
         # HOI data
         entry.precomp_hoi_infos = self.pc_ho_infos[pc_hoi_idx, :].copy()
         entry.precomp_hoi_union_boxes = self.pc_union_boxes[pc_hoi_idx, :].copy()
-        precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :]
+        precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :].copy()
         assert precomp_action_labels[hoi_label] == 1
         precomp_action_labels[:] = 0
         precomp_action_labels[hoi_label] = 1
@@ -81,13 +81,14 @@ class PrecomputedHicoDetHOISplit(PrecomputedHicoDetSplit):
 
 
 class BalancedTripletSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PrecomputedHicoDetHOISplit, hoi_batch_size, drop_last, shuffle):
+    def __init__(self, dataset: PrecomputedHicoDetPureHOISplit, hoi_batch_size, drop_last, shuffle):
         super().__init__(dataset)
-        if not drop_last or not shuffle:
+        if not drop_last:
             raise NotImplementedError()
 
         self.batch_size = hoi_batch_size
         self.drop_last = drop_last
+        self.shuffle = shuffle
         self.dataset = dataset
 
         image_ids = set(dataset.image_ids)
@@ -103,9 +104,10 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         split_mask = np.array([dataset.pc_image_ids[im_ind] in image_ids for im_ind in dataset.pc_ho_im_idxs])
         pos_hois_mask = pos_hois_mask & split_mask
         neg_hois_mask = neg_hois_mask & split_mask
-
-        self.pos_sampler = torch.utils.data.SubsetRandomSampler(np.flatnonzero(pos_hois_mask))
-        self.neg_sampler = torch.utils.data.SubsetRandomSampler(np.flatnonzero(neg_hois_mask))
+        self.pos_samples = np.stack(np.where(self.dataset.pc_action_labels[pos_hois_mask, :]), axis=1)
+        self.neg_samples = np.stack(np.where(self.dataset.pc_action_labels[neg_hois_mask, :]), axis=1)
+        assert np.all(self.neg_samples[:, 1] == 0)
+        assert np.all(self.pos_samples[:, 1] > 0)
 
         neg_pos_ratio = cfg.opt.hoi_bg_ratio
         pos_per_batch = hoi_batch_size / (neg_pos_ratio + 1)
@@ -125,19 +127,25 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         return len(self.batches)
 
     def get_all_batches(self):
+        pos_samples = self.pos_samples
+        neg_samples = self.neg_samples
+        if self.shuffle:
+            pos_samples = np.random.permutation(pos_samples)
+            neg_samples = np.random.permutation(neg_samples)
+
         batches = []
         batch = []
-        for pc_hoi_idx in self.pos_sampler:
-            batch.append(pc_hoi_idx)
+        for sample in pos_samples:
+            batch.append(sample.tolist())
             if len(batch) >= self.pos_per_batch:
                 assert len(batch) == self.pos_per_batch
                 batches.append(batch)
                 batch = []
 
         batch_idx = 0
-        for pc_hoi_idx in self.neg_sampler:
+        for sample in neg_samples:
             batch = batches[batch_idx]
-            batch.append(pc_hoi_idx)
+            batch.append(sample.tolist())
             if len(batch) >= self.batch_size:
                 batch_idx += 1
 
