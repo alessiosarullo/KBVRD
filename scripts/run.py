@@ -22,20 +22,21 @@ from lib.stats.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
 
 
-if cfg.program.debug:
-    try:  # PyCharm debugging
-        import pydevd_pycharm
-        pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
-    except:
-        print('Remote debugging is off.')
-        raise
-
-
 class Launcher:
     # FIXME general: rename "object" in SPO triplets as "target" or something else to avoid ambiguity. Also "verb" might be better than "predicate"
     def __init__(self):
         Timer.gpu_sync = cfg.program.sync
         cfg.parse_args()
+
+        if cfg.program.debug:
+            try:  # PyCharm debugging
+                import pydevd_pycharm
+                pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
+                print('Remote debugging activated.')
+            except:
+                print('Remote debugging is off.')
+                raise
+
         if cfg.program.load_train_output:
             cfg.load()
         cfg.print()
