@@ -108,11 +108,16 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         split_mask = split_ids_mask[pc_ho_im_ids]
 
         pos_hois_mask = pos_hois_mask & split_mask
-        neg_hois_mask = neg_hois_mask & split_mask
-        self.pos_samples = np.stack(np.where(self.dataset.pc_action_labels[pos_hois_mask, :]), axis=1)
-        self.neg_samples = np.stack(np.where(self.dataset.pc_action_labels[neg_hois_mask, :]), axis=1)
-        assert np.all(self.neg_samples[:, 1] == 0)
+        pos_samples_mask_inds, pos_samples_labels = np.where(self.dataset.pc_action_labels[pos_hois_mask, :])
+        pos_hois_ids = np.flatnonzero(pos_hois_mask)
+        self.pos_samples = np.stack([pos_hois_ids[pos_samples_mask_inds], pos_samples_labels], axis=1)
         assert np.all(self.pos_samples[:, 1] > 0)
+
+        neg_hois_mask = neg_hois_mask & split_mask
+        neg_samples_mask_inds, neg_samples_labels = np.where(self.dataset.pc_action_labels[neg_hois_mask, :])
+        neg_hois_ids = np.flatnonzero(neg_hois_mask)
+        self.neg_samples = np.stack([neg_hois_ids[neg_samples_mask_inds], neg_samples_labels], axis=1)
+        assert np.all(self.neg_samples[:, 1] == 0)
 
         self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
         pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
