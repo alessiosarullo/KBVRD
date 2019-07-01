@@ -182,7 +182,7 @@ class MultiModel(GenericModel):
 
                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
-                        prediction.action_scores =act_score
+                        prediction.action_scores = act_score
 
                 return prediction
 
@@ -329,7 +329,8 @@ class ZSHoiModel(ZSBaseModel):
             instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
             instance_logstd = instance_logstd.unsqueeze(dim=1)
             instance_class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                      ((instance_means.unsqueeze(dim=1) - hoi_class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
+                                               ((instance_means.unsqueeze(dim=1) - hoi_class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(
+                                                   dim=2) ** 2)
             hoi_predictors = self.emb_to_predictor(instance_class_logprobs.exp().unsqueeze(dim=2) *
                                                    nn.functional.normalize(hoi_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
             hoi_logits = torch.bmm(vrepr.unsqueeze(dim=1), hoi_predictors.transpose(1, 2)).squeeze(dim=1)
@@ -376,6 +377,9 @@ class ZSModel(ZSBaseModel):
                                                 nn.Dropout(0.5),
                                                 nn.Linear(800, input_dim),
                                                 ])
+
+        if cfg.model.oscore:
+            self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
@@ -427,6 +431,12 @@ class ZSModel(ZSBaseModel):
         if cfg.model.oprior:
             action_logits = action_logits + act_logprior
 
+        if cfg.model.oscore:
+            action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[:, 5:])[vis_output.ho_infos[:, 2], :]
+            if vis_output.action_labels is not None and not cfg.model.softlabels:
+                action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
+            action_logits = action_logits + action_logits_from_obj_score
+
         reg_loss = None
         return action_logits, action_labels, reg_loss
 
@@ -459,13 +469,13 @@ class ZSObjModel(ZSBaseModel):
                                                 nn.Linear(800, input_dim),
                                                 ])
         self.emb_to_obj_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
-                                                nn.Linear(800, input_dim),
-                                                ])
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Dropout(0.5),
+                                                    nn.Linear(600, 800),
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Dropout(0.5),
+                                                    nn.Linear(800, input_dim),
+                                                    ])
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 

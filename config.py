@@ -209,7 +209,7 @@ class ModelConfig(BaseConfigs):
         self.proposal_thr = 0.
         self.relu = False
 
-        self.enorm = False
+        self.oscore = False
         self.attw = False
         self.oprior = False
         self.zsload = False
