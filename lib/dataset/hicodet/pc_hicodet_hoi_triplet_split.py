@@ -92,7 +92,6 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
         self.shuffle = shuffle
         self.dataset = dataset
 
-        image_ids = set(dataset.image_ids)
         pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
         neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
         if dataset.pc_hoi_mask is None:
@@ -102,7 +101,12 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
             assert not np.any(pos_hois_mask & (~dataset.pc_hoi_mask))
             assert not np.any(neg_hois_mask & (~dataset.pc_hoi_mask))
             assert not np.any(pos_hois_mask & neg_hois_mask)
-        split_mask = np.array([dataset.pc_image_ids[im_ind] in image_ids for im_ind in dataset.pc_ho_im_idxs])
+
+        pc_ho_im_ids = dataset.pc_image_ids[dataset.pc_ho_im_idxs]
+        split_ids_mask = np.zeros(max(np.max(pc_ho_im_ids), np.max(dataset.image_ids)), dtype=bool)
+        split_ids_mask[dataset.image_ids] = True
+        split_mask = split_ids_mask[pc_ho_im_ids]
+
         pos_hois_mask = pos_hois_mask & split_mask
         neg_hois_mask = neg_hois_mask & split_mask
         self.pos_samples = np.stack(np.where(self.dataset.pc_action_labels[pos_hois_mask, :]), axis=1)
