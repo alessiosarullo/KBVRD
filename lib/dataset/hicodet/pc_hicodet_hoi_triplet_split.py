@@ -62,11 +62,11 @@ class PrecomputedHicoDetPureHOISplit(PrecomputedHicoDetSplit):
         # HOI data
         entry.precomp_hoi_infos = self.pc_ho_infos[[pc_hoi_idx], :].copy()
         entry.precomp_hoi_union_boxes = self.pc_union_boxes[[pc_hoi_idx], :].copy()
-        precomp_action_labels = self.pc_action_labels[[pc_hoi_idx], :].copy()
+        precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :].copy()
         assert precomp_action_labels[hoi_label] == 1, (pc_hoi_idx, hoi_label, precomp_action_labels)
         precomp_action_labels[:] = 0
         precomp_action_labels[hoi_label] = 1
-        entry.precomp_action_labels = precomp_action_labels
+        entry.precomp_action_labels = precomp_action_labels[None, :]
 
         # Object data
         img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)
