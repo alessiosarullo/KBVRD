@@ -159,9 +159,6 @@ class BalancedTripletSampler(torch.utils.data.Sampler):
 
         # Check
         for i, batch in enumerate(batches):
-            # assert len(batch) == self.batch_size, (i, len(batch), len(batches))
-            if len(batch) != self.batch_size:
-                print(i, len(batch), len(batches))
-        exit(0)
+            assert len(batch) == self.batch_size, (i, len(batch), len(batches))
 
         return batches
