@@ -206,7 +206,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         pc_im_idx = self.im_id_to_pc_im_idx[img_id]
         assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
 
-        entry = PrecomputedExample(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
+        entry = PrecomputedExample(idx_in_split=idx, img_id=img_id, filename=im_data.filename, split=self.split)
 
         # Image data
         img_infos = self.pc_image_infos[pc_im_idx].copy()

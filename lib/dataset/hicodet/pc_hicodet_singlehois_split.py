@@ -72,7 +72,12 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         box_pair_inds = box_start + hoi_infos[1:]
         assert box_pair_inds.size == 2 and np.all(box_pair_inds < box_end)
         entry.precomp_boxes_ext = self.pc_boxes_ext[box_pair_inds, :]
-        entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :]
+        if self.split == Splits.TRAIN:
+            entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :]
+        else:
+            entry.precomp_box_feats = np.stack([self.pc_boxes_feats[box_pair_inds[0], :],
+                                                self.pc_boxes_feats[box_pair_inds[1], :]
+                                                ], axis=0)
         entry.precomp_box_labels = self.pc_box_labels[box_pair_inds].copy()
 
         # HOI data

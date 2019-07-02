@@ -365,5 +365,6 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
                   'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
             image_ids = [image_ids[i] for i in im_with_interactions]
     assert len(split_data) == len(image_ids)
+    assert image_ids == sorted(image_ids)
 
     return split_data, image_ids, final_objects_inds, final_pred_inds
