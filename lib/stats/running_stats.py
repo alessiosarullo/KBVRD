@@ -38,7 +38,7 @@ class History:
 
 
 class RunningStats:
-    def __init__(self, split, data_loader: DataLoader, history_window=None, tboard_log=True):
+    def __init__(self, split, data_loader: DataLoader, history_window=None, tboard_log=True, remove_if_exist=False):
         if history_window is None:
             history_window = cfg.program.log_interval
 
@@ -49,11 +49,12 @@ class RunningStats:
 
         if tboard_log:
             tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
-            try:
-                shutil.rmtree(tboard_dir)
-            except FileNotFoundError:
-                pass
-            os.makedirs(tboard_dir)
+            if remove_if_exist:
+                try:
+                    shutil.rmtree(tboard_dir)
+                except FileNotFoundError:
+                    pass
+            os.makedirs(tboard_dir, exist_ok=True)
             self.tblogger = SummaryWriter(tboard_dir)
         else:
             self.tblogger = None
