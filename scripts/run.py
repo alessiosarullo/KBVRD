@@ -97,12 +97,14 @@ class Launcher:
             print('!!!!!!!!!!!!!!!!! Running on CPU!')
         print_params(self.detector, breakdown=False)
 
-        if cfg.program.load_train_final_output or cfg.program.resume:
+        if cfg.program.resume:
+            ckpt = torch.load(cfg.program.checkpoint_file)
+            self.detector.load_state_dict(ckpt['state_dict'])
+            self.start_epoch = ckpt['epoch'] + 1
+            print(f'Continuing from epoch {self.start_epoch}.')
+        elif cfg.program.load_train_final_output:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
-            if cfg.program.resume:
-                self.start_epoch = ckpt['epoch'] + 1
-                print(f'Continuing from epoch {self.start_epoch}.')
 
     def get_optim(self):
         params = self.detector.parameters()
