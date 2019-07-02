@@ -108,6 +108,8 @@ class Launcher:
 
     def get_optim(self):
         params = self.detector.parameters()
+        if cfg.program.resume:
+            params = [{'params': p, 'initial_lr': cfg.opt.lr} for p in self.detector.parameters() if p.requires_grad]
 
         if cfg.opt.adam:
             optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, eps=1e-3)
@@ -116,7 +118,8 @@ class Launcher:
 
         lr_gamma = cfg.opt.lr_gamma
         if lr_gamma > 0:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma, last_epoch=self.start_epoch - 1)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma,
+                                                        last_epoch=self.start_epoch - 1)
         else:
             scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
         return optimizer, scheduler
