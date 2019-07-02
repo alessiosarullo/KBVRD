@@ -5,24 +5,14 @@ from typing import List
 from collections import Counter
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample
+from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit, PrecomputedMinibatch, PrecomputedExample
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class PrecomputedHicoDetSingleHOIsOnehotSplit(PrecomputedHicoDetSplit):
+class PrecomputedHicoDetSingleHOIsOnehotSplit(PrecomputedHicoDetSingleHOIsSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.split == Splits.TEST:
-            raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
-
-        self.pc_im_idx_to_im_idx = {}
-        for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
-            im_idx = np.flatnonzero(self.image_ids == pc_im_id).tolist()  # type: List
-            if im_idx:
-                assert len(im_idx) == 1, im_idx
-                assert pc_im_id not in self.pc_im_idx_to_im_idx
-                self.pc_im_idx_to_im_idx[pc_im_idx] = im_idx[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
@@ -31,7 +21,7 @@ class PrecomputedHicoDetSingleHOIsOnehotSplit(PrecomputedHicoDetSplit):
 
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
-            batch_sampler=BalancedTripletSampler(self, batch_size, drop_last, shuffle),
+            batch_sampler=BalancedTripletOnehotSampler(self, batch_size, drop_last, shuffle),
             num_workers=num_workers,
             collate_fn=lambda x: PrecomputedMinibatch.collate(x),
             # pin_memory=True,  # disable this in case of freezes
@@ -86,7 +76,7 @@ class PrecomputedHicoDetSingleHOIsOnehotSplit(PrecomputedHicoDetSplit):
         return entry
 
 
-class BalancedTripletSampler(torch.utils.data.Sampler):
+class BalancedTripletOnehotSampler(torch.utils.data.Sampler):
     def __init__(self, dataset: PrecomputedHicoDetSingleHOIsOnehotSplit, hoi_batch_size, drop_last, shuffle):
         super().__init__(dataset)
         if not drop_last:

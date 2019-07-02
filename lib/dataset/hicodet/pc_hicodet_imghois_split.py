@@ -63,6 +63,7 @@ class PrecomputedHicoDetImgHOISplit(PrecomputedHicoDetSplit):
                 assert np.all(img_hoi_inds == np.arange(hoi_start, hoi_end))  # slicing is much more efficient with H5 files
                 precomp_hoi_infos = self.pc_ho_infos[hoi_start:hoi_end, :].copy()
                 precomp_hoi_union_boxes = self.pc_union_boxes[hoi_start:hoi_end, :]
+                precomp_hoi_union_feats = self.pc_union_boxes_feats[hoi_start:hoi_end, :]
                 precomp_action_labels = self.pc_action_labels[hoi_start:hoi_end, :]
 
                 # Filter according to sample
@@ -70,12 +71,14 @@ class PrecomputedHicoDetImgHOISplit(PrecomputedHicoDetSplit):
                 inds = np.array(fg_inds + bg_inds) - hoi_start
                 precomp_hoi_infos = precomp_hoi_infos[inds, :]
                 precomp_hoi_union_boxes = precomp_hoi_union_boxes[inds, :]
+                precomp_hoi_union_feats = precomp_hoi_union_feats[inds, :]
                 precomp_action_labels = precomp_action_labels[inds, :]
 
                 assert np.all(precomp_hoi_infos >= 0)
                 entry.precomp_action_labels = precomp_action_labels
                 entry.precomp_hoi_infos = precomp_hoi_infos
                 entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
+                entry.precomp_hoi_union_feats = precomp_hoi_union_feats
             else:
                 assert self.split == Splits.TEST, (im_idx, pc_im_idx, img_id, im_data.filename)
 

@@ -16,6 +16,9 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
 
+        self.pc_boxes_feats = self.pc_boxes_feats[:]
+        self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
+
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
             im_idx = np.flatnonzero(self.image_ids == pc_im_id).tolist()  # type: List
@@ -31,7 +34,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
 
         data_loader = torch.utils.data.DataLoader(
             dataset=self,
-            batch_sampler=BalancedTripletSampler(self, batch_size, drop_last, shuffle),
+            batch_sampler=BalancedTripletMLSampler(self, batch_size, drop_last, shuffle),
             num_workers=num_workers,
             collate_fn=lambda x: PrecomputedMinibatch.collate(x),
             # pin_memory=True,  # disable this in case of freezes
@@ -81,7 +84,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         return entry
 
 
-class BalancedTripletSampler(torch.utils.data.Sampler):
+class BalancedTripletMLSampler(torch.utils.data.Sampler):
     def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, hoi_batch_size, drop_last, shuffle):
         super().__init__(dataset)
         if not drop_last:
