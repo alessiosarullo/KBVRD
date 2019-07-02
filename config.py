@@ -212,9 +212,9 @@ class ModelConfig(BaseConfigs):
         self.proposal_thr = 0.
         self.relu = False
 
-        self.oscore = False
         self.attw = False
         self.oprior = False
+        self.oscore = False
         self.zsload = False
         self.softlabels = False
         self.aereg = 0.0
@@ -227,8 +227,8 @@ class OptimizerConfig(BaseConfigs):
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
 
-        self.group = True  # group HOIs belonging to the same image
-        self.mltrain = True  # multi-label train for (inter)actions, as opposed to many one-hot examples
+        self.group = False  # group HOIs belonging to the same image
+        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
 
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3

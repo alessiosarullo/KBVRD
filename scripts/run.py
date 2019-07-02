@@ -79,12 +79,12 @@ class Launcher:
             pred_inds = cfg.data.pred_inds
 
         if cfg.opt.group:
-            assert cfg.opt.mltrain
+            assert not cfg.opt.ohtrain
             train_ds_class = PrecomputedHicoDetImgHOISplit
-        elif cfg.opt.mltrain:
-            train_ds_class = PrecomputedHicoDetSingleHOIsSplit
-        else:
+        elif cfg.opt.ohtrain:
             train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
+        else:
+            train_ds_class = PrecomputedHicoDetSingleHOIsSplit
         self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
         self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
         self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
