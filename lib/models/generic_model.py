@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 
 from collections import Counter
+from lib.stats.utils import Timer
+
 
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit

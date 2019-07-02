@@ -16,9 +16,12 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
 
-        if self.split == Splits.TRAIN:
+        if self.split == Splits.TRAIN and not cfg.program.save_mem:
             self.pc_boxes_feats = self.pc_boxes_feats[:]
             self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
+            self._loaded = True
+        else:
+            self._loaded = False
 
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
@@ -72,7 +75,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         box_pair_inds = box_start + hoi_infos[1:]
         assert box_pair_inds.size == 2 and np.all(box_pair_inds < box_end)
         entry.precomp_boxes_ext = self.pc_boxes_ext[box_pair_inds, :]
-        if self.split == Splits.TRAIN:
+        if self._loaded:
             entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :]
         else:
             entry.precomp_box_feats = np.stack([self.pc_boxes_feats[box_pair_inds[0], :],

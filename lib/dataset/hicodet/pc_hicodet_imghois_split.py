@@ -219,7 +219,7 @@ def main():
         if i >= 200:
             break
 
-    Timer.print()
+    Timer.get().print()
 
 
 if __name__ == '__main__':

@@ -133,18 +133,21 @@ class RunningStats:
 
     def print_times(self, epoch=None, batch=None, curr_iter=None):
         num_batches = len(self.data_loader)
-        time_per_batch = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
+        time_per_call = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         try:
             time_for_stats = Timer.get(self.epoch_str, 'Stats', get_only=True).spent(average=True)
         except (ValueError, ZeroDivisionError):
             time_for_stats = 0
 
-        avg_num_imgs_per_batch = self.data_loader.batch_size
-        if avg_num_imgs_per_batch is None:
+        batch_size = self.data_loader.batch_size
+        if batch_size is None:
             batches = self.data_loader.batch_sampler.batches
-            avg_num_imgs_per_batch = sum([len(b) for b in batches]) / len(batches)
-        est_time_per_epoch = num_batches * (time_per_batch + time_to_load * avg_num_imgs_per_batch + time_for_stats)
+            batch_size = sum([len(b) for b in batches]) / len(batches)
+        time_to_load_per_batch = time_to_load * batch_size
+        time_for_stats_per_batch = time_for_stats / cfg.program.log_interval
+        avg_time_per_batch = time_per_call + time_to_load_per_batch + time_for_stats_per_batch
+        est_time_per_epoch = avg_time_per_batch * num_batches
 
         batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
@@ -157,13 +160,16 @@ class RunningStats:
             else:
                 header = '{:s}. {:s}.'.format(self.split_str, batch_str.capitalize())
 
-        print(header, 'Avg: {:>5s}/batch, {:>5s}/load, {:>5s}/stats.'.format(Timer.format(time_per_batch),
-                                                                             Timer.format(time_to_load),
-                                                                             Timer.format(time_for_stats),
-                                                                             ),
+        print(header, 'Avg: {:>5s}/batch @ {:>5s}=opt, {:>5s}=load ({:>5s}/load), {:>5s}=stats ({:>5s}/stats).'.format(
+            Timer.format(avg_time_per_batch),
+            Timer.format(time_per_call),
+            Timer.format(time_to_load_per_batch), Timer.format(time_to_load),
+            Timer.format(time_for_stats_per_batch), Timer.format(time_for_stats),
+        ),
               'Current {:s}progress: {:>7s}/{:>7s} (estimated).'.format('epoch ' if epoch is not None else '',
                                                                         Timer.format(Timer.get(self.epoch_str, get_only=True).progress()),
                                                                         Timer.format(est_time_per_epoch)))
+        # Timer.get(self.epoch_str, 'Batch').print()
 
     def _tb_log_stats(self, stats, curr_iter):
         """Log the tracked statistics to tensorboard"""

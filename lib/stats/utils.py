@@ -67,17 +67,17 @@ class Timer:
             s += ['%s %s' % (sep, ss) for ss in sub_s[1:]]
         return s
 
-    @classmethod
-    def print(cls, average=True):
-        global_t = cls.get()
-        if global_t.total_time == 0 and global_t.start_time is not None:
-            global_t.toc()
-        print('Total time:', '\n'.join(global_t._get_lines(average=average)))
+    def print(self, average=True):
+        if self.total_time == 0 and self.start_time is not None:
+            self.toc()
+        print('Total time:', '\n'.join(self._get_lines(average=average)))
 
     @staticmethod
     def format(seconds):
         if seconds < 0.001:
             s, unit = '%.2f' % (seconds * 1000), 'ms'
+        elif seconds < 0.01:
+            s, unit = '%.1f' % (seconds * 1000), 'ms'
         elif seconds < 1:
             s, unit = '%.0f' % (seconds * 1000), 'ms'
         elif seconds < 10:

@@ -1,4 +1,3 @@
-import os
 import pickle
 
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
