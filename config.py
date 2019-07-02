@@ -172,6 +172,8 @@ class DataConfig(BaseConfigs):
         self.prinds = ''  # restrict the dataset to these predicates if not empty
         self.obinds = ''  # restrict the dataset to these objects if not empty
 
+        self.union = True
+
     @property
     def im_inds(self):
         return list(range(self.num_images)) if self.num_images > 0 else None

@@ -59,13 +59,14 @@ class PrecomputedHicoDetSingleHOIsOnehotSplit(PrecomputedHicoDetSingleHOIsSplit)
         box_pair_inds = box_start + hoi_infos[1:]
         assert box_pair_inds.size == 2 and np.all(box_pair_inds < box_end)
         entry.precomp_boxes_ext = self.pc_boxes_ext[box_pair_inds, :].copy()
-        entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :].copy()
+        entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :]
         entry.precomp_box_labels = self.pc_box_labels[box_pair_inds].copy()
 
         # HOI data
         hoi_infos[1:] = [0, 1]
         entry.precomp_hoi_infos = hoi_infos[None, :]
         entry.precomp_hoi_union_boxes = self.pc_union_boxes[[pc_hoi_idx], :].copy()
+        entry.precomp_hoi_union_feats = self.pc_union_boxes_feats[[pc_hoi_idx], :]
         precomp_action_labels = self.pc_action_labels[pc_hoi_idx, :].copy()
         assert precomp_action_labels[hoi_label] == 1, (pc_hoi_idx, hoi_label, precomp_action_labels)
         precomp_action_labels[:] = 0
