@@ -129,7 +129,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         self.pc_image_ids = pc_feats_file['image_ids'][:]
         self.pc_image_infos = pc_feats_file['img_infos'][:]
 
-        self.pc_boxes_ext = pc_feats_file['boxes_ext'][:]
+        self.pc_boxes_ext = pc_feats_file['boxes_ext']
         self.pc_boxes_feats = pc_feats_file['box_feats']
         self.pc_union_boxes_feats = pc_feats_file['union_boxes_feats']
         try:

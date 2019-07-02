@@ -18,6 +18,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
 
         self.pc_boxes_feats = self.pc_boxes_feats[:]
         self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
+        self.pc_boxes_ext = self.pc_boxes_ext[:]
 
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
