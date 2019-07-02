@@ -101,18 +101,24 @@ class HicoDetSplit(Dataset):
         object_inds = sorted(object_inds)
         self.objects = [hicodet.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
-        self.object_index = {obj: i for i, obj in enumerate(self.objects)}
+        reduced_object_index = {obj: i for i, obj in enumerate(self.objects)}
         if len(object_inds) < self.hicodet.num_object_classes:
             print(f'{split.value.capitalize()} objects:', object_inds)
 
         predicate_inds = sorted(predicate_inds)
         self.predicates = [hicodet.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
-        self.predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
+        reduced_predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
         if len(predicate_inds) < self.hicodet.num_predicates:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
-        interactions = np.array([[self.predicate_index.get(self.hicodet.predicates[p], -1), self.object_index.get(self.hicodet.objects[o], -1)]
+        reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
+                                          reduced_object_index.get(self.hicodet.objects[o], -1)]
+                                 for p, o in self.hicodet.interactions])
+        reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]
+
+        interactions = np.array([[p if self.hicodet.predicates[p] in reduced_predicate_index else -1,
+                                  o if self.hicodet.objects[o] in reduced_object_index else -1]
                                  for p, o in self.hicodet.interactions])
         self.interactions = interactions[np.all(interactions >= 0, axis=1), :]
 

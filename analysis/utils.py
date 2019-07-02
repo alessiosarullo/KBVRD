@@ -3,6 +3,7 @@ import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
+from matplotlib.colors import LogNorm
 
 from lib.bbox_utils import rescale_masks_to_img
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit
@@ -118,15 +119,38 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
 
 
 def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
-             axes=None, vrange=(0, 1), cbar=True, bin_colours=False, grid=False, plot=True, title=None):
+             axes=None, vrange=(0, 1), cbar=True, bin_colours=False, grid=False, plot=True, title=None, log=False,
+             neg_color=None, zero_color=None, cmap='jet'):
     lfsize = 8
     if axes is None:
         plt.figure(figsize=(16, 9))
         ax = plt.gca()
     else:
         ax = axes
-    mat_ax = ax.matshow(mat, cmap=plt.get_cmap('jet', **({'lut': 5} if bin_colours else {})),
-                        **({'vmin': vrange[0], 'vmax': vrange[1]} if vrange is not None else {}))
+
+    mat = mat.copy()
+    if vrange is None:
+        mat_max = mat[~np.isinf(mat)].max()
+        mat_min = mat[~np.isinf(mat)].min()
+        vrange = (mat_min, mat_max)
+
+    num_colors = 5 if bin_colours else 256
+    cmap = plt.get_cmap(cmap, lut=num_colors)
+    if neg_color:
+        cmap.set_under(np.array(neg_color))
+        vrange = (0, vrange[1])
+    if zero_color:
+        cmap.set_over(np.array(zero_color))
+        mat[mat == 0] = 10 * (vrange[1] + 1)
+
+    if log:
+        vrange = (max(vrange[0], 1), vrange[1])
+        if neg_color:
+            mat[mat < 0] = 1e-5
+        mat_ax = ax.matshow(mat, cmap=cmap, norm=LogNorm(vmin=vrange[0], vmax=vrange[1]))
+    else:
+        mat_ax = ax.matshow(mat, cmap=cmap, vmin=vrange[0], vmax=vrange[1])
+
     if cbar:
         plt.colorbar(mat_ax, ax=ax,
                      # fraction=0.04,

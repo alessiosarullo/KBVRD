@@ -7,10 +7,6 @@ import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 
-from analysis.utils import vis_one_image, plot_mat
-from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
-
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['vis']
@@ -18,6 +14,10 @@ try:
     sys.argv[1:] = ['find']
 except ImportError:
     pass
+
+from analysis.utils import vis_one_image, plot_mat
+from config import cfg
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
 
 
 def stats():
@@ -57,10 +57,10 @@ def stats():
 
 def find():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)  # type: HicoDetSplit
 
-    query_str = ['hold', 'refrigerator']
-    query = [hds.hicodet._pred_index[query_str[0]], hds.hicodet._obj_class_index[query_str[1]]]
+    query_str = ['hold', 'apple']
+    query = [hds.hicodet.predicate_index[query_str[0]], hds.hicodet.object_index[query_str[1]]]
 
     output_dir = os.path.join('analysis', 'output', 'gt', 'find', '-'.join(query_str))
     os.makedirs(output_dir, exist_ok=True)

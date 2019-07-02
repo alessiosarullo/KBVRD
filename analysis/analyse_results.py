@@ -20,7 +20,7 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
@@ -195,10 +195,29 @@ def stats():
     seen_act_inds = sorted(pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
     seen_obj_inds = cfg.data.obj_inds
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
-    seen_interactions = np.zeros((hdtrain.hicodet.num_object_classes, hdtrain.hicodet.num_predicates), dtype=bool)
+    hicodet = hdtrain.hicodet
+    seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
+    hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
+    print('Val only interactions:')
+    for p, o in hdval.interactions:
+        if ~seen_interactions[o, p]:
+            print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
+    print('Val only objects:', sorted(set(hdval.objects) - set(hdtrain.objects)))
+    print('Val only actions:', sorted(set(hdval.predicates) - set(hdtrain.predicates)))
+
     hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
+    unseen_interactions[hdtest.interactions[:, 1], hdtest.interactions[:, 0]] = 1
+    unseen_interactions[seen_interactions] = 0
+    print('Unseen interactions:')
+    for p, o in hdtest.interactions:
+        if ~seen_interactions[o, p]:
+            print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
+            assert unseen_interactions[o, p]
+    print('Unseen objects:', sorted(set(hdtest.objects) - set(hdtrain.objects)))
+    print('Unseen actions:', sorted(set(hdtest.predicates) - set(hdtrain.predicates)))
 
     analyser = Analyser(dataset=hdtest)
 
@@ -216,12 +235,14 @@ def stats():
 
     print(np.mean(recall[num_gt > 0]))
 
-    zero_shot_preds = (seen_interactions == 0).astype(np.float) * num_pred
-    zero_shot_preds[zero_shot_preds == 0] = np.inf
-    plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
+    zero_shot_preds = np.full_like(num_pred, fill_value=np.inf)
+    zero_shot_preds[seen_interactions] = -1
+    zero_shot_preds[unseen_interactions] = num_pred[unseen_interactions]
+    plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False, neg_color=[0.5, 0.5, 0.5, 1], zero_color=[0.8, 0, 0.8, 1],
+             log=True)
     plt.savefig(os.path.join(res_save_path, 'zero_shot.png'), dpi=300)
     zero_shot_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], zero_shot_preds[o, p])
-                               for p, o in np.stack(np.where(~np.isinf(zero_shot_preds.T)), axis=1)])
+                               for p, o in np.stack(np.where(~np.isinf(zero_shot_preds.T) & (zero_shot_preds.T >= 0)), axis=1)])
     print(zero_shot_str)
     with open(os.path.join(res_save_path, 'zero_shot.txt'), 'w') as f:
         f.write(zero_shot_str)
@@ -234,7 +255,7 @@ def stats():
                                for p, o in np.stack(np.where(~np.isinf(out_of_gt_preds.T)), axis=1)])
     print()
     print('#' * 100, '\n')
-    print(out_of_gt_str)
+    # print(out_of_gt_str)
     with open(os.path.join(res_save_path, 'out_of_gt.txt'), 'w') as f:
         f.write(out_of_gt_str)
 
@@ -253,7 +274,7 @@ def stats():
     plot_mat((1 - recall)[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
     plt.savefig(os.path.join(res_save_path, 'misses.png'), dpi=300)
 
-    plt.show()
+    # plt.show()
 
 
 def visualise_images():
