@@ -436,7 +436,7 @@ class ZSModel(ZSBaseModel):
 
     def get_soft_labels(self, vis_output: VisualOutput):
         ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
-        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
+        action_labels = 0.5 * vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility + 0.25
 
         action_labels[:, self.seen_pred_inds] = vis_output.action_labels
 
@@ -450,17 +450,11 @@ class ZSModel(ZSBaseModel):
         if vis_output.action_labels is not None:
             if cfg.model.softlabels:
                 action_labels = self.get_soft_labels(vis_output)
-                act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
                 action_labels = vis_output.action_labels
-                act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
-            act_logprior = act_prior[vis_output.ho_infos[:, 2], :].log()
         else:
             action_labels = None
-            obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:].max(dim=1)
-            act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
-            act_logprior = act_prior.log()
 
         if cfg.model.attw:
             instance_params = self.vrepr_to_emb(vrepr)
@@ -477,10 +471,19 @@ class ZSModel(ZSBaseModel):
             action_logits = vrepr @ act_predictors.t()
 
         if cfg.model.oprior:
-            action_logits = action_logits + act_logprior
+            if vis_output.action_labels is not None:
+                if cfg.model.softlabels:
+                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
+                else:
+                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
+                act_prior = act_prior[vis_output.ho_infos[:, 2], :]
+            else:
+                obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:].max(dim=1)
+                act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
+            action_logits = action_logits + act_prior.log()
 
         if cfg.model.oscore:
-            action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[:, 5:])[vis_output.ho_infos[:, 2], :]
+            action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:])
             if vis_output.action_labels is not None and not cfg.model.softlabels:
                 action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
             action_logits = action_logits + action_logits_from_obj_score
