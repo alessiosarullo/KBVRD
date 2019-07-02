@@ -16,8 +16,9 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
 
-        self.pc_boxes_feats = self.pc_boxes_feats[:]
-        self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
+        if self.split == Splits.TRAIN:
+            self.pc_boxes_feats = self.pc_boxes_feats[:]
+            self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
 
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
