@@ -173,6 +173,7 @@ class DataConfig(BaseConfigs):
         self.obinds = ''  # restrict the dataset to these objects if not empty
 
         self.union = True
+        self.nw = 0
 
     @property
     def im_inds(self):

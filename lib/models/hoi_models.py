@@ -284,7 +284,7 @@ class ZSBaseModel(GenericModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos is not None:
-                action_output, action_labels, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+                action_output, action_labels, reg_loss, unseen_action_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
                 if inference and cfg.model.zsload:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
@@ -295,7 +295,15 @@ class ZSBaseModel(GenericModel):
                 action_output = action_labels = None
 
             if not inference:
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if unseen_action_labels is not None:
+                    unseen_action_logits = action_output[:, self.unseen_pred_inds]
+                    seen_action_logits = action_output[:, self.seen_pred_inds]
+                    losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(seen_action_logits, action_labels) *
+                                             seen_action_logits.shape[1],
+                              'action_loss_unseen': nn.functional.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
+                                                    unseen_action_labels.shape[1]}
+                else:
+                    losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
                 if reg_loss is not None:
                     losses['reg_loss'] = reg_loss
                 return losses
@@ -437,26 +445,20 @@ class ZSModel(ZSBaseModel):
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
-        ho_infos = torch.tensor(vis_output.ho_infos, device=vis_output.action_labels.device)
-        action_labels = 0.5 * vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility + 0.25
-
-        action_labels[:, self.seen_pred_inds] = vis_output.action_labels
-
-        action_labels = action_labels.detach()
-        return action_labels
+        unseen_action_labels = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos[:, 2]], self.unseen_pred_inds] * 0.75
+        return unseen_action_labels.detach()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
 
         _, class_embs = self.gcn()  # P x E
-        if vis_output.action_labels is not None:
+        action_labels = vis_output.action_labels
+        unseen_action_labels = None
+        if action_labels is not None:
             if cfg.model.softlabels:
-                action_labels = self.get_soft_labels(vis_output)
+                unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
-                action_labels = vis_output.action_labels
-        else:
-            action_labels = None
 
         if cfg.model.attw:
             instance_params = self.vrepr_to_emb(vrepr)
@@ -491,7 +493,7 @@ class ZSModel(ZSBaseModel):
             action_logits = action_logits + action_logits_from_obj_score
 
         reg_loss = None
-        return action_logits, action_labels, reg_loss
+        return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
 class ZSObjModel(ZSBaseModel):
