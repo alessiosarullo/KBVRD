@@ -45,6 +45,7 @@ class ProgramConfig(BaseConfigs):
         self.debug = False
 
         self.randomize = False
+        self.resume = False
 
         self.model = None
         self.baseline_dir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/'

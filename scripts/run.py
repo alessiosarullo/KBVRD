@@ -45,10 +45,11 @@ class Launcher:
         self.detector = None  # type: Union[None, AbstractModel]
         self.train_split, self.val_split, self.test_split = None, None, None  # type: Union[None, HicoDetSplit]
         self.curr_train_iter = 0
+        self.start_epoch = 0
 
     def run(self):
         self.setup()
-        if cfg.program.load_train_output:
+        if cfg.program.load_train_output and not cfg.program.resume:
             print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.evaluate()
             print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -99,10 +100,9 @@ class Launcher:
         if cfg.program.load_train_output:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
-            # # TODO resume from checkpoint?
-            # if cfg.program.resume:
-            # start_epoch = ckpt['epoch']
-            # print("Continuing from epoch %d." % (start_epoch + 1))
+            if cfg.program.resume:
+                self.start_epoch = ckpt['epoch'] + 1
+                print(f'Continuing from epoch {self.start_epoch}.')
 
     def get_optim(self):
         params = self.detector.parameters()
@@ -114,7 +114,7 @@ class Launcher:
 
         lr_gamma = cfg.opt.lr_gamma
         if lr_gamma > 0:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma, last_epoch=self.start_epoch - 1)
         else:
             scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
         return optimizer, scheduler
@@ -144,7 +144,7 @@ class Launcher:
                 self.detector.eval()
                 all_predictions = self.eval_epoch(None, test_loader, test_stats)
             else:
-                for epoch in range(cfg.opt.num_epochs):
+                for epoch in range(self.start_epoch, cfg.opt.num_epochs):
                     print('Epoch %d start.' % epoch)
                     self.detector.train()
                     self.loss_epoch(epoch, train_loader, training_stats, optimizer)
