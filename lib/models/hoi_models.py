@@ -18,10 +18,10 @@ class BaseModel(GenericModel):
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 # nn.ReLU(inplace=True),
-                                                # nn.Dropout(0.5),
+                                                # nn.Dropout(p=cfg.model.dropout),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         # nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -29,10 +29,10 @@ class BaseModel(GenericModel):
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                nn.ReLU(inplace=True),
-                                               nn.Dropout(0.5),
+                                               nn.Dropout(p=cfg.model.dropout),
                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                # nn.ReLU(inplace=True),
-                                               # nn.Dropout(0.5),
+                                               # nn.Dropout(p=cfg.model.dropout),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         # nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -40,10 +40,10 @@ class BaseModel(GenericModel):
 
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                             # nn.ReLU(inplace=True),
-                                            # nn.Dropout(0.5),
+                                            # nn.Dropout(p=cfg.model.dropout),
                                             # nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                             ])
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -124,6 +124,12 @@ class BaseModel(GenericModel):
         #                        ], dim=1)
 
         action_logits = self.act_output_fc(hoi_act_repr)
+
+        if cfg.program.monitor:
+            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
+            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
+            self.values_to_monitor['act_repr'] = act_repr
+            self.values_to_monitor['action_logits'] = action_logits
         return action_logits
 
 
@@ -140,7 +146,7 @@ class MultiModel(GenericModel):
         # Action through object
         self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
-                                                 nn.Dropout(0.5),
+                                                 nn.Dropout(p=cfg.model.dropout),
                                                  nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                  ])
         nn.init.xavier_normal_(self.act_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -152,7 +158,7 @@ class MultiModel(GenericModel):
         # Action
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                             ])
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -164,7 +170,7 @@ class MultiModel(GenericModel):
         # Action through HOI
         self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                  nn.ReLU(inplace=True),
-                                                 nn.Dropout(0.5),
+                                                 nn.Dropout(p=cfg.model.dropout),
                                                  nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                  ])
         nn.init.xavier_normal_(self.hoi_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -172,7 +178,7 @@ class MultiModel(GenericModel):
 
         self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.hoi_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -180,7 +186,7 @@ class MultiModel(GenericModel):
 
         self.hoi_act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.hoi_act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -343,18 +349,18 @@ class ZSHoiModel(ZSBaseModel):
         input_dim = self.predictor_dim
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(600, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(600, 800),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(800, input_dim),
                                                 ])
 
@@ -420,18 +426,18 @@ class ZSModel(ZSBaseModel):
         input_dim = self.predictor_dim
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(600, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(600, 800),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(800, input_dim),
                                                 ])
 
@@ -508,26 +514,26 @@ class ZSObjModel(ZSBaseModel):
         input_dim = self.predictor_dim
         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(800, 600),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(0.5),
+                                            nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(600, 2 * latent_dim),
                                             ])
         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(600, 800),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(800, input_dim),
                                                 ])
         self.emb_to_obj_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
                                                     nn.ReLU(inplace=True),
-                                                    nn.Dropout(0.5),
+                                                    nn.Dropout(p=cfg.model.dropout),
                                                     nn.Linear(600, 800),
                                                     nn.ReLU(inplace=True),
-                                                    nn.Dropout(0.5),
+                                                    nn.Dropout(p=cfg.model.dropout),
                                                     nn.Linear(800, input_dim),
                                                     ])
 
@@ -643,14 +649,14 @@ class KatoModel(GenericModel):
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                                nn.Dropout(0.5),
+                                                nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                               nn.Dropout(0.5),
+                                               nn.Dropout(p=cfg.model.dropout),
                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))

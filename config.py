@@ -43,10 +43,12 @@ class ProgramConfig(BaseConfigs):
         self.verbose = False
 
         self.debug = False
+        self.monitor = False
+        self.save_mem = False
 
         self.randomize = False
+
         self.resume = False
-        self.save_mem = False
 
         self.model = None
         self.baseline_dir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/'
@@ -218,7 +220,7 @@ class ModelConfig(BaseConfigs):
         self.obj_thr = 0.3
 
         self.proposal_thr = 0.
-        self.relu = False
+        self.dropout = 0.5
 
         self.attw = False
         self.oprior = False
