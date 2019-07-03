@@ -119,7 +119,7 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
 
 
 def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
-             axes=None, vrange=(0, 1), cbar=True, bin_colours=False, grid=False, plot=True, title=None, log=False,
+             axes=None, vrange=None, cbar=True, bin_colours=False, grid=False, plot=True, title=None, log=False,
              neg_color=None, zero_color=None, cmap='jet'):
     lfsize = 8
     if axes is None:
@@ -130,8 +130,8 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
 
     mat = mat.copy()
     if vrange is None:
-        mat_max = mat[~np.isinf(mat)].max()
-        mat_min = mat[~np.isinf(mat)].min()
+        mat_max = mat[~np.isinf(mat) & ~np.isnan(mat)].max()
+        mat_min = mat[~np.isinf(mat) & ~np.isnan(mat)].min()
         vrange = (mat_min, mat_max)
 
     num_colors = 5 if bin_colours else 256

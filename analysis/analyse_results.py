@@ -58,7 +58,7 @@ class Analyser:
             prediction = Prediction(res)
             self.process_prediction(i, ex, prediction)
 
-        self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1))
+        self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1, keepdims=True))
 
     def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
@@ -96,6 +96,10 @@ class Analyser:
 
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
         pred_ho_objects = np.argmax(predict_ho_obj_scores, axis=1)
+
+        #################################################################################
+        # Confusion matrix & co                                                         #
+        #################################################################################
 
         # First, find predictions that 1) match spatially with GT and 2) classify the object correctly.
         pred_gt_spatial_matches = np.zeros((num_predictions, num_gt_hois), dtype=bool)
@@ -161,6 +165,42 @@ class Analyser:
         #         self.act_conf_mat[0, predicted_acts] += 1
 
 
+def compute_cooccs(dataset: HicoDetSplit, gt_iou_thresh=0.5):
+    act_cooccs = np.zeros((dataset.hicodet.num_predicates, dataset.hicodet.num_predicates))
+    for gt_idx in range(len(dataset)):
+        gt_entry = dataset.get_img_entry(gt_idx, read_img=False)
+        gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
+        gt_interactions = np.stack([gt_hoi_triplets[:, 2], gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]]], axis=1)  # (a, o)
+        num_gt_hois = gt_hoi_triplets.shape[0]
+
+        gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
+
+        #################################################################################
+        # Action co-occurrences in GT                                                   #
+        #################################################################################
+
+        gt_gt_ious = compute_ious(gt_boxes, gt_boxes)
+        gt_gt_pair_ious = np.zeros((num_gt_hois, num_gt_hois))
+        for i1, (h1_ind, o1_ind, a1) in enumerate(gt_hoi_triplets):
+            for i2, (h2_ind, o2_ind, a2) in enumerate(gt_hoi_triplets):
+                iou_h = gt_gt_ious[h1_ind, h2_ind]
+                iou_o = gt_gt_ious[o1_ind, o2_ind]
+                gt_gt_pair_ious[i1, i2] = min(iou_h, iou_o)
+
+        assert np.all(gt_gt_pair_ious == gt_gt_pair_ious.T)
+        for i1, (a1, o1) in enumerate(gt_interactions):
+            overlaps = (gt_gt_pair_ious[i1, :] >= gt_iou_thresh)
+            same_object = (o1 == gt_interactions[:, 1])
+            match = overlaps & same_object
+            assert match[i1], (i1, match)
+            matching_idxs = np.flatnonzero(match)
+            matching_idxs = matching_idxs[matching_idxs > i1]  # only examine upper triangle
+            for i2 in matching_idxs:
+                a2 = gt_interactions[i2, 0]
+                act_cooccs[a1, a2] += 1
+    return act_cooccs
+
+
 def _setup_and_load():
     cfg.parse_args(fail_if_missing=False, reset=True)
 
@@ -219,9 +259,18 @@ def stats():
     print('Unseen objects:', sorted(set(hdtest.objects) - set(hdtrain.objects)))
     print('Unseen actions:', sorted(set(hdtest.predicates) - set(hdtrain.predicates)))
 
-    analyser = Analyser(dataset=hdtest)
+    cache_fn = os.path.join(res_save_path, 'cache.pkl')
+    try:
+        with open(cache_fn, 'rb') as f:
+            analyser = pickle.load(f)
+        print('Loaded')
+    except FileNotFoundError:
+        analyser = Analyser(dataset=hdtest)
+        analyser.compute_stats(results)
+        with open(cache_fn, 'wb') as f:
+            pickle.dump(analyser, f)
+        print('Saved')
 
-    analyser.compute_stats(results)
     num_gt, num_pred = analyser.num_gt, analyser.num_pred
     recall = analyser.gt_matches / num_gt
     oa_obj_recall = analyser.gt_candidate_matches / num_gt
@@ -238,28 +287,68 @@ def stats():
     zero_shot_preds = np.full_like(num_pred, fill_value=np.inf)
     zero_shot_preds[seen_interactions] = -1
     zero_shot_preds[unseen_interactions] = num_pred[unseen_interactions]
-    plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False, neg_color=[0.5, 0.5, 0.5, 1], zero_color=[0.8, 0, 0.8, 1],
-             log=True)
+    plot_mat(zero_shot_preds, hdtest.predicates, hdtest.objects, plot=False, neg_color=[0.5, 0.5, 0.5, 1], zero_color=[0.8, 0, 0.8, 1], log=True)
     plt.savefig(os.path.join(res_save_path, 'zero_shot.png'), dpi=300)
     zero_shot_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], zero_shot_preds[o, p])
                                for p, o in np.stack(np.where(~np.isinf(zero_shot_preds.T) & (zero_shot_preds.T >= 0)), axis=1)])
+    print()
+    print('#' * 100, '\n')
+    print('#' * 30, 'Zero shot', '#' * 30, '\n')
     print(zero_shot_str)
     with open(os.path.join(res_save_path, 'zero_shot.txt'), 'w') as f:
         f.write(zero_shot_str)
 
+    unseen_pred_inds = np.array(sorted(set(hdtest.active_predicates.tolist()) - set(hdtrain.active_predicates.tolist())))
+    pred_inds_zs = unseen_pred_inds.tolist() + [p for p in pred_inds if p not in unseen_pred_inds]
+    s_predicates_zs = [hdtest.predicates[i] for i in pred_inds_zs]
+    zs_predicates = [hdtest.predicates[i] for i in unseen_pred_inds]
+    zs_confmat = act_conf_mat[unseen_pred_inds, :][:, pred_inds_zs]
+    zs_confmat[zs_confmat == 0] = np.inf
+    plot_mat(zs_confmat, s_predicates_zs, zs_predicates, x_inds=pred_inds_zs, y_inds=unseen_pred_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'zs_conf_mat.png'), dpi=300)
+    zero_shot_cmat_str = '\n'.join(['%-20s %-20s %.3f' % (zs_predicates[zsp], s_predicates_zs[p], zs_confmat[zsp, p])
+                                    for zsp, p in np.stack(np.where(~np.isinf(zs_confmat) & (zs_confmat > 0)), axis=1)])
+    print()
+    print('#' * 100, '\n')
+    print('#' * 30, 'Zero shot confusion matrix', '#' * 30, '\n')
+    print(zero_shot_cmat_str)
+
+    # act_cooccs_train = compute_cooccs(hdtrain)
+    # zs_act_cooccs_train = act_cooccs_train[unseen_pred_inds, :][:, pred_inds_zs]
+    # zs_act_cooccs_train[zs_act_cooccs_train == 0] = np.inf
+    # plot_mat(zs_act_cooccs_train, s_predicates_zs, zs_predicates, x_inds=pred_inds_zs, y_inds=unseen_pred_inds, plot=False, log=True)
+    # plt.savefig(os.path.join(res_save_path, 'zs_coocc_mat_train.png'), dpi=300)
+
+    act_cooccs_test = compute_cooccs(hdtest)
+    zs_act_cooccs_test = act_cooccs_test[unseen_pred_inds, :][:, pred_inds_zs]
+    zs_act_cooccs_test[zs_act_cooccs_test == 0] = np.inf
+    plot_mat(zs_act_cooccs_test, s_predicates_zs, zs_predicates, x_inds=pred_inds_zs, y_inds=unseen_pred_inds, plot=False, log=True)
+    plt.savefig(os.path.join(res_save_path, 'zs_coocc_mat_test.png'), dpi=300)
+    zero_shot_coocc_str = '\n'.join(['%-20s %-20s %.3f' % (zs_predicates[zsp], s_predicates_zs[p], zs_act_cooccs_test[zsp, p])
+                                     for zsp, p in np.stack(np.where(~np.isinf(zs_act_cooccs_test) & (zs_act_cooccs_test > 0)), axis=1)])
+    print()
+    print('#' * 100, '\n')
+    print('#' * 30, 'Zero shot co-occurrences matrix', '#' * 30, '\n')
+    print(zero_shot_coocc_str)
+
+    exit(0)  # FIXME
+
     out_of_gt_preds = (num_gt == 0).astype(np.float) * num_pred
     out_of_gt_preds[out_of_gt_preds == 0] = np.inf
-    plot_mat(out_of_gt_preds, hdtest.predicates, hdtest.objects, vrange=None, plot=False)
+    plot_mat(out_of_gt_preds, hdtest.predicates, hdtest.objects, plot=False)
     plt.savefig(os.path.join(res_save_path, 'out_of_gt.png'), dpi=300)
     out_of_gt_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], out_of_gt_preds[o, p])
                                for p, o in np.stack(np.where(~np.isinf(out_of_gt_preds.T)), axis=1)])
     print()
     print('#' * 100, '\n')
+    # print('#' * 30, 'Out of GT', '#' * 30, '\n')
     # print(out_of_gt_str)
     with open(os.path.join(res_save_path, 'out_of_gt.txt'), 'w') as f:
         f.write(out_of_gt_str)
 
-    plot_mat(act_conf_mat[pred_inds, :][:, pred_inds], s_predicates, s_predicates, x_inds=pred_inds, y_inds=pred_inds, plot=False)
+    confmat = act_conf_mat[pred_inds, :][:, pred_inds]
+    confmat[confmat == 0] = np.inf
+    plot_mat(confmat, s_predicates, s_predicates, x_inds=pred_inds, y_inds=pred_inds, plot=False)
     plt.savefig(os.path.join(res_save_path, 'conf_mat.png'), dpi=300)
 
     plot_mat(recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)

@@ -12,14 +12,15 @@ class BaseModel(GenericModel):
         return 'base'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.act_repr_dim = 1024
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
+        hidden_dim = 1024
+        self.act_repr_dim = cfg.model.repr_dim
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
                                                 # nn.ReLU(inplace=True),
                                                 # nn.Dropout(p=cfg.model.dropout),
                                                 ])
@@ -27,10 +28,10 @@ class BaseModel(GenericModel):
         # nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(p=cfg.model.dropout),
-                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                               nn.Linear(hidden_dim, self.final_repr_dim),
                                                # nn.ReLU(inplace=True),
                                                # nn.Dropout(p=cfg.model.dropout),
                                                ])
@@ -38,10 +39,10 @@ class BaseModel(GenericModel):
         # nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.final_repr_dim),
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.model.dropout),
-                                            nn.Linear(self.final_repr_dim, self.final_repr_dim),
+                                            nn.Linear(hidden_dim, self.final_repr_dim),
                                             # nn.ReLU(inplace=True),
                                             # nn.Dropout(p=cfg.model.dropout),
                                             # nn.Linear(self.final_repr_dim, self.final_repr_dim),

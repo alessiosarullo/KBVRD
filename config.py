@@ -220,7 +220,9 @@ class ModelConfig(BaseConfigs):
         self.obj_thr = 0.3
 
         self.proposal_thr = 0.
+
         self.dropout = 0.5
+        self.repr_dim = 1024
 
         self.attw = False
         self.oprior = False
