@@ -139,7 +139,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         minibatch.img_infos = img_infos
 
         all_box_pair_inds = self.pc_im_box_range_inds[pc_im_idxs, :1] + self.pc_ho_infos[pc_hoi_idxs, 1:]
-        assert all_box_pair_inds.shape[1] == 2 and np.all(all_box_pair_inds[:, 1] < self.pc_im_box_range_inds[pc_im_idxs, 1])
+        assert all_box_pair_inds.shape[1] == 2 and np.all(all_box_pair_inds[:, 1] <= self.pc_im_box_range_inds[pc_im_idxs, 1])
         all_box_inds = all_box_pair_inds.flatten()
         assert all_box_inds.size == 2 * len(pc_hoi_idxs)
 
