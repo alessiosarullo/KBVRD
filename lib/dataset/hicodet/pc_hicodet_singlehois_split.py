@@ -29,8 +29,21 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
             im_idx = np.flatnonzero(self.image_ids == pc_im_id).tolist()  # type: List
             if im_idx:
                 assert len(im_idx) == 1, im_idx
-                assert pc_im_id not in self.pc_im_idx_to_im_idx
                 self.pc_im_idx_to_im_idx[pc_im_idx] = im_idx[0]
+
+        self.pc_im_box_range_inds = np.full((self.pc_image_ids.shape[0], 2), fill_value=-1, dtype=np.int)
+        for i, pc_box_im_idx in enumerate(self.pc_box_im_idxs):
+            if self.pc_im_box_range_inds[pc_box_im_idx, 0] < 0:
+                self.pc_im_box_range_inds[pc_box_im_idx, 0] = i
+            self.pc_im_box_range_inds[pc_box_im_idx, 1] = i
+
+        # Check
+        for i, (start, end) in enumerate(self.pc_im_box_range_inds):
+            # if start >= 0:
+                assert start >= 0 and end >= 0
+                assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
+            # else:
+            #     assert end < 0
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
@@ -100,63 +113,43 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
     def collate(self, pc_hoi_idxs):
         minibatch = PrecomputedMinibatch()
 
-        all_box_inds = []
+        pc_hoi_idxs = np.array(pc_hoi_idxs)
+        arange = np.arange(len(pc_hoi_idxs))
+
+        pc_im_idxs = self.pc_ho_im_idxs[pc_hoi_idxs]
+        img_infos = self.pc_image_infos[pc_im_idxs, :].copy()
 
         for i, pc_hoi_idx in enumerate(pc_hoi_idxs):
             Timer.get('GetBatch').tic()
-
-            pc_im_idx = self.pc_ho_im_idxs[pc_hoi_idx]
+            pc_im_idx = pc_im_idxs[i]
             im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
-            im_data = self._data[im_idx]
             img_id = self.image_ids[im_idx]
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
-
-            # Image data
-            img_infos = self.pc_image_infos[pc_im_idx].copy()
-            assert img_infos.shape == (3,)
-            minibatch.img_infos += [np.array(img_infos, dtype=np.float32)]
             minibatch.other_ex_data += [{'index': im_idx,
                                          'id': img_id,
-                                         'fn': im_data.filename,
+                                         'fn': self._data[im_idx].filename,
                                          'split': self.split,
-                                         'im_size': img_infos[:2],  # this is the original one and won't be changed
-                                         'im_scale': img_infos[2],
+                                         'im_size': img_infos[i, :2],  # this is the original one and won't be changed
+                                         'im_scale': img_infos[i, 2],
                                          }]
-
-            hoi_infos = self.pc_ho_infos[pc_hoi_idx, :].copy()
-
-            # Object data
-            img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)
-            assert img_box_inds.size > 0
-            box_start, box_end = img_box_inds[0], img_box_inds[-1] + 1
-            assert np.all(img_box_inds == np.arange(box_start, box_end))
-            box_pair_inds = box_start + hoi_infos[1:]
-            assert box_pair_inds.size == 2 and np.all(box_pair_inds < box_end)
-
-            boxes_ext = self.pc_boxes_ext[box_pair_inds, :]
-            boxes_ext[:, 0] = i
-            minibatch.pc_boxes_ext += [boxes_ext]
-            all_box_inds.extend(box_pair_inds.tolist())
-
-            # HOI data
-            hoi_infos = np.array([[i, i * 2, i * 2 + 1]], dtype=hoi_infos.dtype)
-            minibatch.pc_ho_infos += [hoi_infos]
             Timer.get('GetBatch').toc()
 
-        img_infos = np.stack(minibatch.img_infos, axis=0)
         img_infos[:, 0] = max(img_infos[:, 0])
         img_infos[:, 1] = max(img_infos[:, 1])
         minibatch.img_infos = img_infos
 
-        minibatch.pc_boxes_ext = np.concatenate(minibatch.pc_boxes_ext, axis=0)
-        minibatch.pc_ho_infos = np.concatenate(minibatch.pc_ho_infos, axis=0)
+        all_box_pair_inds = self.pc_im_box_range_inds[pc_im_idxs, :1] + self.pc_ho_infos[pc_hoi_idxs, 1:]
+        assert all_box_pair_inds.shape[1] == 2 and np.all(all_box_pair_inds[:, 1] < self.pc_im_box_range_inds[pc_im_idxs, 1])
+        all_box_inds = all_box_pair_inds.flatten()
+        assert all_box_inds.size == 2 * len(pc_hoi_idxs)
 
-        all_box_inds = np.array(all_box_inds)
-        assert len(all_box_inds.shape) == 1 and all_box_inds.size == 2 * len(pc_hoi_idxs)
-        pc_hoi_idxs = np.array(pc_hoi_idxs)
-
+        boxes_ext = self.pc_boxes_ext[all_box_inds, :]
+        boxes_ext[:, 0] = np.repeat(arange, 2)
+        minibatch.pc_boxes_ext = boxes_ext
         minibatch.pc_box_feats = self.pc_boxes_feats[all_box_inds, :]
         minibatch.pc_box_labels = self.pc_box_labels[all_box_inds].copy()
+
+        minibatch.pc_ho_infos = np.stack([arange, 2 * arange, 2 * arange + 1], axis=0)
         minibatch.pc_ho_union_boxes = self.pc_union_boxes[pc_hoi_idxs, :]
         minibatch.pc_ho_union_feats = self.pc_union_boxes_feats[pc_hoi_idxs, :]
         minibatch.pc_action_labels = self.pc_action_labels[pc_hoi_idxs, :].copy()
