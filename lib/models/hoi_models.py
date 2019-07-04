@@ -126,7 +126,7 @@ class BGFilter(BaseModel):
                 margin_target = action_labels[:, 0]
 
                 bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
-                max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0])
+                max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0]).detach()
 
                 act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
                 if cfg.model.marginl:
