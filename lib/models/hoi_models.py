@@ -123,9 +123,18 @@ class BGFilter(BaseModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
+                margin_target = action_labels[:, 0]
+
+                bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
+                max_fg_score = torch.sigmoid(action_labels[:, 1:].max(dim=1)[0])
+
                 losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * action_output.shape[1],
-                          'bg_loss': F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
+                          'bg_margin_loss': (margin_target *
+                                            F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')).mean()
                           }
+                # losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * action_output.shape[1],
+                #           'bg_loss': F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
+                #           }
                 return losses
             else:
                 prediction = Prediction()
