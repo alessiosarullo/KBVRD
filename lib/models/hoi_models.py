@@ -132,7 +132,7 @@ class BGFilter(BaseModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -231,7 +231,7 @@ class ZSBaseModel(GenericModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -486,7 +486,7 @@ class ZSObjModel(ZSBaseModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -591,7 +591,7 @@ class KatoModel(GenericModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -712,7 +712,7 @@ class PeyreModel(GenericModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2].cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]

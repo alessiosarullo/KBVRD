@@ -50,7 +50,7 @@ class MaskRCNN(nn.Module):
             unscaled_img_sizes = np.array([d['im_size'] for d in x.other_ex_data])
             box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs=detect_inputs, unscaled_img_sizes=unscaled_img_sizes)
 
-            im_scales = x.img_infos[:, 2].cpu().numpy()
+            im_scales = x.img_infos[:, 2]
             boxes = boxes * im_scales[box_im_ids, None]
             boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
                                         boxes.astype(np.float32, copy=False),

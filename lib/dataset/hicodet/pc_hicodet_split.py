@@ -91,7 +91,7 @@ class PrecomputedMinibatch:
         img_infos = np.stack(self.img_infos, axis=0)
         img_infos[:, 0] = max(img_infos[:, 0])
         img_infos[:, 1] = max(img_infos[:, 1])
-        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
+        self.img_infos = img_infos
 
         if self.pc_box_labels[0] is None:
             assert all([l is None for l in self.pc_box_labels])
