@@ -149,7 +149,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         minibatch.pc_box_feats = self.pc_boxes_feats[all_box_inds, :]
         minibatch.pc_box_labels = self.pc_box_labels[all_box_inds].copy()
 
-        minibatch.pc_ho_infos = np.stack([arange, 2 * arange, 2 * arange + 1], axis=0)
+        minibatch.pc_ho_infos = np.stack([arange, 2 * arange, 2 * arange + 1], axis=1)
         minibatch.pc_ho_union_boxes = self.pc_union_boxes[pc_hoi_idxs, :]
         minibatch.pc_ho_union_feats = self.pc_union_boxes_feats[pc_hoi_idxs, :]
         minibatch.pc_action_labels = self.pc_action_labels[pc_hoi_idxs, :].copy()
