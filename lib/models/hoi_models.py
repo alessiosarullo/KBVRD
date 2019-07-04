@@ -130,13 +130,13 @@ class BGFilter(BaseModel):
 
                 act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
                 losses = {'action_loss': act_loss}
-                if cfg.model.marginl:
+                if cfg.opt.marginl:
                     bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')
                     bg_loss = ((max_fg_score > 0).float() * bg_loss).mean()  # Loss only on non-trivial samples
-                    losses['bg_margin_loss'] = bg_loss
+                    losses['bg_margin_loss'] = cfg.opt.bg_coeff * bg_loss
                 else:
                     bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
-                    losses['bg_loss'] = bg_loss
+                    losses['bg_loss'] = cfg.opt.bg_coeff * bg_loss
                 return losses
             else:
                 prediction = Prediction()

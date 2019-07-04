@@ -56,6 +56,21 @@ class MaskRCNN(nn.Module):
                                         boxes.astype(np.float32, copy=False),
                                         scores.astype(np.float32, copy=False)
                                         ], axis=1)
+
+            # Checks
+            im_sizes = np.array([d['im_size'][::-1] * d['im_scale'] for d in x.other_ex_data]).astype(np.float32)
+            box_im_sizes = im_sizes[, :]
+            norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
+            assert np.all(0 <= norm_boxes), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
+            assert np.all(norm_boxes <= 1), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
+
+            im_areas = np.prod(im_sizes, axis=1)
+            box_widths = boxes_ext[:, 3] - boxes_ext[:, 1]
+            box_heights = boxes_ext[:, 4] - boxes_ext[:, 2]
+            norm_box_areas = box_widths * box_heights / im_areas[box_im_ids]
+            assert np.all(0 < norm_box_areas), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
+            assert np.all(norm_box_areas <= 1), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
+
             return boxes_ext, fmap.detach()
 
     def get_rois_feats(self, fmap, rois):

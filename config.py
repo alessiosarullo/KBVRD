@@ -224,8 +224,6 @@ class ModelConfig(BaseConfigs):
         self.dropout = 0.5
         self.repr_dim = 1024
 
-        self.marginl = False
-
         self.attw = False
         self.oprior = False
         self.oscore = False
@@ -243,6 +241,9 @@ class OptimizerConfig(BaseConfigs):
 
         self.group = False  # group HOIs belonging to the same image
         self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
+
+        self.marginl = False
+        self.bg_coeff = 1.0
 
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3
