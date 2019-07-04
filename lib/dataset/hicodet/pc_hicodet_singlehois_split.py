@@ -1,3 +1,4 @@
+from builtins import super
 from typing import List
 
 import numpy as np
@@ -8,6 +9,80 @@ from config import cfg
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
+
+
+class PrecomputedHoiMinibatch(PrecomputedMinibatch):
+    def __init__(self):
+        super().__init__()
+        self.ex_in
+
+    def append(self, ex: PrecomputedExample):
+        im_id_in_batch = len(self.img_infos)
+        self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]
+
+        self.other_ex_data += [{'index': ex.index,
+                                'id': ex.id,
+                                'fn': ex.filename,
+                                'split': ex.split,
+                                'im_size': ex.img_size,  # this is the original one and won't be changed
+                                'im_scale': ex.scale,
+                                }]
+
+        boxes_ext = ex.precomp_boxes_ext
+        if boxes_ext is not None:
+            boxes_ext[:, 0] = im_id_in_batch
+            self.pc_boxes_ext += [boxes_ext]
+            self.pc_box_feats += [ex.precomp_box_feats]
+
+            self.pc_box_labels += [ex.precomp_box_labels]
+
+            hoi_infos = ex.precomp_hoi_infos
+            if hoi_infos is not None:
+                num_boxes = sum([boxes.shape[0] for boxes in self.pc_boxes_ext[:-1]])
+                hoi_infos[:, 0] = im_id_in_batch
+                hoi_infos[:, 1:] += num_boxes
+                self.pc_ho_infos += [hoi_infos]
+                self.pc_ho_union_boxes += [ex.precomp_hoi_union_boxes]
+                self.pc_ho_union_feats += [ex.precomp_hoi_union_feats]
+
+                self.pc_action_labels += [ex.precomp_action_labels]
+
+    def vectorize(self, device):
+        for k, v in self.__dict__.items():
+            if k.startswith('pc_') and ('label' not in k):
+                if not v:
+                    v = [np.empty(0)]
+                self.__dict__[k] = np.concatenate(v, axis=0)
+
+        assert self.pc_boxes_ext.shape[0] == self.pc_box_feats.shape[0]
+        assert self.pc_ho_infos.shape[0] == self.pc_ho_union_boxes.shape[0]
+
+        img_infos = np.stack(self.img_infos, axis=0)
+        img_infos[:, 0] = max(img_infos[:, 0])
+        img_infos[:, 1] = max(img_infos[:, 1])
+        self.img_infos = torch.tensor(img_infos, dtype=torch.float32, device=device)
+
+        if self.pc_box_labels[0] is None:
+            assert all([l is None for l in self.pc_box_labels])
+            assert all([l is None for l in self.pc_action_labels])
+            self.pc_box_labels = self.pc_action_labels = None
+        else:
+            assert all([l is not None for l in self.pc_box_labels])
+            assert all([l is not None for l in self.pc_action_labels])
+            assert len(self.pc_box_labels) == len(self.pc_action_labels) == self.img_infos.shape[0], \
+                (len(self.pc_box_labels), len(self.pc_action_labels), self.img_infos.shape[0])
+            self.pc_box_labels = np.concatenate(self.pc_box_labels, axis=0)
+            self.pc_action_labels = np.concatenate(self.pc_action_labels, axis=0)
+            assert self.pc_boxes_ext.shape[0] == self.pc_box_labels.shape[0]
+            assert self.pc_ho_infos.shape[0] == self.pc_action_labels.shape[0]
+
+    @classmethod
+    def collate(cls, examples, train=False):
+        minibatch = cls()
+        for ex in examples:
+            minibatch.append(ex)
+        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        return minibatch
 
 
 class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):

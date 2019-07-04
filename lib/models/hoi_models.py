@@ -103,11 +103,12 @@ class BGFilter(BaseModel):
                                           nn.Dropout(p=cfg.model.dropout),
                                           nn.Linear(1024, 512),
                                           ])
-        self.bg_geo_obj_mlp = nn.Sequential(*[nn.Linear(14 + self.dataset.num_object_classes, 128),
-                                              nn.Linear(128, 256),
-                                              ])
-
-        self.bg_detection_mlp = nn.Linear(512 + 256, 1, bias=False)
+        # self.bg_geo_obj_mlp = nn.Sequential(*[nn.Linear(14 + self.dataset.num_object_classes, 128),
+        #                                       nn.Linear(128, 256),
+        #                                       ])
+        #
+        # self.bg_detection_mlp = nn.Linear(512 + 256, 1, bias=False)
+        self.bg_detection_mlp = nn.Linear(512, 1, bias=False)
         torch.nn.init.xavier_normal_(self.bg_detection_mlp.weight, gain=1.0)
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -167,9 +168,10 @@ class BGFilter(BaseModel):
         geo_feats = self.get_geo_feats(vis_output, batch)
 
         vis_repr = self.bg_vis_mlp(union_boxes_feats)
-        geo_obj_repr = self.bg_geo_obj_mlp(torch.cat([geo_feats, boxes_ext[ho_infos[:, 2], 5:]], dim=1))
+        # geo_obj_repr = self.bg_geo_obj_mlp(torch.cat([geo_feats, boxes_ext[ho_infos[:, 2], 5:]], dim=1))
 
-        bg_logits = self.bg_detection_mlp(torch.cat([vis_repr, geo_obj_repr], dim=1))
+        # bg_logits = self.bg_detection_mlp(torch.cat([vis_repr, geo_obj_repr], dim=1))
+        bg_logits = self.bg_detection_mlp(vis_repr)
 
         action_logits = super()._forward(vis_output, batch, step, epoch, **kwargs)
         return action_logits, bg_logits

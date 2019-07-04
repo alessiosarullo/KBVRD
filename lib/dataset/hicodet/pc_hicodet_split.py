@@ -108,7 +108,7 @@ class PrecomputedMinibatch:
             assert self.pc_ho_infos.shape[0] == self.pc_action_labels.shape[0]
 
     @classmethod
-    def collate(cls, examples):
+    def collate(cls, examples, **kwargs):
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
