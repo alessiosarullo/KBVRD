@@ -62,7 +62,7 @@ def save_feats():
                 vout = vm(im_data, inference)  # type: VisualOutput
                 boxes_ext = vout.boxes_ext
                 box_feats = vout.box_feats
-                ho_infos = vout.ho_infos
+                ho_infos = vout.ho_infos_np
                 union_boxes = vout.hoi_union_boxes
                 union_boxes_feats = vout.hoi_union_boxes_feats
                 box_labels = vout.box_labels

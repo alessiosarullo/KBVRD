@@ -47,7 +47,7 @@ class VisualModule(nn.Module):
 
                 if ho_infos.shape[0] > 0:
                     ho_infos = ho_infos.astype(np.int, copy=False)
-                    output.ho_infos = ho_infos
+                    output.ho_infos_np = ho_infos
 
                     if batch.pc_box_labels is not None:
                         box_labels_np = batch.pc_box_labels
@@ -71,7 +71,7 @@ class VisualModule(nn.Module):
 
                     if ho_infos.shape[0] > 0:
                         ho_infos = ho_infos.astype(np.int, copy=False)
-                        output.ho_infos = ho_infos
+                        output.ho_infos_np = ho_infos
 
                         hoi_union_boxes = get_union_boxes(boxes_ext_np[:, 1:5], ho_infos[:, 1:])
                         hoi_union_boxes_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map,
