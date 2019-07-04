@@ -129,14 +129,15 @@ class PrecomputedFilesHandler:
     @classmethod
     def get(cls, file_name, attribute_name, load_in_memory=False):
         file = cls.get_file(file_name)
+        key = attribute_name
         if load_in_memory:
-            attribute_name += '__loaded'
-        if attribute_name not in cls.files[file_name].keys():
+            key += '__loaded'
+        if key not in cls.files[file_name].keys():
             attribute = file[attribute_name]
             if load_in_memory:
                 attribute = attribute[:]
-            cls.files[file_name][attribute_name] = attribute
-        return cls.files[file_name][attribute_name]
+            cls.files[file_name][key] = attribute
+        return cls.files[file_name][key]
 
 
 class PrecomputedHicoDetSplit(HicoDetSplit):
