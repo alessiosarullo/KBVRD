@@ -128,13 +128,10 @@ class BGFilter(BaseModel):
                 bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
                 max_fg_score = torch.sigmoid(action_labels[:, 1:].max(dim=1)[0])
 
-                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * action_output.shape[1],
-                          'bg_margin_loss': (margin_target *
-                                            F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')).mean()
-                          }
-                # losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * action_output.shape[1],
-                #           'bg_loss': F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
-                #           }
+                act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
+                # bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
+                bg_loss = (margin_target * F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')).mean()
+                losses = {'action_loss': act_loss, 'bg_margin_loss': bg_loss}
                 return losses
             else:
                 prediction = Prediction()
@@ -160,7 +157,8 @@ class BGFilter(BaseModel):
 
                         action_scores = torch.sigmoid(action_output).cpu().numpy()
                         bg_scores = torch.sigmoid(bg_output).squeeze(dim=1).cpu().numpy()
-                        keep = (action_scores.max(axis=1) > bg_scores)
+                        action_scores[:, 0] = bg_scores
+                        keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
 
                         if np.any(keep):
                             prediction.ho_img_inds = vis_output.ho_infos_np[keep, 0]
