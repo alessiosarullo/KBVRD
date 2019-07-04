@@ -228,7 +228,7 @@ class ModelConfig(BaseConfigs):
         self.oprior = False
         self.oscore = False
         self.zsload = False
-        self.softl = 0
+        self.softl = 0.0
         self.aereg = 0.0
 
 
