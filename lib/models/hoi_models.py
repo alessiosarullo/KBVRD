@@ -126,11 +126,14 @@ class BGFilter(BaseModel):
                 margin_target = action_labels[:, 0]
 
                 bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
-                max_fg_score = torch.sigmoid(action_labels[:, 1:].max(dim=1)[0])
+                max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0])
 
                 act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
-                # bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
-                bg_loss = (margin_target * F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')).mean()
+                if cfg.model.marginl:
+                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')
+                    bg_loss = ((max_fg_score > 0).float() * bg_loss).mean()  # Loss only on non-trivial samples
+                else:
+                    bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
                 losses = {'action_loss': act_loss, 'bg_margin_loss': bg_loss}
                 return losses
             else:

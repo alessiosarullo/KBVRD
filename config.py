@@ -224,6 +224,8 @@ class ModelConfig(BaseConfigs):
         self.dropout = 0.5
         self.repr_dim = 1024
 
+        self.marginl = False
+
         self.attw = False
         self.oprior = False
         self.oscore = False
