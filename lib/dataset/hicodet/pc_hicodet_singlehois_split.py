@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample, PrecomputedFilesHandler
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
@@ -17,12 +17,9 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
 
-        if self.split == Splits.TRAIN and not cfg.program.save_mem:
-            self.pc_boxes_feats = self.pc_boxes_feats[:]
-            self.pc_union_boxes_feats = self.pc_union_boxes_feats[:]
-            self._loaded = True
-        else:
-            self._loaded = False
+        if not cfg.program.save_mem:
+            self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=True)
+            self.pc_union_boxes_feats =  PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=True)
 
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
@@ -39,11 +36,8 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
 
         # Check
         for i, (start, end) in enumerate(self.pc_im_box_range_inds):
-            # if start >= 0:
-                assert start >= 0 and end >= 0
-                assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
-            # else:
-            #     assert end < 0
+            assert start >= 0 and end >= 0
+            assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
@@ -54,7 +48,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
             dataset=self,
             batch_sampler=BalancedTripletMLSampler(self, batch_size, drop_last, shuffle),
             num_workers=num_workers,
-            collate_fn=lambda x: (self.collate(x) if self._loaded else PrecomputedMinibatch.collate(x)),
+            collate_fn=lambda x: self.collate(x),
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
         )
@@ -63,52 +57,8 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
     def __len__(self):
         return self.num_precomputed_hois
 
-    def __getitem__(self, pc_hoi_idx) -> PrecomputedExample:
-        if self._loaded:
-            return pc_hoi_idx
-        else:
-            Timer.get('GetBatch').tic()
-
-            pc_im_idx = self.pc_ho_im_idxs[pc_hoi_idx]
-            im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
-            im_data = self._data[im_idx]
-            img_id = self.image_ids[im_idx]
-            assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
-
-            # Image data
-            entry = PrecomputedExample(idx_in_split=im_idx, img_id=self.image_ids[im_idx], filename=im_data.filename, split=self.split)
-            img_infos = self.pc_image_infos[pc_im_idx].copy()
-            assert img_infos.shape == (3,)
-            entry.img_size = img_infos[:2]
-            entry.scale = img_infos[2]
-
-            hoi_infos = self.pc_ho_infos[pc_hoi_idx, :].copy()
-
-            # Object data
-            img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)
-            assert img_box_inds.size > 0
-            box_start, box_end = img_box_inds[0], img_box_inds[-1] + 1
-            assert np.all(img_box_inds == np.arange(box_start, box_end))
-            box_pair_inds = box_start + hoi_infos[1:]
-            assert box_pair_inds.size == 2 and np.all(box_pair_inds < box_end)
-            entry.precomp_boxes_ext = self.pc_boxes_ext[box_pair_inds, :]
-            if self._loaded:
-                entry.precomp_box_feats = self.pc_boxes_feats[box_pair_inds, :]
-            else:
-                entry.precomp_box_feats = np.stack([self.pc_boxes_feats[box_pair_inds[0], :],
-                                                    self.pc_boxes_feats[box_pair_inds[1], :]
-                                                    ], axis=0)
-            entry.precomp_box_labels = self.pc_box_labels[box_pair_inds].copy()
-
-            # HOI data
-            hoi_infos[1:] = [0, 1]
-            entry.precomp_hoi_infos = hoi_infos[None, :]
-            entry.precomp_hoi_union_boxes = self.pc_union_boxes[[pc_hoi_idx], :]
-            entry.precomp_hoi_union_feats = self.pc_union_boxes_feats[[pc_hoi_idx], :]
-            entry.precomp_action_labels = self.pc_action_labels[[pc_hoi_idx], :].copy()
-
-            Timer.get('GetBatch').toc()
-        return entry
+    def __getitem__(self, pc_hoi_idx: int) -> int:
+        return pc_hoi_idx
 
     def collate(self, pc_hoi_idxs):
         minibatch = PrecomputedMinibatch()

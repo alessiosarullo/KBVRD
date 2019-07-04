@@ -116,31 +116,53 @@ class PrecomputedMinibatch:
         return minibatch
 
 
+class PrecomputedFilesHandler:
+    files = {}
+
+    def __init__(self):
+        super().__init__()
+
+    @classmethod
+    def get_file(cls, file_name):
+        return cls.files.setdefault(file_name, {}).setdefault('_handler', h5py.File(file_name, 'r'))
+
+    @classmethod
+    def get(cls, file_name, attribute_name, load_in_memory=False):
+        file = cls.get_file(file_name)
+        if load_in_memory:
+            attribute_name += '__loaded'
+        if attribute_name not in cls.files[file_name].keys():
+            attribute = file[attribute_name]
+            if load_in_memory:
+                attribute = attribute[:]
+            cls.files[file_name][attribute_name] = attribute
+        return cls.files[file_name][attribute_name]
+
+
 class PrecomputedHicoDetSplit(HicoDetSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
-                                                                            (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
-        print('Loading precomputed feats for %s split from %s.' % (self.split.value, precomputed_feats_fn))
-        pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
-        assert pc_feats_file['box_feats'].shape[1] == 2048  # FIXME magic constant
+        self.precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch,
+                                                                                 (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
+        print('Loading precomputed feats for %s split from %s.' % (self.split.value, self.precomputed_feats_fn))
 
-        self.pc_image_ids = pc_feats_file['image_ids'][:]
-        self.pc_image_infos = pc_feats_file['img_infos'][:]
+        self.pc_image_ids = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'image_ids', load_in_memory=True)
+        self.pc_image_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'img_infos', load_in_memory=True)
 
-        self.pc_boxes_ext = pc_feats_file['boxes_ext'][:]
-        self.pc_boxes_feats = pc_feats_file['box_feats']
-        self.pc_union_boxes_feats = pc_feats_file['union_boxes_feats']
+        self.pc_boxes_ext = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'boxes_ext', load_in_memory=True)
+        self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=False)
+        assert self.pc_boxes_feats.shape[1] == 2048  # FIXME magic constant
         try:
-            self.pc_box_labels = pc_feats_file['box_labels'][:]
+            self.pc_box_labels = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_labels', load_in_memory=True)
         except KeyError:
             self.pc_box_labels = None
 
-        self.pc_ho_infos = pc_feats_file['ho_infos'][:].astype(np.int)
-        self.pc_union_boxes = pc_feats_file['union_boxes'][:]
+        self.pc_ho_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'ho_infos', load_in_memory=True).astype(np.int)
+        self.pc_union_boxes = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes', load_in_memory=True)
+        self.pc_union_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=False)
         try:
-            self.pc_action_labels = pc_feats_file['action_labels'][:]
+            self.pc_action_labels = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'action_labels', load_in_memory=True)
         except KeyError:
             self.pc_action_labels = None
 
