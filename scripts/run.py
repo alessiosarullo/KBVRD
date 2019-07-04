@@ -234,7 +234,9 @@ class Launcher:
             loss.backward()
             nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
-            # batch_stats['watch'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in hoi_branch.named_parameters() if v.requires_grad}
+            if cfg.program.monitor:
+                batch_stats['grads'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in self.detector.named_parameters()
+                                        if v.requires_grad and 'bias' not in k}
 
             optimizer.step()
 

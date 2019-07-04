@@ -301,12 +301,14 @@ class ZSBaseModel(GenericModel):
                 action_output = action_labels = None
 
             if not inference:
-                if unseen_action_labels is not None:
+                if cfg.model.softl > 0:
+                    assert unseen_action_labels is not None
                     unseen_action_logits = action_output[:, self.unseen_pred_inds]
                     seen_action_logits = action_output[:, self.seen_pred_inds]
                     losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(seen_action_logits, action_labels) *
                                              seen_action_logits.shape[1],
-                              'action_loss_unseen': nn.functional.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
+                              'action_loss_unseen': cfg.model.softl *
+                                                    nn.functional.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
                                                     unseen_action_labels.shape[1]}
                 else:
                     losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
@@ -369,21 +371,15 @@ class ZSHoiModel(ZSBaseModel):
         adj_av = (self.gcn.adj_av > 0).float()
         self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
 
-        if cfg.model.softlabels:
+        if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-
-    def get_soft_labels(self, vis_output: VisualOutput):
-        raise NotImplementedError
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
 
         hoi_class_embs, _, _ = self.gcn()  # I x E
         if vis_output.action_labels is not None:
-            if cfg.model.softlabels:
-                action_labels = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                action_labels = vis_output.action_labels
+            action_labels = vis_output.action_labels
         else:
             action_labels = None
 
@@ -407,7 +403,7 @@ class ZSHoiModel(ZSBaseModel):
 
         act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
 
-        if vis_output.action_labels is not None and not cfg.model.softlabels:  # restrict training to seen predicates only
+        if vis_output.action_labels is not None and not cfg.model.softl:  # restrict training to seen predicates only
             act_logits = act_logits[:, self.seen_pred_inds]
 
         reg_loss = None
@@ -447,7 +443,7 @@ class ZSModel(ZSBaseModel):
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
-        if cfg.model.softlabels:
+        if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
@@ -461,7 +457,7 @@ class ZSModel(ZSBaseModel):
         action_labels = vis_output.action_labels
         unseen_action_labels = None
         if action_labels is not None:
-            if cfg.model.softlabels:
+            if cfg.model.softl > 0:
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 class_embs = class_embs[self.seen_pred_inds, :]  # P x E
@@ -482,7 +478,7 @@ class ZSModel(ZSBaseModel):
 
         if cfg.model.oprior:
             if vis_output.action_labels is not None:
-                if cfg.model.softlabels:
+                if cfg.model.softl:
                     act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
                 else:
                     act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
@@ -494,7 +490,7 @@ class ZSModel(ZSBaseModel):
 
         if cfg.model.oscore:
             action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos[:, 2], 5:])
-            if vis_output.action_labels is not None and not cfg.model.softlabels:
+            if vis_output.action_labels is not None and not cfg.model.softl:
                 action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
             action_logits = action_logits + action_logits_from_obj_score
 
@@ -540,7 +536,7 @@ class ZSObjModel(ZSBaseModel):
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
-        if cfg.model.softlabels:
+        if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
@@ -613,11 +609,8 @@ class ZSObjModel(ZSBaseModel):
             ho_obj_output = ho_obj_output[fg_objs, :]
             ho_obj_labels = ho_obj_labels[fg_objs]
 
-            if cfg.model.softlabels:
-                action_labels = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                act_class_embs = act_class_embs[self.seen_pred_inds, :]  # P x E
-                action_labels = vis_output.action_labels
+            act_class_embs = act_class_embs[self.seen_pred_inds, :]  # P x E
+            action_labels = vis_output.action_labels
         else:
             action_labels = ho_obj_output = ho_obj_labels = None
 

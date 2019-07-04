@@ -132,7 +132,10 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
     if vrange is None:
         mat_max = mat[~np.isinf(mat) & ~np.isnan(mat)].max()
         mat_min = mat[~np.isinf(mat) & ~np.isnan(mat)].min()
-        vrange = (mat_min, mat_max)
+        if 0 <= mat_min and mat_max <= 1:
+            vrange = (0, 1)
+        else:
+            vrange = (mat_min, mat_max)
 
     num_colors = 5 if bin_colours else 256
     cmap = plt.get_cmap(cmap, lut=num_colors)

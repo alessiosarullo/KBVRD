@@ -20,7 +20,9 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
@@ -45,6 +47,7 @@ class Analyser:
         self.act_conf_mat = np.zeros((self.dataset.num_predicates, self.dataset.num_predicates))
 
         self.gt_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        self.pred_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
         self.gt_spatial_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
         self.gt_candidate_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
         self.num_gt = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
@@ -123,6 +126,7 @@ class Analyser:
         # Then decide which action predictions are hits. For each pair, an action is considered predicted if the assigned score satisfies some
         # criterion (e.g., is greater than a certain threshold). An action prediction is a hit if there is a matching GT (in the sense defined above)
         # with the same action (note: duplicates are NOT allowed, i.e., only the best match for a GT elements is considered correct).
+        pred_has_been_matched = np.zeros(num_predictions, dtype=bool)
         hits = np.zeros_like(predict_action_scores)
         best_match_for_gt = np.full(num_gt_hois, fill_value=-1, dtype=np.int)
         for gtidx, (ga, go) in enumerate(gt_interactions):
@@ -135,6 +139,7 @@ class Analyser:
             pred_candidates = (pred_candidate_ious > 0)
 
             if np.any(pred_candidates):
+                assert np.all(pred_candidate_ious[pred_candidates] >= self.iou_thresh)
                 self.gt_candidate_matches[go, ga] += 1
 
                 best_match = np.argmax(pred_candidate_ious)
@@ -143,6 +148,8 @@ class Analyser:
                     hits[best_match, ga] += 1
                     self.gt_matches[go, ga] += 1
                     self.act_conf_mat[ga, ga] += 1
+                    if ~pred_has_been_matched[best_match]:
+                        self.pred_matches[go, ga] += 1
         hits = (hits > 0)
 
         # Finally, fill the off-diagonal elements of the confusion matrix. To do this, find the best match for any given GT triplet and consider
@@ -273,8 +280,9 @@ def stats():
 
     num_gt, num_pred = analyser.num_gt, analyser.num_pred
     recall = analyser.gt_matches / num_gt
-    oa_obj_recall = analyser.gt_candidate_matches / num_gt
-    oa_recall = analyser.gt_spatial_matches / num_gt
+    precision = analyser.pred_matches / num_pred
+    obj_hit_recall = analyser.gt_candidate_matches / num_gt
+    spatial_match_recall = analyser.gt_spatial_matches / num_gt
     act_conf_mat = analyser.act_conf_mat
 
     obj_inds = np.argsort(num_gt.sum(axis=1))[::-1]
@@ -331,7 +339,14 @@ def stats():
     print('#' * 30, 'Zero shot co-occurrences matrix', '#' * 30, '\n')
     print(zero_shot_coocc_str)
 
-    exit(0)  # FIXME
+    plot_mat(precision[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_prec.png'), dpi=300)
+    plot_mat(precision[obj_inds, :][:, unseen_pred_inds].T, s_objects, zs_predicates, x_inds=obj_inds, y_inds=unseen_pred_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'zs_ao_prec.png'), dpi=300)
+    plot_mat(recall[obj_inds, :][:, unseen_pred_inds].T, s_objects, zs_predicates, x_inds=obj_inds, y_inds=unseen_pred_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'zs_ao_rec.png'), dpi=300)
+
+    # exit(0)  # FIXME
 
     out_of_gt_preds = (num_gt == 0).astype(np.float) * num_pred
     out_of_gt_preds[out_of_gt_preds == 0] = np.inf
@@ -352,16 +367,16 @@ def stats():
     plt.savefig(os.path.join(res_save_path, 'conf_mat.png'), dpi=300)
 
     plot_mat(recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'matches.png'), dpi=300)
+    plt.savefig(os.path.join(res_save_path, 'oa_recall.png'), dpi=300)
 
-    plot_mat(oa_obj_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa-obj_matches.png'), dpi=300)
+    plot_mat(obj_hit_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_obj_hit_recall.png'), dpi=300)
 
-    plot_mat(oa_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_matches.png'), dpi=300)
+    plot_mat(spatial_match_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_spatial_match_recall.png'), dpi=300)
 
     plot_mat((1 - recall)[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'misses.png'), dpi=300)
+    plt.savefig(os.path.join(res_save_path, 'oa_misses.png'), dpi=300)
 
     # plt.show()
 

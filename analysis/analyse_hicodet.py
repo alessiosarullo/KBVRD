@@ -7,6 +7,10 @@ import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
 
+from analysis.utils import vis_one_image, plot_mat
+from config import cfg
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
+
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['vis']
@@ -14,10 +18,6 @@ try:
     sys.argv[1:] = ['find']
 except ImportError:
     pass
-
-from analysis.utils import vis_one_image, plot_mat
-from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
 
 
 def stats():
@@ -59,23 +59,31 @@ def find():
     cfg.parse_args(fail_if_missing=False, reset=True)
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)  # type: HicoDetSplit
 
-    query_str = ['hold', 'apple']
-    query = [hds.hicodet.predicate_index[query_str[0]], hds.hicodet.object_index[query_str[1]]]
+    queries_str = [
+        ['fly', 'kite'],
+        ['carry', 'kite'],
+    ]
+    queries = [hds.hicodet.op_pair_to_interaction[hds.hicodet.object_index[q[1]], hds.hicodet.predicate_index[q[0]]] for q in queries_str]
+    if np.any(np.array(queries) < 0):
+        raise ValueError('Unknown interaction(s).')
+    output_dir = os.path.join('analysis', 'output', 'gt', 'find', '_'.join(['-'.join(q) for q in queries_str]))
 
-    output_dir = os.path.join('analysis', 'output', 'gt', 'find', '-'.join(query_str))
     os.makedirs(output_dir, exist_ok=True)
 
+    queries_set = set(queries)
     for idx in range(len(hds)):
         example = hds.get_img_entry(idx, read_img=False)  # type: Example
         im_fn = example.filename
 
+        if idx % 50 == 0:
+            print(idx)
+
         boxes = example.gt_boxes
         box_classes = example.gt_obj_classes
         hois = example.gt_hois
-        for _, i, o_ind in hois:
-            if i == query[0] and box_classes[o_ind] == query[1]:
-                break
-        else:  # This is correct!
+        gt_interactions = hds.hicodet.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+        misses = queries_set - set(gt_interactions.tolist())
+        if misses:
             continue
         ho_pairs = hois[:, [0, 2]]
         action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_predicates))
@@ -88,7 +96,7 @@ def find():
             ho_pairs=ho_pairs, action_class_scores=action_class_scores,
             output_file_path=os.path.join(output_dir, os.path.splitext(im_fn)[0]),
             ext='png',
-            dpi=400, fontsize=2, show_scores=False
+            dpi=400, fontsize=3, show_scores=False
         )
 
         # if idx >= 1000:
