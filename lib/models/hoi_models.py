@@ -165,7 +165,7 @@ class BGFilter(BaseModel):
         ho_infos = vis_output.ho_infos
         union_boxes_feats = vis_output.hoi_union_boxes_feats
 
-        geo_feats = self.get_geo_feats(vis_output, batch)
+        # geo_feats = self.get_geo_feats(vis_output, batch)
 
         vis_repr = self.bg_vis_mlp(union_boxes_feats)
         # geo_obj_repr = self.bg_geo_obj_mlp(torch.cat([geo_feats, boxes_ext[ho_infos[:, 2], 5:]], dim=1))
