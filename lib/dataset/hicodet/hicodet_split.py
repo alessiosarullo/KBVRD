@@ -158,6 +158,10 @@ class HicoDetSplit(Dataset):
         return len(self.predicates)
 
     @property
+    def num_interactions(self):
+        return self.interactions.shape[0]
+
+    @property
     def num_images(self):
         return len(self.image_ids)
 
