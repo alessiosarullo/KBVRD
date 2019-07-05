@@ -365,7 +365,7 @@ class ZSModel(ZSBaseModel):
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
-        op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates])
+        op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates], dtype=np.float32)
         for _, p, o in dataset.hoi_triplets:
             op_mat[o, p] += 1
         op_mat /= np.maximum(1, op_mat.sum(axis=1, keepdims=True))
