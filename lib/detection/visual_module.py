@@ -96,7 +96,7 @@ class VisualModule(nn.Module):
         obj_labels_1hot[np.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
 
         hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
-        assert hoi_labels.shape[0] == self.action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.hicodet.num_interactions
+        assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.hicodet.num_interactions
         return hoi_labels
 
     def process_boxes(self, batch, predict, feat_map, boxes_ext_np):
