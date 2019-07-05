@@ -121,7 +121,9 @@ class GenericModel(AbstractModel):
                         prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
 
                         if cfg.model.phoi:
-                            prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
+                            ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
+                            hoi_obj_scores = ho_obj_scores[:, self.hicodet.interactions[:, 1]]
+                            prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores
                         else:
                             if output.shape[1] < self.dataset.hicodet.num_predicates:
                                 assert output.shape[1] == self.dataset.num_predicates
