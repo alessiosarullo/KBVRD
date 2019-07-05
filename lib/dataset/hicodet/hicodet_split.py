@@ -369,6 +369,3 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
     assert image_ids == sorted(image_ids)
 
     return split_data, image_ids, final_objects_inds, final_pred_inds
-
-ds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, pred_inds=[0, 1, 2])
-print(ds.active_interactions)
