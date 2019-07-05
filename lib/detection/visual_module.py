@@ -89,7 +89,7 @@ class VisualModule(nn.Module):
 
     def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
         # Requires everything Numpy
-        interactions = self.dataset.hicodet.interactions
+        interactions = self.dataset.reduced_interactions
         hoi_obj_labels = box_labels[ho_infos[:, 2]]
 
         obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes), dtype=np.float32)

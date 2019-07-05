@@ -115,12 +115,19 @@ class HicoDetSplit(Dataset):
         reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
                                           reduced_object_index.get(self.hicodet.objects[o], -1)]
                                  for p, o in self.hicodet.interactions])
-        reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]
+        self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
+        self.active_interactions = np.array(sorted(set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}),
+                                            dtype=np.int)
+        self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
 
+        # Checks
         interactions = np.array([[p if self.hicodet.predicates[p] in reduced_predicate_index else -1,
                                   o if self.hicodet.objects[o] in reduced_object_index else -1]
                                  for p, o in self.hicodet.interactions])
-        self.interactions = interactions[np.all(interactions >= 0, axis=1), :]
+        assert np.all(self.interactions == interactions[np.all(interactions >= 0, axis=1), :])
+        assert np.all([reduced_predicate_index[self.hicodet.predicates[p]] == self.reduced_interactions[i, 0] and
+                       reduced_object_index[self.hicodet.objects[o]] == self.reduced_interactions[i, 1]
+                       for i, (p, o) in enumerate(self.interactions)])
 
         # Compute mappings to and from COCO
         coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
@@ -297,8 +304,6 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
         pred_filtering_map[pred_inds] = pred_inds
 
         new_im_inds, new_split_data = [], []
-        pred_count = {}
-        obj_count = {}
         for i, im_data in enumerate(split_data):
             boxes, box_classes, hois = im_data.boxes, im_data.box_classes, im_data.hois
 
@@ -322,11 +327,6 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
                 hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
                 assert np.all(hois >= 0)
 
-                for pred in hois[:, 1]:
-                    pred_count[pred] = pred_count.get(pred, 0) + 1
-                for obj in box_classes:
-                    obj_count[obj] = obj_count.get(obj, 0) + 1
-
                 new_im_inds.append(i)
                 new_split_data.append(HicoDetImData(filename=im_data.filename,
                                                     boxes=boxes, box_classes=box_classes,
@@ -345,17 +345,8 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
 
         # Now we can add the person class: there won't be interactions with persons as an object if not in the initial indices, but the dataset
         # includes the class anyway because the model must always be able to predict it.
-        # Also, if both predicate and object indices are specified, some of them might not be present due to not having suitable predicate-object
-        # pairs. These will be removed, as the model can't actually train on them due to the lack of examples.
-        final_objects_inds = sorted(set(obj_count.keys()) | {hicodet.human_class})
-        final_pred_inds = sorted(set(pred_count.keys()))
-        pred_inds = set(pred_inds)
-        if pred_inds - set(pred_count.keys()):
-            print('The following predicates have been discarded due to the lack of feasible objects: %s.' %
-                  ', '.join(['%s (%d)' % (hicodet.predicates[p], p) for p in (pred_inds - set(pred_count.keys()))]))
-        if obj_inds - set(obj_count.keys()):
-            print('The following objects have been discarded due to the lack of feasible predicates: %s.' %
-                  ', '.join(['%s (%d)' % (hicodet.objects[o], o) for o in (obj_inds - set(obj_count.keys()))]))
+        final_objects_inds = sorted(obj_inds | {hicodet.human_class})
+        final_pred_inds = sorted(pred_inds)
 
     # Filter images with only invisible or null interactions
     if filter_empty_imgs:
@@ -374,3 +365,6 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
     assert image_ids == sorted(image_ids)
 
     return split_data, image_ids, final_objects_inds, final_pred_inds
+
+ds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, pred_inds=[0, 1, 2])
+print(ds.active_interactions)
