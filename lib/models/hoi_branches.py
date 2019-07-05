@@ -69,7 +69,7 @@ class ExtCheatGCNBranch(AbstractHOIBranch):
         self.num_predicates = dataset.hicodet.num_predicates
 
         self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
         pred_emb_sim = pred_word_embs @ pred_word_embs.T
         pred_emb_sim[np.arange(pred_emb_sim.shape[0]), np.arange(pred_emb_sim.shape[0])] = 1
 

@@ -14,8 +14,8 @@ from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit,
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['vis']
-    # sys.argv[1:] = ['stats']
-    sys.argv[1:] = ['find']
+    sys.argv[1:] = ['stats']
+    # sys.argv[1:] = ['find']
 except ImportError:
     pass
 
@@ -25,7 +25,7 @@ def stats():
     split = Splits.TRAIN
 
     os.makedirs(output_dir, exist_ok=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)  # type: HicoDetSplit
     hd = hds.hicodet
 
     op_mat = np.zeros([hds.num_object_classes, hds.num_predicates])
