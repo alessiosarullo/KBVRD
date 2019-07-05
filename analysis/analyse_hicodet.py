@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+import pickle
 
 import cv2
 import matplotlib
@@ -33,6 +34,12 @@ def stats():
         op_mat[o, p] += 1
     pred_labels = hd.predicates
     obj_labels = hd.objects
+
+    perc_op_mat = op_mat / op_mat.sum(axis=1, keepdims=True)
+    pred_inds = sorted(pickle.load(open('output/base/2019-06-14_10-13-10_pfilt/ds_inds.pkl', 'rb'))[Splits.TRAIN.value]['pred'].tolist())
+    for o, row in enumerate(perc_op_mat):
+        print(f'{hd.objects[o]:15s}',
+              ', '.join([f'{hd.predicates[p]:>15s}={row[p]*100:4.1f}' for p in sorted(set(hd.predicate_index.values()) - set(pred_inds))]))
 
     # Sort by most frequent object and predicate
     num_objs_per_predicate = np.sum(op_mat, axis=0)

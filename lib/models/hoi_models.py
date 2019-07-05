@@ -365,12 +365,19 @@ class ZSModel(ZSBaseModel):
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
+        op_mat = np.zeros([dataset.num_object_classes, dataset.num_predicates])
+        for _, p, o in dataset.hoi_triplets:
+            op_mat[o, p] += 1
+        op_mat /= np.maximum(1, op_mat.sum(axis=1, keepdims=True))
+        self.op_mat = nn.Parameter(torch.from_numpy(op_mat)[:, self.unseen_pred_inds], requires_grad=False)
+
         if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
         # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
-        unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
+        # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
+        unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         return unseen_action_labels.detach()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
