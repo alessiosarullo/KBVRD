@@ -71,6 +71,7 @@ class ExtCheatGCNBranch(AbstractHOIBranch):
         self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg')
         pred_emb_sim = pred_word_embs @ pred_word_embs.T
+        assert np.all(np.diag(pred_emb_sim) == 1)
 
         # Normalised adjacency matrix
         self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
