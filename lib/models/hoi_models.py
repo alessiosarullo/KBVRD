@@ -1,10 +1,8 @@
 import pickle
 
-import torch.nn.functional as F
-
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
-from lib.models.generic_model import GenericModel, Prediction
+from lib.models.generic_model import GenericModel, Prediction, F
 from lib.models.hoi_branches import *
 
 
@@ -54,8 +52,9 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
         # nn.init.xavier_normal_(self.concat_repr_mlp[6].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.act_output_mlp = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
-        torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
+        num_classes = dataset.hicodet.num_interactions if cfg.model.phoi else dataset.num_predicates
+        self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
     @property
     def final_repr_dim(self):
@@ -72,7 +71,6 @@ class BaseModel(GenericModel):
 
         ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
         ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
-        # act_repr = self.act_repr_mlp(torch.cat([box_feats[hoi_infos[:, 1], :], box_feats[hoi_infos[:, 2], :]], dim=1))
         act_repr = self.act_repr_mlp(union_boxes_feats)
 
         hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
@@ -81,14 +79,14 @@ class BaseModel(GenericModel):
                 return hoi_act_repr, ho_obj_repr
             return hoi_act_repr
 
-        action_logits = self.act_output_mlp(hoi_act_repr)
+        output_logits = self.output_mlp(hoi_act_repr)
 
         if cfg.program.monitor:
             self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
             self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
             self.values_to_monitor['act_repr'] = act_repr
-            self.values_to_monitor['action_logits'] = action_logits
-        return action_logits
+            self.values_to_monitor['output_logits'] = output_logits
+        return output_logits
 
 
 class BGFilter(BaseModel):
@@ -130,13 +128,11 @@ class BGFilter(BaseModel):
 
                 act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
                 losses = {'action_loss': act_loss}
-                if cfg.opt.marginl:
-                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=0.1, reduction='none')
-                    bg_loss = ((max_fg_score > 0).float() * bg_loss).mean()  # Loss only on non-trivial samples
-                    losses['bg_margin_loss'] = cfg.opt.bg_coeff * bg_loss
+                if cfg.opt.margin > 0:
+                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=cfg.opt.margin, reduction='none').mean()
                 else:
                     bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
-                    losses['bg_loss'] = cfg.opt.bg_coeff * bg_loss
+                losses['bg_loss'] = cfg.opt.bg_coeff * bg_loss
                 return losses
             else:
                 prediction = Prediction()
@@ -205,7 +201,7 @@ class ZSBaseModel(GenericModel):
             ckpt = torch.load(cfg.program.baseline_model_file)
             self.pretrained_base_model = BaseModel(dataset)
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.act_output_mlp.weight.detach(), requires_grad=False)  # P x D
+            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
             assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
@@ -595,7 +591,7 @@ class KatoModel(GenericModel):
                 hoi_output = None
 
             if not inference:
-                hoi_labels = vis_output.get_hoi_labels(self.dataset)
+                hoi_labels = vis_output.hoi_labels
                 losses = {'hoi_loss': F.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]}
                 return losses
             else:

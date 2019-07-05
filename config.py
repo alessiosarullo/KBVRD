@@ -231,29 +231,34 @@ class ModelConfig(BaseConfigs):
         self.softl = 0.0
         self.aereg = 0.0
 
+        # Predict action or interaction?
+        self.phoi = False
+
 
 class OptimizerConfig(BaseConfigs):
     def __init__(self):
+        # Optimiser parameters
         self.adam = False
         self.momentum = 0.9
         self.l2_coeff = 1e-4
         self.grad_clip = 5.0
-
-        self.group = False  # group HOIs belonging to the same image
-        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
-
-        self.marginl = False
-        self.bg_coeff = 1.0
+        self.num_epochs = 10
 
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3
-        self.lr_gamma = 0.5
+        self.lr_gamma = 0.0
         self.lr_decay_period = 4
 
-        self.num_epochs = 10
-        self.img_batch_size = 8
+        # Batch parameters
+        self.group = False  # group HOIs belonging to the same image
+        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
+        self.img_batch_size = 8  # only used when grouping
         self.hoi_batch_size = 64
         self.hoi_bg_ratio = 3
+
+        # Loss parameters
+        self.margin = 0.0
+        self.bg_coeff = 1.0
 
 
 class Configs:

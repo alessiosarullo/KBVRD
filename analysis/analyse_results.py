@@ -22,7 +22,8 @@ try:
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass

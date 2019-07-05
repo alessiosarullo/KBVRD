@@ -1,16 +1,13 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
-from collections import Counter
-from lib.stats.utils import Timer
-
+import torch.nn.functional as F
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
-from lib.models.abstract_model import AbstractModel
 from lib.detection.visual_module import VisualModule
+from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction, VisualOutput
 
 
@@ -80,7 +77,7 @@ class GenericModel(AbstractModel):
     #     elif u is None and v is not None:
     #         loss = v * m - t * (v * m + s - m) + ((1 - t) * v + t) * le
     #     else:
-    #         loss = nn.functional.binary_cross_entropy_with_logits(logits, labels)
+    #         loss = F.binary_cross_entropy_with_logits(logits, labels)
     #
     #     loss = loss.mean() * num_rels  # The average is computed over classes and examples, instead of only over examples. This fixes it.
     #     return loss
@@ -90,14 +87,19 @@ class GenericModel(AbstractModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos_np is not None:
-                action_output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
+                output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
             else:
                 assert inference
-                action_output = None
+                output = None
 
             if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if cfg.model.phoi:
+                    hoi_labels = vis_output.hoi_labels
+                    losses = {'hoi_loss': F.binary_cross_entropy_with_logits(output, hoi_labels) * output.shape[1]}
+                else:
+                    action_labels = vis_output.action_labels
+                    losses = {'action_loss': F.binary_cross_entropy_with_logits(output, action_labels) * output.shape[1]}
+
                 return losses
             else:
                 prediction = Prediction()
@@ -113,17 +115,20 @@ class GenericModel(AbstractModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        if action_output.shape[1] < self.dataset.hicodet.num_predicates:
-                            assert action_output.shape[1] == self.dataset.num_predicates
-                            restricted_action_output = action_output
-                            action_output = restricted_action_output.new_zeros((action_output.shape[0], self.dataset.hicodet.num_predicates))
-                            action_output[:, self.dataset.active_predicates] = restricted_action_output
+                        assert output is not None
 
                         prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                        if cfg.model.phoi:
+                            prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
+                        else:
+                            if output.shape[1] < self.dataset.hicodet.num_predicates:
+                                assert output.shape[1] == self.dataset.num_predicates
+                                restricted_action_output = output
+                                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.hicodet.num_predicates))
+                                output[:, self.dataset.active_predicates] = restricted_action_output
+                            prediction.action_scores = torch.sigmoid(output).cpu().numpy()
 
                 return prediction
 

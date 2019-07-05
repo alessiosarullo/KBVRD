@@ -78,7 +78,7 @@ class PrecomputedMinibatch:
 
                 self.pc_action_labels += [ex.precomp_action_labels]
 
-    def vectorize(self, device):
+    def vectorize(self):
         for k, v in self.__dict__.items():
             if k.startswith('pc_') and ('label' not in k):
                 if not v:
@@ -112,7 +112,7 @@ class PrecomputedMinibatch:
         minibatch = cls()
         for ex in examples:
             minibatch.append(ex)
-        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        minibatch.vectorize()
         return minibatch
 
 

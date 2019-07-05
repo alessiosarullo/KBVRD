@@ -54,6 +54,7 @@ class VisualModule(nn.Module):
                         action_labels_np = batch.pc_action_labels
                         output.box_labels = torch.tensor(box_labels_np, device=device)
                         output.action_labels = torch.tensor(action_labels_np, device=device)
+                        output.hoi_labels = torch.tensor(self.action_labels_to_hoi_labels(box_labels_np, action_labels_np, ho_infos), device=device)
                 else:
                     assert inference
         else:
@@ -63,7 +64,8 @@ class VisualModule(nn.Module):
                 # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
 
                 if boxes_ext_np.shape[0] > 0 or training:
-                    boxes_ext_np, box_feats, ho_infos, box_labels, action_labels = self.process_boxes(batch, inference, feat_map, boxes_ext_np)
+                    boxes_ext_np, box_feats, ho_infos, box_labels, action_labels, hoi_labels = \
+                        self.process_boxes(batch, inference, feat_map, boxes_ext_np)
                     output.boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
                     output.box_feats = box_feats
                     output.box_labels = box_labels
@@ -85,17 +87,17 @@ class VisualModule(nn.Module):
         # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
         return output
 
-    # FIXME delete
-    # def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
-    #     # Requires everything Numpy
-    #     box_labels_per_pair_np = box_labels[ho_infos[:, 2]].astype(np.int)
-    #     hoi_labels_np = np.zeros((action_labels.shape[0], self.dataset.num_interactions), dtype=np.float32)
-    #     for i in range(action_labels.shape[0]):
-    #         a_inds = np.flatnonzero(action_labels[i, :])
-    #         inter_inds = self.dataset.op_pair_to_interaction[np.full_like(a_inds, fill_value=box_labels_per_pair_np[i]), a_inds]
-    #         assert np.all(inter_inds >= 0)
-    #         hoi_labels_np[i, inter_inds] = 1
-    #     return hoi_labels_np
+    def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
+        # Requires everything Numpy
+        interactions = self.dataset.hicodet.interactions
+        hoi_obj_labels = box_labels[ho_infos[:, 2]]
+
+        obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes), dtype=np.float32)
+        obj_labels_1hot[np.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
+
+        hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
+        assert hoi_labels.shape[0] == self.action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.hicodet.num_interactions
+        return hoi_labels
 
     def process_boxes(self, batch, predict, feat_map, boxes_ext_np):
         if not predict:
@@ -107,6 +109,7 @@ class VisualModule(nn.Module):
             boxes_ext_np, box_classes = self.box_gt_assignment(batch, boxes_ext_np)
             ho_infos, action_labels = self.hoi_gt_assignments(batch, boxes_ext_np, box_classes)
 
+            hoi_labels = torch.tensor(self.action_labels_to_hoi_labels(box_classes, action_labels, ho_infos), device=feat_map.device)
             box_labels = torch.tensor(box_classes, device=feat_map.device)
             action_labels = torch.tensor(action_labels, device=feat_map.device)
             assert ho_infos.shape[0] == action_labels.shape[0]
@@ -125,14 +128,14 @@ class VisualModule(nn.Module):
             box_classes = box_classes[inds]
 
             ho_infos = self.get_all_pairs(boxes_ext_np, box_classes)
-            box_labels = action_labels = None
+            box_labels = action_labels = hoi_labels = None
 
         # masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
         # assert boxes_ext_np.shape[0] == masks.shape[0]
         box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, :5])
         assert boxes_ext_np.shape[0] == box_feats.shape[0]
 
-        return boxes_ext_np, box_feats, ho_infos, box_labels, action_labels
+        return boxes_ext_np, box_feats, ho_infos, box_labels, action_labels, hoi_labels
 
     def filter_boxes(self, boxes_ext_np, coco_box_classes=None):
         keep = np.ones(boxes_ext_np.shape[0], dtype=bool)

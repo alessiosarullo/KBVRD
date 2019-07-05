@@ -10,6 +10,7 @@ detectron_outputs/
 ./output/
 ./output
 output
+Weights/
 
 # Data and models
 data/
