@@ -335,7 +335,7 @@ class ZSModel(ZSBaseModel):
         return 'zsgc'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
+        self.emb_dim = 512
         super().__init__(dataset, **kwargs)
 
         latent_dim = self.emb_dim
@@ -361,9 +361,9 @@ class ZSModel(ZSBaseModel):
             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
         if cfg.model.vv:
-            self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+            self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
         else:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
 
         op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates], dtype=np.float32)
         for _, p, o in dataset.hoi_triplets:
