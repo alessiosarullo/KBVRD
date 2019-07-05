@@ -60,6 +60,64 @@ class CheatGCNBranch(AbstractHOIBranch):
         return obj_embs, pred_embs
 
 
+class ExtCheatGCNBranch(AbstractHOIBranch):
+    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+        super().__init__(**kwargs)
+        num_gc_layers = len(gc_dims)
+        self.gc_dims = gc_dims
+        self.num_objects = dataset.hicodet.num_object_classes
+        self.num_predicates = dataset.hicodet.num_predicates
+
+        self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg')
+        pred_emb_sim = pred_word_embs @ pred_word_embs.T
+
+        # Normalised adjacency matrix
+        self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
+        adj = torch.eye(self.num_objects + self.num_predicates).float()
+        adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
+        adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
+        adj[self.num_objects:, self.num_objects:] = torch.from_numpy(pred_emb_sim)  # bottom right
+        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+
+        self.adj = nn.Parameter(adj, requires_grad=False)
+        self.adj_nv = nn.Parameter(adj[:self.num_objects, self.num_objects:], requires_grad=False)
+        self.adj_vv = nn.Parameter(adj[self.num_objects:, self.num_objects:], requires_grad=False)
+        self.adj_diag = nn.Parameter(adj.diag(), requires_grad=False)
+
+        # Starting representation
+        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(),
+                              requires_grad=True)
+
+        gc_layers = []
+        for i in range(num_gc_layers):
+            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
+            out_dim = gc_dims[i]
+            if i < num_gc_layers - 1:
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
+            else:
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+
+        self.gc_layers = nn.ModuleList(gc_layers)
+
+    @property
+    def output_dim(self):
+        raise self.gc_dims[-1]
+
+    def _forward(self, input_repr=None):
+        if input_repr is not None:
+            z = input_repr
+        else:
+            z = self.z
+        for gcl in self.gc_layers:
+            z = gcl(self.adj @ z)
+        obj_embs = z[:self.num_objects]
+        pred_embs = z[self.num_objects:]
+        return obj_embs, pred_embs
+
+
 class CheatHoiGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
         super().__init__(**kwargs)

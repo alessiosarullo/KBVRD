@@ -360,7 +360,10 @@ class ZSModel(ZSBaseModel):
         if cfg.model.oscore:
             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+        if cfg.model.vv:
+            self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+        else:
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
 
         if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
