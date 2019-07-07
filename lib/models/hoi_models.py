@@ -335,8 +335,13 @@ class ZSModel(ZSBaseModel):
         return 'zsgc'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 512
         super().__init__(dataset, **kwargs)
+        if cfg.model.large:
+            gcemb_dim = 2048
+            self.emb_dim = 512
+        else:
+            gcemb_dim = 1024
+            self.emb_dim = 200
 
         latent_dim = self.emb_dim
         input_dim = self.predictor_dim
@@ -361,10 +366,10 @@ class ZSModel(ZSBaseModel):
             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
         if cfg.model.vv:
-            self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
+            self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = self.gcn.word_embs
         else:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
 
         if cfg.model.aereg > 0:

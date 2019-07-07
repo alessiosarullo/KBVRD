@@ -231,6 +231,7 @@ class ModelConfig(BaseConfigs):
         self.softl = 0.0
         self.aereg = 0.0
         self.vv = False
+        self.large = False
 
         # Predict action or interaction?
         self.phoi = False
