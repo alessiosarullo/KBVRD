@@ -440,7 +440,7 @@ class ZSModel(ZSBaseModel):
             action_logits = action_logits + action_logits_from_obj_score
 
         if cfg.model.aereg > 0:
-            reg_loss = cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+            reg_loss = -cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
         else:
             reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
