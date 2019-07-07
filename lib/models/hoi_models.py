@@ -375,14 +375,13 @@ class ZSModel(ZSBaseModel):
         if cfg.model.aereg > 0:
             self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
                                                requires_grad=False)
-            self.emb_to_wemb = nn.Sequential(*[nn.Linear(latent_dim, latent_dim),
-                                               nn.ReLU(inplace=True),
-                                               # nn.Dropout(p=cfg.model.dropout),
-                                               nn.Linear(latent_dim, self.pred_word_embs.shape[1]),
-                                               # nn.ReLU(inplace=True),
-                                               # nn.Dropout(p=cfg.model.dropout),
-                                               # nn.Linear(800, input_dim),
-                                               ])
+            if cfg.model.regsmall:
+                self.emb_to_wemb = nn.Linear(latent_dim, self.pred_word_embs.shape[1])
+            else:
+                self.emb_to_wemb = nn.Sequential(*[nn.Linear(latent_dim, latent_dim),
+                                                   nn.ReLU(inplace=True),
+                                                   nn.Linear(latent_dim, self.pred_word_embs.shape[1]),
+                                                   ])
 
         op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates], dtype=np.float32)
         for _, p, o in dataset.hoi_triplets:

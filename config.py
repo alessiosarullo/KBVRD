@@ -229,7 +229,10 @@ class ModelConfig(BaseConfigs):
         self.oscore = False
         self.zsload = False
         self.softl = 0.0
+
         self.aereg = 0.0
+        self.regsmall = False
+
         self.vv = False
         self.large = False
 
