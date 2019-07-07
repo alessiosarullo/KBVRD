@@ -251,7 +251,7 @@ def hist():
 
     print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins]))
     for j in range(hds.hicodet.num_predicates):
-        print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in hist[j]]))
+        print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in h[j]]))
 
 
 def stats():
