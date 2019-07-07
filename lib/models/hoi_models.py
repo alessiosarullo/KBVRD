@@ -368,7 +368,8 @@ class ZSModel(ZSBaseModel):
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
 
         if cfg.model.aereg > 0:
-            self.pred_word_embs = nn.Parameter(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg'), requires_grad=False)
+            self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
+                                               requires_grad=False)
             self.emb_to_wemb = nn.Sequential(*[nn.Linear(latent_dim, latent_dim),
                                                nn.ReLU(inplace=True),
                                                # nn.Dropout(p=cfg.model.dropout),
