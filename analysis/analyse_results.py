@@ -247,11 +247,12 @@ def hist():
             preds.append(prediction.action_scores)
 
     preds = np.concatenate(preds, axis=0)
-    h, bins = np.histogram(preds[:, 0], bins=11)
+    bins = np.arange(11) / 10
+    h, bins = np.histogram(preds[:, 0], bins=bins)
 
-    print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins]))
+    print(' ' * 20, ' '.join([f'<{x:5.1f}' for x in bins[1:]]))
     for j in range(hds.hicodet.num_predicates):
-        h, bins = np.histogram(preds[:, j], bins=11)
+        h, bins = np.histogram(preds[:, j], bins=bins)
         print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in h]))
 
 
