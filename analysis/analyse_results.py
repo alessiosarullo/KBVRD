@@ -247,7 +247,9 @@ def hist():
             h, bins = np.histogram(prediction.action_scores, bins=11)
             hist += h
 
-    for j
+    print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins]))
+    for j in range(hds.hicodet.num_predicates):
+        print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in hist[j]]))
 
 
 def stats():
