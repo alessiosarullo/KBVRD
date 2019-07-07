@@ -362,8 +362,21 @@ class ZSModel(ZSBaseModel):
 
         if cfg.model.vv:
             self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
+            word_embs = self.gcn.word_embs
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=2048, gc_dims=(1024, self.emb_dim))
+            word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+
+        if cfg.model.aereg > 0:
+            self.pred_word_embs = nn.Parameter(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg'), requires_grad=False)
+            self.emb_to_wemb = nn.Sequential(*[nn.Linear(latent_dim, latent_dim),
+                                               nn.ReLU(inplace=True),
+                                               # nn.Dropout(p=cfg.model.dropout),
+                                               nn.Linear(latent_dim, self.pred_word_embs.shape[1]),
+                                               # nn.ReLU(inplace=True),
+                                               # nn.Dropout(p=cfg.model.dropout),
+                                               # nn.Linear(800, input_dim),
+                                               ])
 
         op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates], dtype=np.float32)
         for _, p, o in dataset.hoi_triplets:
@@ -424,7 +437,10 @@ class ZSModel(ZSBaseModel):
                 action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
             action_logits = action_logits + action_logits_from_obj_score
 
-        reg_loss = None
+        if cfg.model.aereg > 0:
+            reg_loss = cfg.model.aereg * (F.normalize(self.emb_to_wemb(class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+        else:
+            reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
