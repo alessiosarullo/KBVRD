@@ -246,7 +246,7 @@ def hist():
         if prediction.ho_pairs is not None:
             preds.append(prediction.action_scores)
 
-    preds = np.stack(preds, axis=0)
+    preds = np.concatenate(preds, axis=0)
     h, bins = np.histogram(preds, bins=11)
 
     print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins]))
