@@ -397,14 +397,15 @@ class ZSModel(ZSBaseModel):
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
 
-        _, class_embs = self.gcn()  # P x E
+        _, all_class_embs = self.gcn()  # P x E
+        class_embs = all_class_embs
         action_labels = vis_output.action_labels
         unseen_action_labels = None
         if action_labels is not None:
             if cfg.model.softl > 0:
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
-                class_embs = class_embs[self.seen_pred_inds, :]  # P x E
+                class_embs = all_class_embs[self.seen_pred_inds, :]  # P x E
 
         if cfg.model.attw:
             instance_params = self.vrepr_to_emb(vrepr)
@@ -439,7 +440,7 @@ class ZSModel(ZSBaseModel):
             action_logits = action_logits + action_logits_from_obj_score
 
         if cfg.model.aereg > 0:
-            reg_loss = cfg.model.aereg * (F.normalize(self.emb_to_wemb(class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+            reg_loss = cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
         else:
             reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels

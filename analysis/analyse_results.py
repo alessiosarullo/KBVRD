@@ -230,18 +230,47 @@ def evaluate():
     # evaluator.output_metrics(sort=True, actions_to_keep=list(set(range(117)) - {84}))
     # evaluator.output_metrics(sort=True, actions_to_keep=list(range(117)))
 
-    predict_hoi_scores = np.concatenate(evaluator.predict_hoi_scores, axis=0)
-    hoi_hist, bins = np.histogram(predict_hoi_scores, bins=11)
-    print(bins)
-    interactions_to_preds = np.zeros((hds.hicodetnum_interactions, hds.hicodet.num_predicates))
-    interactions_to_preds[np.arange(hds.hicodet.num_interactions), hds.hicodet.interactions[:, 0]] = 1
-    act_hist = hoi_hist @ interactions_to_preds
-    for j in range(hds.hicodet.num_predicates):
-        print(' '.join([act_hist[:, j]]))
+    # predict_hoi_scores = np.concatenate(evaluator.predict_hoi_scores, axis=0)
+    # hoi_hists, bins = zip(*[np.histogram(predict_j, bins=11) for predict_j in predict_hoi_scores.T])
+    # hoi_hist = np.stack(hoi_hists, axis=1)
+    # assert all([np.all(b == bins[0]) for b in bins[1:]])
+    # bins = bins[0]
+    # print(bins)
+    # interactions_to_preds = np.zeros((hds.hicodetnum_interactions, hds.hicodet.num_predicates))
+    # interactions_to_preds[np.arange(hds.hicodet.num_interactions), hds.hicodet.interactions[:, 0]] = 1
+    # act_hist = hoi_hist @ interactions_to_preds
+    # for j in range(hds.hicodet.num_predicates):
+    #     print(' '.join([act_hist[:, j]]))
 
     # stats = Evaluator_HD.evaluate_predictions(hds, results)
     # stats.print_metrics(sort=True)
     # Timer.print()
+
+
+def hist():
+    results = _setup_and_load()
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+
+    # evaluator.evaluate_predictions(results)
+    evaluator.load(cfg.program.eval_res_file)
+
+    evaluator.output_metrics(sort=True, actions_to_keep=[1, 2, 84])
+    # evaluator.output_metrics(sort=True, actions_to_keep=list(set(range(117)) - {84}))
+    # evaluator.output_metrics(sort=True, actions_to_keep=list(range(117)))
+
+    # predict_hoi_scores = np.concatenate(evaluator.predict_hoi_scores, axis=0)
+    # hoi_hists, bins = zip(*[np.histogram(predict_j, bins=11) for predict_j in predict_hoi_scores.T])
+    # hoi_hist = np.stack(hoi_hists, axis=1)
+    # assert all([np.all(b == bins[0]) for b in bins[1:]])
+    # bins = bins[0]
+    # print(bins)
+    # interactions_to_preds = np.zeros((hds.hicodetnum_interactions, hds.hicodet.num_predicates))
+    # interactions_to_preds[np.arange(hds.hicodet.num_interactions), hds.hicodet.interactions[:, 0]] = 1
+    # act_hist = hoi_hist @ interactions_to_preds
+    # for j in range(hds.hicodet.num_predicates):
+    #     print(' '.join([act_hist[:, j]]))
+
 
 
 def stats():
@@ -448,6 +477,7 @@ def main():
     funcs = {'vis': visualise_images,
              'stats': stats,
              'eval': evaluate,
+             'hist': hist,
              }
     print(sys.argv)
     parser = argparse.ArgumentParser()
