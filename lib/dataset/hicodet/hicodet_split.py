@@ -134,7 +134,7 @@ class HicoDetSplit(Dataset):
         assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hicodet.objects)
         self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.objects], dtype=np.int)
 
-        # Compute HOI triplets. Each is [human, interaction, object].
+        # Compute HOI triplets. Each is [human, action, object].
         hoi_triplets = []
         for im_data in self._data:
             box_classes, inters = im_data.box_classes, im_data.hois

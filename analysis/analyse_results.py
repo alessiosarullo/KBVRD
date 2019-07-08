@@ -4,6 +4,8 @@ import pickle
 import sys
 from typing import List, Dict
 
+from collections import Counter
+
 import cv2
 import matplotlib
 import numpy as np
@@ -23,7 +25,8 @@ try:
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
+    sys.argv[1:] = ['hist', '--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
@@ -239,27 +242,27 @@ def hist():
     predictions = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
-    bins = np.arange(11) / 10
-    preds = []
+    num_bins = 20
+    bins = np.arange(num_bins + 1) / num_bins
     pred_hist = np.zeros((bins.size, hds.num_predicates), dtype=np.int)
 
     for i, res in enumerate(predictions):
         prediction = Prediction(res)
         if prediction.ho_pairs is not None:
             act_scores = prediction.action_scores
-            preds.append(act_scores)
-            hist_inds = np.floor(act_scores * (pred_hist.shape[0] - 1)).astype(np.int)
-            pred_hist[hist_inds, np.arange(pred_hist.shape[1])] += 1
+            for row in act_scores:
+                hist_inds = np.floor(row * num_bins).astype(np.int)
+                pred_hist[hist_inds, np.arange(pred_hist.shape[1])] += 1
     pred_hist[-2, :] += pred_hist[-1, :]
     pred_hist = pred_hist[:-1, :]
 
-    preds = np.concatenate(preds, axis=0)
+    num_gt = Counter(hds.hoi_triplets[:, 1])
 
-    print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins[1:]]))
+    print(' ' * 20, ' '.join([f'{x:6.2f}' for x in bins[1:]]), '|', '{:>6s}'.format(f'>{bins[1]}'), '|', f'{"#GT":>6s}')
     for j in range(hds.hicodet.num_predicates):
-        h, bins = np.histogram(preds[:, j], bins=bins)
-        assert np.all(pred_hist[:, j] == h)
-        print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in h]))
+        h = pred_hist[:, j]
+        p = hds.hicodet.predicates[j]
+        print(f'{p:20s}', ' '.join([f'{x:6d}' for x in h]), '|', f'{np.sum(h[1:]):6d}', '|', f'{num_gt[j]:6d}')
 
 
 def stats():
