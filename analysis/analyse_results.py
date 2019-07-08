@@ -241,15 +241,17 @@ def hist():
 
     bins = np.arange(11) / 10
     preds = []
-    pred_hist = np.zeros((bins.size - 1, hds.num_predicates))
+    pred_hist = np.zeros((bins.size, hds.num_predicates))
 
     for i, res in enumerate(predictions):
         prediction = Prediction(res)
         if prediction.ho_pairs is not None:
             act_scores = prediction.action_scores
             preds.append(act_scores)
-            hist_inds = np.floor(act_scores * pred_hist.shape[0]).astype(np.int)
+            hist_inds = np.floor(act_scores * (pred_hist.shape[0] - 1)).astype(np.int)
             pred_hist[hist_inds, np.arange(pred_hist.shape[1])] = act_scores
+    pred_hist[-2, :] += pred_hist[-1, :]
+    pred_hist = pred_hist[:-1, :]
 
     preds = np.concatenate(preds, axis=0)
     h, bins = np.histogram(preds[:, 0], bins=bins)
