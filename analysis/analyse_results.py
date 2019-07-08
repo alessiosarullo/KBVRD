@@ -241,7 +241,7 @@ def hist():
 
     bins = np.arange(11) / 10
     preds = []
-    pred_hist = np.zeros((bins.size, hds.num_predicates))
+    pred_hist = np.zeros((bins.size, hds.num_predicates), dtype=np.int)
 
     for i, res in enumerate(predictions):
         prediction = Prediction(res)
@@ -249,7 +249,7 @@ def hist():
             act_scores = prediction.action_scores
             preds.append(act_scores)
             hist_inds = np.floor(act_scores * (pred_hist.shape[0] - 1)).astype(np.int)
-            pred_hist[hist_inds, np.arange(pred_hist.shape[1])] = act_scores
+            pred_hist[hist_inds, np.arange(pred_hist.shape[1])] += 1
     pred_hist[-2, :] += pred_hist[-1, :]
     pred_hist = pred_hist[:-1, :]
 
