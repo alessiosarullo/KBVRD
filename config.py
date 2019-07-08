@@ -219,11 +219,13 @@ class ModelConfig(BaseConfigs):
         self.hum_thr = 0.7
         self.obj_thr = 0.3
 
-        self.proposal_thr = 0.
-
         self.dropout = 0.5
         self.repr_dim = 1024
 
+        # BG
+        self.filter = False
+
+        # ZS
         self.attw = False
         self.oprior = False
         self.oscore = False
@@ -233,6 +235,7 @@ class ModelConfig(BaseConfigs):
         self.aereg = 0.0
         self.regsmall = False
 
+        # ZS GCN
         self.vv = False
         self.large = False
 

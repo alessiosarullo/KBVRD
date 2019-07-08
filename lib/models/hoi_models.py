@@ -159,12 +159,19 @@ class BGFilter(BaseModel):
                         action_scores = torch.sigmoid(action_output).cpu().numpy()
                         bg_scores = torch.sigmoid(bg_output).squeeze(dim=1).cpu().numpy()
                         action_scores[:, 0] = bg_scores
-                        keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
 
-                        if np.any(keep):
-                            prediction.ho_img_inds = vis_output.ho_infos_np[keep, 0]
-                            prediction.ho_pairs = vis_output.ho_infos_np[keep, 1:]
-                            prediction.action_scores = action_scores[keep, :]
+                        if cfg.model.filter:
+                            keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
+
+                            if np.any(keep):
+                                prediction.ho_img_inds = vis_output.ho_infos_np[keep, 0]
+                                prediction.ho_pairs = vis_output.ho_infos_np[keep, 1:]
+                                prediction.action_scores = action_scores[keep, :]
+                        else:
+                            action_scores[:, 1:] *= (1 - bg_scores[:, None])
+                            prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
+                            prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
+                            prediction.action_scores = action_scores
 
                 return prediction
 

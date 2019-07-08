@@ -22,11 +22,12 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
-    sys.argv[1:] = ['hist', '--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10/']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
@@ -51,9 +52,16 @@ class Analyser:
         self.act_conf_mat = np.zeros((self.dataset.num_predicates, self.dataset.num_predicates))
 
         self.gt_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
-        self.pred_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
-        self.gt_spatial_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
-        self.gt_candidate_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
+        self.gt_spatial_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))  # overlap
+        self.gt_candidate_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))  # overlap + object
+
+        self.pred_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))  # candidate + > pred thr + best match
+
+        self.ph_num_bins = 20
+        self.ph_bins = np.arange(self.ph_num_bins + 1) / self.ph_num_bins
+        self.pred_act_hist = np.zeros((self.ph_bins.size, self.dataset.num_predicates), dtype=np.int)  # just predicted
+        self.pred_best_match_act_hist = np.zeros((self.ph_bins.size, self.dataset.num_predicates), dtype=np.int)  # candidate + best match
+
         self.num_gt = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
         self.num_pred = np.zeros((self.dataset.num_object_classes, self.dataset.num_predicates))
 
@@ -66,6 +74,12 @@ class Analyser:
             self.process_prediction(i, ex, prediction)
 
         self.act_conf_mat /= np.maximum(1, self.act_conf_mat.sum(axis=1, keepdims=True))
+
+        self.pred_act_hist[-2, :] += self.pred_act_hist[-1, :]
+        self.pred_act_hist = self.pred_act_hist[:-1, :]
+
+        self.pred_best_match_act_hist[-2, :] += self.pred_best_match_act_hist[-1, :]
+        self.pred_best_match_act_hist = self.pred_best_match_act_hist[:-1, :]
 
     def process_prediction(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
@@ -109,6 +123,7 @@ class Analyser:
         #################################################################################
 
         # First, find predictions that 1) match spatially with GT and 2) classify the object correctly.
+        arange_act = np.arange(self.dataset.num_predicates)
         pred_gt_spatial_matches = np.zeros((num_predictions, num_gt_hois), dtype=bool)
         pred_gt_candidate_matches = np.zeros((num_predictions, num_gt_hois))
         for predict_idx, (ph_ind, po_ind) in enumerate(predict_ho_pairs):
@@ -125,7 +140,10 @@ class Analyser:
             pred_gt_spatial_matches[predict_idx, spatial_matches] = 1
             pred_gt_candidate_matches[predict_idx, matches] = gt_pair_ious[matches]
 
-            self.num_pred[po, predict_action_scores[predict_idx, :] >= self.hoi_score_thr] += 1
+            act_scores = predict_action_scores[predict_idx, :]
+            self.num_pred[po, act_scores >= self.hoi_score_thr] += 1
+            hist_inds = np.floor(act_scores * self.ph_num_bins).astype(np.int)
+            self.pred_act_hist[hist_inds, arange_act] += 1
 
         # Then decide which action predictions are hits. For each pair, an action is considered predicted if the assigned score satisfies some
         # criterion (e.g., is greater than a certain threshold). An action prediction is a hit if there is a matching GT (in the sense defined above)
@@ -148,7 +166,9 @@ class Analyser:
 
                 best_match = np.argmax(pred_candidate_ious)
                 best_match_for_gt[gtidx] = best_match
-                if predict_action_scores[best_match, ga] >= self.hoi_score_thr:
+                best_match_score = predict_action_scores[best_match, ga]
+                self.pred_best_match_act_hist[int(best_match_score * self.ph_num_bins), ga] += 1
+                if best_match_score >= self.hoi_score_thr:
                     hits[best_match, ga] += 1
                     self.gt_matches[go, ga] += 1
                     self.act_conf_mat[ga, ga] += 1
@@ -238,34 +258,99 @@ def evaluate():
     # Timer.print()
 
 
-def hist():
-    predictions = _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-
-    num_bins = 20
-    bins = np.arange(num_bins + 1) / num_bins
-    pred_hist = np.zeros((bins.size, hds.num_predicates), dtype=np.int)
-
-    for i, res in enumerate(predictions):
-        prediction = Prediction(res)
-        if prediction.ho_pairs is not None:
-            act_scores = prediction.action_scores
-            for row in act_scores:
-                hist_inds = np.floor(row * num_bins).astype(np.int)
-                pred_hist[hist_inds, np.arange(pred_hist.shape[1])] += 1
-    pred_hist[-2, :] += pred_hist[-1, :]
-    pred_hist = pred_hist[:-1, :]
-
-    num_gt = Counter(hds.hoi_triplets[:, 1])
-
-    print(' ' * 20, ' '.join([f'{x:6.2f}' for x in bins[1:]]), '|', '{:>6s}'.format(f'>{bins[1]}'), '|', f'{"#GT":>6s}')
-    for j in range(hds.hicodet.num_predicates):
-        h = pred_hist[:, j]
-        p = hds.hicodet.predicates[j]
-        print(f'{p:20s}', ' '.join([f'{x:6d}' for x in h]), '|', f'{np.sum(h[1:]):6d}', '|', f'{num_gt[j]:6d}')
-
-
 def stats():
+    results = _setup_and_load()
+    res_save_path = cfg.program.res_stats_path
+    os.makedirs(res_save_path, exist_ok=True)
+
+    hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
+    hicodet = hdtrain.hicodet
+
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+
+    cache_fn = os.path.join(res_save_path, 'cache.pkl')
+    try:
+        with open(cache_fn, 'rb') as f:
+            analyser = pickle.load(f)
+        print('Loaded')
+    except FileNotFoundError:
+        analyser = Analyser(dataset=hdtest)
+        analyser.compute_stats(results)
+        with open(cache_fn, 'wb') as f:
+            pickle.dump(analyser, f)
+        print('Saved')
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        num_gt, num_pred = analyser.num_gt, analyser.num_pred
+        recall = analyser.gt_matches / num_gt
+        precision = analyser.pred_matches / num_pred
+        obj_hit_recall = analyser.gt_candidate_matches / num_gt
+        spatial_match_recall = analyser.gt_spatial_matches / num_gt
+        act_conf_mat = analyser.act_conf_mat
+
+    obj_inds = np.argsort(num_gt.sum(axis=1))[::-1]
+    s_objects = [hdtest.objects[i] for i in obj_inds]
+    pred_inds = (np.argsort(num_gt.sum(axis=0)[1:])[::-1] + 1).tolist() + [0]  # no_interaction at the end
+    s_predicates = [hdtest.predicates[i] for i in pred_inds]
+
+    num_gt_act = np.sum(num_gt, axis=0).astype(np.int)
+    print(' ' * 20,
+          ' '.join([f'{x:6.2f}{"":7s}' for x in analyser.ph_bins[1:]]),
+          '|', '{:>25s}'.format(f'>{analyser.ph_bins[1]}'),
+          '|', f'{"#GT":>6s}')
+    for j in range(hicodet.num_predicates):
+        pred_hist = analyser.pred_act_hist[:, j]
+        pred_match_hist = analyser.pred_best_match_act_hist[:, j]
+        sum_p = np.sum(pred_hist[1:])
+        sum_m = np.sum(pred_match_hist[1:])
+        n_gt = num_gt_act[j]
+        assert np.all(pred_match_hist[pred_hist == 0] == 0)
+        print(f'{hicodet.predicates[j]:20s}',
+              ' '.join([f'{p:6d} ({"{:3.0f}%".format(100 * m / p) if p > 0 else "":>4s})' for p, m in zip(pred_hist, pred_match_hist)]),
+              '|', f'{sum_p:6d} (p: {"{:3.0f}%".format(100 * sum_m / sum_p) if sum_p > 0 else "":>4s}, r: {100 * sum_m / n_gt:3.0f}%)',
+              '|', f'{n_gt:6d}')
+
+    exit(0)  # FIXME
+
+    print(np.mean(recall[num_gt > 0]))
+
+    out_of_gt_preds = (num_gt == 0).astype(np.float) * num_pred
+    out_of_gt_preds[out_of_gt_preds == 0] = np.inf
+    plot_mat(out_of_gt_preds, hdtest.predicates, hdtest.objects, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'out_of_gt.png'), dpi=300)
+    out_of_gt_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], out_of_gt_preds[o, p])
+                               for p, o in np.stack(np.where(~np.isinf(out_of_gt_preds.T)), axis=1)])
+    print()
+    print('#' * 100, '\n')
+    # print('#' * 30, 'Out of GT', '#' * 30, '\n')
+    # print(out_of_gt_str)
+    with open(os.path.join(res_save_path, 'out_of_gt.txt'), 'w') as f:
+        f.write(out_of_gt_str)
+
+    confmat = act_conf_mat[pred_inds, :][:, pred_inds]
+    confmat[confmat == 0] = np.inf
+    plot_mat(confmat, s_predicates, s_predicates, x_inds=pred_inds, y_inds=pred_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'conf_mat.png'), dpi=300)
+
+    plot_mat(precision[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_prec.png'), dpi=300)
+
+    plot_mat(recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_recall.png'), dpi=300)
+
+    plot_mat(obj_hit_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_obj_hit_recall.png'), dpi=300)
+
+    plot_mat(spatial_match_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_spatial_match_recall.png'), dpi=300)
+
+    plot_mat((1 - recall)[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'oa_misses.png'), dpi=300)
+
+    # plt.show()
+
+
+def zs_stats():
     results = _setup_and_load()
     res_save_path = cfg.program.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
@@ -312,16 +397,12 @@ def stats():
     num_gt, num_pred = analyser.num_gt, analyser.num_pred
     recall = analyser.gt_matches / num_gt
     precision = analyser.pred_matches / num_pred
-    obj_hit_recall = analyser.gt_candidate_matches / num_gt
-    spatial_match_recall = analyser.gt_spatial_matches / num_gt
     act_conf_mat = analyser.act_conf_mat
 
     obj_inds = np.argsort(num_gt.sum(axis=1))[::-1]
     s_objects = [hdtest.objects[i] for i in obj_inds]
     pred_inds = (np.argsort(num_gt.sum(axis=0)[1:])[::-1] + 1).tolist() + [0]  # no_interaction at the end
     s_predicates = [hdtest.predicates[i] for i in pred_inds]
-
-    print(np.mean(recall[num_gt > 0]))
 
     zero_shot_preds = np.full_like(num_pred, fill_value=np.inf)
     zero_shot_preds[seen_interactions] = -1
@@ -370,44 +451,10 @@ def stats():
     print('#' * 30, 'Zero shot co-occurrences matrix', '#' * 30, '\n')
     print(zero_shot_coocc_str)
 
-    plot_mat(precision[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_prec.png'), dpi=300)
     plot_mat(precision[obj_inds, :][:, unseen_pred_inds].T, s_objects, zs_predicates, x_inds=obj_inds, y_inds=unseen_pred_inds, plot=False)
     plt.savefig(os.path.join(res_save_path, 'zs_ao_prec.png'), dpi=300)
     plot_mat(recall[obj_inds, :][:, unseen_pred_inds].T, s_objects, zs_predicates, x_inds=obj_inds, y_inds=unseen_pred_inds, plot=False)
     plt.savefig(os.path.join(res_save_path, 'zs_ao_rec.png'), dpi=300)
-
-    # exit(0)  # FIXME
-
-    out_of_gt_preds = (num_gt == 0).astype(np.float) * num_pred
-    out_of_gt_preds[out_of_gt_preds == 0] = np.inf
-    plot_mat(out_of_gt_preds, hdtest.predicates, hdtest.objects, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'out_of_gt.png'), dpi=300)
-    out_of_gt_str = '\n'.join(['%-20s %-20s %d' % (hdtest.predicates[p], hdtest.objects[o], out_of_gt_preds[o, p])
-                               for p, o in np.stack(np.where(~np.isinf(out_of_gt_preds.T)), axis=1)])
-    print()
-    print('#' * 100, '\n')
-    # print('#' * 30, 'Out of GT', '#' * 30, '\n')
-    # print(out_of_gt_str)
-    with open(os.path.join(res_save_path, 'out_of_gt.txt'), 'w') as f:
-        f.write(out_of_gt_str)
-
-    confmat = act_conf_mat[pred_inds, :][:, pred_inds]
-    confmat[confmat == 0] = np.inf
-    plot_mat(confmat, s_predicates, s_predicates, x_inds=pred_inds, y_inds=pred_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'conf_mat.png'), dpi=300)
-
-    plot_mat(recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_recall.png'), dpi=300)
-
-    plot_mat(obj_hit_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_obj_hit_recall.png'), dpi=300)
-
-    plot_mat(spatial_match_recall[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_spatial_match_recall.png'), dpi=300)
-
-    plot_mat((1 - recall)[obj_inds, :][:, pred_inds], s_predicates, s_objects, x_inds=pred_inds, y_inds=obj_inds, plot=False)
-    plt.savefig(os.path.join(res_save_path, 'oa_misses.png'), dpi=300)
 
     # plt.show()
 
@@ -468,8 +515,8 @@ def visualise_images():
 def main():
     funcs = {'vis': visualise_images,
              'stats': stats,
+             'zs': zs_stats,
              'eval': evaluate,
-             'hist': hist,
              }
     print(sys.argv)
     parser = argparse.ArgumentParser()
