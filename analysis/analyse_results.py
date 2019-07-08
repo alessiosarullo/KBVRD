@@ -254,12 +254,11 @@ def hist():
     pred_hist = pred_hist[:-1, :]
 
     preds = np.concatenate(preds, axis=0)
-    h, bins = np.histogram(preds[:, 0], bins=bins)
-    assert np.all(pred_hist == h)
 
     print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins[1:]]))
     for j in range(hds.hicodet.num_predicates):
         h, bins = np.histogram(preds[:, j], bins=bins)
+        assert np.all(pred_hist[:, j] == h)
         print(f'{hds.hicodet.predicates[j]:20s}', ' '.join([f'{x:6d}' for x in h]))
 
 
