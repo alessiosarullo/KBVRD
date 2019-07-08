@@ -239,16 +239,21 @@ def hist():
     predictions = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
+    bins = np.arange(11) / 10
     preds = []
+    pred_hist = np.zeros((bins.size - 1, hds.num_predicates))
 
     for i, res in enumerate(predictions):
         prediction = Prediction(res)
         if prediction.ho_pairs is not None:
-            preds.append(prediction.action_scores)
+            act_scores = prediction.action_scores
+            preds.append(act_scores)
+            hist_inds = np.floor(act_scores * pred_hist.shape[0]).astype(np.int)
+            pred_hist[hist_inds, np.arange(pred_hist.shape[1])] = act_scores
 
     preds = np.concatenate(preds, axis=0)
-    bins = np.arange(11) / 10
     h, bins = np.histogram(preds[:, 0], bins=bins)
+    assert np.all(pred_hist == h)
 
     print(' ' * 20, ' '.join([f'{x:6.1f}' for x in bins[1:]]))
     for j in range(hds.hicodet.num_predicates):
