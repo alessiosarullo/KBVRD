@@ -102,7 +102,7 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def output_metrics(self, sort=False, actions_to_keep=None):
+    def output_metrics(self, sort=False, actions_to_keep=None, return_labels=False):
         mf = MetricFormatter()
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
@@ -136,7 +136,9 @@ class Evaluator(BaseEvaluator):
                                                                                   keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
-        return obj_metrics, hoi_metrics, self.dataset_split.obj_labels, gt_hoi_labels
+        if return_labels:
+            return obj_metrics, hoi_metrics, self.dataset_split.obj_labels, gt_hoi_labels
+        return obj_metrics, hoi_metrics
 
     def filter_actions(self, gt_hoi_labels, actions_to_keep):
         if actions_to_keep is not None:

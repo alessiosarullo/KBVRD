@@ -265,7 +265,7 @@ def compare():
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.program.eval_res_file)
-    obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True)
+    obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True, return_labels=True)
 
     print('=' * 100, '\n')
 
@@ -274,7 +274,7 @@ def compare():
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.program.eval_res_file)
-    obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True)
+    obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True, return_labels=True)
 
     print('=' * 100, '\n')
 
