@@ -136,6 +136,9 @@ class Evaluator(BaseEvaluator):
                                                                                   keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
+        for k, v in pos_hoi_metrics.items():
+            assert k not in hoi_metrics.keys()
+            hoi_metrics[k] = v
         if return_labels:
             return obj_metrics, hoi_metrics, self.dataset_split.obj_labels, gt_hoi_labels
         return obj_metrics, hoi_metrics

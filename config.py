@@ -170,6 +170,9 @@ class DataConfig(BaseConfigs):
         self.im_scale = None
         self.im_max_size = None
 
+        self.filter_bg_only = True
+        self.null_as_bg = True
+
         self.num_images = 0  # restrict the dataset to this number of images if > 0
         self.val_ratio = 0.1
         self.prinds = ''  # restrict the dataset to these predicates if not empty

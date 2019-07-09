@@ -121,17 +121,21 @@ class BGFilter(BaseModel):
 
             if not inference:
                 action_labels = vis_output.action_labels
-                margin_target = action_labels[:, 0]
+                if cfg.data.null_as_bg:
+                    bg_label = action_labels[:, 0]
+                    max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0]).detach()
+                    act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
+                else:
+                    bg_label = 1 - action_labels.any(dim=1)
+                    max_fg_score = torch.sigmoid((action_output * action_labels).max(dim=1)[0]).detach()
+                    act_loss = F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
 
-                bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
-                max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0]).detach()
-
-                act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
                 losses = {'action_loss': act_loss}
                 if cfg.opt.margin > 0:
-                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * margin_target - 1, margin=cfg.opt.margin, reduction='none').mean()
+                    bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
+                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * bg_label - 1, margin=cfg.opt.margin, reduction='none').mean()
                 else:
-                    bg_loss = F.binary_cross_entropy_with_logits(bg_output, action_labels[:, :1])
+                    bg_loss = F.binary_cross_entropy_with_logits(bg_output, bg_label[:, None])
                 losses['bg_loss'] = cfg.opt.bg_coeff * bg_loss
                 return losses
             else:
@@ -379,10 +383,11 @@ class ZSModel(ZSBaseModel):
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
+                                           requires_grad=False)
+        self.pred_emb_sim = self.pred_word_embs @ self.pred_word_embs.t()
 
         if cfg.model.aereg > 0:
-            self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
-                                               requires_grad=False)
             if cfg.model.regsmall:
                 self.emb_to_wemb = nn.Linear(latent_dim, self.pred_word_embs.shape[1])
             else:
@@ -399,11 +404,18 @@ class ZSModel(ZSBaseModel):
 
         if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+
+    def LIS(self, x):
+        T, w, k = 8.4, 10, 12  # as in the paper
+        return T * torch.sigmoid(w * x - k)
 
     def get_soft_labels(self, vis_output: VisualOutput):
-        unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
+        # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
         # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+        unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * \
+                               torch.sigmoid(vis_output.action_labels @ self.pred_emb_sim)
         return unseen_action_labels.detach()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):

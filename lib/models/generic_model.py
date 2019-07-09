@@ -97,11 +97,9 @@ class GenericModel(AbstractModel):
 
             if not inference:
                 if cfg.model.phoi:
-                    hoi_labels = vis_output.hoi_labels
-                    losses = {'hoi_loss': self.bce_loss(output, hoi_labels)}
+                    losses = {'hoi_loss': self.bce_loss(output, vis_output.hoi_labels)}
                 else:
-                    action_labels = vis_output.action_labels
-                    losses = {'action_loss': self.bce_loss(output, action_labels)}
+                    losses = {'action_loss': self.bce_loss(output, vis_output.action_labels)}
                 return losses
             else:
                 prediction = Prediction()

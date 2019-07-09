@@ -182,7 +182,7 @@ class VisualModule(nn.Module):
         return boxes_ext, box_labels
 
     def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False):
-        bg_ratio = cfg.opt.hoi_bg_ratio
+        bg_ratio = cfg.opt.hoi_bg_ratio + 1  # heuristic: add 1 to compensate for images that do not contain enough BG relations
 
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
@@ -216,10 +216,14 @@ class VisualModule(nn.Module):
                         if head_predict_ind != tail_predict_ind:
                             action_labels_i[head_predict_ind, tail_predict_ind, rel_id] = 1.0
 
-            ho_fg_mask = action_labels_i[:, :, 1:].any(axis=2)
-            assert not np.any(action_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
-            ho_bg_mask = ~ho_fg_mask
-            action_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
+            if cfg.data.null_as_bg:  # treat null action as negative/background
+                ho_fg_mask = action_labels_i[:, :, 1:].any(axis=2)
+                assert not np.any(action_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
+                ho_bg_mask = ~ho_fg_mask
+                action_labels_i[:, :, 0] = ho_bg_mask.astype(np.float)
+            else:  # null action is separate from background
+                ho_fg_mask = action_labels_i.any(axis=2)
+                ho_bg_mask = ~ho_fg_mask
 
             # Filter irrelevant BG relationships (i.e., those where the subject is not human or self-relations).
             non_human_box_inds_i = (predict_box_labels_i != self.dataset.human_class)
@@ -228,7 +232,7 @@ class VisualModule(nn.Module):
 
             ho_fg_pairs_i = np.stack(np.where(ho_fg_mask), axis=1)
             ho_bg_pairs_i = np.stack(np.where(ho_bg_mask), axis=1)
-            num_bg_to_sample = ho_fg_pairs_i.shape[0] * bg_ratio
+            num_bg_to_sample = max(ho_fg_pairs_i.shape[0], 1) * bg_ratio
             bg_inds = np.random.permutation(ho_bg_pairs_i.shape[0])[:num_bg_to_sample]
             if resample_bg and bg_inds.size < num_bg_to_sample:  # resample randomly to get to the chosen number
                 # FIXME this doesn't work

@@ -262,7 +262,7 @@ class HicoDetSplitBuilder:
             pred_inds = pred_inds or cfg.data.pred_inds
 
             split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
-                                                                             filter_empty_imgs=split == Splits.TRAIN)
+                                                                             filter_empty_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
             assert len(split_data) == len(image_ids)
 
             # Split train/val if needed
@@ -362,7 +362,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
         split_data = new_split_data
         num_old_images, num_new_images = len(image_ids), len(im_with_interactions)
         if num_new_images < num_old_images:
-            print('Images have been discarded due to not having visible interactions or only having background ones. '
+            print('Images have been discarded due to only having background interactions. '
                   'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
             image_ids = [image_ids[i] for i in im_with_interactions]
     assert len(split_data) == len(image_ids)
