@@ -28,7 +28,6 @@ def save_feats():
             print('Remote debugging failed.')
             raise
 
-
     train_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
     test_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     assert Splits.VAL not in HicoDetSplitBuilder.splits[HicoDetSplit]

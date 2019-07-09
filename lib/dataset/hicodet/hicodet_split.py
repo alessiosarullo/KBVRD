@@ -114,7 +114,7 @@ class HicoDetSplit(Dataset):
 
         reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
                                           reduced_object_index.get(self.hicodet.objects[o], -1)]
-                                 for p, o in self.hicodet.interactions])
+                                         for p, o in self.hicodet.interactions])
         self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
         self.active_interactions = np.array(sorted(set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}),
                                             dtype=np.int)
@@ -224,7 +224,8 @@ class HicoDetSplitBuilder:
                 cls.hicodet = HicoDet()
 
             split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
-                                                                             filter_empty_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
+                                                                             filter_empty_imgs=split == Splits.TRAIN,
+                                                                             filter_bg_only_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
             assert len(split_data) == len(image_ids)
 
             # Split train/val if needed
@@ -292,7 +293,7 @@ def remap_box_pairs(box_pairs, box_mask):
     return box_pairs
 
 
-def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs):
+def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs, filter_bg_only_imgs):
     split_data = hicodet.split_data[split]  # type: List[HicoDetImData]
     image_ids = list(range(len(split_data)))
 
@@ -353,17 +354,24 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs)
         final_pred_inds = sorted(pred_inds)
 
     # Filter images with only invisible or null interactions
-    if filter_empty_imgs:
+    if filter_empty_imgs or filter_bg_only_imgs:
         im_with_interactions, new_split_data = [], []
         for i, im_data in enumerate(split_data):
-            if np.any(im_data.hois[:, 1] != hicodet.predicate_index[hicodet.null_interaction]):
-                im_with_interactions.append(i)
-                new_split_data.append(im_data)
+            empty = im_data.boxes.size == 0
+            fg_hois = np.any(im_data.hois[:, 1] != hicodet.predicate_index[hicodet.null_interaction])
+            if filter_empty_imgs and empty:
+                continue
+            if filter_bg_only_imgs and ~fg_hois:
+                continue
+            im_with_interactions.append(i)
+            new_split_data.append(im_data)
         split_data = new_split_data
         num_old_images, num_new_images = len(image_ids), len(im_with_interactions)
         if num_new_images < num_old_images:
-            print('Images have been discarded due to only having background interactions. '
-                  'Image index has changed (from %d images to %d).' % (num_old_images, num_new_images))
+            print(f'Images have been discarded due to {"not having objects" if filter_empty_imgs else ""}'
+                  f'{" or " if filter_empty_imgs and filter_bg_only_imgs else ""}'
+                  f'{"only having background interactions" if filter_empty_imgs else ""}. '
+                  f'Image index has changed (from {num_old_images} images to {num_new_images}).')
             image_ids = [image_ids[i] for i in im_with_interactions]
     assert len(split_data) == len(image_ids)
     assert image_ids == sorted(image_ids)
