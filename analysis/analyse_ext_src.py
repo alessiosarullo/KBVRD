@@ -124,14 +124,14 @@ def plot_embedding_pp_sim():
 
     from tools.verb_graph import get_verb_similarity, get_synonyms
 
-    # # # Co-occurrences
-    # # co_occurrences = get_hd_co_occurrences()
-    # # np.save('tmp.npy', co_occurrences)
-    # co_occurrences = np.load('tmp.npy')
-    # assert np.all(co_occurrences[np.arange(dataset.num_predicates), np.arange(dataset.num_predicates)] == 0)
-    # pp_sim = co_occurrences / np.maximum(1, np.sum(co_occurrences, axis=1, keepdims=True))
-    # most_similar(pp_sim, dataset.predicates, filter_first=False)
-    # plot_mat(pp_sim, dataset.predicates, dataset.predicates, plot=False, bin_colours=True)
+    # # Co-occurrences
+    # co_occurrences = get_hd_co_occurrences()
+    # np.save('tmp.npy', co_occurrences)
+    co_occurrences = np.load('tmp.npy')
+    assert np.all(co_occurrences[np.arange(dataset.num_predicates), np.arange(dataset.num_predicates)] == 0)
+    pp_sim = co_occurrences / np.maximum(1, np.sum(co_occurrences, axis=1, keepdims=True))
+    most_similar(pp_sim, dataset.predicates, filter_first=False)
+    plot_mat(pp_sim, dataset.predicates, dataset.predicates, plot=False, bin_colours=True)
 
     # # # WordNet
     # hd = dataset.hicodet
