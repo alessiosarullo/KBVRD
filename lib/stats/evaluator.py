@@ -113,9 +113,9 @@ class Evaluator(BaseEvaluator):
         mf.format_metric_and_gt_lines(gt_obj_class_hist, obj_metrics, obj_class_inds, gt_str='GT objects')
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
-        gt_hoi_labels = self.hicodet.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
+        orig_gt_hoi_labels = self.hicodet.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        gt_hoi_labels, interactions_to_keep = self.filter_actions(gt_hoi_labels, actions_to_keep)
+        gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=hoi_metrics,
                                                                               gt_labels=gt_hoi_labels,
@@ -126,7 +126,7 @@ class Evaluator(BaseEvaluator):
 
         # Same, but with null interaction filtered
         actions_to_keep = sorted(set(actions_to_keep or range(self.hicodet.num_predicates)) - {0})
-        pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(gt_hoi_labels, actions_to_keep)
+        pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
         pos_hoi_metrics = {f'+{k}': v for k, v in hoi_metrics.items()}
         gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=pos_hoi_metrics,
