@@ -415,7 +415,7 @@ class ZSModel(ZSBaseModel):
         # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * \
-                               torch.sigmoid(vis_output.action_labels @ self.pred_emb_sim)
+                               torch.sigmoid(vis_output.action_labels @ self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds])
         return unseen_action_labels.detach()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
