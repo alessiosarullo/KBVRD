@@ -115,13 +115,7 @@ class Evaluator(BaseEvaluator):
         gt_hoi_triplets = self.dataset_split.hoi_triplets
         gt_hoi_labels = self.hicodet.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        interactions_to_keep = None
-        if actions_to_keep is not None:
-            act_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
-            act_mask[np.array(actions_to_keep).astype(np.int)] = True
-            interaction_mask = act_mask[self.hicodet.interactions[:, 0]]
-            gt_hoi_labels = gt_hoi_labels[interaction_mask[gt_hoi_labels]]
-            interactions_to_keep = set(np.flatnonzero(interaction_mask).tolist())
+        gt_hoi_labels, interactions_to_keep = self.filter_actions(gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=hoi_metrics,
                                                                               gt_labels=gt_hoi_labels,
@@ -130,7 +124,30 @@ class Evaluator(BaseEvaluator):
                                                                               keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
-        return obj_metrics, hoi_metrics
+        # Same, but with null interaction filtered
+        actions_to_keep = sorted(set(actions_to_keep or range(self.hicodet.num_predicates)) - {0})
+        pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(gt_hoi_labels, actions_to_keep)
+        assert np.all(pos_gt_hoi_labels >= 0)
+        pos_hoi_metrics = {f'+{k}': v for k, v in hoi_metrics.items()}
+        gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=pos_hoi_metrics,
+                                                                                  gt_labels=pos_gt_hoi_labels,
+                                                                                  all_classes=list(range(self.hicodet.num_interactions)),
+                                                                                  sort=sort,
+                                                                                  keep_inds=interactions_to_keep)
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+
+        return obj_metrics, hoi_metrics, self.dataset_split.obj_labels, gt_hoi_labels
+
+    def filter_actions(self, gt_hoi_labels, actions_to_keep):
+        if actions_to_keep is not None:
+            act_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
+            act_mask[np.array(actions_to_keep).astype(np.int)] = True
+            interaction_mask = act_mask[self.hicodet.interactions[:, 0]]
+            gt_hoi_labels = gt_hoi_labels[interaction_mask[gt_hoi_labels]]
+            interactions_to_keep = set(np.flatnonzero(interaction_mask).tolist())
+        else:
+            interactions_to_keep = None
+        return gt_hoi_labels, interactions_to_keep
 
     def match_prediction_to_gt(self, im_id, gt_entry: Example, prediction: Prediction):
         if isinstance(gt_entry, Example):
@@ -273,35 +290,38 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str, print_out=True):
-        num_gt_examples = sum(gt_label_hist.values())
-        pad = len(gt_str)
+    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str=None, print_out=True):
+        num_gt = sum(gt_label_hist.values())
+
+        pad = len(gt_str) if gt_str is not None else 0
         if metrics:
             pad = max(pad, max([len(k) for k in metrics.keys()]))
 
+        p = 2
         lines = []
         for k, v in metrics.items():
-            lines += [self.format_metric(k, v, pad)]
-        format_str = '%{}s %8s [%s]'.format(pad + 1)
-        lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join(['%5d ' % i for i in class_inds]))]
-        lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt_examples) for i in class_inds]))]
+            lines += [self.format_metric(k, v, pad, precision=p)]
+        format_str = '%{}s %{}s [%s]'.format(pad + 1, p + 8)
+        if gt_str is not None:
+            lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join([('%{:d}d '.format(p + 5)) % i for i in class_inds]))]
+            lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt, precision=p) for i in class_inds]))]
 
         if print_out:
             print('\n'.join(lines))
         return lines
 
-    def format_metric(self, metric_name, data, metric_str_len=None):
+    def format_metric(self, metric_name, data, metric_str_len=None, **kwargs):
         metric_str_len = metric_str_len or len(metric_name)
-        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x) for x in data]) if data.size > 1 else ''
-        f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data)), per_class_str)
+        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x, **kwargs) for x in data]) if data.size > 1 else ''
+        f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data), **kwargs), per_class_str)
         return f_str
 
     @staticmethod
     def _format_percentage(value, precision=2):
-        if value < 1:
-            if value > 0:
-                return ('%{}.{}f%%'.format(precision + 3, precision)) % (value * 100)
+        if -1 < value < 1:
+            if value != 0:
+                return ('% {}.{}f%%'.format(precision + 5, precision)) % (value * 100)
             else:
-                return ('%{}.{}f%%'.format(precision + 3, 0)) % (value * 100)
+                return ('% {}.{}f%%'.format(precision + 5, 0)) % (value * 100)
         else:
-            return ('%{}d%%'.format(precision + 3)) % 100
+            return ('% {}d%%'.format(precision + 5)) % (100 * np.sign(value))

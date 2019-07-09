@@ -16,14 +16,15 @@ from config import cfg
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example, Minibatch
 from lib.models.containers import Prediction
-from lib.stats.evaluator import Evaluator
+from lib.stats.evaluator import Evaluator, MetricFormatter
 from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10/']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
+    sys.argv[1:] = ['compare']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
@@ -258,6 +259,46 @@ def evaluate():
     # Timer.print()
 
 
+def compare():
+    sys.argv[1:] = ['--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
+    _setup_and_load()
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator.load(cfg.program.eval_res_file)
+    obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True)
+
+    print('=' * 100, '\n')
+
+    sys.argv[1:] = ['--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
+    _setup_and_load()
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator.load(cfg.program.eval_res_file)
+    obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True)
+
+    print('=' * 100, '\n')
+
+    assert np.all(gt_hoi_labels2 == gt_hoi_labels1)
+    c_hoi_metrics = {k: hoi_metrics2[k] - hoi_metrics1[k] for k in hoi_metrics2.keys()}
+    gt_hoi_class_hist, _, hoi_class_inds = evaluator.sort_and_filter(metrics=c_hoi_metrics,
+                                                                     gt_labels=gt_hoi_labels2,
+                                                                     all_classes=list(range(hds.hicodet.num_interactions)),
+                                                                     sort=True)
+
+    mf = MetricFormatter()
+    mf.format_metric_and_gt_lines(gt_hoi_class_hist, c_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+
+    print('=' * 100, '\n')
+
+    inds = np.argsort(c_hoi_metrics['M-mAP'])
+    c_hoi_metrics = {k: v[inds] for k, v in c_hoi_metrics.items()}
+    hoi_class_inds = [hoi_class_inds[i] for i in inds]
+    gt_hoi_class_hist = {i: gt_hoi_class_hist[i] for i in inds}
+    mf.format_metric_and_gt_lines(gt_hoi_class_hist, c_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+
+    # Timer.print()
+
+
 def stats():
     results = _setup_and_load()
     res_save_path = cfg.program.res_stats_path
@@ -306,7 +347,8 @@ def stats():
         n_gt = num_gt_act[j]
         assert np.all(pred_match_hist[pred_hist == 0] == 0)
         print(f'{hicodet.predicates[j]:20s}',
-              ' '.join([f'{p:6d} ({"{:3.0f}%".format(100 * m / p) if p > 0 else "":>4s})' for p, m in zip(pred_hist, pred_match_hist)]),
+              ' '.join([f'{p:6d} ({"{:3.0f}{:1s}".format(100 * m / p, "%" if m > 0 else "") if p > 0 else "":>4s})'
+                        for p, m in zip(pred_hist, pred_match_hist)]),
               '|', f'{sum_p:6d} (p: {"{:3.0f}%".format(100 * sum_m / sum_p) if sum_p > 0 else "":>4s}, r: {100 * sum_m / n_gt:3.0f}%)',
               '|', f'{n_gt:6d}')
 
@@ -517,6 +559,7 @@ def main():
              'stats': stats,
              'zs': zs_stats,
              'eval': evaluate,
+             'compare': compare,
              }
     print(sys.argv)
     parser = argparse.ArgumentParser()

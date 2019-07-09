@@ -161,7 +161,8 @@ class BGFilter(BaseModel):
                         action_scores[:, 0] = bg_scores
 
                         if cfg.model.filter:
-                            keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
+                            # keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
+                            keep = (bg_scores < 0.95)
 
                             if np.any(keep):
                                 prediction.ho_img_inds = vis_output.ho_infos_np[keep, 0]
