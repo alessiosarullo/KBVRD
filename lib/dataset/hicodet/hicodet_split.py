@@ -48,7 +48,7 @@ class Minibatch:
                                 'id': ex.id,
                                 'fn': ex.filename,
                                 'split': ex.split,
-                                'im_size': ex.img_size,  # this won't be changed
+                                'im_size': np.array(ex.img_size),  # this won't be changed
                                 'im_scale': ex.scale,
                                 }]
 
@@ -188,7 +188,7 @@ class HicoDetSplit(Dataset):
             raw_image = cv2.imread(os.path.join(self.img_dir, im_data.filename))
             img_h, img_w = raw_image.shape[:2]
             image, img_scale_factor = preprocess_img(raw_image)
-            img_size = (img_h, img_w)
+            img_size = [img_h, img_w]
 
             entry.image = image
             entry.img_size = img_size
