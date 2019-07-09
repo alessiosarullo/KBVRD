@@ -19,8 +19,8 @@ from lib.dataset.word_embeddings import WordEmbeddings
 
 try:
     matplotlib.use('Qt5Agg')
-    sys.argv[1:] = ['embop']
-    # sys.argv[1:] = ['embpp']
+    # sys.argv[1:] = ['embop']
+    sys.argv[1:] = ['embpp']
     # sys.argv[1:] = ['hois']
 except ImportError:
     pass
@@ -154,10 +154,8 @@ def plot_embedding_pp_sim():
     # # plot_mat(sim_mat, hd.predicates, hd.predicates, vrange=None, plot=False)
 
     # # GloVe word embeddings
-    word_emb_dim = 300
-    word_embs = WordEmbeddings(source='glove', dim=word_emb_dim)
-    pe = word_embs.get_embeddings(dataset.predicates)
-    pe /= np.linalg.norm(pe, axis=1, keepdims=True) + 1e-6
+    with open(os.path.join(cfg.program.cache_root, 'glove_300_norm_pred-avg.pkl'), 'rb') as f:
+        pe = pickle.load(f)
     pp_sim = np.sum(pe[:, None, :] * pe[None, :, :], axis=2)
     most_similar(pp_sim, dataset.predicates)
     plot_mat(pp_sim, dataset.predicates, dataset.predicates, plot=False, bin_colours=True)
@@ -198,7 +196,7 @@ def plot_embedding_pp_sim():
     # most_similar(pp_sim, dataset.predicates)
     # # plot_mat(pp_sim, dataset.predicates, dataset.predicates, plot=False, vrange=None, bin_colours=True)
 
-    # plt.show()
+    plt.show()
 
 
 def plot_feasible_hois():

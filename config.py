@@ -267,6 +267,7 @@ class OptimizerConfig(BaseConfigs):
         # Loss parameters
         self.margin = 0.0
         self.bg_coeff = 1.0
+        self.fl_gamma = 0.0  # gamma in focal loss
 
 
 class Configs:

@@ -42,16 +42,19 @@ class GenericModel(AbstractModel):
     def final_repr_dim(self):
         raise NotImplementedError()
 
-    # def focal_loss(self, logits, labels):
-    #     gamma = cfg.opt.gamma
-    #     s = logits
-    #     t = labels
-    #     m = s.clamp(min=0)  # m = max(s, 0)
-    #     x = (-s.abs()).exp()
-    #     z = ((s >= 0) == t.byte()).float()
-    #     loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
-    #     loss = loss_mat.mean() * self.dataset.num_predicates
-    #     return loss
+    def bce_loss(self, logits, labels):
+        if cfg.opt.fl_gamma != 0:  # Focal loss
+            gamma = cfg.opt.fl_gamma
+            s = logits
+            t = labels
+            m = s.clamp(min=0)  # m = max(s, 0)
+            x = (-s.abs()).exp()
+            z = ((s >= 0) == t.byte()).float()
+            loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
+            loss = loss_mat.mean() * loss_mat.shape[1]
+        else:  # standard BCE loss
+            loss = F.binary_cross_entropy_with_logits(logits, labels) * logits.shape[1]
+        return loss
     #
     # def weighted_binary_cross_entropy_with_logits(self, logits, labels, num_rels=None):
     #     if num_rels is None:
@@ -95,11 +98,10 @@ class GenericModel(AbstractModel):
             if not inference:
                 if cfg.model.phoi:
                     hoi_labels = vis_output.hoi_labels
-                    losses = {'hoi_loss': F.binary_cross_entropy_with_logits(output, hoi_labels) * output.shape[1]}
+                    losses = {'hoi_loss': self.bce_loss(output, hoi_labels)}
                 else:
                     action_labels = vis_output.action_labels
-                    losses = {'action_loss': F.binary_cross_entropy_with_logits(output, action_labels) * output.shape[1]}
-
+                    losses = {'action_loss': self.bce_loss(output, action_labels)}
                 return losses
             else:
                 prediction = Prediction()

@@ -88,6 +88,8 @@ class WordEmbeddings:
                     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
                     if embs:
                         emb = sum(embs) / len(embs)
+                        emb_norm = np.linalg.norm(emb)
+                        emb = emb / emb_norm if emb_norm > 0 else emb
                     else:
                         emb = None
                 # elif retry == 'avg_norm_first':
