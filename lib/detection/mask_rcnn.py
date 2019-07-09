@@ -46,7 +46,7 @@ class MaskRCNN(nn.Module):
 
         assert self.allow_train or not self.training
         with torch.set_grad_enabled(self.training):
-            detect_inputs = {'data': x.imgs, 'im_info': x.img_infos}
+            detect_inputs = {'data': x.imgs, 'im_info': torch.tensor(x.img_infos, dtype=torch.float32, device=x.imgs.device)}
             unscaled_img_sizes = np.array([d['im_size'] for d in x.other_ex_data])
             box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs=detect_inputs, unscaled_img_sizes=unscaled_img_sizes)
 
