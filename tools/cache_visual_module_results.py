@@ -15,6 +15,9 @@ def save_feats():
     def empty_lists(num, length):
         return ([None for j in range(length)] for i in range(num))
 
+    sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
+    cfg.parse_args(fail_if_missing=False)
+
     if cfg.program.debug:
         try:  # PyCharm debugging
             print('Starting remote debugging (resume from debug server)')
@@ -25,8 +28,6 @@ def save_feats():
             print('Remote debugging failed.')
             raise
 
-    sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
-    cfg.parse_args(fail_if_missing=False)
 
     train_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
     test_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
