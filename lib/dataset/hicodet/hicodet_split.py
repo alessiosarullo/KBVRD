@@ -224,7 +224,7 @@ class HicoDetSplitBuilder:
                 cls.hicodet = HicoDet()
 
             split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
-                                                                             filter_empty_imgs=split == Splits.TRAIN)
+                                                                             filter_empty_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
             assert len(split_data) == len(image_ids)
 
             # Split train/val if needed
