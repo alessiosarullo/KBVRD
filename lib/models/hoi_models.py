@@ -385,7 +385,7 @@ class ZSModel(ZSBaseModel):
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
                                            requires_grad=False)
-        self.pred_emb_sim = self.pred_word_embs @ self.pred_word_embs.t()
+        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
         if cfg.model.aereg > 0:
             if cfg.model.regsmall:
