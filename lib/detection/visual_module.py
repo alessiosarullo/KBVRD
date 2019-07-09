@@ -182,7 +182,7 @@ class VisualModule(nn.Module):
         return boxes_ext, box_labels
 
     def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False):
-        bg_ratio = cfg.opt.hoi_bg_ratio + 1  # heuristic: add 1 to compensate for images that do not contain enough BG relations
+        bg_ratio = cfg.opt.hoi_bg_ratio
 
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
