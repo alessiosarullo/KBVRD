@@ -128,7 +128,7 @@ class Evaluator(BaseEvaluator):
         actions_to_keep = sorted(set(actions_to_keep or range(self.hicodet.num_predicates)) - {0})
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
-        pos_hoi_metrics = {f'+{k}': v for k, v in hoi_metrics.items()}
+        pos_hoi_metrics = {f'+{k}': v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=pos_hoi_metrics,
                                                                                   gt_labels=pos_gt_hoi_labels,
                                                                                   all_classes=list(range(self.hicodet.num_interactions)),
