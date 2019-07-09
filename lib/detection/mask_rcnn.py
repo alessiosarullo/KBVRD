@@ -60,7 +60,7 @@ class MaskRCNN(nn.Module):
             # Checks
             im_sizes = np.array([d['im_size'][::-1] * d['im_scale'] for d in x.other_ex_data]).astype(np.float32)
             box_im_sizes = im_sizes[box_im_ids, :]
-            norm_boxes = boxes_ext[:, 1:5] / box_im_sizes.repeat(1, 2)
+            norm_boxes = boxes_ext[:, 1:5] / np.tile(box_im_sizes, [1, 2])
             assert np.all(0 <= norm_boxes), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
             assert np.all(norm_boxes <= 1), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
 
