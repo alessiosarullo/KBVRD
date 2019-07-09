@@ -15,6 +15,16 @@ def save_feats():
     def empty_lists(num, length):
         return ([None for j in range(length)] for i in range(num))
 
+    if cfg.program.debug:
+        try:  # PyCharm debugging
+            print('Starting remote debugging (resume from debug server)')
+            import pydevd_pycharm
+            pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
+            print('Remote debugging activated.')
+        except:
+            print('Remote debugging failed.')
+            raise
+
     sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
     cfg.parse_args(fail_if_missing=False)
 
