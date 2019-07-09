@@ -370,7 +370,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs,
         if num_new_images < num_old_images:
             print(f'Images have been discarded due to {"not having objects" if filter_empty_imgs else ""}'
                   f'{" or " if filter_empty_imgs and filter_bg_only_imgs else ""}'
-                  f'{"only having background interactions" if filter_empty_imgs else ""}. '
+                  f'{"only having background interactions" if filter_bg_only_imgs else ""}. '
                   f'Image index has changed (from {num_old_images} images to {num_new_images}).')
             image_ids = [image_ids[i] for i in im_with_interactions]
     assert len(split_data) == len(image_ids)
