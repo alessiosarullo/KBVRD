@@ -335,137 +335,155 @@
 #
 #         return action_logits
 #
-#
-# class BaseModel(GenericModel):
+# class ZSHoiModel(ZSBaseModel):
 #     @classmethod
 #     def get_cline_name(cls):
-#         return 'base'
+#         return 'zsh'
 #
 #     def __init__(self, dataset: HicoDetSplit, **kwargs):
+#         self.emb_dim = 200
 #         super().__init__(dataset, **kwargs)
-#         vis_feat_dim = self.visual_module.vis_feat_dim
-#         self._act_repr_dim = 600
 #
-#         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
+#         latent_dim = self.emb_dim
+#         input_dim = self.predictor_dim
+#         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(800, 600),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(600, 2 * latent_dim),
+#                                             ])
+#         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
 #                                                 nn.ReLU(inplace=True),
-#                                                 nn.Dropout(0.5),
-#                                                 nn.Linear(self.act_repr_dim, self.act_repr_dim),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(600, 800),
 #                                                 nn.ReLU(inplace=True),
-#                                                 nn.Dropout(0.5),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(800, input_dim),
 #                                                 ])
-#         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-#         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
 #
-#         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.act_repr_dim),
-#                                                nn.ReLU(inplace=True),
-#                                                nn.Dropout(0.5),
-#                                                nn.Linear(self.act_repr_dim, self.act_repr_dim),
-#                                                nn.ReLU(inplace=True),
-#                                                nn.Dropout(0.5),
-#                                                ])
-#         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-#         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+#         self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+#         adj_av = (self.gcn.adj_av > 0).float()
+#         self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
 #
-#         self.union_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, self.act_repr_dim),
-#                                               nn.ReLU(inplace=True),
-#                                               nn.Dropout(0.5),
-#                                               nn.Linear(self.act_repr_dim, self.act_repr_dim),
-#                                               nn.ReLU(inplace=True),
-#                                               nn.Dropout(0.5),
-#                                               ])
-#         nn.init.xavier_normal_(self.union_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-#         nn.init.xavier_normal_(self.union_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
+#         if cfg.model.softl:
+#             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 #
-#         self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
-#         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+#     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+#         vrepr = self.base_model._forward(vis_output, return_repr=True)
 #
-#     @property
-#     def act_repr_dim(self):
-#         return self._act_repr_dim
+#         hoi_class_embs, _, _ = self.gcn()  # I x E
+#         if vis_output.action_labels is not None:
+#             action_labels = vis_output.action_labels
+#         else:
+#             action_labels = None
 #
-#     def _forward(self, vis_output: VisualOutput, return_repr=False):
-#         if vis_output.box_labels is not None:
-#             vis_output.filter_boxes()
-#         boxes_ext = vis_output.boxes_ext
-#         box_feats = vis_output.box_feats
-#         masks = vis_output.masks
-#         union_boxes_feats = vis_output.hoi_union_boxes_feats
-#         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+#         if cfg.model.attw:
+#             instance_params = self.vrepr_to_emb(vrepr)
+#             instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
+#             instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+#             instance_logstd = instance_logstd.unsqueeze(dim=1)
+#             instance_class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+#                                                ((instance_means.unsqueeze(dim=1) - hoi_class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(
+#                                                    dim=2) ** 2)
+#             hoi_predictors = self.emb_to_predictor(instance_class_logprobs.exp().unsqueeze(dim=2) *
+#                                                    F.normalize(hoi_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+#             hoi_logits = torch.bmm(vrepr.unsqueeze(dim=1), hoi_predictors.transpose(1, 2)).squeeze(dim=1)
+#         else:
+#             hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
+#             hoi_logits = vrepr @ hoi_predictors.t()
 #
-#         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+#         ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
+#         hoi_logits = hoi_logits * ho_obj_inter_prior
 #
-#         ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
-#         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-#         union_repr = self.union_repr_mlp(union_boxes_feats)
-#         act_repr = union_repr + ho_subj_repr + ho_obj_repr
-#         if return_repr:
-#             return act_repr
+#         act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
 #
-#         action_logits = self.act_output_fc(act_repr)
-#         return action_logits
+#         if vis_output.action_labels is not None and not cfg.model.softl:  # restrict training to seen predicates only
+#             act_logits = act_logits[:, self.seen_pred_inds]
+#
+#         reg_loss = None
+#         return act_logits, action_labels, reg_loss
 #
 #
-# class ZSModel(GenericModel):
+# class ZSObjModel(ZSBaseModel):
 #     @classmethod
 #     def get_cline_name(cls):
-#         return 'zs'
+#         return 'zso'
 #
 #     def __init__(self, dataset: HicoDetSplit, **kwargs):
-#         self.word_emb_dim = 300
+#         self.emb_dim = 200
 #         super().__init__(dataset, **kwargs)
 #
-#         # FIXME
-#         base_model = BaseModel(dataset)
-#         ckpt = torch.load('output/base/2019-05-29_18-06-14_dropout05/final.tar')
-#         base_model.load_state_dict(ckpt['state_dict'])
-#
-#         self.predictor_dim = base_model.act_repr_dim
-#
-#         self.dataset = dataset
-#         self.num_objects = dataset.num_object_classes
-#         self.num_predicates = dataset.num_predicates
-#         self.base_model = base_model
-#
-#         word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim)
-#         obj_word_embs = word_embs.get_embeddings(dataset.objects, retry='avg_norm_last')
-#         pred_word_embs = word_embs.get_embeddings(dataset.predicates, retry='avg_norm_first')
-#         # self.obj_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(obj_word_embs), freeze=True)
-#         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-#         # self.pred_word_embs = nn.Embedding.from_pretrained(torch.from_numpy(pred_word_embs), freeze=True)
-#         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
-#
-#         self.emb_to_predictor = nn.Sequential(*[nn.Linear(self.word_emb_dim * 2, self.predictor_dim),
+#         latent_dim = self.emb_dim
+#         input_dim = self.predictor_dim
+#         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(800, 600),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(600, 2 * latent_dim),
+#                                             ])
+#         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
 #                                                 nn.ReLU(inplace=True),
-#                                                 nn.Dropout(0.5),
-#                                                 nn.Linear(self.predictor_dim, self.predictor_dim),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(600, 800),
 #                                                 nn.ReLU(inplace=True),
-#                                                 nn.Dropout(0.5),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(800, input_dim),
 #                                                 ])
+#         self.emb_to_obj_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+#                                                     nn.ReLU(inplace=True),
+#                                                     nn.Dropout(p=cfg.model.dropout),
+#                                                     nn.Linear(600, 800),
+#                                                     nn.ReLU(inplace=True),
+#                                                     nn.Dropout(p=cfg.model.dropout),
+#                                                     nn.Linear(800, input_dim),
+#                                                     ])
 #
-#         self.act_output_fc = nn.Linear(self.act_repr_dim, dataset.num_predicates, bias=True)
-#         torch.nn.init.xavier_normal_(self.act_output_fc.weight, gain=1.0)
+#         self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
+#
+#         if cfg.model.softl:
+#             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+#
+#     def get_soft_labels(self, vis_output: VisualOutput):
+#         ho_infos = torch.tensor(vis_output.ho_infos_np, device=vis_output.action_labels.device)
+#         action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
+#
+#         action_labels[:, self.seen_pred_inds] = vis_output.action_labels
+#
+#         action_labels = action_labels.detach()
+#         return action_labels
 #
 #     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
 #         with torch.set_grad_enabled(self.training):
 #             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 #
-#             if vis_output.ho_infos is not None:
-#                 action_output = self._forward(vis_output, )
+#             if vis_output.ho_infos_np is not None:
+#                 action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+#                 if inference and self.load_backbone:
+#                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+#                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
+#
+#                     action_output[:, self.seen_pred_inds] = pretrained_action_output
 #             else:
 #                 assert inference
-#                 action_output = None
+#                 action_output = action_labels = None
 #
 #             if not inference:
-#                 action_labels = vis_output.action_labels
-#                 # losses = {'action_loss': (action_output * action_labels).sum(dim=1)}  # For MSE
-#                 losses = {'action_loss': nn.functional.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+#                 losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1],
+#                           'obj_loss': F.cross_entropy(ho_obj_output, ho_obj_labels),
+#                           }
+#                 if reg_loss is not None:
+#                     losses['reg_loss'] = reg_loss
 #                 return losses
 #             else:
 #                 prediction = Prediction()
 #
 #                 if vis_output.boxes_ext is not None:
 #                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-#                     im_scales = x.img_infos[:, 2].cpu().numpy()
+#                     im_scales = x.img_infos[:, 2]
 #
 #                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
 #                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -473,152 +491,49 @@
 #                     prediction.obj_boxes = obj_boxes
 #                     prediction.obj_scores = boxes_ext[:, 5:]
 #
-#                     if vis_output.ho_infos is not None:
+#                     if vis_output.ho_infos_np is not None:
 #                         assert action_output is not None
 #
-#                         prediction.ho_img_inds = vis_output.ho_infos[:, 0]
-#                         prediction.ho_pairs = vis_output.ho_infos[:, 1:]
+#                         prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
+#                         prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
+#
 #                         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 #
 #                 return prediction
 #
-#     def _forward(self, vis_output: VisualOutput, **kwargs):
-#         if vis_output.box_labels is not None:
-#             vis_output.filter_boxes()
-#         boxes_ext = vis_output.boxes_ext
-#         masks = vis_output.masks
-#         hoi_infos = torch.tensor(vis_output.ho_infos, device=masks.device)
+#     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+#         act_vrepr, ho_obj_vrepr = self.base_model._forward(vis_output, return_repr=True, return_obj=True)
+#         act_instance_params = self.vrepr_to_emb(act_vrepr)
+#         act_instance_means = act_instance_params[:, :act_instance_params.shape[1] // 2]  # P x E
+#         act_instance_logstd = act_instance_params[:, act_instance_params.shape[1] // 2:]  # P x E
 #
-#         obj_word_embs = boxes_ext[hoi_infos[:, 2], 5:] @ self.obj_word_embs
-#         hoi_word_embs = torch.cat([obj_word_embs[:, None, :], self.pred_word_embs[None, :, :]], axis=2)
-#         hoi_predictors = self.emb_to_predictor(hoi_word_embs).transpose(1, 2)
+#         obj_class_embs, act_class_embs = self.gcn()  # P x E
+#         if vis_output.action_labels is not None:
+#             obj_predictors = self.emb_to_obj_predictor(obj_class_embs)  # P x D
+#             ho_obj_output = ho_obj_vrepr @ obj_predictors.t()
+#             ho_infos = torch.tensor(vis_output.ho_infos_np, device=ho_obj_vrepr.device)
+#             ho_obj_labels = vis_output.box_labels[ho_infos[:, 2]]
+#             fg_objs = (ho_obj_labels >= 0)
+#             ho_obj_output = ho_obj_output[fg_objs, :]
+#             ho_obj_labels = ho_obj_labels[fg_objs]
 #
-#         visual_feats = self.base_model._forward(vis_output, return_repr=True).detach()
-#         action_output = torch.bmm(visual_feats, hoi_predictors)
-#         # action_output = ((union_boxes_feats.unsqueeze(dim=1) - hoi_predictors) ** 2).sum(dim=2) # for MSE
-#
-#         return action_output
-#
-#
-# class KatoModel(GenericModel):
-#     # FIXME?
-#     @classmethod
-#     def get_cline_name(cls):
-#         return 'kato'
-#
-#     def __init__(self, dataset: HicoDetSplit, **kwargs):
-#         super().__init__(dataset, **kwargs)
-#         raise NotImplementedError('This needs to be checked after refactors.')
-#         self.obj_branch = SimpleObjBranch(input_dim=self.visual_module.vis_feat_dim + self.dataset.num_object_classes)
-#         self.obj_output_fc = nn.Linear(self.obj_branch.output_dim, self.dataset.num_object_classes)
-#
-#         self.hoi_branch = KatoGCNBranch(self.visual_module.vis_feat_dim, self.obj_branch.output_dim, dataset)
-#
-#     def _forward(self, **kwargs):
-#         box_im_ids = boxes_ext[:, 0].long()
-#         hoi_infos = torch.tensor(hoi_infos, device=masks.device)
-#         im_ids = torch.unique(hoi_infos[:, 0], sorted=True)
-#         box_unique_im_ids = torch.unique(box_im_ids, sorted=True)
-#         assert im_ids.equal(box_unique_im_ids), (im_ids, box_unique_im_ids)
-#
-#         obj_repr = self.obj_branch(boxes_ext, box_feats)
-#         obj_logits = self.obj_output_fc(obj_repr)
-#
-#         hoi_obj_logits, action_logits = self.hoi_branch(obj_repr, union_boxes_feats, hoi_infos)
-#
-#         return obj_logits, action_logits
-#
-#
-# class PeyreModel(GenericModel):
-#     @classmethod
-#     def get_cline_name(cls):
-#         return 'peyre'
-#
-#     def __init__(self, dataset: HicoDetSplit, **kwargs):
-#         super().__init__(dataset, **kwargs)
-#         raise NotImplementedError('This needs to be checked after refactors.')
-#         self.hoi_branch = PeyreEmbsimBranch(self.visual_module.vis_feat_dim, dataset)
-#
-#     def get_losses(self, x, **kwargs):
-#         y = self(x, inference=False, **kwargs)
-#
-#         hoi_subj_logits, hoi_subj_labels = y[0]
-#         subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
-#         subj_labels_1hot[torch.arange(subj_labels_1hot.shape[0]), hoi_subj_labels] = 1
-#         hoi_subj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot) * self.dataset.num_object_classes
-#
-#         hoi_obj_logits, hoi_obj_labels = y[1]
-#         obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
-#         obj_labels_1hot[torch.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
-#         hoi_obj_loss = nn.functional.binary_cross_entropy_with_logits(hoi_obj_logits, obj_labels_1hot) * self.dataset.num_object_classes
-#
-#         hoi_act_logits, action_labels = y[2]
-#         act_loss = nn.functional.binary_cross_entropy_with_logits(hoi_act_logits, action_labels) * self.dataset.num_predicates
-#
-#         hoi_logits, hoi_labels = y[3]
-#         hoi_loss = nn.functional.binary_cross_entropy_with_logits(hoi_logits, hoi_labels) * self.dataset.num_interactions
-#
-#         return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
-#
-#     def forward(self, x, inference=True, **kwargs):
-#         with torch.set_grad_enabled(self.training):
-#             boxes_ext, box_feats, masks, union_boxes, union_boxes_feats, hoi_infos, box_labels, action_labels, hoi_labels = \
-#                 self.visual_module(x, inference)
-#             # `hoi_infos` is an R x 3 NumPy array where each column is [image ID, subject index, object index].
-#             # Masks are floats at this point.
-#
-#             if hoi_infos is not None:
-#                 logits = self._forward(,
-#                 hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = logits
-#             else:
-#                 hoi_subj_logits = hoi_obj_logits = hoi_act_logits = hoi_logits = None
-#
-#             if not inference:
-#                 assert all([x is not None for x in (box_labels, action_labels, hoi_labels)])
-#
-#                 hoi_subj_labels = box_labels[hoi_infos[:, 1]]
-#                 # assert torch.unique(hoi_subj_labels).shape[0] == 1, hoi_subj_labels  # Doesn't work because of negative sampling. FIXME?
-#
-#                 hoi_obj_labels = box_labels[hoi_infos[:, 2]]
-#                 return (hoi_subj_logits, hoi_subj_labels), (hoi_obj_logits, hoi_obj_labels), (hoi_act_logits, action_labels), (hoi_logits, hoi_labels)
-#             else:
-#                 im_scales = x.img_infos[:, 2].cpu().numpy()
-#                 if hoi_logits is None:
-#                     hoi_output = None
-#                 else:
-#                     hoi_output = np.empty([hoi_logits.shape[0], self.dataset.num_interactions])
-#                     for iid, (pid, oid) in enumerate(self.dataset.interactions):
-#                         hoi_subj_prob = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class])
-#                         hoi_obj_prob = torch.sigmoid(hoi_obj_logits[:, oid])
-#                         hoi_act_prob = torch.sigmoid(hoi_act_logits[:, pid])
-#                         hoi_prob = torch.sigmoid(hoi_logits[:, iid])
-#                         hoi_output[:, iid] = hoi_subj_prob * hoi_obj_prob * hoi_act_prob * hoi_prob
-#                 return self._prepare_prediction(None, None, hoi_output, hoi_infos, boxes_ext, im_scales)
-#
-#     def _forward(self, **kwargs):
-#         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = self.hoi_branch(boxes_ext, box_feats, hoi_infos)
-#         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
-#
-#     def _prepare_prediction(self, obj_output, action_output, hoi_probs, hoi_infos, boxes_ext, im_scales):
-#         assert obj_output is None and action_output is None
-#
-#         ho_pairs = ho_img_inds = None
-#         if hoi_infos is not None:
-#             assert boxes_ext is not None
-#             assert hoi_probs is not None
-#             ho_img_inds = hoi_infos[:, 0]
-#             ho_pairs = hoi_infos[:, 1:]
-#
-#         if boxes_ext is not None:
-#             boxes_ext = boxes_ext.cpu().numpy()
-#             obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-#             obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+#             act_class_embs = act_class_embs[self.seen_pred_inds, :]  # P x E
+#             action_labels = vis_output.action_labels
 #         else:
-#             obj_im_inds = obj_boxes = None
-#         return Prediction(obj_im_inds=obj_im_inds,
-#                           obj_boxes=obj_boxes,
-#                           obj_scores=None,
-#                           ho_img_inds=ho_img_inds,
-#                           ho_pairs=ho_pairs,
-#                           action_scores=None,
-#                           hoi_scores=hoi_probs)
+#             action_labels = ho_obj_output = ho_obj_labels = None
+#
+#         act_instance_logstd = act_instance_logstd.unsqueeze(dim=1)
+#         class_logprobs = - 0.5 * (2 * act_instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+#                                   ((act_instance_means.unsqueeze(dim=1) - act_class_embs.unsqueeze(dim=0)) /
+#                                    act_instance_logstd.exp()).norm(dim=2) ** 2)
+#
+#         if cfg.model.attw:
+#             act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
+#                                                    F.normalize(act_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+#             action_output = torch.bmm(act_vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
+#         else:
+#             act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
+#             action_output = act_vrepr @ act_predictors.t()
+#
+#         reg_loss = None
+#         return action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels

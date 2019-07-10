@@ -347,22 +347,31 @@ class Configs:
             pickle.dump(cls.to_dict(), f)
 
     @classmethod
-    def load(cls, file_path=None, program=True, data=True, model=True, opt=True, reset=False):
+    def load(cls, file_path=None):
         file_path = file_path or cls.program.config_file
         with open(file_path, 'rb') as f:
             d = pickle.load(f)
-        if program:
-            output_path = cls.program.output_path
-            save_dir = cls.program.save_dir
-            cls.program.__dict__.update(d['program'])
-            cls.program.save_dir = save_dir
-            assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
-        if data:
-            cls.data.__dict__.update(d['data'])
-        if model:
-            cls.model.__dict__.update(d['model'])
-        if opt:
-            cls.opt.__dict__.update(d['opt'])
+
+        # Program
+        output_path = cls.program.output_path
+        save_dir = cls.program.save_dir
+        resume = cls.program.resume
+        cls.program.__dict__.update(d['program'])
+        cls.program.save_dir = save_dir
+        cls.program.resume = resume
+        assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
+
+        # Data
+        cls.data.__dict__.update(d['data'])
+
+        # Model
+        cls.model.__dict__.update(d['model'])
+
+        # Optimizer
+        num_epochs = cls.opt.num_epochs
+        cls.opt.__dict__.update(d['opt'])
+        if resume:
+            cls.opt.num_epochs += num_epochs
 
 
 # Alias

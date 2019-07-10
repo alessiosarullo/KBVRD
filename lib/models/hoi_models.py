@@ -22,36 +22,25 @@ class BaseModel(GenericModel):
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
-                                                # nn.ReLU(inplace=True),
-                                                # nn.Dropout(p=cfg.model.dropout),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        # nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(p=cfg.model.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
-                                               # nn.ReLU(inplace=True),
-                                               # nn.Dropout(p=cfg.model.dropout),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        # nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.model.dropout),
                                             nn.Linear(hidden_dim, self.final_repr_dim),
-                                            # nn.ReLU(inplace=True),
-                                            # nn.Dropout(p=cfg.model.dropout),
-                                            # nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                             ])
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        # nn.init.xavier_normal_(self.concat_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        # nn.init.xavier_normal_(self.concat_repr_mlp[6].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         num_classes = dataset.hicodet.num_interactions if cfg.model.phoi else dataset.num_predicates
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
@@ -272,77 +261,6 @@ class ZSBaseModel(GenericModel):
                 return prediction
 
 
-class ZSHoiModel(ZSBaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'zsh'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
-        super().__init__(dataset, **kwargs)
-
-        latent_dim = self.emb_dim
-        input_dim = self.predictor_dim
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
-                                            nn.Linear(800, 600),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
-                                            nn.Linear(600, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(800, input_dim),
-                                                ])
-
-        self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-        adj_av = (self.gcn.adj_av > 0).float()
-        self.adj_av_norm = nn.Parameter(adj_av / adj_av.sum(dim=1, keepdim=True))
-
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-
-        hoi_class_embs, _, _ = self.gcn()  # I x E
-        if vis_output.action_labels is not None:
-            action_labels = vis_output.action_labels
-        else:
-            action_labels = None
-
-        if cfg.model.attw:
-            instance_params = self.vrepr_to_emb(vrepr)
-            instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
-            instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
-            instance_logstd = instance_logstd.unsqueeze(dim=1)
-            instance_class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                               ((instance_means.unsqueeze(dim=1) - hoi_class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(
-                                                   dim=2) ** 2)
-            hoi_predictors = self.emb_to_predictor(instance_class_logprobs.exp().unsqueeze(dim=2) *
-                                                   F.normalize(hoi_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
-            hoi_logits = torch.bmm(vrepr.unsqueeze(dim=1), hoi_predictors.transpose(1, 2)).squeeze(dim=1)
-        else:
-            hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
-            hoi_logits = vrepr @ hoi_predictors.t()
-
-        ho_obj_inter_prior = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:][:, self.dataset.hicodet.interactions[:, 1]]
-        hoi_logits = hoi_logits * ho_obj_inter_prior
-
-        act_logits = hoi_logits @ self.adj_av_norm  # get action class embeddings through marginalisation
-
-        if vis_output.action_labels is not None and not cfg.model.softl:  # restrict training to seen predicates only
-            act_logits = act_logits[:, self.seen_pred_inds]
-
-        reg_loss = None
-        return act_logits, action_labels, reg_loss
-
-
 class ZSModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
@@ -385,6 +303,8 @@ class ZSModel(ZSBaseModel):
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')),
+                                          requires_grad=False)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
                                            requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
@@ -408,8 +328,9 @@ class ZSModel(ZSBaseModel):
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
-    def LIS(self, x):
-        T, w, k = 8.4, 10, 12  # as in the paper
+    def LIS(self, x, w=10, k=12, T=8.4):  # defaults are as in the paper
+        if T is None:
+            T = np.ceil((1 + np.exp(k - w)) * 10) / 10  # this is basically how they compute it. It's a normalisation constant for when x=1.
         return T * torch.sigmoid(w * x - k)
 
     def get_soft_labels(self, vis_output: VisualOutput):
@@ -472,137 +393,99 @@ class ZSModel(ZSBaseModel):
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
-class ZSObjModel(ZSBaseModel):
+class ZSSimModel(ZSModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zso'
+        return 'zss'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self.emb_dim = 200
         super().__init__(dataset, **kwargs)
+        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        seen_transfer_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
+        seen_full_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
+        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_full_train_pred_inds.tolist())))
+        self.seen_pred_inds = nn.Parameter(torch.from_numpy(seen_full_train_pred_inds), requires_grad=False)
+        self.seen_transfer_inds = nn.Parameter(torch.from_numpy(seen_transfer_pred_inds), requires_grad=False)
+        self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)
 
-        latent_dim = self.emb_dim
-        input_dim = self.predictor_dim
-        self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
-                                            nn.Linear(800, 600),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
-                                            nn.Linear(600, 2 * latent_dim),
-                                            ])
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(800, input_dim),
-                                                ])
-        self.emb_to_obj_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                    nn.ReLU(inplace=True),
-                                                    nn.Dropout(p=cfg.model.dropout),
-                                                    nn.Linear(600, 800),
-                                                    nn.ReLU(inplace=True),
-                                                    nn.Dropout(p=cfg.model.dropout),
-                                                    nn.Linear(800, input_dim),
-                                                    ])
+        # these are RELATIVE to the seen ones
+        rel_seen_transfer_pred_inds = [np.flatnonzero(seen_pred_inds == p)[0] for p in seen_transfer_pred_inds]
+        self.rel_seen_transfer_inds = nn.Parameter(torch.from_numpy(rel_seen_transfer_pred_inds), requires_grad=False)
 
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=512, gc_dims=(300, self.emb_dim))
-
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+        wemb_dim = self.pred_word_embs.shape[0]
+        self.soft_labels_emb_mlp = nn.Sequential(*[nn.Linear(wemb_dim * 2, wemb_dim * 2),
+                                                   nn.ReLU(inplace=True),
+                                                   # nn.Dropout(p=cfg.model.dropout),
+                                                   nn.Linear(wemb_dim * 2, wemb_dim),
+                                                   ])
 
     def get_soft_labels(self, vis_output: VisualOutput):
-        ho_infos = torch.tensor(vis_output.ho_infos_np, device=vis_output.action_labels.device)
-        action_labels = vis_output.boxes_ext[ho_infos[:, 2], 5:] @ self.obj_act_feasibility
+        # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
+        # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
+        # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
 
-        action_labels[:, self.seen_pred_inds] = vis_output.action_labels
+        known_labels = vis_output.action_labels
+        unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
+                                                                 known_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
 
-        action_labels = action_labels.detach()
-        return action_labels
+        # these are for ALL actions
+        action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+        surrogate_action_labels = F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t() * action_labels_mask
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos_np is not None:
-                action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                if inference and self.load_backbone:
-                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
-
-                    action_output[:, self.seen_pred_inds] = pretrained_action_output
-            else:
-                assert inference
-                action_output = action_labels = None
-
-            if not inference:
-                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1],
-                          'obj_loss': F.cross_entropy(ho_obj_output, ho_obj_labels),
-                          }
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
+        # Loss is for transfer only, actual labels for unseen only
+        unseen_action_label_loss = self.bce_loss(surrogate_action_labels[:, self.seen_transfer_inds], known_labels[:, self.rel_seen_transfer_inds])
+        unseen_action_labels = surrogate_action_labels[:, self.unseen_pred_inds]
+        return unseen_action_labels.detach(), unseen_action_label_loss
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        act_vrepr, ho_obj_vrepr = self.base_model._forward(vis_output, return_repr=True, return_obj=True)
-        act_instance_params = self.vrepr_to_emb(act_vrepr)
-        act_instance_means = act_instance_params[:, :act_instance_params.shape[1] // 2]  # P x E
-        act_instance_logstd = act_instance_params[:, act_instance_params.shape[1] // 2:]  # P x E
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
 
-        obj_class_embs, act_class_embs = self.gcn()  # P x E
-        if vis_output.action_labels is not None:
-            obj_predictors = self.emb_to_obj_predictor(obj_class_embs)  # P x D
-            ho_obj_output = ho_obj_vrepr @ obj_predictors.t()
-            ho_infos = torch.tensor(vis_output.ho_infos_np, device=ho_obj_vrepr.device)
-            ho_obj_labels = vis_output.box_labels[ho_infos[:, 2]]
-            fg_objs = (ho_obj_labels >= 0)
-            ho_obj_output = ho_obj_output[fg_objs, :]
-            ho_obj_labels = ho_obj_labels[fg_objs]
-
-            act_class_embs = act_class_embs[self.seen_pred_inds, :]  # P x E
-            action_labels = vis_output.action_labels
-        else:
-            action_labels = ho_obj_output = ho_obj_labels = None
-
-        act_instance_logstd = act_instance_logstd.unsqueeze(dim=1)
-        class_logprobs = - 0.5 * (2 * act_instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                  ((act_instance_means.unsqueeze(dim=1) - act_class_embs.unsqueeze(dim=0)) /
-                                   act_instance_logstd.exp()).norm(dim=2) ** 2)
+        _, all_class_embs = self.gcn()  # P x E
+        class_embs = all_class_embs
+        action_labels = vis_output.action_labels
+        unseen_action_labels, unseen_action_label_loss = None, None
+        if action_labels is not None:
+            if cfg.model.softl > 0:
+                unseen_action_labels, unseen_action_label_loss = self.get_soft_labels(vis_output)
+            else:  # restrict training to seen predicates only
+                class_embs = all_class_embs[self.seen_pred_inds, :]  # P x E
 
         if cfg.model.attw:
+            instance_params = self.vrepr_to_emb(vrepr)
+            instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
+            instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+            instance_logstd = instance_logstd.unsqueeze(dim=1)
+            class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+                                      ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
             act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
-                                                   F.normalize(act_class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
-            action_output = torch.bmm(act_vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
+                                                   F.normalize(class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+            action_logits = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
         else:
-            act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
-            action_output = act_vrepr @ act_predictors.t()
+            act_predictors = self.emb_to_predictor(class_embs)  # P x D
+            action_logits = vrepr @ act_predictors.t()
 
-        reg_loss = None
-        return action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels
+        if cfg.model.oprior:
+            if vis_output.action_labels is not None:
+                if cfg.model.softl:
+                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
+                else:
+                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
+                act_prior = act_prior[vis_output.ho_infos_np[:, 2], :]
+            else:
+                obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:].max(dim=1)
+                act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
+            action_logits = action_logits + act_prior.log()
+
+        if cfg.model.oscore:
+            action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:])
+            if vis_output.action_labels is not None and not cfg.model.softl:
+                action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
+            action_logits = action_logits + action_logits_from_obj_score
+
+        reg_loss = unseen_action_label_loss  # FIXME hack
+        if cfg.model.aereg > 0:
+            reg_loss += -cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+        return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
 class KatoModel(GenericModel):
