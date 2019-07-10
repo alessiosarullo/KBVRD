@@ -411,8 +411,10 @@ class ZSSimModel(ZSModel):
         self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)
 
         # these are RELATIVE to the seen ones
-        rel_seen_transfer_pred_inds = np.array([np.flatnonzero(seen_pred_inds == p)[0] for p in seen_transfer_pred_inds])
-        self.rel_seen_transfer_inds = nn.Parameter(torch.from_numpy(rel_seen_transfer_pred_inds), requires_grad=False)
+        rel_seen_transfer_pred_inds = sorted([np.flatnonzero(seen_pred_inds == p)[0] for p in seen_transfer_pred_inds])
+        rel_seen_train_pred_inds = sorted(set(range(len(seen_pred_inds))) - set(rel_seen_transfer_pred_inds))
+        self.rel_seen_transfer_inds = nn.Parameter(torch.from_numpy(np.array(rel_seen_transfer_pred_inds)), requires_grad=False)
+        self.rel_seen_train_inds = nn.Parameter(torch.from_numpy(np.array(rel_seen_train_pred_inds)), requires_grad=False)
 
         wemb_dim = self.pred_word_embs.shape[0]
         self.soft_labels_emb_mlp = nn.Sequential(*[nn.Linear(wemb_dim * 2, wemb_dim * 2),
@@ -428,8 +430,9 @@ class ZSSimModel(ZSModel):
 
         known_labels = vis_output.action_labels
         transfer_labels = known_labels[:, self.rel_seen_transfer_inds]
+        train_labels = known_labels[:, self.rel_seen_train_inds]
         unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
-                                                                 transfer_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
+                                                                 train_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
 
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
