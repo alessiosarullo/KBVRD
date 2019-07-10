@@ -100,6 +100,7 @@ class Launcher:
         if cfg.program.resume:
             try:
                 ckpt = torch.load(cfg.program.saved_model_file)
+                os.rename(cfg.program.saved_model_file, cfg.program.checkpoint_file)
             except FileNotFoundError:
                 ckpt = torch.load(cfg.program.checkpoint_file)
             self.detector.load_state_dict(ckpt['state_dict'])
