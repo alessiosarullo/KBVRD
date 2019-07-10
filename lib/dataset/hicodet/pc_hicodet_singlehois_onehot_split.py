@@ -88,6 +88,7 @@ class BalancedTripletOnehotSampler(torch.utils.data.Sampler):
         self.shuffle = shuffle
         self.dataset = dataset
 
+        raise NotImplementedError()  # the following has to be fixed or deleted altogether
         pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
         neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
         if dataset.pc_hoi_mask is None:

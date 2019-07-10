@@ -101,6 +101,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
         self.hoi_batch_size = self.batch_size
         self.dataset = dataset
 
+        raise NotImplementedError()  # the following has to be fixed or deleted altogether
         image_ids = set(dataset.image_ids)
         pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
         neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
@@ -197,30 +198,3 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
 
     def __len__(self):
         return len(self.batches)
-
-
-def main():
-    import random
-    seed = 3
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-
-    s = PrecomputedHicoDetImgHOISplit.get_split(split=Splits.TRAIN)
-    ld = s.get_loader(batch_size=64)
-
-    for i, x in enumerate(ld):
-        x = x  # type: PrecomputedMinibatch
-        if i % 50 == 0:
-            print(i)
-            print(Timer.format(Timer.get('GetBatch', get_only=True).spent(average=True)))
-        assert x.pc_ho_infos.shape[0] == 64
-        if i >= 200:
-            break
-
-    Timer.get().print()
-
-
-if __name__ == '__main__':
-    main()
