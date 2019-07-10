@@ -437,6 +437,7 @@ class ZSSimModel(ZSModel):
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
+        surrogate_action_labels = self.LIS(surrogate_action_labels, w=10, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
         unseen_action_label_loss = self.bce_loss(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
