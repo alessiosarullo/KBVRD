@@ -51,7 +51,7 @@ class ProgramConfig(BaseConfigs):
         self.resume = False
 
         self.model = None
-        self.baseline_dir = ''  # Path to the model checkpoint file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/'
+        self.seenf = -1
 
         self.save_dir = ''
 
@@ -116,14 +116,9 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'ds_inds.pkl')
 
     @property
-    def baseline_model_file(self):
-        assert self.baseline_dir
-        return os.path.join(self.baseline_dir, 'final.tar')
-
-    @property
     def active_classes_file(self):
-        assert self.baseline_dir
-        return os.path.join(self.baseline_dir, 'ds_inds.pkl')
+        assert self.seenf >= 0
+        return os.path.join('zero-shot_inds', f'seen_inds_{self.seenf}.pkl.push')
 
     @property
     def tensorboard_dir(self):
@@ -175,7 +170,7 @@ class DataConfig(BaseConfigs):
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
         self.val_ratio = 0.1
-        self.prinds = ''  # restrict the dataset to these predicates if not empty
+        self.prinds = ''  # restrict the dataset to these predicates if not empty. FIXME fix interactions with seen file
         self.obinds = ''  # restrict the dataset to these objects if not empty
 
         self.union = True
@@ -232,8 +227,8 @@ class ModelConfig(BaseConfigs):
         self.attw = False
         self.oprior = False
         self.oscore = False
-        self.zsload = False
         self.softl = 0.0
+        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
 
         self.aereg = 0.0
         self.regsmall = False

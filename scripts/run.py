@@ -70,7 +70,7 @@ class Launcher:
         print('RNG seed:', seed)
 
         # Data
-        if cfg.program.baseline_dir:
+        if cfg.program.seenf >= 0:
             pred_inds = sorted(pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
             obj_inds = cfg.data.obj_inds
         else:

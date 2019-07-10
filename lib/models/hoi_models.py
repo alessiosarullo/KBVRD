@@ -1,4 +1,5 @@
 import pickle
+import os
 
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
@@ -209,8 +210,9 @@ class ZSBaseModel(GenericModel):
         self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
         self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
-        if cfg.model.zsload:
-            ckpt = torch.load(cfg.program.baseline_model_file)
+        self.load_backbone = len(cfg.model.hoi_backbone) > 0
+        if self.load_backbone:
+            ckpt = torch.load(cfg.model.hoi_backbone)
             self.pretrained_base_model = BaseModel(dataset)
             self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
             self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
@@ -223,7 +225,7 @@ class ZSBaseModel(GenericModel):
 
             if vis_output.ho_infos_np is not None:
                 action_output, action_labels, reg_loss, unseen_action_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                if inference and cfg.model.zsload:
+                if inference and self.load_backbone:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
 
@@ -526,7 +528,7 @@ class ZSObjModel(ZSBaseModel):
 
             if vis_output.ho_infos_np is not None:
                 action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                if inference and cfg.model.zsload:
+                if inference and self.load_backbone:
                     pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
                     pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
 
