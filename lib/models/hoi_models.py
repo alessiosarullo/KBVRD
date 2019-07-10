@@ -116,7 +116,7 @@ class BGFilter(BaseModel):
                     max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0]).detach()
                     act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
                 else:
-                    bg_label = 1 - (action_labels > 0).any(dim=1)
+                    bg_label = 1 - (action_labels > 0).any(dim=1).float()
                     max_fg_score = torch.sigmoid((action_output * action_labels).max(dim=1)[0]).detach()
                     act_loss = F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
 
