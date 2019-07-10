@@ -427,15 +427,16 @@ class ZSSimModel(ZSModel):
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
 
         known_labels = vis_output.action_labels
+        transfer_labels = known_labels[:, self.rel_seen_transfer_inds]
         unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
-                                                                 known_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
+                                                                 transfer_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
 
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
-        surrogate_action_labels = F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t() * action_labels_mask
+        surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
 
         # Loss is for transfer only, actual labels for unseen only
-        unseen_action_label_loss = self.bce_loss(surrogate_action_labels[:, self.seen_transfer_inds], known_labels[:, self.rel_seen_transfer_inds])
+        unseen_action_label_loss = self.bce_loss(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
         unseen_action_labels = surrogate_action_labels[:, self.unseen_pred_inds]
         return unseen_action_labels.detach(), unseen_action_label_loss
 
