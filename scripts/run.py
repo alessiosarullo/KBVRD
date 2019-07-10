@@ -39,7 +39,7 @@ class Launcher:
                 print('Remote debugging failed.')
                 raise
 
-        if cfg.program.load_train_final_output or cfg.program.resume:
+        if cfg.program.eval_only or cfg.program.resume:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
@@ -49,7 +49,7 @@ class Launcher:
 
     def run(self):
         self.setup()
-        if cfg.program.load_train_final_output:
+        if cfg.program.eval_only:
             print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.evaluate()
             print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -107,7 +107,7 @@ class Launcher:
             self.start_epoch = ckpt['epoch'] + 1
             self.curr_train_iter = ckpt['curr_iter'] + 1
             print(f'Continuing from epoch {self.start_epoch} @ iteration {self.curr_train_iter}.')
-        elif cfg.program.load_train_final_output:
+        elif cfg.program.eval_only:
             ckpt = torch.load(cfg.program.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
 

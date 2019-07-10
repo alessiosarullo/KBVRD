@@ -129,12 +129,8 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.output_path, 'res_stats')
 
     @property
-    def load_train_final_output(self):
-        return os.path.exists(self.saved_model_file)
-
-    # @property
-    # def resume(self):
-    #     return os.path.exists(self.checkpoint_file)
+    def eval_only(self):
+        return os.path.exists(self.saved_model_file) and not self.resume
 
     def _postprocess_args(self, fail_if_missing):
         self.save_dir = self.save_dir.rstrip('/')

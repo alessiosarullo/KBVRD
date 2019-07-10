@@ -69,7 +69,7 @@ class RunningStats:
 
     @property
     def epoch_str(self):
-        return '%s epoch' % self.split_str
+        return f'{self.split_str} epoch'
 
     def update_stats(self, output_dict):
         assert sum([int('total' in k.lower()) for k in output_dict.get('losses', {})]) <= 1
