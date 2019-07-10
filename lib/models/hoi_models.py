@@ -416,7 +416,7 @@ class ZSSimModel(ZSModel):
         self.rel_seen_transfer_inds = nn.Parameter(torch.from_numpy(np.array(rel_seen_transfer_pred_inds)), requires_grad=False)
         self.rel_seen_train_inds = nn.Parameter(torch.from_numpy(np.array(rel_seen_train_pred_inds)), requires_grad=False)
 
-        wemb_dim = self.pred_word_embs.shape[0]
+        wemb_dim = self.pred_word_embs.shape[1]
         self.soft_labels_emb_mlp = nn.Sequential(*[nn.Linear(wemb_dim * 2, wemb_dim * 2),
                                                    nn.ReLU(inplace=True),
                                                    # nn.Dropout(p=cfg.model.dropout),
