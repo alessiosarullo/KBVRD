@@ -98,7 +98,10 @@ class Launcher:
         print_params(self.detector, breakdown=False)
 
         if cfg.program.resume:
-            ckpt = torch.load(cfg.program.checkpoint_file)
+            try:
+                ckpt = torch.load(cfg.program.saved_model_file)
+            except FileNotFoundError:
+                ckpt = torch.load(cfg.program.checkpoint_file)
             self.detector.load_state_dict(ckpt['state_dict'])
             self.start_epoch = ckpt['epoch'] + 1
             self.curr_train_iter = ckpt['curr_iter'] + 1
