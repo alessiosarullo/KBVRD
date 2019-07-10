@@ -411,7 +411,7 @@ class ZSSimModel(ZSModel):
         self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)
 
         # these are RELATIVE to the seen ones
-        rel_seen_transfer_pred_inds = [np.flatnonzero(seen_pred_inds == p)[0] for p in seen_transfer_pred_inds]
+        rel_seen_transfer_pred_inds = np.array([np.flatnonzero(seen_pred_inds == p)[0] for p in seen_transfer_pred_inds])
         self.rel_seen_transfer_inds = nn.Parameter(torch.from_numpy(rel_seen_transfer_pred_inds), requires_grad=False)
 
         wemb_dim = self.pred_word_embs.shape[0]
