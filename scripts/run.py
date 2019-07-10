@@ -54,6 +54,10 @@ class Launcher:
             all_predictions = self.evaluate()
             print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         else:
+            try:
+                os.remove(cfg.program.prediction_file)
+            except FileNotFoundError:
+                pass
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
