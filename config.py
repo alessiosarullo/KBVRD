@@ -246,7 +246,7 @@ class OptimizerConfig(BaseConfigs):
         # Optimiser parameters
         self.adam = False
         self.momentum = 0.9
-        self.l2_coeff = 1e-4
+        self.l2_coeff = 5e-4
         self.grad_clip = 5.0
         self.num_epochs = 10
 

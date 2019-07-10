@@ -400,6 +400,8 @@ class ZSSimModel(ZSModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        assert cfg.model.softl
+
         seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         seen_transfer_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
         seen_full_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
