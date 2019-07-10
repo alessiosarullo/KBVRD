@@ -404,9 +404,9 @@ class ZSSimModel(ZSModel):
 
         seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         seen_transfer_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
-        seen_full_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
-        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_full_train_pred_inds.tolist())))
-        self.seen_pred_inds = nn.Parameter(torch.from_numpy(seen_full_train_pred_inds), requires_grad=False)
+        seen_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
+        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_train_pred_inds.tolist())))
+        self.seen_train_inds = nn.Parameter(torch.from_numpy(seen_train_pred_inds), requires_grad=False)
         self.seen_transfer_inds = nn.Parameter(torch.from_numpy(seen_transfer_pred_inds), requires_grad=False)
         self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)
 
@@ -432,7 +432,7 @@ class ZSSimModel(ZSModel):
         transfer_labels = known_labels[:, self.rel_seen_transfer_inds]
         train_labels = known_labels[:, self.rel_seen_train_inds]
         unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
-                                                                 train_labels @ self.pred_word_embs[self.seen_pred_inds, :]], dim=1))
+                                                                 train_labels @ self.pred_word_embs[self.seen_train_inds, :]], dim=1))
 
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
