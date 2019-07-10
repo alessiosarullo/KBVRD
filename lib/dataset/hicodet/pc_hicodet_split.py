@@ -172,10 +172,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             raise NotImplementedError('Object class filtering is not supported.')
         if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
-            self.pc_hoi_mask = np.any(self.pc_action_labels, axis=1)
             # Note: boxes with no interactions are NOT filtered
-        else:
-            self.pc_hoi_mask = None
 
         # Derived
         self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)
@@ -291,15 +288,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                     if box_inds is not None:
                         precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
                         precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-
-                    # Filter out HOIs
-                    if self.pc_hoi_mask is not None:
-                        img_hoi_mask = self.pc_hoi_mask[start:end]
-                        precomp_hoi_infos = precomp_hoi_infos[img_hoi_mask, :]
-                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[img_hoi_mask, :]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[img_hoi_mask, :]
-                        if precomp_action_labels is not None:
-                            precomp_action_labels = precomp_action_labels[img_hoi_mask, :]
 
                     # Filter out HOIs
                     if False and (self.active_predicates.size < self.num_predicates or box_inds is not None):  # FIXME
