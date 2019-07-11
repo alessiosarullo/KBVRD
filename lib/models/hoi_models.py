@@ -302,10 +302,11 @@ class ZSModel(ZSBaseModel):
             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
         if cfg.model.vv:
+            assert not cfg.model.iso_null, print('Not supported')
             self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = self.gcn.word_embs
         else:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim), isolate_null=cfg.model.iso_null)
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         self.obj_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')),
                                           requires_grad=False)

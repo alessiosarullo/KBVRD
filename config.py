@@ -235,6 +235,7 @@ class ModelConfig(BaseConfigs):
         # ZS GCN
         self.vv = False
         self.large = False
+        self.iso_null = False
 
         # Predict action or interaction?
         self.phoi = False

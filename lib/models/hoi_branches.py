@@ -9,7 +9,7 @@ from lib.models.abstract_model import AbstractHOIBranch
 
 
 class CheatGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), isolate_null=False, **kwargs):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
@@ -18,6 +18,8 @@ class CheatGCNBranch(AbstractHOIBranch):
 
         # Normalised adjacency matrix
         self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
+        if isolate_null:
+            self.noun_verb_links[:, 0] = 0
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
@@ -28,8 +30,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         self.adj_diag = nn.Parameter(adj.diag(), requires_grad=False)
 
         # Starting representation
-        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(),
-                              requires_grad=True)
+        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(), requires_grad=True)
 
         gc_layers = []
         for i in range(num_gc_layers):
