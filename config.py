@@ -223,9 +223,11 @@ class ModelConfig(BaseConfigs):
         self.attw = False
         self.oprior = False
         self.oscore = False
+        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
+
         self.softl = 0.0
         self.nullzs = False
-        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
+        self.lis = False
 
         self.aereg = 0.0
         self.regsmall = False
