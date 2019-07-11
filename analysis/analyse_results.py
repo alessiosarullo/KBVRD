@@ -22,20 +22,27 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
+
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
-    sys.argv[1:] = ['compare']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-09_13-09-45_bare_softl1-act']
+    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
+
+    # sys.argv[1:] = ['compare']
+
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
-    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-04_10-29-22_bare_softl01']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-09_13-09-45_bare_softl1-act'] + ['--seenf', '1']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
+
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
     pass
 
 
 class Analyser:
-    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=0.5):
+    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=0.05):
         super().__init__()
 
         self.iou_thresh = iou_thresh
@@ -242,6 +249,31 @@ def _setup_and_load():
     return results
 
 
+def _print_confidence_scores(analyser: Analyser, marked_preds=None):
+    if marked_preds is not None:
+        marked_preds = {x for x in marked_preds}
+    else:
+        marked_preds = []
+    hicodet = analyser.dataset.hicodet
+    num_gt_act = np.sum(analyser.num_gt, axis=0).astype(np.int)
+    print(' ' * 20,
+          ' '.join([f'{x:6.2f}{"":7s}' for x in analyser.ph_bins[1:]]),
+          '|', '{:>25s}'.format(f'>{analyser.ph_bins[1]}'),
+          '|', f'{"#GT":>6s}')
+    for j in range(hicodet.num_predicates):
+        pred_hist = analyser.pred_act_hist[:, j]
+        pred_match_hist = analyser.pred_best_match_act_hist[:, j]
+        sum_p = np.sum(pred_hist[1:])
+        sum_m = np.sum(pred_match_hist[1:])
+        n_gt = num_gt_act[j]
+        assert np.all(pred_match_hist[pred_hist == 0] == 0)
+        print(f'{">" if j in marked_preds else "":1s}{hicodet.predicates[j]:19s}',
+              ' '.join([f'{p:6d} ({"{:3.0f}{:1s}".format(100 * m / p, "%" if m > 0 else "") if p > 0 else "":>4s})'
+                        for p, m in zip(pred_hist, pred_match_hist)]),
+              '|', f'{sum_p:6d} (p: {"{:3.0f}%".format(100 * sum_m / sum_p) if sum_p > 0 else "":>4s}, r: {100 * sum_m / n_gt:3.0f}%)',
+              '|', f'{n_gt:6d}')
+
+
 def evaluate():
     results = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
@@ -334,27 +366,9 @@ def stats():
     pred_inds = (np.argsort(num_gt.sum(axis=0)[1:])[::-1] + 1).tolist() + [0]  # no_interaction at the end
     s_predicates = [hdtest.predicates[i] for i in pred_inds]
 
-    num_gt_act = np.sum(num_gt, axis=0).astype(np.int)
-    print(' ' * 20,
-          ' '.join([f'{x:6.2f}{"":7s}' for x in analyser.ph_bins[1:]]),
-          '|', '{:>25s}'.format(f'>{analyser.ph_bins[1]}'),
-          '|', f'{"#GT":>6s}')
-    for j in range(hicodet.num_predicates):
-        pred_hist = analyser.pred_act_hist[:, j]
-        pred_match_hist = analyser.pred_best_match_act_hist[:, j]
-        sum_p = np.sum(pred_hist[1:])
-        sum_m = np.sum(pred_match_hist[1:])
-        n_gt = num_gt_act[j]
-        assert np.all(pred_match_hist[pred_hist == 0] == 0)
-        print(f'{hicodet.predicates[j]:20s}',
-              ' '.join([f'{p:6d} ({"{:3.0f}{:1s}".format(100 * m / p, "%" if m > 0 else "") if p > 0 else "":>4s})'
-                        for p, m in zip(pred_hist, pred_match_hist)]),
-              '|', f'{sum_p:6d} (p: {"{:3.0f}%".format(100 * sum_m / sum_p) if sum_p > 0 else "":>4s}, r: {100 * sum_m / n_gt:3.0f}%)',
-              '|', f'{n_gt:6d}')
+    _print_confidence_scores(analyser)
 
-    exit(0)  # FIXME
-
-    print(np.mean(recall[num_gt > 0]))
+    print('Recall:', np.mean(recall[num_gt > 0]))
 
     out_of_gt_preds = (num_gt == 0).astype(np.float) * num_pred
     out_of_gt_preds[out_of_gt_preds == 0] = np.inf
@@ -436,15 +450,18 @@ def zs_stats():
             pickle.dump(analyser, f)
         print('Saved')
 
-    num_gt, num_pred = analyser.num_gt, analyser.num_pred
-    recall = analyser.gt_matches / num_gt
-    precision = analyser.pred_matches / num_pred
-    act_conf_mat = analyser.act_conf_mat
+    with np.errstate(divide='ignore', invalid='ignore'):
+        num_gt, num_pred = analyser.num_gt, analyser.num_pred
+        recall = analyser.gt_matches / num_gt
+        precision = analyser.pred_matches / num_pred
+        act_conf_mat = analyser.act_conf_mat
 
     obj_inds = np.argsort(num_gt.sum(axis=1))[::-1]
     s_objects = [hdtest.objects[i] for i in obj_inds]
     pred_inds = (np.argsort(num_gt.sum(axis=0)[1:])[::-1] + 1).tolist() + [0]  # no_interaction at the end
     s_predicates = [hdtest.predicates[i] for i in pred_inds]
+
+    _print_confidence_scores(analyser, marked_preds=set(range(hicodet.num_predicates)) - set(seen_act_inds))
 
     zero_shot_preds = np.full_like(num_pred, fill_value=np.inf)
     zero_shot_preds[seen_interactions] = -1
@@ -472,7 +489,18 @@ def zs_stats():
                                     for zsp, p in np.stack(np.where(~np.isinf(zs_confmat) & (zs_confmat > 0)), axis=1)])
     print()
     print('#' * 100, '\n')
-    print('#' * 30, 'Zero shot confusion matrix', '#' * 30, '\n')
+    print('#' * 30, 'Zero shot confusion matrix (ZS to all)', '#' * 30, '\n')
+    print(zero_shot_cmat_str)
+
+    zs_confmat_inv = act_conf_mat[pred_inds_zs, :][:, unseen_pred_inds]
+    zs_confmat_inv[zs_confmat_inv == 0] = np.inf
+    plot_mat(zs_confmat_inv, zs_predicates, s_predicates_zs, x_inds=unseen_pred_inds, y_inds=pred_inds_zs, plot=False)
+    plt.savefig(os.path.join(res_save_path, 'zs_conf_mat_inv.png'), dpi=300)
+    zero_shot_cmat_str = '\n'.join(['%-20s %-20s %.3f' % (s_predicates_zs[p], zs_predicates[zsp], zs_confmat_inv[p, zsp])
+                                    for p, zsp in np.stack(np.where(~np.isinf(zs_confmat_inv) & (zs_confmat_inv > 0)), axis=1)])
+    print()
+    print('#' * 100, '\n')
+    print('#' * 30, 'Zero shot confusion matrix (all to ZS)', '#' * 30, '\n')
     print(zero_shot_cmat_str)
 
     # act_cooccs_train = compute_cooccs(hdtrain)

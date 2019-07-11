@@ -198,6 +198,8 @@ class ZSBaseModel(GenericModel):
         unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
         self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
         self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
+        if cfg.model.nullzs:
+            self.unseen_and_null_pred_inds = nn.Parameter(torch.tensor(np.concatenate([np.array([0]), unseen_pred_inds])), requires_grad=False)
 
         self.load_backbone = len(cfg.model.hoi_backbone) > 0
         if self.load_backbone:
@@ -226,7 +228,11 @@ class ZSBaseModel(GenericModel):
             if not inference:
                 if cfg.model.softl > 0:
                     assert unseen_action_labels is not None
-                    unseen_action_logits = action_output[:, self.unseen_pred_inds]
+                    if cfg.model.nullzs:
+                        unseen_action_logits = action_output[:, self.unseen_and_null_pred_inds]
+                        unseen_action_labels = torch.cat([action_labels[:, :1], unseen_action_labels], dim=1)
+                    else:
+                        unseen_action_logits = action_output[:, self.unseen_pred_inds]
                     seen_action_logits = action_output[:, self.seen_pred_inds]
                     losses = {'action_loss': F.binary_cross_entropy_with_logits(seen_action_logits, action_labels) * seen_action_logits.shape[1],
                               'action_loss_unseen': cfg.model.softl *
