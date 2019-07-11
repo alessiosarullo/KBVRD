@@ -339,7 +339,8 @@ class ZSModel(ZSBaseModel):
                 w, k, T = 10, 12, 8.4
             else:
                 assert w is not None and k is not None
-                T = np.ceil((1 + np.exp(k - w)) * 10) / 10  # this is basically how they compute it. It's a normalisation constant for when x=1.
+                # This is basically how they compute it. It's a normalisation constant for when x=1.
+                T = (np.ceil((1 + np.exp(k - w)) * 10) / 10).item()
         assert w is not None and k is not None and T is not None
         return T * torch.sigmoid(w * x - k)
 
