@@ -333,9 +333,14 @@ class ZSModel(ZSBaseModel):
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
 
-    def LIS(self, x, w=10, k=12, T=8.4):  # defaults are as in the paper
+    def LIS(self, x, w=None, k=None, T=None):  # defaults are as in the paper
         if T is None:
-            T = np.ceil((1 + np.exp(k - w)) * 10) / 10  # this is basically how they compute it. It's a normalisation constant for when x=1.
+            if w is None and k is None:
+                w, k, T = 10, 12, 8.4
+            else:
+                assert w is not None and k is not None
+                T = np.ceil((1 + np.exp(k - w)) * 10) / 10  # this is basically how they compute it. It's a normalisation constant for when x=1.
+        assert w is not None and k is not None and T is not None
         return T * torch.sigmoid(w * x - k)
 
     def get_soft_labels(self, vis_output: VisualOutput):
