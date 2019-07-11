@@ -457,7 +457,7 @@ class ZSSimModel(ZSModel):
         surrogate_action_labels = self.LIS(surrogate_action_labels, w=10, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
-        unseen_action_label_loss = self.bce_loss(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
+        unseen_action_label_loss = F.binary_cross_entropy(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
         unseen_action_labels = surrogate_action_labels[:, self.unseen_pred_inds]
         return unseen_action_labels.detach(), unseen_action_label_loss
 
