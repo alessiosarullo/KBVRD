@@ -117,6 +117,11 @@ class Launcher:
 
     def get_optim(self):
         params = self.detector.parameters()
+        if cfg.opt.c_lr_gcn != 0:
+            assert not cfg.program.resume, 'Not implemented'
+            gcn_params = [p for n, p in self.detector.named_parameters() if 'gcn' in n and p.requires_grad]
+            non_gcn_params = [p for n, p in self.detector.named_parameters() if 'gcn' not in n and p.requires_grad]
+            params = [{'params': gcn_params, 'lr': cfg.opt.lr * cfg.opt.c_lr_gcn}, {'params': non_gcn_params}]
         if cfg.program.resume:
             params = [{'params': p, 'initial_lr': cfg.opt.lr} for p in self.detector.parameters() if p.requires_grad]
 

@@ -28,7 +28,9 @@ try:
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_12-10-10_bare_softl1-act']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_14-28-53_bare_softl1-act_nullzs']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_15-26-34_bare_softl1-act_lis']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_16-32-36_bare_isonull']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-12_11-26-05_bare_softl1-act_nullzs_aggp']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-12_11-59-10_bare_softl1-act_lis18-7']
 
     # sys.argv[1:] = ['compare']
 
@@ -36,7 +38,9 @@ try:
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_12-10-10_bare_softl1-act']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_14-28-53_bare_softl1-act_nullzs']
-    sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_15-26-34_bare_softl1-act_lis']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_16-32-36_bare_isonull']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-12_11-26-05_bare_softl1-act_nullzs_aggp']
+    sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-12_11-59-10_bare_softl1-act_lis18-7']
 
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:

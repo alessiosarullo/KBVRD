@@ -302,7 +302,7 @@ class ZSModel(ZSBaseModel):
             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
 
         if cfg.model.vv:
-            assert not cfg.model.iso_null, print('Not supported')
+            assert not cfg.model.iso_null, 'Not supported'
             self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
             word_embs = self.gcn.word_embs
         else:

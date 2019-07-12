@@ -255,6 +255,7 @@ class OptimizerConfig(BaseConfigs):
         self.lr = 1e-3
         self.lr_gamma = 0.0
         self.lr_decay_period = 4
+        self.c_lr_gcn = 0.0
 
         # Batch parameters
         self.group = False  # group HOIs belonging to the same image
