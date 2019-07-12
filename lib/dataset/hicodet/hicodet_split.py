@@ -323,14 +323,14 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs,
             interaction_mask = np.all(hois >= 0, axis=1)
             hois = hois[interaction_mask, :]
 
-            if hois.size > 0:
-                # Filter boxes with no interactions
-                box_mask = np.zeros(boxes.shape[0], dtype=bool)
-                box_mask[np.unique(hois[:, [0, 2]])] = 1
-                boxes = boxes[box_mask, :]
-                box_classes = box_classes[box_mask]
-                hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
-                assert np.all(hois >= 0)
+            # if hois.size > 0:
+            #     # Filter boxes with no interactions
+            #     box_mask = np.zeros(boxes.shape[0], dtype=bool)
+            #     box_mask[np.unique(hois[:, [0, 2]])] = 1
+            #     boxes = boxes[box_mask, :]
+            #     box_classes = box_classes[box_mask]
+            #     hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
+            #     assert np.all(hois >= 0)
 
             new_split_data.append(HicoDetImData(filename=im_data.filename,
                                                 boxes=boxes, box_classes=box_classes,

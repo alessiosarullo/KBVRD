@@ -236,6 +236,7 @@ class ModelConfig(BaseConfigs):
         self.vv = False
         self.large = False
         self.iso_null = False
+        self.aggp = False
 
         # Predict action or interaction?
         self.phoi = False

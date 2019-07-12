@@ -25,16 +25,18 @@ try:
 
     # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
-    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-09_13-09-45_bare_softl1-act']
-    sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_12-10-10_bare_softl1-act']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_14-28-53_bare_softl1-act_nullzs']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-11_15-26-34_bare_softl1-act_lis']
 
     # sys.argv[1:] = ['compare']
 
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-01_22-15-33_bare']
-    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_20-50-20_att']
-    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-02_17-12-17_bare_softl']
-    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-09_13-09-45_bare_softl1-act'] + ['--seenf', '1']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_10-11-00_bare']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_12-10-10_bare_softl1-act']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_14-28-53_bare_softl1-act_nullzs']
+    sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_15-26-34_bare_softl1-act_lis']
 
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
@@ -418,25 +420,25 @@ def zs_stats():
     seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
-    hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
-    print('Val only interactions:')
-    for p, o in hdval.interactions:
-        if ~seen_interactions[o, p]:
-            print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
-    print('Val only objects:', sorted(set(hdval.objects) - set(hdtrain.objects)))
-    print('Val only actions:', sorted(set(hdval.predicates) - set(hdtrain.predicates)))
+    # hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
+    # print('Val only interactions:')
+    # for p, o in hdval.interactions:
+    #     if ~seen_interactions[o, p]:
+    #         print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
+    # print('Val only objects:', sorted(set(hdval.objects) - set(hdtrain.objects)))
+    # print('Val only actions:', sorted(set(hdval.predicates) - set(hdtrain.predicates)))
 
     hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
     unseen_interactions[hdtest.interactions[:, 1], hdtest.interactions[:, 0]] = 1
     unseen_interactions[seen_interactions] = 0
-    print('Unseen interactions:')
-    for p, o in hdtest.interactions:
-        if ~seen_interactions[o, p]:
-            print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
-            assert unseen_interactions[o, p]
-    print('Unseen objects:', sorted(set(hdtest.objects) - set(hdtrain.objects)))
-    print('Unseen actions:', sorted(set(hdtest.predicates) - set(hdtrain.predicates)))
+    # print('Unseen interactions:')
+    # for p, o in hdtest.interactions:
+    #     if ~seen_interactions[o, p]:
+    #         print(f'{hicodet.predicates[p]:20s} {hicodet.objects[o]:20s}')
+    #         assert unseen_interactions[o, p]
+    # print('Unseen objects:', sorted(set(hdtest.objects) - set(hdtrain.objects)))
+    # print('Unseen actions:', sorted(set(hdtest.predicates) - set(hdtrain.predicates)))
 
     cache_fn = os.path.join(res_save_path, 'cache.pkl')
     try:

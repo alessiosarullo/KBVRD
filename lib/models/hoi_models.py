@@ -308,10 +308,22 @@ class ZSModel(ZSBaseModel):
         else:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim), isolate_null=cfg.model.iso_null)
             word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')),
-                                          requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')),
-                                           requires_grad=False)
+        obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
+        if cfg.model.aggp:
+            for j, pe in enumerate(pred_wembs):
+                if j == 0:
+                    continue
+                new_pred_emb = pe
+                for i, oe in enumerate(obj_wembs):
+                    if self.gcn.noun_verb_links[i, j]:
+                        ope = (pe + oe) / 2
+                        ope /= np.linalg.norm(ope)
+                        new_pred_emb += ope
+                new_pred_emb /= np.linalg.norm(new_pred_emb)
+                pred_wembs[j, :] = new_pred_emb
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
         if cfg.model.aereg > 0:
