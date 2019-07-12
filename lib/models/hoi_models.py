@@ -351,8 +351,8 @@ class ZSModel(ZSBaseModel):
                 w, k, T = 10, 12, 8.4
             else:
                 assert w is not None and k is not None
-                # This is basically how they compute it. It's a normalisation constant for when x=1.
-                T = (np.ceil((1 + np.exp(k - w)) * 10) / 10).item()
+                # This is basically what it is: a normalisation constant for when x=1.
+                T = 1 + np.exp(k - w).item()
         assert w is not None and k is not None and T is not None
         return T * torch.sigmoid(w * x - k)
 
@@ -364,7 +364,7 @@ class ZSModel(ZSBaseModel):
         action_labels = vis_output.action_labels
         pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds]
         if cfg.model.lis:
-            act_sim = action_labels @ self.LIS(pred_sims.clamp(min=0), w=10, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+            act_sim = action_labels @ self.LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
             act_sim = torch.sigmoid(action_labels @ pred_sims)
         unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
