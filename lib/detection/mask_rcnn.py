@@ -96,3 +96,22 @@ class MaskRCNN(nn.Module):
             masks = im_detect_mask(self.mask_rcnn, box_im_ids, boxes, fmap)
             masks = torch.stack([masks[i, c, :, :] for i, c in enumerate(box_classes)], dim=0)
         return masks.detach()
+
+
+class ImgMaskRCNN(MaskRCNN):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: Minibatch, **kwargs):
+        assert self.allow_train or not self.training
+        with torch.set_grad_enabled(self.training):
+            detect_inputs = {'data': x.imgs, 'im_info': torch.tensor(x.img_infos, dtype=torch.float32, device=x.imgs.device)}
+            return_dict = self.mask_rcnn(**detect_inputs)
+            fmap = return_dict['blob_conv']
+            return fmap.detach()
+
+    def get_rois_feats(self, fmap, rois):
+        raise NotImplementedError
+
+    def get_masks(self, fmap, rois, box_classes):
+        raise NotImplementedError
