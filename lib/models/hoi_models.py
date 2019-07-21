@@ -7,6 +7,18 @@ from lib.models.generic_model import GenericModel, Prediction, F
 from lib.models.hoi_branches import *
 
 
+def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
+    if T is None:
+        if w is None and k is None:
+            w, k, T = 10, 12, 8.4
+        else:
+            assert w is not None and k is not None
+            # This is basically what it is: a normalisation constant for when x=1.
+            T = 1 + np.exp(k - w).item()
+    assert w is not None and k is not None and T is not None
+    return T * torch.sigmoid(w * x - k)
+
+
 class BaseModel(GenericModel):
     @classmethod
     def get_cline_name(cls):
@@ -187,12 +199,11 @@ class BGFilter(BaseModel):
         return action_logits, bg_logits
 
 
-class ZSBaseModel(GenericModel):
+class ZSGenericModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
         self.base_model = BaseModel(dataset, **kwargs)
-        self.predictor_dim = self.base_model.final_repr_dim
 
         seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
@@ -207,6 +218,42 @@ class ZSBaseModel(GenericModel):
             self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
             assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
             # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+
+        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
+        if cfg.model.aggp:
+            for j, pe in enumerate(pred_wembs):
+                if j == 0:
+                    continue
+                new_pred_emb = pe
+                for i, oe in enumerate(obj_wembs):
+                    if self.gcn.noun_verb_links[i, j]:
+                        ope = (pe + oe) / 2
+                        ope /= np.linalg.norm(ope)
+                        new_pred_emb += ope
+                new_pred_emb /= np.linalg.norm(new_pred_emb)
+                pred_wembs[j, :] = new_pred_emb
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
+        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
+
+        if cfg.model.softl:
+            self.obj_act_feasibility = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
+
+    def get_soft_labels(self, vis_output: VisualOutput):
+        # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
+        # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
+        # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+
+        action_labels = vis_output.action_labels
+        pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds]
+        if cfg.model.lis:
+            act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+        else:
+            act_sim = torch.sigmoid(action_labels @ pred_sims)
+        unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+        return unseen_action_labels.detach()
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -264,13 +311,41 @@ class ZSBaseModel(GenericModel):
                 return prediction
 
 
-class ZSModel(ZSBaseModel):
+class ZSBaseModel(ZSGenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsb'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        assert cfg.model.softl > 0
+
+        num_classes = dataset.hicodet.num_predicates  # ALL predicates
+        self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
+
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        action_logits = self.output_mlp(vrepr)
+
+        action_labels = vis_output.action_labels
+        unseen_action_labels = None
+        if action_labels is not None:
+            unseen_action_labels = self.get_soft_labels(vis_output)
+
+        reg_loss = None
+        return action_logits, action_labels, reg_loss, unseen_action_labels
+
+
+class ZSGCModel(ZSGenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsgc'
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        self.predictor_dim = self.base_model.final_repr_dim
+
         if cfg.model.large:
             gcemb_dim = 2048
             self.emb_dim = 512
@@ -303,27 +378,8 @@ class ZSModel(ZSBaseModel):
         if cfg.model.vv:
             assert not cfg.model.iso_null, 'Not supported'
             self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
-            word_embs = self.gcn.word_embs
         else:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim), isolate_null=cfg.model.iso_null)
-            word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
-        if cfg.model.aggp:
-            for j, pe in enumerate(pred_wembs):
-                if j == 0:
-                    continue
-                new_pred_emb = pe
-                for i, oe in enumerate(obj_wembs):
-                    if self.gcn.noun_verb_links[i, j]:
-                        ope = (pe + oe) / 2
-                        ope /= np.linalg.norm(ope)
-                        new_pred_emb += ope
-                new_pred_emb /= np.linalg.norm(new_pred_emb)
-                pred_wembs[j, :] = new_pred_emb
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
-        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
 
         if cfg.model.aereg > 0:
             if cfg.model.regsmall:
@@ -342,32 +398,6 @@ class ZSModel(ZSBaseModel):
 
         if cfg.model.softl:
             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-            self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
-
-    def LIS(self, x, w=None, k=None, T=None):  # defaults are as in the paper
-        if T is None:
-            if w is None and k is None:
-                w, k, T = 10, 12, 8.4
-            else:
-                assert w is not None and k is not None
-                # This is basically what it is: a normalisation constant for when x=1.
-                T = 1 + np.exp(k - w).item()
-        assert w is not None and k is not None and T is not None
-        return T * torch.sigmoid(w * x - k)
-
-    def get_soft_labels(self, vis_output: VisualOutput):
-        # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
-        # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
-        # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
-
-        action_labels = vis_output.action_labels
-        pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds]
-        if cfg.model.lis:
-            act_sim = action_labels @ self.LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
-        else:
-            act_sim = torch.sigmoid(action_labels @ pred_sims)
-        unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
-        return unseen_action_labels.detach()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
@@ -421,7 +451,7 @@ class ZSModel(ZSBaseModel):
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
-class ZSSimModel(ZSModel):
+class ZSSimModel(ZSGCModel):
     @classmethod
     def get_cline_name(cls):
         return 'zss'
@@ -465,7 +495,7 @@ class ZSSimModel(ZSModel):
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
-        surrogate_action_labels = self.LIS(surrogate_action_labels, w=10, k=7)
+        surrogate_action_labels = LIS(surrogate_action_labels, w=10, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
         unseen_action_label_loss = F.binary_cross_entropy(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)

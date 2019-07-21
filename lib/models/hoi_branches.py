@@ -8,8 +8,15 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractHOIBranch
 
 
+def get_noun_verb_adj_mat(dataset: HicoDetSplit):
+    noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32))
+    if cfg.model.iso_null:
+        noun_verb_links[:, 0] = 0
+    return noun_verb_links
+
+
 class CheatGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), isolate_null=False, **kwargs):
+    def __init__(self, dataset: HicoDetSplit, input_repr_dim=512, gc_dims=(256, 128), **kwargs):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
@@ -17,9 +24,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         self.num_predicates = dataset.hicodet.num_predicates
 
         # Normalised adjacency matrix
-        self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
-        if isolate_null:
-            self.noun_verb_links[:, 0] = 0
+        self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
