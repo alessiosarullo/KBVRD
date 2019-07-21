@@ -321,7 +321,7 @@ class ZSBaseModel(ZSGenericModel):
         assert cfg.model.softl > 0
 
         num_classes = dataset.hicodet.num_predicates  # ALL predicates
-        self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
+        self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
