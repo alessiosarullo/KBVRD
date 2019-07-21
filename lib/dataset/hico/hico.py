@@ -5,21 +5,11 @@ import numpy as np
 from scipy.io import loadmat
 
 from lib.dataset.utils import Splits
-from typing import Dict, List
 
 
-class HicoDetImData:
-    def __init__(self, filename, boxes, box_classes, hois, wnet_actions):
-        self.filename = filename
-        self.boxes = boxes
-        self.box_classes = box_classes
-        self.hois = hois
-        self.wnet_actions = wnet_actions
-
-
-class HicoDet:
+class Hico:
     def __init__(self):
-        self.driver = HicoDetDriver()  # type: HicoDetDriver
+        self.driver = HicoDriver()  # type: HicoDriver
         self.null_interaction = self.driver.null_interaction
 
         # Objects
@@ -38,9 +28,12 @@ class HicoDet:
         self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
         # Data
-        self.split_data = {Splits.TRAIN: self.compute_annotations(Splits.TRAIN),
-                           Splits.TEST: self.compute_annotations(Splits.TEST)
-                           }  # type: Dict[Splits: List[HicoDetImData]]
+        train_annotations = self.driver.split_annotations[Splits.TRAIN]
+        train_annotations[np.isnan(train_annotations)] = 0
+        test_annotations = self.driver.split_annotations[Splits.TEST]
+        test_annotations[np.isnan(test_annotations)] = 0
+        self.split_annotations = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
+        self.split_filenames = self.driver.split_filenames
 
     @property
     def human_class(self) -> int:
@@ -61,64 +54,8 @@ class HicoDet:
     def get_img_dir(self, split):
         return self.driver.split_img_dir[split]
 
-    def compute_annotations(self, split) -> List[HicoDetImData]:
-        annotations = self.driver.split_annotations[split if split == Splits.TEST else Splits.TRAIN]
-        split_data = []
-        for i, img_ann in enumerate(annotations):
-            im_hum_boxes, im_obj_boxes, im_obj_box_classes, im_interactions, im_wn_actions = [], [], [], [], []
-            for inter in img_ann['interactions']:
-                inter_id = inter['id']
-                if not inter['invis']:
-                    curr_num_hum_boxes = int(sum([b.shape[0] for b in im_hum_boxes]))
-                    curr_num_obj_boxes = int(sum([b.shape[0] for b in im_obj_boxes]))
 
-                    # Interaction
-                    pred_class = self.interactions[inter_id][0]
-                    new_inters = inter['conn']
-                    num_new_inters = new_inters.shape[0]
-                    new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
-                                           np.full(num_new_inters, fill_value=pred_class, dtype=np.int),
-                                           new_inters[:, 1] + curr_num_obj_boxes
-                                           ], axis=1)
-                    im_interactions.append(new_inters)
-                    im_wn_actions += [self.driver.interaction_list[inter_id]['pred_wid'] for _ in range(num_new_inters)]
-
-                    # Human
-                    im_hum_boxes.append(inter['hum_bbox'])
-
-                    # Object
-                    obj_boxes = inter['obj_bbox']
-                    im_obj_boxes.append(obj_boxes)
-                    obj_class = self.interactions[inter_id][1]
-                    im_obj_box_classes.append(np.full(obj_boxes.shape[0], fill_value=obj_class, dtype=np.int))
-
-            if im_hum_boxes:
-                assert im_obj_boxes
-                assert im_obj_box_classes
-                assert im_interactions
-                im_hum_boxes, inv_ind = np.unique(np.concatenate(im_hum_boxes, axis=0), axis=0, return_inverse=True)
-                num_hum_boxes = im_hum_boxes.shape[0]
-
-                im_obj_boxes = np.concatenate(im_obj_boxes)
-                im_obj_box_classes = np.concatenate(im_obj_box_classes)
-
-                im_interactions = np.concatenate(im_interactions)
-                im_interactions[:, 0] = np.array([inv_ind[h] for h in im_interactions[:, 0]], dtype=np.int)
-                im_interactions[:, 2] += num_hum_boxes
-
-                im_boxes = np.concatenate([im_hum_boxes, im_obj_boxes], axis=0)
-                im_box_classes = np.concatenate([np.full(num_hum_boxes, fill_value=self.human_class, dtype=np.int), im_obj_box_classes])
-            else:
-                im_boxes = np.empty((0, 4), dtype=np.int)
-                im_box_classes = np.empty(0, dtype=np.int)
-                im_interactions = np.empty((0, 3), dtype=np.int)
-            split_data.append(HicoDetImData(filename=img_ann['file'], boxes=im_boxes, box_classes=im_box_classes, hois=im_interactions,
-                                            wnet_actions=im_wn_actions))
-
-        return split_data
-
-
-class HicoDetDriver:
+class HicoDriver:
     def __init__(self):
         """
         Relevant class attributes:
@@ -158,64 +95,56 @@ class HicoDetDriver:
         """
         # TODO what are the 'id' and 'count' field for?
 
-        self.data_dir = os.path.join('data', 'HICO-DET')
+        self.data_dir = os.path.join('data', 'HICO')
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')
         self.null_interaction = '__no_interaction__'
 
-        train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict = self.load_annotations()
+        train_annotations, train_fns, test_annotations, test_fns, interaction_list, wn_pred_dict, pred_dict = self.load_annotations()
         self.split_img_dir = {Splits.TRAIN: os.path.join(self.data_dir, 'images', 'train2015'),
                               Splits.TEST: os.path.join(self.data_dir, 'images', 'test2015')}
         self.split_annotations = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
+        self.split_filenames = {Splits.TRAIN: train_fns, Splits.TEST: test_fns}
         self.interaction_list = interaction_list
         self.wn_predicate_dict = wn_pred_dict
         self.predicate_dict = pred_dict
 
     def load_annotations(self):
-        def _parse_split(_split):
-            # The many "-1"s are due to original values being suited for MATLAB.
-            _annotations = []
-            for _src_ann in src_anns['bbox_%s' % _split.value]:
-                _ann = {'file': _src_ann[0],
-                        'img_size': np.array([int(_src_ann[1][field]) for field in ['width', 'height', 'depth']], dtype=np.int),
-                        'interactions': []}
-                for _inter in np.atleast_1d(_src_ann[2]):
-                    _new_inter = {
-                        'id': int(_inter['id']) - 1,
-                        'invis': bool(_inter['invis']),
-                    }
-                    if not _new_inter['invis']:
-                        _new_inter['hum_bbox'] = np.atleast_2d(np.array([_inter['bboxhuman'][c] - 1 for c in ['x1', 'y1', 'x2', 'y2']],
-                                                                        dtype=np.int).T)
-                        _new_inter['obj_bbox'] = np.atleast_2d(np.array([_inter['bboxobject'][c] - 1 for c in ['x1', 'y1', 'x2', 'y2']],
-                                                                        dtype=np.int).T)
-                        _new_inter['conn'] = np.atleast_2d(np.array([coord - 1 for coord in _inter['connection']], dtype=np.int))
-                    _ann['interactions'].append(_new_inter)
-                _annotations.append(_ann)
-            return _annotations
-
         try:
             with open(self.path_pickle_annotation_file, 'rb') as f:
                 d = pickle.load(f)
-                train_annotations = d[Splits.TRAIN.value]
-                test_annotations = d[Splits.TEST.value]
+                train_annotations = d[f'{Splits.TRAIN.value}_anno']
+                train_fns = d[f'{Splits.TRAIN.value}_fn']
+                test_annotations = d[f'{Splits.TEST.value}_anno']
+                test_fns = d[f'{Splits.TEST.value}_fn']
                 interaction_list = d['interaction_list']
                 wn_pred_dict = d['wn_pred_dict']
                 pred_dict = d['pred_dict']
         except FileNotFoundError:
-            src_anns = loadmat(os.path.join(self.data_dir, 'anno_bbox.mat'), squeeze_me=True)
+            # 'anno_train': 600 x 38118 matrix. Associates to each training set images action labels. Specifically, cell (i,j) can contain one
+            #       of the four values -1, 0, 1 or NaN according to whether action i is a hard negative, a soft negative/positive,
+            #       a hard positive or unknown in image j.
+            # 'anno_test': 600 x 9658 matrix. Same format for the training set one.
+            # 'list_train' and 'list_set' are respectively 38118- and 9658- dimensional vectors of file names.
+            src_anns = loadmat(os.path.join(self.data_dir, 'anno.mat'), squeeze_me=True)
 
-            train_annotations = _parse_split(_split=Splits.TRAIN)
-            test_annotations = _parse_split(_split=Splits.TEST)
-
+            train_annotations = src_anns['anno_train'].T
+            train_fns = [fn for fn in src_anns['list_train']]
+            test_annotations = src_anns['anno_test'].T
+            test_fns = [fn for fn in src_anns['list_test']]
             interaction_list, wn_pred_dict, pred_dict = self.parse_interaction_list(src_anns['list_action'])
 
             with open(self.path_pickle_annotation_file, 'wb') as f:
-                pickle.dump({Splits.TRAIN.value: train_annotations,
-                             Splits.TEST.value: test_annotations,
+                pickle.dump({f'{Splits.TRAIN.value}_anno': train_annotations,
+                             f'{Splits.TRAIN.value}_fn': train_fns,
+                             f'{Splits.TEST.value}_anno': test_annotations,
+                             f'{Splits.TEST.value}_fn': test_fns,
                              'interaction_list': interaction_list,
                              'wn_pred_dict': wn_pred_dict,
                              'pred_dict': pred_dict,
                              }, f)
+
+        assert train_annotations.shape[0] == len(train_fns)
+        assert test_annotations.shape[0] == len(test_fns)
 
         # Substitute 'no_interaction' with the specified null interaction string, if needed.
         pred_dict[self.null_interaction] = pred_dict.get('no_interaction', self.null_interaction)
@@ -227,7 +156,7 @@ class HicoDetDriver:
             if inter['obj'] == 'hair_drier':
                 inter['obj'] = 'hair_dryer'
 
-        return train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict
+        return train_annotations, train_fns, test_annotations, test_fns, interaction_list, wn_pred_dict, pred_dict
 
     @staticmethod
     def parse_interaction_list(src_interaction_list):
@@ -287,3 +216,7 @@ class HicoDetDriver:
         pred_dict = {k: pred_dict[k] for k in sorted(pred_dict.keys())}
 
         return interaction_list, wpred_dict, pred_dict
+
+
+if __name__ == '__main__':
+    Hico()
