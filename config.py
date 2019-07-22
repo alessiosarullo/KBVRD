@@ -245,6 +245,8 @@ class OptimizerConfig(BaseConfigs):
     def __init__(self):
         # Optimiser parameters
         self.adam = False
+        self.adamb1 = 0.9
+        self.adamb2 = 0.999
         self.momentum = 0.9
         self.l2_coeff = 5e-4
         self.grad_clip = 5.0
@@ -253,7 +255,7 @@ class OptimizerConfig(BaseConfigs):
         # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
         self.lr = 1e-3
         self.lr_gamma = 0.0
-        self.lr_decay_period = 4
+        self.lr_decay_period = 5
         self.c_lr_gcn = 0.0
 
         # Batch parameters

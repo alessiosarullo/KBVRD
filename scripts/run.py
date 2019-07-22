@@ -126,7 +126,7 @@ class Launcher:
             params = [{'params': p, 'initial_lr': cfg.opt.lr} for p in self.detector.parameters() if p.requires_grad]
 
         if cfg.opt.adam:
-            optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, eps=1e-3)
+            optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, betas=(cfg.opt.adamb1, cfg.opt.adamb2))
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, momentum=cfg.opt.momentum)
 
