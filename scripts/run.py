@@ -134,12 +134,17 @@ class Launcher:
         else:
             optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, momentum=cfg.opt.momentum)
 
-        lr_gamma = cfg.opt.lr_gamma
-        if lr_gamma > 0:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=lr_gamma,
+        lr_decay = cfg.opt.lr_decay_period
+        lr_warmup = cfg.opt.lr_warmup
+        if lr_warmup > 0:
+            assert lr_decay == 0
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[lr_warmup], gamma=cfg.opt.lr_gamma,
+                                                             last_epoch=self.start_epoch - 1)
+        elif lr_decay > 0:
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=cfg.opt.lr_gamma,
                                                         last_epoch=self.start_epoch - 1)
         else:
-            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=3, factor=0.1, verbose=True, threshold_mode='abs', cooldown=1)
+            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=cfg.opt.lr_gamma, verbose=True, threshold_mode='abs', cooldown=0)
         return optimizer, scheduler
 
     def train(self):
