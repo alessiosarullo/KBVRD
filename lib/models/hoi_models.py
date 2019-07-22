@@ -507,7 +507,6 @@ class ZSSimModel(ZSBaseModel):
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
 
-        _, all_class_embs = self.gcn()  # P x E
         action_labels = vis_output.action_labels
         unseen_action_labels, unseen_action_label_loss = None, None
         if action_labels is not None:
