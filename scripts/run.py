@@ -74,13 +74,15 @@ class Launcher:
         print('RNG seed:', seed)
 
         # Data
+        # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
+        obj_inds = pred_inds = inter_inds = None
         if cfg.program.seenf >= 0:
-            pred_inds = sorted(pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
-            obj_inds = cfg.data.obj_inds
-        else:
-            # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
-            obj_inds = cfg.data.obj_inds
-            pred_inds = cfg.data.pred_inds
+            inds_dict = pickle.load(open(cfg.program.active_classes_file, 'rb'))
+            try:
+                inter_inds = sorted(inds_dict[Splits.TRAIN.value]['inter'].tolist())
+            except KeyError:
+                pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
+                obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.opt.group:
             assert not cfg.opt.ohtrain
@@ -89,8 +91,10 @@ class Launcher:
             train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
         else:
             train_ds_class = PrecomputedHicoDetSingleHOIsSplit
-        self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN, obj_inds=obj_inds, pred_inds=pred_inds)
-        self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL, obj_inds=obj_inds, pred_inds=pred_inds)
+        self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
+                                                         obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
+        self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
+                                                       obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
         self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         # Model

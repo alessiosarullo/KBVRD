@@ -166,43 +166,12 @@ class DataConfig(BaseConfigs):
 
         self.num_images = 0  # restrict the dataset to this number of images if > 0
         self.val_ratio = 0.1
-        self.prinds = ''  # restrict the dataset to these predicates if not empty. FIXME fix interactions with seen file
-        self.obinds = ''  # restrict the dataset to these objects if not empty
 
         self.nw = 0
 
     @property
     def im_inds(self):
         return list(range(self.num_images)) if self.num_images > 0 else None
-
-    @property
-    def pred_inds(self):
-        if not self.prinds:  # use all predicates
-            return None
-        try:  # case in which a single number is specified
-            try:
-                num_preds = int(self.prinds)
-                pred_inds = list(range(num_preds))
-            except ValueError:  # cannot cast to int
-                num_possible_preds = 116  # FIXME magic constant
-                num_preds = int(float(self.prinds) * num_possible_preds)
-                pred_inds = [0] + sorted(random.sample(range(num_possible_preds), num_preds))
-        except ValueError:  # cannot cast to number: a list has been specified
-            pred_inds = sorted([int(pred_ind) for pred_ind in self.prinds.split(',')])
-            if pred_inds[0] != 0:
-                pred_inds = [0] + pred_inds
-        return pred_inds
-
-    @property
-    def obj_inds(self):
-        if not self.obinds:  # use all objects
-            return None
-        try:  # case in which a single number is specified
-            num_objs = int(self.obinds)
-            obj_inds = list(range(num_objs))
-        except ValueError:  # cannot cast to int: a list has been specified
-            obj_inds = sorted([int(obj_ind) for obj_ind in self.obinds.split(',')])
-        return obj_inds
 
 
 class ModelConfig(BaseConfigs):

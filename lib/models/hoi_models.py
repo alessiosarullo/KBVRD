@@ -496,6 +496,7 @@ class ZSSimModel(ZSBaseModel):
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
         surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
+        # act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
 
         # Loss is for transfer only, actual labels for unseen only
         transfer_labels = known_labels[:, self.rel_seen_transfer_inds].detach()

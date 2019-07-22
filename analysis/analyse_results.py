@@ -21,7 +21,7 @@ from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
-    sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-10_13-35-46_vanilla']
 
     # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
@@ -301,11 +301,24 @@ def evaluate():
     assert len(non_rare_classes) == 600 - 138
 
     map = evaluator.metrics['M-mAP']
+    print(np.mean(map))
     nrand = 25
-    for t in range(20):
+    a, b = [], []
+    for t in range(10000):
         unseen = np.sort(np.random.choice(non_rare_classes, size=nrand, replace=False))
-        print(unseen)
-        print(np.mean(map[unseen]))
+        a.append(unseen)
+        b.append(np.mean(map[unseen]))
+    b = np.array(b)
+    inds = np.argsort(b)[::-1]
+    for i in inds[:10]:
+        print(a[i])
+        print(b[i])
+    # [19  25 117 144 151 152 154 163 167 190 245 258 307 326 347 366 400 433 434 466 471 476 479 523 598]
+    # 0.3231287508995482
+    # [12  19  20  43  56 177 201 219 288 297 313 326 329 374 428 452 457 459 478 481 503 527 530 540 572]
+    # 0.3185646326138225
+    # [28  35  94 103 131 139 144 152 153 193 226 230 252 264 285 316 340 348 396 415 459 483 491 534 576]
+    # 0.3152317659333818
 
     # evaluator.output_metrics(sort=True, actions_to_keep=[1, 2, 84])
     # evaluator.output_metrics(sort=True, actions_to_keep=list(set(range(117)) - {84}))
@@ -436,8 +449,10 @@ def zs_stats():
     res_save_path = cfg.program.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    seen_act_inds = sorted(pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred'].tolist())
-    seen_obj_inds = cfg.data.obj_inds
+    inds_dict = pickle.load(open(cfg.program.active_classes_file, 'rb'))
+    seen_act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
+    seen_obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
+
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
     hicodet = hdtrain.hicodet
     seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)

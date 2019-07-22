@@ -214,7 +214,7 @@ class HicoDetSplitBuilder:
         raise NotImplementedError('Use class methods only.')
 
     @classmethod
-    def get_split(cls, split_class: Type[HicoDetSplit], split: Splits, pred_inds=None, obj_inds=None):
+    def get_split(cls, split_class: Type[HicoDetSplit], split: Splits, pred_inds=None, obj_inds=None, inter_inds=None):
         class_splits = cls.splits.setdefault(split_class, {})
         if split not in class_splits:
             if split == Splits.VAL:
@@ -223,9 +223,9 @@ class HicoDetSplitBuilder:
             if cls.hicodet is None:
                 cls.hicodet = HicoDet()
 
-            split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
+            split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds, inter_inds,
                                                                              filter_empty_imgs=split == Splits.TRAIN,
-                                                                             filter_null_only_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
+                                                                             filter_null_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
             assert len(split_data) == len(image_ids)
 
             # Split train/val if needed
@@ -293,9 +293,12 @@ def remap_box_pairs(box_pairs, box_mask):
     return box_pairs
 
 
-def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs, filter_null_only_imgs):
+def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter_empty_imgs, filter_null_imgs):
     split_data = hicodet.split_data[split]  # type: List[HicoDetImData]
     image_ids = list(range(len(split_data)))
+
+    if inter_inds is not None:
+        assert obj_inds is None and pred_inds is None
 
     # Filter out unwanted predicates/object classes
     if obj_inds is None and pred_inds is None:
@@ -323,15 +326,6 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs,
             interaction_mask = np.all(hois >= 0, axis=1)
             hois = hois[interaction_mask, :]
 
-            # if hois.size > 0:
-            #     # Filter boxes with no interactions
-            #     box_mask = np.zeros(boxes.shape[0], dtype=bool)
-            #     box_mask[np.unique(hois[:, [0, 2]])] = 1
-            #     boxes = boxes[box_mask, :]
-            #     box_classes = box_classes[box_mask]
-            #     hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
-            #     assert np.all(hois >= 0)
-
             new_split_data.append(HicoDetImData(filename=im_data.filename,
                                                 boxes=boxes, box_classes=box_classes,
                                                 hois=hois,
@@ -348,21 +342,21 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, filter_empty_imgs,
         final_objects_inds = sorted(obj_inds | {hicodet.human_class})
         final_pred_inds = sorted(pred_inds)
 
-    if filter_empty_imgs or filter_null_only_imgs:  # empty = no boxes
+    if filter_empty_imgs or filter_null_imgs:  # empty = no boxes
         im_with_interactions = []
         for i, im_data in enumerate(split_data):
             empty = im_data.boxes.size == 0
             fg_hois = np.any(im_data.hois[:, 1] != hicodet.predicate_index[hicodet.null_interaction])
             if filter_empty_imgs and empty:
                 continue
-            if filter_null_only_imgs and ~fg_hois:
+            if filter_null_imgs and ~fg_hois:
                 continue
             im_with_interactions.append(i)
         num_old_images, num_new_images = len(image_ids), len(im_with_interactions)
         if num_new_images < num_old_images:
             print(f'Images have been discarded due to {"not having objects" if filter_empty_imgs else ""}'
-                  f'{" or " if filter_empty_imgs and filter_null_only_imgs else ""}'
-                  f'{"only having background interactions" if filter_null_only_imgs else ""}. '
+                  f'{" or " if filter_empty_imgs and filter_null_imgs else ""}'
+                  f'{"only having background interactions" if filter_null_imgs else ""}. '
                   f'Image index has changed (from {num_old_images} images to {num_new_images}).')
             image_ids = [image_ids[i] for i in im_with_interactions]
             split_data = [split_data[i] for i in im_with_interactions]
