@@ -262,7 +262,7 @@ class OptimizerConfig(BaseConfigs):
         self.group = False  # group HOIs belonging to the same image
         self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
         self.img_batch_size = 8  # only used when grouping
-        self.hoi_batch_size = 64
+        self.batch_size = 64
         self.hoi_bg_ratio = 3
 
         # Loss parameters

@@ -143,8 +143,8 @@ class Launcher:
 
         optimizer, scheduler = self.get_optim()
 
-        train_loader = self.train_split.get_loader(batch_size=cfg.opt.hoi_batch_size, num_workers=cfg.data.nw)
-        val_loader = self.val_split.get_loader(batch_size=cfg.opt.hoi_batch_size)
+        train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size, num_workers=cfg.data.nw)
+        val_loader = self.val_split.get_loader(batch_size=cfg.opt.batch_size)
         test_loader = self.test_split.get_loader(batch_size=1)
 
         training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
