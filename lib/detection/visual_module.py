@@ -93,7 +93,8 @@ class VisualModule(nn.Module):
         hoi_obj_labels = box_labels[ho_infos[:, 2]]
 
         obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes), dtype=np.float32)
-        obj_labels_1hot[np.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
+        fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
+        obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
 
         hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
         assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.num_interactions
