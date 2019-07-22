@@ -169,7 +169,6 @@ class DataConfig(BaseConfigs):
         self.prinds = ''  # restrict the dataset to these predicates if not empty. FIXME fix interactions with seen file
         self.obinds = ''  # restrict the dataset to these objects if not empty
 
-        self.union = True
         self.nw = 0
 
     @property
@@ -268,6 +267,7 @@ class OptimizerConfig(BaseConfigs):
         self.margin = 0.0
         self.bg_coeff = 1.0
         self.fl_gamma = 0.0  # gamma in focal loss
+        self.meanc = False  # mean or sum over classes for BCE loss?
 
 
 class Configs:

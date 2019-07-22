@@ -51,10 +51,13 @@ class GenericModel(AbstractModel):
             x = (-s.abs()).exp()
             z = ((s >= 0) == t.byte()).float()
             loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
-            loss = loss_mat.mean() * loss_mat.shape[1]
+            loss = loss_mat.mean()
         else:  # standard BCE loss
-            loss = F.binary_cross_entropy_with_logits(logits, labels) * logits.shape[1]
+            loss = F.binary_cross_entropy_with_logits(logits, labels)
+        if not cfg.opt.meanc:
+            loss *= logits.shape[1]
         return loss
+
     #
     # def weighted_binary_cross_entropy_with_logits(self, logits, labels, num_rels=None):
     #     if num_rels is None:
