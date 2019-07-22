@@ -21,7 +21,7 @@ from lib.stats.utils import Timer
 
 try:
     matplotlib.use('Qt5Agg')
-    # sys.argv[1:] = ['eval', '--save_dir', 'output/zsgc/2019-06-24_15-37-24_att']
+    sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
 
     # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
@@ -32,6 +32,8 @@ try:
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-12_11-26-05_bare_softl1-act_nullzs_aggp']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsgc/2019-07-12_11-59-10_bare_softl1-act_lis18-7']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/zsb/2019-07-21_12-04-36_sl1-lis']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsb/2019-07-22_11-37-28_sl1-nolis-avg']
+    # sys.argv[1:] = ['stats', '--save_dir', 'output/zsb/2019-07-22_12-53-55_sl1-nolis-sigm']
 
     # sys.argv[1:] = ['compare']
 
@@ -42,7 +44,9 @@ try:
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-11_16-32-36_bare_isonull']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-12_11-26-05_bare_softl1-act_nullzs_aggp']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsgc/2019-07-12_11-59-10_bare_softl1-act_lis18-7']
-    sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-21_12-04-36_sl1-lis']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-21_12-04-36_sl1-lis']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_11-37-28_sl1-nolis-avg']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_12-53-55_sl1-nolis-sigm']
 
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
@@ -284,17 +288,30 @@ def _print_confidence_scores(analyser: Analyser, marked_preds=None):
 
 def evaluate():
     results = _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    evaluator = Evaluator(dataset_split=hdtest, hoi_score_thr=None, num_hoi_thr=None)
 
     # evaluator.evaluate_predictions(results)
     evaluator.load(cfg.program.eval_res_file)
 
-    evaluator.output_metrics(sort=True, actions_to_keep=[1, 2, 84])
+    hois = [inter for imdata in hdtest.hicodet.split_data[Splits.TRAIN]
+            for inter in hdtest.hicodet.op_pair_to_interaction[imdata.box_classes[imdata.hois[:, 2]], imdata.hois[:, 1]]]
+    hoi_hist = Counter(hois)
+    non_rare_classes = np.array(sorted([c for c, n in hoi_hist.items() if n >= 10]))
+    assert len(non_rare_classes) == 600 - 138
+
+    map = evaluator.metrics['M-mAP']
+    nrand = 25
+    for t in range(20):
+        unseen = np.sort(np.random.choice(non_rare_classes, size=nrand, replace=False))
+        print(unseen)
+        print(np.mean(map[unseen]))
+
+    # evaluator.output_metrics(sort=True, actions_to_keep=[1, 2, 84])
     # evaluator.output_metrics(sort=True, actions_to_keep=list(set(range(117)) - {84}))
     # evaluator.output_metrics(sort=True, actions_to_keep=list(range(117)))
 
-    # stats = Evaluator_HD.evaluate_predictions(hds, results)
+    # stats = Evaluator_HD.evaluate_predictions(hdtest, results)
     # stats.print_metrics(sort=True)
     # Timer.print()
 

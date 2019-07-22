@@ -251,8 +251,8 @@ class ZSGenericModel(GenericModel):
         if cfg.model.lis:
             act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
-            act_sim = torch.sigmoid(action_labels @ pred_sims)
-            # act_sim = action_labels @ pred_sims.clamp(min=0) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+            # act_sim = torch.sigmoid(action_labels @ pred_sims)
+            act_sim = action_labels @ pred_sims.clamp(min=0) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         return unseen_action_labels.detach()
 
@@ -714,10 +714,10 @@ class PeyreModel(GenericModel):
                 hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
                 assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.hicodet.num_interactions
 
-                hoi_subj_loss = F.binary_cross_entropy_with_logits(hoi_subj_logits, subj_labels_1hot)
-                hoi_obj_loss = F.binary_cross_entropy_with_logits(hoi_obj_logits, obj_labels_1hot)
-                act_loss = F.binary_cross_entropy_with_logits(hoi_act_logits, action_labels)
-                hoi_loss = F.binary_cross_entropy_with_logits(hoi_logits, hoi_labels)
+                hoi_subj_loss = self.bce_loss(hoi_subj_logits, subj_labels_1hot)
+                hoi_obj_loss = self.bce_loss(hoi_obj_logits, obj_labels_1hot)
+                act_loss = self.bce_loss(hoi_act_logits, action_labels)
+                hoi_loss = self.bce_loss(hoi_logits, hoi_labels)
                 return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
             else:
                 prediction = Prediction()
