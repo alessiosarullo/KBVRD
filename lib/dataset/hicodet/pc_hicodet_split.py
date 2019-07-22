@@ -182,7 +182,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 box_class = self.pc_box_labels[self.pc_ho_infos[i, 2]]
                 self.pc_action_labels[i, :] *= op_pair_is_valid[box_class, :]
             diff_num_hois = num_hois - self.pc_action_labels.sum()
-            print(f'Number of filtered HOIs: {diff_num_hois}.')
+            print(f'Number of filtered HOIs: {diff_num_hois:.0f}.')
 
         # Derived
         self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)
