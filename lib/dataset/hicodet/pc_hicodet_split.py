@@ -173,6 +173,16 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
             # Note: boxes with no interactions are NOT filtered
+        elif len(self.active_interactions) < self.hicodet.num_interactions and self.split != Splits.TEST:
+            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_predicates])
+            assert op_pair_is_valid.size == self.hicodet.op_pair_to_interaction.size
+            op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
+            num_hois = self.pc_action_labels.sum()
+            for i in range(self.pc_action_labels.shape[0]):
+                box_class = self.pc_box_labels[self.pc_ho_infos[i, 2]]
+                self.pc_action_labels[i, :] *= op_pair_is_valid[box_class, :]
+            diff_num_hois = num_hois - self.pc_action_labels.sum()
+            print(f'Number of filtered HOIs: {diff_num_hois}.')
 
         # Derived
         self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)

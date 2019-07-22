@@ -90,7 +90,7 @@ class Minibatch:
 
 
 class HicoDetSplit(Dataset):
-    def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds):
+    def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds, inter_inds):
         assert split in Splits
 
         self.split = split
@@ -112,13 +112,19 @@ class HicoDetSplit(Dataset):
         if len(predicate_inds) < self.hicodet.num_predicates:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
-        # FIXME this class is agnostic to filtered interactions
-        reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
-                                          reduced_object_index.get(self.hicodet.objects[o], -1)]
-                                         for p, o in self.hicodet.interactions])
-        self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
-        self.active_interactions = np.array(sorted(set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}),
-                                            dtype=np.int)
+        if inter_inds is not None:
+            assert len(object_inds) == self.hicodet.num_object_classes and len(predicate_inds) == self.hicodet.num_predicates
+            inter_inds = sorted(inter_inds)
+            self.active_interactions = np.array(inter_inds, dtype=np.int)
+            self.reduced_interactions = self.hicodet.interactions[self.active_interactions, :]
+            print(f'{split.value.capitalize()} interactions:', inter_inds)
+        else:
+            reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
+                                              reduced_object_index.get(self.hicodet.objects[o], -1)]
+                                             for p, o in self.hicodet.interactions])
+            self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
+            active_interactions = set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
+            self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
         self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
 
         # Checks
