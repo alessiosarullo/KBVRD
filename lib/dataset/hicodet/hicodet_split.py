@@ -116,7 +116,8 @@ class HicoDetSplit(Dataset):
             assert len(object_inds) == self.hicodet.num_object_classes and len(predicate_inds) == self.hicodet.num_predicates
             inter_inds = sorted(inter_inds)
             self.active_interactions = np.array(inter_inds, dtype=np.int)
-            self.reduced_interactions = self.hicodet.interactions[self.active_interactions, :]
+            self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
+            self.reduced_interactions = self.interactions
             print(f'{split.value.capitalize()} interactions:', inter_inds)
         else:
             reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
@@ -125,16 +126,16 @@ class HicoDetSplit(Dataset):
             self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
             active_interactions = set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
             self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
-        self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
+            self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
 
-        # Checks
-        interactions = np.array([[p if self.hicodet.predicates[p] in reduced_predicate_index else -1,
-                                  o if self.hicodet.objects[o] in reduced_object_index else -1]
-                                 for p, o in self.hicodet.interactions])
-        assert np.all(self.interactions == interactions[np.all(interactions >= 0, axis=1), :])
-        assert np.all([reduced_predicate_index[self.hicodet.predicates[p]] == self.reduced_interactions[i, 0] and
-                       reduced_object_index[self.hicodet.objects[o]] == self.reduced_interactions[i, 1]
-                       for i, (p, o) in enumerate(self.interactions)])
+            # Checks
+            interactions = np.array([[p if self.hicodet.predicates[p] in reduced_predicate_index else -1,
+                                      o if self.hicodet.objects[o] in reduced_object_index else -1]
+                                     for p, o in self.hicodet.interactions])
+            assert np.all(self.interactions == interactions[np.all(interactions >= 0, axis=1), :])
+            assert np.all([reduced_predicate_index[self.hicodet.predicates[p]] == self.reduced_interactions[i, 0] and
+                           reduced_object_index[self.hicodet.objects[o]] == self.reduced_interactions[i, 1]
+                           for i, (p, o) in enumerate(self.interactions)])
 
         # Compute mappings to and from COCO
         coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
