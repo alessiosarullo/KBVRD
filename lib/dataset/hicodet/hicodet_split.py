@@ -240,13 +240,13 @@ class HicoDetSplitBuilder:
                 num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
                 class_splits[Splits.TRAIN] = split_class(split=Splits.TRAIN, hicodet=cls.hicodet,
                                                          data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
-                                                         object_inds=object_inds, predicate_inds=predicate_inds)
+                                                         object_inds=object_inds, predicate_inds=predicate_inds, inter_inds=inter_inds)
                 class_splits[Splits.VAL] = split_class(split=Splits.VAL, hicodet=cls.hicodet,
                                                        data=split_data[-num_val_imgs:], image_ids=image_ids[-num_val_imgs:],
-                                                       object_inds=object_inds, predicate_inds=predicate_inds)
+                                                       object_inds=object_inds, predicate_inds=predicate_inds, inter_inds=inter_inds)
             else:
                 class_splits[split] = split_class(split=split, hicodet=cls.hicodet, data=split_data, image_ids=image_ids,
-                                                  object_inds=object_inds, predicate_inds=predicate_inds)
+                                                  object_inds=object_inds, predicate_inds=predicate_inds, inter_inds=inter_inds)
 
         return class_splits[split]
 
