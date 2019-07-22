@@ -735,7 +735,7 @@ class PeyreModel(GenericModel):
                     if vis_output.ho_infos_np is not None:
                         assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
                         interactions = self.dataset.hicodet.interactions
-                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, self.dataset.human_class]) * \
+                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, [self.dataset.human_class]]) * \
                                              torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
                                              torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
                                              torch.sigmoid(hoi_logits)
