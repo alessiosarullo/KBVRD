@@ -770,24 +770,24 @@ class PeyreModel(GenericModel):
 
         subj_appearance = self.vis_to_app_mlps['sub'](box_feats)
         subj_repr = self.app_to_repr_mlps['sub'](subj_appearance)
-        subj_emb = torch.F.normalize(self.wemb_to_repr_mlps['sub'](self.obj_word_embs))
+        subj_emb = F.normalize(self.wemb_to_repr_mlps['sub'](self.obj_word_embs))
         subj_logits = subj_repr @ subj_emb.t()
         hoi_subj_logits = subj_logits[hoi_hum_inds, :]
 
         obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
         obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
-        obj_emb = torch.F.normalize(self.wemb_to_repr_mlps['obj'](self.obj_word_embs))
+        obj_emb = F.normalize(self.wemb_to_repr_mlps['obj'](self.obj_word_embs))
         obj_logits = obj_repr @ obj_emb.t()
         hoi_obj_logits = obj_logits[hoi_obj_inds, :]
 
         hoi_subj_appearance = subj_appearance[hoi_hum_inds, :]
         hoi_obj_appearance = obj_appearance[hoi_obj_inds, :]
         hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-        hoi_act_emb = torch.F.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
+        hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
 
         hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-        hoi_emb = torch.F.normalize(self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs))
+        hoi_emb = F.normalize(self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs))
         hoi_logits = hoi_repr @ hoi_emb.t()
 
         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
