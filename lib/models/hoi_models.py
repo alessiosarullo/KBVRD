@@ -666,11 +666,13 @@ class PeyreModel(GenericModel):
 
                 hoi_subj_labels = box_labels[vis_output.ho_infos_np[:, 1]]
                 subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
-                subj_labels_1hot[torch.arange(subj_labels_1hot.shape[0]), hoi_subj_labels] = 1
+                fg_objs = np.flatnonzero(hoi_subj_labels >= 0)
+                subj_labels_1hot[fg_objs, hoi_subj_labels[fg_objs]] = 1
 
                 hoi_obj_labels = box_labels[vis_output.ho_infos_np[:, 2]]
                 obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
-                obj_labels_1hot[torch.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
+                fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
+                obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
 
                 action_labels = vis_output.action_labels
                 hoi_labels = vis_output.hoi_labels
