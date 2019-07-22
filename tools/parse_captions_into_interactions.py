@@ -103,9 +103,22 @@ def vg():
     print(len(region_descr))
 
 
+def vcap():
+    d = json.load(open(os.path.join(cfg.program.data_root, 'VideoCaptions', 'train.json'), 'r'))
+    captions = [s for v in d.values() for s in v['sentences']]
+    print('\n'.join(captions[:10]))
+    print()
+
+    objs_per_pred = parse_captions(captions)
+    # with open(os.path.join(cfg.program.cache_root, 'vcap_predicate_objects.pkl'), 'wb') as f:
+    #     pickle.dump(objs_per_pred, f)
+    # print(len(captions))
+
+
 def main():
     funcs = {
         'vg': vg,
+        'vcap': vcap,
     }
     print(sys.argv)
     parser = argparse.ArgumentParser()
