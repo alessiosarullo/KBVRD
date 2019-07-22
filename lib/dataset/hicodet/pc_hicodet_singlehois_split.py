@@ -28,17 +28,6 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
                 assert len(im_idx) == 1, im_idx
                 self.pc_im_idx_to_im_idx[pc_im_idx] = im_idx[0]
 
-        self.pc_im_box_range_inds = np.full((self.pc_image_ids.shape[0], 2), fill_value=-1, dtype=np.int)
-        for i, pc_box_im_idx in enumerate(self.pc_box_im_idxs):
-            if self.pc_im_box_range_inds[pc_box_im_idx, 0] < 0:
-                self.pc_im_box_range_inds[pc_box_im_idx, 0] = i
-            self.pc_im_box_range_inds[pc_box_im_idx, 1] = i
-
-        # Check
-        for i, (start, end) in enumerate(self.pc_im_box_range_inds):
-            assert start >= 0 and end >= 0
-            assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
-
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         if shuffle is None:
             shuffle = True if self.split == Splits.TRAIN else False

@@ -167,23 +167,6 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         except KeyError:
             self.pc_action_labels = None
 
-        # Filter HOIs. Object class filtering is currently not supported.
-        if self.active_object_classes.size < self.hicodet.num_object_classes:
-            raise NotImplementedError('Object class filtering is not supported.')
-        if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
-            self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
-            # Note: boxes with no interactions are NOT filtered
-        elif len(self.active_interactions) < self.hicodet.num_interactions and self.split != Splits.TEST:
-            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_predicates])
-            assert op_pair_is_valid.size == self.hicodet.op_pair_to_interaction.size
-            op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
-            num_hois = self.pc_action_labels.sum()
-            for i in range(self.pc_action_labels.shape[0]):
-                box_class = self.pc_box_labels[self.pc_ho_infos[i, 2]]
-                self.pc_action_labels[i, :] *= op_pair_is_valid[box_class, :]
-            diff_num_hois = num_hois - self.pc_action_labels.sum()
-            print(f'Number of filtered HOIs: {diff_num_hois:.0f}.')
-
         # Derived
         self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)
         self.pc_ho_im_idxs = self.pc_ho_infos[:, 0]
@@ -197,6 +180,37 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             assert len(pc_im_idx) == 1, pc_im_idx
             assert im_id not in self.im_id_to_pc_im_idx
             self.im_id_to_pc_im_idx[im_id] = pc_im_idx[0]
+
+        self.pc_im_box_range_inds = np.full((self.pc_image_ids.shape[0], 2), fill_value=-1, dtype=np.int)
+        for i, pc_box_im_idx in enumerate(self.pc_box_im_idxs):
+            if self.pc_im_box_range_inds[pc_box_im_idx, 0] < 0:
+                self.pc_im_box_range_inds[pc_box_im_idx, 0] = i
+            self.pc_im_box_range_inds[pc_box_im_idx, 1] = i
+        # Check
+        for i, (start, end) in enumerate(self.pc_im_box_range_inds):
+            assert start >= 0 and end >= 0
+            assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
+
+        # Filter HOIs. Object class filtering is currently not supported.
+        if self.active_object_classes.size < self.hicodet.num_object_classes:
+            raise NotImplementedError('Object class filtering is not supported.')
+        if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
+            self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
+            # Note: boxes with no interactions are NOT filtered
+        elif len(self.active_interactions) < self.hicodet.num_interactions and self.split != Splits.TEST:
+            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_predicates])
+            assert op_pair_is_valid.size == self.hicodet.op_pair_to_interaction.size
+            op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
+            num_hois = self.pc_action_labels.sum()
+            for i in range(self.pc_action_labels.shape[0]):
+                box_ind = self.pc_im_box_range_inds[self.pc_ho_infos[i, 0], 0] + self.pc_ho_infos[i, 2]
+                box_class = self.pc_box_labels[box_ind]
+                if box_class >= 0:
+                    self.pc_action_labels[i, :] *= op_pair_is_valid[box_class, :]
+                else:
+                    assert not np.any(self.pc_action_labels[i, :])
+            diff_num_hois = num_hois - self.pc_action_labels.sum()
+            print(f'Number of filtered HOIs: {diff_num_hois:.0f}.')
 
     @property
     def precomputed_visual_feat_dim(self):
