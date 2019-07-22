@@ -112,6 +112,7 @@ class HicoDetSplit(Dataset):
         if len(predicate_inds) < self.hicodet.num_predicates:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
+        # FIXME this class is agnostic to filtered interactions
         reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
                                           reduced_object_index.get(self.hicodet.objects[o], -1)]
                                          for p, o in self.hicodet.interactions])
