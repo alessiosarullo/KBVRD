@@ -245,7 +245,8 @@ class Launcher:
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
+            if cfg.opt.grad_clip > 0:
+                nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
 
             if cfg.program.monitor:
                 batch_stats['grads'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in self.detector.named_parameters()

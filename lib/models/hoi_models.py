@@ -251,7 +251,8 @@ class ZSGenericModel(GenericModel):
         if cfg.model.lis:
             act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
-            act_sim = torch.sigmoid(action_labels @ pred_sims)
+            # act_sim = torch.sigmoid(action_labels @ pred_sims)
+            act_sim = action_labels @ pred_sims.clamp(min=0) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         return unseen_action_labels.detach()
 
