@@ -307,23 +307,31 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter
     else:
         obj_inds = set(obj_inds or range(hicodet.num_object_classes))
         pred_inds = pred_inds or list(range(hicodet.num_predicates))
+        inter_inds = inter_inds or list(range(hicodet.num_interactions))
         assert 0 in pred_inds
         pred_filtering_map = np.full(hicodet.num_predicates, fill_value=-1, dtype=np.int)
         pred_filtering_map[pred_inds] = pred_inds
+        inter_filtering_map = np.full(hicodet.num_interactions, fill_value=-1, dtype=np.int)
+        inter_filtering_map[inter_inds] = inter_inds
 
         new_split_data = []
         for i, im_data in enumerate(split_data):
             boxes, box_classes, hois = im_data.boxes, im_data.box_classes, im_data.hois
 
-            # Filter boxes of bad classes
+            # Filter boxes based on object class
             box_mask = np.array([c in obj_inds for i, c in enumerate(box_classes)], dtype=bool)
             boxes = boxes[box_mask, :]
             box_classes = box_classes[box_mask]
 
-            # Filter interactions of bad classes or between removed boxes
+            # Filter interactions based on action class or between removed boxes
             hois[:, [0, 2]] = remap_box_pairs(hois[:, [0, 2]], box_mask)
             hois[:, 1] = pred_filtering_map[hois[:, 1]]
             interaction_mask = np.all(hois >= 0, axis=1)
+            hois = hois[interaction_mask, :]
+
+            # Filter interactions based on interaction class
+            inter_classes = hicodet.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+            interaction_mask = (inter_filtering_map[inter_classes] >= 0)
             hois = hois[interaction_mask, :]
 
             new_split_data.append(HicoDetImData(filename=im_data.filename,
