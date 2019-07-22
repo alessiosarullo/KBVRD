@@ -673,10 +673,7 @@ class PeyreModel(GenericModel):
                 obj_labels_1hot[torch.arange(obj_labels_1hot.shape[0]), hoi_obj_labels] = 1
 
                 action_labels = vis_output.action_labels
-
-                interactions = self.dataset.hicodet.interactions
-                hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
-                assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.hicodet.num_interactions
+                hoi_labels = vis_output.hoi_labels
 
                 hoi_subj_loss = self.bce_loss(hoi_subj_logits, subj_labels_1hot)
                 hoi_obj_loss = self.bce_loss(hoi_obj_logits, obj_labels_1hot)
