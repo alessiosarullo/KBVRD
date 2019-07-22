@@ -452,7 +452,7 @@ class ZSGCModel(ZSGenericModel):
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
-class ZSSimModel(ZSGCModel):
+class ZSSimModel(ZSBaseModel):
     @classmethod
     def get_cline_name(cls):
         return 'zss'
@@ -488,7 +488,6 @@ class ZSSimModel(ZSGCModel):
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
 
         known_labels = vis_output.action_labels
-        transfer_labels = known_labels[:, self.rel_seen_transfer_inds]
         train_labels = known_labels[:, self.rel_seen_train_inds]
         unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
                                                                  train_labels @ self.pred_word_embs[self.seen_train_inds, :]], dim=1))
@@ -496,10 +495,12 @@ class ZSSimModel(ZSGCModel):
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
-        surrogate_action_labels = LIS(surrogate_action_labels, w=10, k=7)
+        surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
+        transfer_labels = known_labels[:, self.rel_seen_transfer_inds].detach()
         unseen_action_label_loss = F.binary_cross_entropy(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
+
         unseen_action_labels = surrogate_action_labels[:, self.unseen_pred_inds]
         return unseen_action_labels.detach(), unseen_action_label_loss
 
@@ -507,50 +508,13 @@ class ZSSimModel(ZSGCModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
 
         _, all_class_embs = self.gcn()  # P x E
-        class_embs = all_class_embs
         action_labels = vis_output.action_labels
         unseen_action_labels, unseen_action_label_loss = None, None
         if action_labels is not None:
-            if cfg.model.softl > 0:
-                unseen_action_labels, unseen_action_label_loss = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                class_embs = all_class_embs[self.seen_pred_inds, :]  # P x E
-
-        if cfg.model.attw:
-            instance_params = self.vrepr_to_emb(vrepr)
-            instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
-            instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
-            instance_logstd = instance_logstd.unsqueeze(dim=1)
-            class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
-                                      ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
-            act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
-                                                   F.normalize(class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
-            action_logits = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
-        else:
-            act_predictors = self.emb_to_predictor(class_embs)  # P x D
-            action_logits = vrepr @ act_predictors.t()
-
-        if cfg.model.oprior:
-            if vis_output.action_labels is not None:
-                if cfg.model.softl:
-                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
-                else:
-                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
-                act_prior = act_prior[vis_output.ho_infos_np[:, 2], :]
-            else:
-                obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:].max(dim=1)
-                act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
-            action_logits = action_logits + act_prior.log()
-
-        if cfg.model.oscore:
-            action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:])
-            if vis_output.action_labels is not None and not cfg.model.softl:
-                action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
-            action_logits = action_logits + action_logits_from_obj_score
+            unseen_action_labels, unseen_action_label_loss = self.get_soft_labels(vis_output)
 
         reg_loss = unseen_action_label_loss  # FIXME hack
-        if cfg.model.aereg > 0:
-            reg_loss += -cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+        action_logits = self.output_mlp(vrepr)
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
