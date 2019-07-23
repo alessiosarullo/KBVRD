@@ -381,6 +381,41 @@ class BGFilter(BaseModel):
         return action_logits, bg_logits
 
 
+class GCModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'gc'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.base_model = BaseModel(dataset, **kwargs)
+        self.predictor_dim = 1024
+
+        gcemb_dim = 1024
+        self.emb_dim = 200
+
+        latent_dim = self.emb_dim
+        input_dim = self.predictor_dim
+        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(600, 800),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(800, input_dim),
+                                                ])
+
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
+
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        _, all_class_embs = self.gcn()  # P x E
+        act_predictors = self.emb_to_predictor(all_class_embs)  # P x D
+        action_logits = vrepr @ act_predictors.t()
+        return action_logits
+
+
 class ZSGenericModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
