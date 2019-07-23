@@ -153,6 +153,118 @@ class NewBaseModel(GenericModel):
         return output_logits
 
 
+class MultiModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'multi'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        hidden_dim = 1024
+        self.output_repr_dim = cfg.model.repr_dim
+
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
+                                                ])
+
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=cfg.model.dropout),
+                                               nn.Linear(hidden_dim, self.final_repr_dim),
+                                               ])
+
+        self.hoi_act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
+                                                ])
+
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Linear(hidden_dim, self.final_repr_dim),
+                                            ])
+
+        self.act_output_mlp = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
+        self.hoi_output_mlp = nn.Linear(self.final_repr_dim, dataset.hicodet.num_interactions, bias=False)
+        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos_np is not None:
+                act_output, hoi_output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
+            else:
+                assert inference
+                act_output = hoi_output = None
+
+            if not inference:
+                losses = {'hoi_loss': self.bce_loss(hoi_output, vis_output.hoi_labels),
+                          'action_loss': self.bce_loss(act_output, vis_output.action_labels)}
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos_np is not None:
+                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
+
+                        if act_output.shape[1] < self.dataset.hicodet.num_predicates:
+                            assert act_output.shape[1] == self.dataset.num_predicates
+                            restricted_action_output = act_output
+                            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.hicodet.num_predicates))
+                            act_output[:, self.dataset.active_predicates] = restricted_action_output
+                        prediction.action_scores = torch.sigmoid(act_output).cpu().numpy()
+
+                        ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
+                        hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
+                        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy() * \
+                                                hoi_obj_scores * \
+                                                prediction.action_scores[:, self.dataset.hicodet.interactions[:, 0]]
+
+                return prediction
+
+    @property
+    def final_repr_dim(self):
+        return self.output_repr_dim
+
+    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None):
+        box_feats = vis_output.box_feats
+        hoi_infos = vis_output.ho_infos
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+
+        ho_subj_repr = self.ho_subj_repr_mlp(box_feats[hoi_infos[:, 1], :])
+        ho_obj_repr = self.ho_obj_repr_mlp(box_feats[hoi_infos[:, 2], :])
+        hoi_act_repr = self.hoi_act_repr_mlp(union_boxes_feats)
+        hoi_logits = self.hoi_output_mlp(ho_subj_repr + ho_obj_repr + hoi_act_repr)
+
+        act_repr = self.act_repr_mlp(union_boxes_feats)
+        act_logits = self.act_output_mlp(act_repr)
+
+        if cfg.program.monitor:
+            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
+            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
+            self.values_to_monitor['hoi_act_repr'] = hoi_act_repr
+            self.values_to_monitor['act_repr'] = act_repr
+            self.values_to_monitor['hoi_logits'] = hoi_logits
+        return act_logits, hoi_logits
+
+
 class BGFilter(BaseModel):
     @classmethod
     def get_cline_name(cls):
