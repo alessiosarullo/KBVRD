@@ -1,5 +1,4 @@
 import pickle
-import os
 
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
@@ -393,7 +392,7 @@ class GCModel(GenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        
+
         latent_dim = 200
         # input_dim = self.predictor_dim
         # self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
@@ -847,25 +846,21 @@ class PeyreModel(GenericModel):
                                          nn.Linear(spatial_dim, spatial_dim))
 
         output_dim = 1024
-        self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.visual_module.vis_feat_dim, output_dim),
-                                                                nn.ReLU(),
-                                                                nn.Dropout(p=0.5),
-                                                                nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']})
-        self.app_to_repr_mlps['pred'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
-                                                      nn.ReLU(),
-                                                      nn.Dropout(p=0.5),
-                                                      nn.Linear(output_dim, output_dim))
-        self.app_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(appearance_dim * 2 + spatial_dim, output_dim),
-                                                    nn.ReLU(),
-                                                    nn.Dropout(p=0.5),
-                                                    nn.Linear(output_dim, output_dim))
-
-        self.wemb_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.word_embs.dim, output_dim),
-                                                                 nn.ReLU(),
-                                                                 nn.Linear(output_dim, output_dim)) for k in ['sub', 'pred', 'obj']})
-        self.wemb_to_repr_mlps['vp'] = nn.Sequential(nn.Linear(3 * self.word_embs.dim, output_dim),
+        self.app_to_repr_mlps = nn.ModuleDict()
+        for k in ['sub', 'obj', 'pred', 'vp']:
+            input_dim = self.visual_module.vis_feat_dim if k in ['sub', 'obj'] else (appearance_dim * 2 + spatial_dim)
+            self.app_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
                                                      nn.ReLU(),
-                                                     nn.Linear(output_dim, output_dim))
+                                                     nn.Dropout(p=0.5),
+                                                     nn.Linear(output_dim, output_dim),
+                                                     nn.Dropout(p=0.5))
+
+        self.wemb_to_repr_mlps = nn.ModuleDict()
+        for k in ['sub', 'obj', 'pred', 'vp']:
+            input_dim = (3 * self.word_embs.dim) if k == 'vp' else self.word_embs.dim
+            self.wemb_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
+                                                      nn.ReLU(),
+                                                      nn.Linear(output_dim, output_dim))
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):

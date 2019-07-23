@@ -63,13 +63,11 @@ class HicoDriver:
             - wn_predicate_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
                 - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
-                - 'id' [int]: A number I have not understood the use of.
-                - 'count' [int]: Another number I have not understood the use of.
                 - 'syn' [list]: Set of synonyms
                 - 'def' [str]: A definition
-                - 'ex' [str]: An example (sometimes not provided)
+                - 'add_def' [str]: An additional definition (sometimes not provided)
                 EXAMPLE: key: v00007012, entry:
-                    {'id': 1, 'wname': 'blow.v.01', 'count': 6, 'syn': ['blow'], 'def': 'exhale hard', 'ex': 'blow on the soup to cool it down'}
+                    {'wname': 'blow.v.01', 'syn': ['blow'], 'def': 'exhale hard'}
             - predicate_dict [dict]: The 117 possible predicates, including a null one. They are fewer than the entries in the WordNet dictionary
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
@@ -79,21 +77,10 @@ class HicoDriver:
                 - 'obj' [str]: The name of the object of the action (i.e., the target).
                 - 'pred' [str]: The verb describing the action (key in `predicate_dict`).
                 - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`), or None for the null interaction.
-            - split_data [dict(dict)]: One entry per split, with keys in `Splits`. Each entry is a dictionary with the following items:
-                - 'img_dir' [str]: Path to the folder containing the images
-                - 'annotations' [list(dict)]: Annotations for each image, thus structured:
-                    - 'file' [str]: The file name
-                    - 'img_size' [array]: Image size expressed in [width, height, depth]
-                    - 'interactions' [list(dict)]: Each entry has:
-                            - 'id' [int]: The id of the interaction in `interaction_list`.
-                            - 'invis' [bool]: Whether the interaction is invisible or not. It does NOT necesserily mean that it is not in the image.
-                        If 'invis' is False then there are three more fields:
-                            - 'hum_bbox' [array]: Hx4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to a human.
-                            - 'obj_bbox' [array]: Ox4 matrix of (x1, y1, x2, y2) coordinates for each bounding box belonging to an object.
-                            - 'conn' [array]: Cx2 with a pair of human-object indices for each interaction
-                Other entries might be added to this dictionary for caching reasons.
+            - split_annotations [dict(ndarray)]: One entry per split, with keys in `Splits`.
+                Each entry is a matrix with dimensions [num_images, num_interactions] and each cell ij has a value in {-1, 0, 1} according to whether
+                action j is a hard negative, uncertain/unknown or a hard positive in image i.
         """
-        # TODO what are the 'id' and 'count' field for?
 
         self.data_dir = os.path.join('data', 'HICO')
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')

@@ -3,6 +3,7 @@ import os
 import cv2
 import numpy as np
 from torch.utils.data import Dataset
+from typing import List
 
 import h5py
 import torch
@@ -138,6 +139,7 @@ class HicoSplit(Dataset):
         img_id = self.image_ids[idx]
         img_fn = self.hico.split_filenames[self.split][img_id]
         entry = Example(idx_in_split=idx, img_id=img_id, filename=img_fn, split=self.split)
+        entry.gt_hois = self.hico.split_annotations[self.split][img_id, :]
         if read_img:
             raw_image = cv2.imread(os.path.join(self.img_dir, img_fn))
             img_h, img_w = raw_image.shape[:2]
