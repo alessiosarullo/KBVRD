@@ -393,25 +393,26 @@ class GCModel(GenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        self.emb_dim = 200
+        
+        latent_dim = 200
+        # input_dim = self.predictor_dim
+        # self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
+        #                                       nn.ReLU(inplace=True),
+        #                                       nn.Dropout(p=cfg.model.dropout),
+        #                                       nn.Linear(600, 800),
+        #                                       nn.ReLU(inplace=True),
+        #                                       nn.Dropout(p=cfg.model.dropout),
+        #                                       nn.Linear(800, input_dim),
+        #                                       )
+        # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
-        latent_dim = self.emb_dim
-        input_dim = self.predictor_dim
-        self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(600, 800),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
-                                                nn.Linear(800, input_dim),
-                                                ])
-
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, all_class_embs = self.gcn()  # P x E
-        act_predictors = self.emb_to_predictor(all_class_embs)  # P x D
+        # act_predictors = self.emb_to_predictor(all_class_embs)  # P x D
+        act_predictors = all_class_embs  # P x D
         action_logits = vrepr @ act_predictors.t()
         return action_logits
 
@@ -958,7 +959,7 @@ class PeyreModel(GenericModel):
 
         hoi_subj_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
         hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
-        
+
         hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
         hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
