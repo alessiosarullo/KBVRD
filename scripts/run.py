@@ -136,11 +136,11 @@ class Launcher:
 
         lr_decay = cfg.opt.lr_decay_period
         lr_warmup = cfg.opt.lr_warmup
-        if lr_warmup >= 0:
-            assert lr_decay < 0
+        if lr_warmup > 0:
+            assert lr_decay == 0
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[lr_warmup], gamma=cfg.opt.lr_gamma,
                                                              last_epoch=self.start_epoch - 1)
-        elif lr_decay >= 0:
+        elif lr_decay > 0:
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=cfg.opt.lr_gamma,
                                                         last_epoch=self.start_epoch - 1)
         else:
