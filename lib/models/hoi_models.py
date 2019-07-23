@@ -164,12 +164,12 @@ class MultiModel(GenericModel):
         hidden_dim = 1024
         self.output_repr_dim = cfg.model.repr_dim
 
-        self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+        self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(p=cfg.model.dropout),
                                                  nn.Linear(hidden_dim, self.final_repr_dim),
                                                  ])
-        self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+        self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
@@ -180,12 +180,12 @@ class MultiModel(GenericModel):
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
 
-        self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+        self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                  nn.ReLU(inplace=True),
                                                  nn.Dropout(p=cfg.model.dropout),
                                                  nn.Linear(hidden_dim, self.final_repr_dim),
                                                  ])
-        self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+        self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
