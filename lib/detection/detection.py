@@ -8,7 +8,6 @@ from .wrappers import cfg, _add_multilevel_rois_for_test, box_utils
 def im_detect_boxes(model, inputs, unscaled_img_sizes):
     assert not cfg.TEST.BBOX_AUG.ENABLED
     assert not cfg.MODEL.KEYPOINTS_ON
-    assert cfg.MODEL.MASK_ON
     assert not cfg.TEST.MASK_AUG.ENABLED
 
     nonnms_scores, nonnms_boxes, feat_map, nonnms_im_ids = _im_detect_bbox(model, inputs, unscaled_img_sizes)
@@ -148,19 +147,7 @@ def _box_results_with_nms_and_limit(all_scores, all_boxes, im_ids):
 
 
 def im_detect_mask(model, im_ids, boxes, blob_conv):
-    """
-    Arguments:
-        model (DetectionModelHelper): the detection model to use
-        im_scale (list): image blob scales as returned by im_detect_bbox
-        boxes (ndarray): B x 4 array of bounding box detections (e.g., as returned by im_detect_bbox)
-        blob_conv (Variable): base features from the backbone network.
-
-    Returns:
-        pred_masks (ndarray): B x K x M x M array of class specific soft masks output by the network (must be processed by segm_results to convert
-            into hard masks in the original image coordinate space)
-    """
-    # TODO docs
-
+    assert cfg.MODEL.MASK_ON
     assert cfg.MRCNN.CLS_SPECIFIC_MASK
     assert boxes.shape[0] > 0
     M = cfg.MRCNN.RESOLUTION
