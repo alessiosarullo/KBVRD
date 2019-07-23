@@ -164,24 +164,32 @@ class MultiModel(GenericModel):
         hidden_dim = 1024
         self.output_repr_dim = cfg.model.repr_dim
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+        self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(p=cfg.model.dropout),
+                                                 nn.Linear(hidden_dim, self.final_repr_dim),
+                                                 ])
+        self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
-
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(p=cfg.model.dropout),
-                                               nn.Linear(hidden_dim, self.final_repr_dim),
-                                               ])
-
         self.hoi_act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.model.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
 
+        self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+                                                 nn.ReLU(inplace=True),
+                                                 nn.Dropout(p=cfg.model.dropout),
+                                                 nn.Linear(hidden_dim, self.final_repr_dim),
+                                                 ])
+        self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classe, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
+                                                ])
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.model.dropout),
@@ -244,24 +252,24 @@ class MultiModel(GenericModel):
         return self.output_repr_dim
 
     def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None):
+        boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = vis_output.ho_infos
         union_boxes_feats = vis_output.hoi_union_boxes_feats
 
-        ho_subj_repr = self.ho_subj_repr_mlp(box_feats[hoi_infos[:, 1], :])
-        ho_obj_repr = self.ho_obj_repr_mlp(box_feats[hoi_infos[:, 2], :])
+        subj_ho_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
+        obj_ho_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
+
+        hoi_subj_repr = self.hoi_subj_repr_mlp(subj_ho_feats)
+        hoi_obj_repr = self.hoi_obj_repr_mlp(obj_ho_feats)
         hoi_act_repr = self.hoi_act_repr_mlp(union_boxes_feats)
-        hoi_logits = self.hoi_output_mlp(ho_subj_repr + ho_obj_repr + hoi_act_repr)
+        hoi_logits = self.hoi_output_mlp(hoi_subj_repr + hoi_obj_repr + hoi_act_repr)
 
+        act_subj_repr = self.act_subj_repr_mlp(subj_ho_feats)
+        act_obj_repr = self.act_obj_repr_mlp(obj_ho_feats)
         act_repr = self.act_repr_mlp(union_boxes_feats)
-        act_logits = self.act_output_mlp(act_repr)
+        act_logits = self.act_output_mlp(act_subj_repr + act_obj_repr + act_repr)
 
-        if cfg.program.monitor:
-            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
-            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
-            self.values_to_monitor['hoi_act_repr'] = hoi_act_repr
-            self.values_to_monitor['act_repr'] = act_repr
-            self.values_to_monitor['hoi_logits'] = hoi_logits
         return act_logits, hoi_logits
 
 
