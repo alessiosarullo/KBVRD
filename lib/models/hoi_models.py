@@ -846,7 +846,7 @@ class PeyreModel(GenericModel):
                                          nn.Linear(spatial_dim, spatial_dim))
 
         output_dim = 1024
-        self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(appearance_dim, output_dim),
+        self.app_to_repr_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(self.visual_module.vis_feat_dim, output_dim),
                                                                 nn.ReLU(),
                                                                 nn.Dropout(p=0.5),
                                                                 nn.Linear(output_dim, output_dim)) for k in ['sub', 'obj']})
@@ -946,20 +946,19 @@ class PeyreModel(GenericModel):
         hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
         spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
 
-        subj_appearance = self.vis_to_app_mlps['sub'](box_feats)
-        subj_repr = self.app_to_repr_mlps['sub'](subj_appearance)
+        subj_repr = self.app_to_repr_mlps['sub'](box_feats)
         subj_emb = F.normalize(self.wemb_to_repr_mlps['sub'](self.obj_word_embs))
         subj_logits = subj_repr @ subj_emb.t()
         hoi_subj_logits = subj_logits[hoi_hum_inds, :]
 
-        obj_appearance = self.vis_to_app_mlps['obj'](box_feats)
-        obj_repr = self.app_to_repr_mlps['obj'](obj_appearance)
+        obj_repr = self.app_to_repr_mlps['obj'](box_feats)
         obj_emb = F.normalize(self.wemb_to_repr_mlps['obj'](self.obj_word_embs))
         obj_logits = obj_repr @ obj_emb.t()
         hoi_obj_logits = obj_logits[hoi_obj_inds, :]
 
-        hoi_subj_appearance = subj_appearance[hoi_hum_inds, :]
-        hoi_obj_appearance = obj_appearance[hoi_obj_inds, :]
+        hoi_subj_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
+        hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
+        
         hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
         hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()

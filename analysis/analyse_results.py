@@ -22,7 +22,7 @@ from lib.stats.utils import Timer
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-10_13-35-46_vanilla']
-    sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-22_19-18-57_zsinters']
+    # sys.argv[1:] = ['eval', '--save_dir', 'output/base/2019-07-22_19-18-57_zsinters']
 
     # sys.argv[1:] = ['stats', '--save_dir', 'output/base/2019-07-10_10-17-30_vanilla']
     # sys.argv[1:] = ['stats', '--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
@@ -48,6 +48,7 @@ try:
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-21_12-04-36_sl1-lis']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_11-37-28_sl1-nolis-avg']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_12-53-55_sl1-nolis-sigm']
+    sys.argv[1:] = ['zs', '--save_dir', 'output/zss/2019-07-22_16-28-13_vanilla']
 
     # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
 except ImportError:
