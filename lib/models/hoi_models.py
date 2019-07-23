@@ -470,7 +470,10 @@ class ZSGenericModel(GenericModel):
         else:
             # act_sim = torch.sigmoid(action_labels @ pred_sims)
             act_sim = action_labels @ pred_sims.clamp(min=0) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
-        unseen_action_labels = act_sim * self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+        obj_labels = vis_output.box_labels[vis_output.ho_infos_np[:, 2]]
+        fg_ho_pair = (obj_labels >= 0)
+        unseen_action_labels = act_sim.new_zeros(act_sim.shape)
+        unseen_action_labels[fg_ho_pair, :] = act_sim[fg_ho_pair, :] * self.obj_act_feasibility[:, self.unseen_pred_inds][obj_labels[fg_ho_pair], :]
         return unseen_action_labels.detach()
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -644,18 +647,6 @@ class ZSGCModel(ZSGenericModel):
             act_predictors = self.emb_to_predictor(class_embs)  # P x D
             action_logits = vrepr @ act_predictors.t()
 
-        if cfg.model.oprior:
-            if vis_output.action_labels is not None:
-                if cfg.model.softl:
-                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :]).clamp(min=1e-8)
-                else:
-                    act_prior = (self.gcn.noun_verb_links[vis_output.box_labels, :][:, self.seen_pred_inds]).clamp(min=1e-8)
-                act_prior = act_prior[vis_output.ho_infos_np[:, 2], :]
-            else:
-                obj_max, obj_argmax = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:].max(dim=1)
-                act_prior = (self.gcn.noun_verb_links[obj_argmax, :] * obj_max.unsqueeze(dim=1)).clamp(min=1e-8)
-            action_logits = action_logits + act_prior.log()
-
         if cfg.model.oscore:
             action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:])
             if vis_output.action_labels is not None and not cfg.model.softl:
@@ -704,13 +695,19 @@ class ZSSimModel(ZSBaseModel):
         # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
 
+        obj_labels = vis_output.box_labels[vis_output.ho_infos_np[:, 2]]
+        bg_objs_mask = obj_labels < 0
+
         known_labels = vis_output.action_labels
         train_labels = known_labels[:, self.rel_seen_train_inds]
-        unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([self.obj_word_embs[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :],
+        obj_embs = self.obj_word_embs[obj_labels, :]
+        obj_embs[bg_objs_mask, :] = 0
+        unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([obj_embs,
                                                                  train_labels @ self.pred_word_embs[self.seen_train_inds, :]], dim=1))
 
         # these are for ALL actions
-        action_labels_mask = self.obj_act_feasibility[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
+        action_labels_mask = self.obj_act_feasibility[obj_labels, :]
+        action_labels_mask[bg_objs_mask, :] = 0
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
         surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
         # act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
