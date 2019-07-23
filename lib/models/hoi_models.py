@@ -91,6 +91,68 @@ class BaseModel(GenericModel):
         return output_logits
 
 
+class NewBaseModel(GenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'newbase'
+
+    def __init__(self, dataset: HicoDetSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        vis_feat_dim = self.visual_module.vis_feat_dim
+        hidden_dim = 1024
+        self.act_repr_dim = cfg.model.repr_dim
+
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
+                                                ])
+
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=cfg.model.dropout),
+                                               nn.Linear(hidden_dim, self.final_repr_dim),
+                                               ])
+
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Linear(hidden_dim, self.final_repr_dim),
+                                            ])
+
+        num_classes = dataset.hicodet.num_interactions if cfg.model.phoi else dataset.num_predicates
+        self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
+
+    @property
+    def final_repr_dim(self):
+        return self.act_repr_dim
+
+    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None, return_repr=False, return_obj=False):
+        box_feats = vis_output.box_feats
+        hoi_infos = vis_output.ho_infos
+        union_boxes_feats = vis_output.hoi_union_boxes_feats
+
+        ho_subj_repr = self.ho_subj_repr_mlp(box_feats[hoi_infos[:, 1], :])
+        ho_obj_repr = self.ho_obj_repr_mlp(box_feats[hoi_infos[:, 2], :])
+        act_repr = self.act_repr_mlp(union_boxes_feats)
+
+        hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
+        if return_repr:
+            if return_obj:
+                return hoi_act_repr, ho_obj_repr
+            return hoi_act_repr
+
+        output_logits = self.output_mlp(hoi_act_repr)
+
+        if cfg.program.monitor:
+            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
+            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
+            self.values_to_monitor['act_repr'] = act_repr
+            self.values_to_monitor['output_logits'] = output_logits
+        return output_logits
+
+
 class BGFilter(BaseModel):
     @classmethod
     def get_cline_name(cls):
