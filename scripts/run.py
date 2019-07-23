@@ -187,7 +187,8 @@ class Launcher:
                     try:
                         scheduler.step(metrics=val_loss)
                     except TypeError:
-                        scheduler.step()
+                        # Scheduler default behaviour is wrong: it gets called with epoch=0 twice, both at the beginning and after the first epoch.
+                        scheduler.step(epoch=epoch + 1)
 
                     all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
 
