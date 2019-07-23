@@ -702,15 +702,16 @@ class ZSSimModel(ZSBaseModel):
         train_labels = known_labels[:, self.rel_seen_train_inds]
         obj_embs = self.obj_word_embs[obj_labels, :]
         obj_embs[bg_objs_mask, :] = 0
-        unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([obj_embs,
-                                                                 train_labels @ self.pred_word_embs[self.seen_train_inds, :]], dim=1))
+        coocc_act_embs_avg = train_labels @ self.pred_word_embs[self.seen_train_inds, :] / train_labels.sum(dim=1, keepdim=True).clamp(min=1)
+        unseen_action_embs = self.soft_labels_emb_mlp(torch.cat([obj_embs, coocc_act_embs_avg], dim=1))
 
         # these are for ALL actions
         action_labels_mask = self.obj_act_feasibility[obj_labels, :]
         action_labels_mask[bg_objs_mask, :] = 0
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
-        surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
-        # act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+        surrogate_action_labels.clamp_(min=0, max=1)
+        if cfg.model.lis:
+            surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
         transfer_labels = known_labels[:, self.rel_seen_transfer_inds].detach()
