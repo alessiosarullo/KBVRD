@@ -470,6 +470,10 @@ class GCModel(GenericModel):
             non_neigh_mask[~self.vv_adj] = 1
             max_non_neigh_sim = (act_predictors_sim * non_neigh_mask).max(dim=1)[0]
 
+            # Exclude null interaction
+            min_neigh_sim = min_neigh_sim[1:]
+            max_non_neigh_sim = max_non_neigh_sim[1:]
+
             assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
             assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
 
