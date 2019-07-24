@@ -14,7 +14,7 @@ class AbstractModel(nn.Module):
         self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
         self.values_to_monitor = {}  # type: Dict[str, torch.Tensor]
 
-    def forward(self, x, predict=True, **kwargs):
+    def forward(self, x, inference=True, **kwargs):
         raise NotImplementedError()
 
     def __call__(self, *args, **kwargs):

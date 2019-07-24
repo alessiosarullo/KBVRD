@@ -10,7 +10,6 @@ import torch
 from config import cfg
 from lib.dataset.hico.hico import Hico
 from lib.dataset.utils import Splits, preprocess_img
-from lib.detection.wrappers import COCO_CLASSES
 
 
 class ImgEntry:
@@ -43,12 +42,6 @@ class HicoSplit(Dataset):
                                             dtype=np.int)
         self.interactions = self.hico.interactions[self.active_interactions, :]  # original predicate and object inds
 
-        # # Compute mappings to and from COCO
-        # coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
-        # assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hico.objects)
-        # self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.hico.objects], dtype=np.int)
-
-        ############################
         try:
             precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
             self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
@@ -89,8 +82,12 @@ class HicoSplit(Dataset):
         def collate(idx_list):
             # TODO filter interactions
             idxs = np.array(idx_list)
-            feats = self.pc_img_feats[idxs, :]
-            feats = self.pc_img_feats[idxs, :]
+            feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)
+            if self.pc_labels is not None:
+                labels = torch.tensor(self.pc_labels[idxs, :], device=device)
+            else:
+                labels = None
+            return feats, labels
 
         if self.pc_feats_file is None:
             raise NotImplementedError('This is only possible with precomputed features.')
@@ -101,6 +98,8 @@ class HicoSplit(Dataset):
         if self.split == Splits.TEST and batch_size > 1:
             print('! Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
             batch_size = 1
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         data_loader = torch.utils.data.DataLoader(
             dataset=self,

@@ -180,6 +180,9 @@ class ModelConfig(BaseConfigs):
         self.dropout = 0.5
         self.repr_dim = 1024
 
+        # HICO
+        self.hico_lhard = False
+
         # BG
         self.filter = False
 

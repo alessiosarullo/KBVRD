@@ -27,15 +27,12 @@ class BaseEvaluator:
         raise NotImplementedError()
 
 
-class Evaluator(BaseEvaluator):
-    def __init__(self, dataset_split: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+class HicoEvaluator(BaseEvaluator):
+    def __init__(self, dataset_split: HicoSplit):
         super().__init__()
-        self.iou_thresh = iou_thresh
-        self.hoi_score_thr = hoi_score_thr
-        self.num_hoi_thr = num_hoi_thr
 
         self.dataset_split = dataset_split
-        self.hicodet = dataset_split.hicodet
+        self.hico = dataset_split.hico
         self._init()
 
     def _init(self):
@@ -78,9 +75,9 @@ class Evaluator(BaseEvaluator):
 
         gt_hoi_classes_count = Counter(gt_hoi_classes.tolist())
 
-        ap = np.zeros(self.hicodet.num_interactions)
-        recall = np.zeros(self.hicodet.num_interactions)
-        for j in range(self.hicodet.num_interactions):
+        ap = np.zeros(self.hico.num_interactions)
+        recall = np.zeros(self.hico.num_interactions)
+        for j in range(self.hico.num_interactions):
             num_gt_hois = gt_hoi_classes_count[j]
             if num_gt_hois == 0:
                 continue
@@ -108,30 +105,30 @@ class Evaluator(BaseEvaluator):
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
         gt_obj_class_hist, obj_metrics, obj_class_inds = self.sort_and_filter(metrics=obj_metrics,
                                                                               gt_labels=self.dataset_split.obj_labels,
-                                                                              all_classes=list(range(self.hicodet.num_object_classes)),
+                                                                              all_classes=list(range(self.hico.num_object_classes)),
                                                                               sort=sort)
         mf.format_metric_and_gt_lines(gt_obj_class_hist, obj_metrics, obj_class_inds, gt_str='GT objects')
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
-        orig_gt_hoi_labels = self.hicodet.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
+        orig_gt_hoi_labels = self.hico.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=hoi_metrics,
                                                                               gt_labels=gt_hoi_labels,
-                                                                              all_classes=list(range(self.hicodet.num_interactions)),
+                                                                              all_classes=list(range(self.hico.num_interactions)),
                                                                               sort=sort,
                                                                               keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
         # Same, but with null interaction filtered
-        actions_to_keep = sorted(set(actions_to_keep or range(self.hicodet.num_predicates)) - {0})
+        actions_to_keep = sorted(set(actions_to_keep or range(self.hico.num_predicates)) - {0})
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
         pos_hoi_metrics = {f'+{k}': v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=pos_hoi_metrics,
                                                                                   gt_labels=pos_gt_hoi_labels,
-                                                                                  all_classes=list(range(self.hicodet.num_interactions)),
+                                                                                  all_classes=list(range(self.hico.num_interactions)),
                                                                                   sort=sort,
                                                                                   keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
@@ -145,9 +142,9 @@ class Evaluator(BaseEvaluator):
 
     def filter_actions(self, gt_hoi_labels, actions_to_keep):
         if actions_to_keep is not None:
-            act_mask = np.zeros(self.hicodet.num_predicates, dtype=bool)
+            act_mask = np.zeros(self.hico.num_predicates, dtype=bool)
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
-            interaction_mask = act_mask[self.hicodet.interactions[:, 0]]
+            interaction_mask = act_mask[self.hico.interactions[:, 0]]
             gt_hoi_labels = gt_hoi_labels[interaction_mask[gt_hoi_labels]]
             interactions_to_keep = set(np.flatnonzero(interaction_mask).tolist())
         else:
@@ -161,7 +158,7 @@ class Evaluator(BaseEvaluator):
 
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
 
-            gt_hoi_classes = self.hicodet.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
+            gt_hoi_classes = self.hico.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
             assert np.all(gt_hoi_classes) >= 0
 
             gt_ho_ids = self.gt_count + np.arange(num_gt_hois)
@@ -169,7 +166,7 @@ class Evaluator(BaseEvaluator):
         else:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
-        predict_hoi_scores = np.zeros([0, self.hicodet.num_interactions])
+        predict_hoi_scores = np.zeros([0, self.hico.num_interactions])
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
         if prediction.obj_boxes is not None:
@@ -186,21 +183,21 @@ class Evaluator(BaseEvaluator):
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_scores is not None
 
-                    if len(self.dataset_split.active_predicates) < self.hicodet.num_predicates:
-                        predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.hicodet.num_predicates))
+                    if len(self.dataset_split.active_predicates) < self.hico.num_predicates:
+                        predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.hico.num_predicates))
                         predict_action_scores[:, self.dataset_split.active_predicates] = prediction.action_scores
                     else:
                         predict_action_scores = prediction.action_scores
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
 
-                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.hicodet.num_interactions])
-                    for iid, (pid, oid) in enumerate(self.hicodet.interactions):
+                    predict_hoi_scores = np.empty([predict_ho_pairs.shape[0], self.hico.num_interactions])
+                    for iid, (pid, oid) in enumerate(self.hico.interactions):
                         predict_hoi_scores[:, iid] = predict_obj_scores_per_ho_pair[:, oid] * predict_action_scores[:, pid]
         else:
             assert prediction.ho_pairs is None
 
         pred_gt_ious = compute_ious(predict_boxes, gt_boxes)
-        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.hicodet.num_interactions), fill_value=-1, dtype=np.int)
+        pred_gt_assignment_per_hoi = np.full((predict_hoi_scores.shape[0], self.hico.num_interactions), fill_value=-1, dtype=np.int)
         for predict_idx, (ph, po) in enumerate(predict_ho_pairs):
             gt_pair_ious = np.zeros(num_gt_hois)
             for gtidx, (gh, go, gi) in enumerate(gt_hoi_triplets):
@@ -208,7 +205,7 @@ class Evaluator(BaseEvaluator):
                 iou_o = pred_gt_ious[po, go]
                 gt_pair_ious[gtidx] = min(iou_h, iou_o)
             if np.any(gt_pair_ious >= self.iou_thresh):
-                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.hicodet.num_interactions))
+                gt_pair_ious_per_hoi = np.zeros((num_gt_hois, self.hico.num_interactions))
                 gt_pair_ious_per_hoi[np.arange(num_gt_hois), gt_hoi_classes] = gt_pair_ious
                 gt_assignments = gt_pair_ious_per_hoi.argmax(axis=0)[np.any(gt_pair_ious_per_hoi >= self.iou_thresh, axis=0)]
                 gt_hoi_assignments = gt_hoi_classes[gt_assignments]

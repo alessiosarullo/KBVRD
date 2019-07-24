@@ -1,7 +1,5 @@
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from config import cfg
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
@@ -9,6 +7,7 @@ from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.detection.visual_module import VisualModule
 from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction, VisualOutput
+from lib.models.misc import bce_loss
 
 
 class GenericModel(AbstractModel):
@@ -41,22 +40,6 @@ class GenericModel(AbstractModel):
     @property
     def final_repr_dim(self):
         raise NotImplementedError()
-
-    def bce_loss(self, logits, labels):
-        if cfg.opt.fl_gamma != 0:  # Focal loss
-            gamma = cfg.opt.fl_gamma
-            s = logits
-            t = labels
-            m = s.clamp(min=0)  # m = max(s, 0)
-            x = (-s.abs()).exp()
-            z = ((s >= 0) == t.byte()).float()
-            loss_mat = (1 + x).pow(-gamma) * (m - s * t + x * (gamma * z).exp() * (1 + x).log())
-            loss = loss_mat.mean()
-        else:  # standard BCE loss
-            loss = F.binary_cross_entropy_with_logits(logits, labels)
-        if not cfg.opt.meanc:
-            loss *= logits.shape[1]
-        return loss
 
     #
     # def weighted_binary_cross_entropy_with_logits(self, logits, labels, num_rels=None):
@@ -100,9 +83,9 @@ class GenericModel(AbstractModel):
 
             if not inference:
                 if cfg.model.phoi:
-                    losses = {'hoi_loss': self.bce_loss(output, vis_output.hoi_labels)}
+                    losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
                 else:
-                    losses = {'action_loss': self.bce_loss(output, vis_output.action_labels)}
+                    losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
                 return losses
             else:
                 prediction = Prediction()

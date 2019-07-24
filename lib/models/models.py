@@ -1,21 +1,12 @@
 import pickle
 
+from torch.nn import functional as F
+
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
-from lib.models.generic_model import GenericModel, Prediction, F
-from lib.models.hoi_branches import *
-
-
-def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
-    if T is None:
-        if w is None and k is None:
-            w, k, T = 10, 12, 8.4
-        else:
-            assert w is not None and k is not None
-            # This is basically what it is: a normalisation constant for when x=1.
-            T = 1 + np.exp(k - w).item()
-    assert w is not None and k is not None and T is not None
-    return T * torch.sigmoid(w * x - k)
+from lib.models.generic_model import GenericModel, Prediction
+from lib.models.branches import *
+from lib.models.misc import bce_loss, LIS
 
 
 class BaseModel(GenericModel):
@@ -211,8 +202,8 @@ class MultiModel(GenericModel):
                 act_output = hoi_output = None
 
             if not inference:
-                losses = {'hoi_loss': self.bce_loss(hoi_output, vis_output.hoi_labels),
-                          'action_loss': self.bce_loss(act_output, vis_output.action_labels)}
+                losses = {'hoi_loss': bce_loss(hoi_output, vis_output.hoi_labels),
+                          'action_loss': bce_loss(act_output, vis_output.action_labels)}
                 return losses
             else:
                 prediction = Prediction()
@@ -270,114 +261,6 @@ class MultiModel(GenericModel):
         act_logits = self.act_output_mlp(act_subj_repr + act_obj_repr + act_repr)
 
         return act_logits, hoi_logits
-
-
-class BGFilter(BaseModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'bg'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.bg_vis_mlp = nn.Sequential(*[nn.Linear(self.visual_module.vis_feat_dim, 1024),
-                                          nn.ReLU(inplace=True),
-                                          nn.Dropout(p=cfg.model.dropout),
-                                          nn.Linear(1024, 512),
-                                          ])
-        # self.bg_geo_obj_mlp = nn.Sequential(*[nn.Linear(14 + self.dataset.num_object_classes, 128),
-        #                                       nn.Linear(128, 256),
-        #                                       ])
-        #
-        # self.bg_detection_mlp = nn.Linear(512 + 256, 1, bias=False)
-        self.bg_detection_mlp = nn.Linear(512, 1, bias=False)
-        torch.nn.init.xavier_normal_(self.bg_detection_mlp.weight, gain=1.0)
-
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos_np is not None:
-                action_output, bg_output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
-            else:
-                assert inference
-                action_output = bg_output = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                if cfg.data.null_as_bg:
-                    bg_label = action_labels[:, 0]
-                    max_fg_score = torch.sigmoid((action_output * action_labels)[:, 1:].max(dim=1)[0]).detach()
-                    act_loss = F.binary_cross_entropy_with_logits(action_output[:, 1:], action_labels[:, 1:]) * (action_output.shape[1] - 1)
-                else:
-                    bg_label = 1 - (action_labels > 0).any(dim=1).float()
-                    max_fg_score = torch.sigmoid((action_output * action_labels).max(dim=1)[0]).detach()
-                    act_loss = F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]
-
-                losses = {'action_loss': act_loss}
-                if cfg.opt.margin > 0:
-                    bg_score = torch.sigmoid(bg_output).squeeze(dim=1)
-                    bg_loss = F.margin_ranking_loss(bg_score, max_fg_score, 2 * bg_label - 1, margin=cfg.opt.margin, reduction='none').mean()
-                else:
-                    bg_loss = F.binary_cross_entropy_with_logits(bg_output, bg_label[:, None])
-                losses['bg_loss'] = cfg.opt.bg_coeff * bg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        if action_output.shape[1] < self.dataset.hicodet.num_predicates:
-                            assert action_output.shape[1] == self.dataset.num_predicates
-                            restricted_action_output = action_output
-                            action_output = restricted_action_output.new_zeros((action_output.shape[0], self.dataset.hicodet.num_predicates))
-                            action_output[:, self.dataset.active_predicates] = restricted_action_output
-
-                        action_scores = torch.sigmoid(action_output).cpu().numpy()
-                        bg_scores = torch.sigmoid(bg_output).squeeze(dim=1).cpu().numpy()
-                        action_scores[:, 0] = bg_scores
-
-                        if cfg.model.filter:
-                            # keep = (action_scores[:, 1:].max(axis=1) > bg_scores)
-                            keep = (bg_scores < 0.95)
-
-                            if np.any(keep):
-                                prediction.ho_img_inds = vis_output.ho_infos_np[keep, 0]
-                                prediction.ho_pairs = vis_output.ho_infos_np[keep, 1:]
-                                prediction.action_scores = action_scores[keep, :]
-                        else:
-                            action_scores[:, 1:] *= (1 - bg_scores[:, None])
-                            prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                            prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-                            prediction.action_scores = action_scores
-
-                return prediction
-
-    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None, **kwargs):
-        boxes_ext = vis_output.boxes_ext
-        ho_infos = vis_output.ho_infos
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-
-        # geo_feats = self.get_geo_feats(vis_output, batch)
-
-        vis_repr = self.bg_vis_mlp(union_boxes_feats)
-        # geo_obj_repr = self.bg_geo_obj_mlp(torch.cat([geo_feats, boxes_ext[ho_infos[:, 2], 5:]], dim=1))
-
-        # bg_logits = self.bg_detection_mlp(torch.cat([vis_repr, geo_obj_repr], dim=1))
-        bg_logits = self.bg_detection_mlp(vis_repr)
-
-        action_logits = super()._forward(vis_output, batch, step, epoch, **kwargs)
-        return action_logits, bg_logits
 
 
 class GCModel(GenericModel):
@@ -636,7 +519,20 @@ class ZSGCModel(ZSGenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
+        # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
+        
+        latent_dim = 200
+        input_dim = self.predictor_dim
+        self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
+                                              nn.ReLU(inplace=True),
+                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Linear(600, 800),
+                                              nn.ReLU(inplace=True),
+                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Linear(800, input_dim),
+                                              )
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+
         nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
         if cfg.model.greg > 0:
             self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
@@ -915,10 +811,10 @@ class PeyreModel(GenericModel):
                 action_labels = vis_output.action_labels
                 hoi_labels = vis_output.hoi_labels
 
-                hoi_subj_loss = self.bce_loss(hoi_subj_logits, subj_labels_1hot)
-                hoi_obj_loss = self.bce_loss(hoi_obj_logits, obj_labels_1hot)
-                act_loss = self.bce_loss(hoi_act_logits, action_labels)
-                hoi_loss = self.bce_loss(hoi_logits, hoi_labels)
+                hoi_subj_loss = bce_loss(hoi_subj_logits, subj_labels_1hot)
+                hoi_obj_loss = bce_loss(hoi_obj_logits, obj_labels_1hot)
+                act_loss = bce_loss(hoi_act_logits, action_labels)
+                hoi_loss = bce_loss(hoi_logits, hoi_labels)
                 return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
             else:
                 prediction = Prediction()
