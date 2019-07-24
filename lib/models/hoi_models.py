@@ -472,7 +472,8 @@ class GCModel(GenericModel):
 
             assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
 
-            reg_loss = cfg.model.greg * F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
+            reg_loss = F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
+            reg_loss = cfg.model.greg * reg_loss.mean()
         return action_logits, reg_loss
 
 
