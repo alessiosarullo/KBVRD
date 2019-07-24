@@ -10,24 +10,7 @@ from lib.models.containers import Prediction
 from lib.stats.utils import Timer
 
 
-class BaseEvaluator:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def load(self, fn):
-        with open(fn, 'rb') as f:
-            d = pickle.load(f)
-            self.__dict__.update(d)
-
-    def save(self, fn):
-        with open(fn, 'wb') as f:
-            pickle.dump({k: v for k, v in vars(self).items() if k not in ['dataset']}, f)
-
-    def evaluate_predictions(self, predictions: List[Dict]):
-        raise NotImplementedError()
-
-
-class HicoEvaluator(BaseEvaluator):
+class HicoEvaluator:
     def __init__(self, dataset_split: HicoSplit):
         super().__init__()
 
@@ -36,20 +19,8 @@ class HicoEvaluator(BaseEvaluator):
         self._init()
 
     def _init(self):
-        self.gt_hoi_classes = []
-        self.predict_hoi_scores = []
-        self.pred_gt_assignment_per_hoi = []
-        self.gt_hit_per_prediction = {}
-        self.gt_hit_per_prediction2 = []
-        self.gt_count = 0
-
+        self.predict_hoi_scores = np.full_like(self.hico.split_annotations[self.dataset_split.split], fill_value=np.nan)
         self.metrics = {}  # type: Dict[str, np.ndarray]
-
-    def save(self, fn):
-        with open(fn, 'wb') as f:
-            pickle.dump({'hits': self.gt_hit_per_prediction,
-                         'gt_classes': np.concatenate(self.gt_hoi_classes, axis=0),
-                         'metrics': self.metrics}, f)
 
     def evaluate_predictions(self, predictions: List[Dict]):
         self._init()

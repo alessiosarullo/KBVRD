@@ -520,7 +520,7 @@ class ZSGCModel(ZSGenericModel):
 
         gcemb_dim = 1024
         # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
-        
+
         latent_dim = 200
         input_dim = self.predictor_dim
         self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
@@ -545,6 +545,7 @@ class ZSGCModel(ZSGenericModel):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, act_class_embs = self.gcn()  # P x E
         act_predictors = act_class_embs  # P x D
+        act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
         action_logits = vrepr @ act_predictors.t()
 
         action_labels = vis_output.action_labels
