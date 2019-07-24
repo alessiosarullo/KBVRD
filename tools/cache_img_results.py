@@ -44,7 +44,7 @@ def save_feats():
             im_infos = np.array([*im_data.img_size, im_data.scale])  # size is the original one
             all_img_infos.append(im_infos)
 
-            vout = vm(im_data)
+            vout = vm(im_data.image)
             img_feats.append(vout)
 
             if split != Splits.TEST:

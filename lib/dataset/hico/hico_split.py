@@ -126,7 +126,7 @@ class HicoSplit(Dataset):
             image, img_scale_factor = preprocess_img(raw_image, target_size=600)  # FIXME magic constant
             img_size = [img_h, img_w]
 
-            entry.image = image
+            entry.image = torch.tensor(image, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
             entry.img_size = img_size
             entry.scale = img_scale_factor
         return entry
