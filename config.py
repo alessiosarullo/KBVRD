@@ -187,6 +187,10 @@ class ModelConfig(BaseConfigs):
         # BG
         self.filter = False
 
+        # GC
+        self.greg = 0.0
+        self.greg_margin = 0.3
+
         # ZS
         self.attw = False
         self.oprior = False

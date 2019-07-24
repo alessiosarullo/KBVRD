@@ -406,14 +406,74 @@ class GCModel(GenericModel):
         # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+        if cfg.model.greg > 0:
+            nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
+            self.vv_adj = (nv_adj.t() @ nv_adj).clamp(max=1).byte()
+            assert (self.vv_adj.diag()[1:] == 1).all()
+
+    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+
+            if vis_output.ho_infos_np is not None:
+                action_output, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
+            else:
+                assert inference
+                action_output = reg_loss = None
+
+            if not inference:
+                action_labels = vis_output.action_labels
+                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
+                return losses
+            else:
+                prediction = Prediction()
+
+                if vis_output.boxes_ext is not None:
+                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
+                    im_scales = x.img_infos[:, 2]
+
+                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
+                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
+                    prediction.obj_im_inds = obj_im_inds
+                    prediction.obj_boxes = obj_boxes
+                    prediction.obj_scores = boxes_ext[:, 5:]
+
+                    if vis_output.ho_infos_np is not None:
+                        assert action_output is not None
+
+                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
+                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
+
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+
+                return prediction
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
-        _, all_class_embs = self.gcn()  # P x E
-        # act_predictors = self.emb_to_predictor(all_class_embs)  # P x D
-        act_predictors = all_class_embs  # P x D
+        _, act_class_embs = self.gcn()  # P x E
+        # act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
+        act_predictors = act_class_embs  # P x D
         action_logits = vrepr @ act_predictors.t()
-        return action_logits
+
+        reg_loss = None
+        if cfg.model.greg > 0:
+            act_predictors_norm = F.normalize(act_predictors, dim=1)
+            act_predictors_sim = act_predictors_norm @ act_predictors_norm.t()
+
+            neigh_mask = torch.full_like(act_predictors_sim, np.inf)
+            neigh_mask[self.vv_adj] = 1
+            min_neigh_sim = (act_predictors_sim * neigh_mask).min(dim=1)[0]
+
+            non_neigh_mask = torch.full_like(act_predictors_sim, -np.inf)
+            non_neigh_mask[~self.vv_adj] = 1
+            max_non_neigh_sim = (act_predictors_sim * non_neigh_mask).max(dim=1)[0]
+
+            assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
+
+            reg_loss = cfg.model.greg * F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
+        return action_logits, reg_loss
 
 
 class ZSGenericModel(GenericModel):
@@ -853,7 +913,7 @@ class PeyreModel(GenericModel):
                                                      nn.ReLU(),
                                                      nn.Dropout(p=0.5),
                                                      nn.Linear(output_dim, output_dim),
-                                                     nn.Dropout(p=0.5))
+                                                     )
 
         self.wemb_to_repr_mlps = nn.ModuleDict()
         for k in ['sub', 'obj', 'pred', 'vp']:
