@@ -471,6 +471,7 @@ class GCModel(GenericModel):
             max_non_neigh_sim = (act_predictors_sim * non_neigh_mask).max(dim=1)[0]
 
             assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
+            assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
 
             reg_loss = F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
             reg_loss = cfg.model.greg * reg_loss.mean()
