@@ -537,3 +537,106 @@
 #
 #         reg_loss = None
 #         return action_output, action_labels, reg_loss, ho_obj_output, ho_obj_labels
+#
+#
+# class ZSGCModel(ZSGenericModel):
+#     @classmethod
+#     def get_cline_name(cls):
+#         return 'zsgc'
+#
+#     def __init__(self, dataset: HicoDetSplit, **kwargs):
+#         super().__init__(dataset, **kwargs)
+#         self.base_model = BaseModel(dataset, **kwargs)
+#         self.predictor_dim = self.base_model.final_repr_dim
+#
+#         if cfg.model.large:
+#             gcemb_dim = 2048
+#             self.emb_dim = 512
+#         else:
+#             gcemb_dim = 1024
+#             self.emb_dim = 200
+#
+#         latent_dim = self.emb_dim
+#         input_dim = self.predictor_dim
+#         self.vrepr_to_emb = nn.Sequential(*[nn.Linear(input_dim, 800),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(800, 600),
+#                                             nn.ReLU(inplace=True),
+#                                             nn.Dropout(p=cfg.model.dropout),
+#                                             nn.Linear(600, 2 * latent_dim),
+#                                             ])
+#         self.emb_to_predictor = nn.Sequential(*[nn.Linear(latent_dim, 600),
+#                                                 nn.ReLU(inplace=True),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(600, 800),
+#                                                 nn.ReLU(inplace=True),
+#                                                 nn.Dropout(p=cfg.model.dropout),
+#                                                 nn.Linear(800, input_dim),
+#                                                 ])
+#
+#         if cfg.model.oscore:
+#             self.obj_scores_to_act_logits = nn.Sequential(*[nn.Linear(self.dataset.num_object_classes, self.dataset.hicodet.num_predicates)])
+#
+#         if cfg.model.vv:
+#             assert not cfg.model.iso_null, 'Not supported'
+#             self.gcn = ExtCheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
+#         else:
+#             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.emb_dim))
+#
+#         if cfg.model.aereg > 0:
+#             if cfg.model.regsmall:
+#                 self.emb_to_wemb = nn.Linear(latent_dim, self.pred_word_embs.shape[1])
+#             else:
+#                 self.emb_to_wemb = nn.Sequential(*[nn.Linear(latent_dim, latent_dim),
+#                                                    nn.ReLU(inplace=True),
+#                                                    nn.Linear(latent_dim, self.pred_word_embs.shape[1]),
+#                                                    ])
+#
+#         op_mat = np.zeros([dataset.hicodet.num_object_classes, dataset.hicodet.num_predicates], dtype=np.float32)
+#         for _, p, o in dataset.hoi_triplets:
+#             op_mat[o, p] += 1
+#         op_mat /= np.maximum(1, op_mat.sum(axis=1, keepdims=True))
+#         self.op_mat = nn.Parameter(torch.from_numpy(op_mat)[:, self.unseen_pred_inds], requires_grad=False)
+#
+#         if cfg.model.softl:
+#             self.obj_act_feasibility = nn.Parameter(self.gcn.noun_verb_links, requires_grad=False)
+#
+#     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+#         vrepr = self.base_model._forward(vis_output, return_repr=True)
+#
+#         _, all_class_embs = self.gcn()  # P x E
+#         class_embs = all_class_embs
+#         action_labels = vis_output.action_labels
+#         unseen_action_labels = None
+#         if action_labels is not None:
+#             if cfg.model.softl > 0:
+#                 unseen_action_labels = self.get_soft_labels(vis_output)
+#             else:  # restrict training to seen predicates only
+#                 class_embs = all_class_embs[self.seen_pred_inds, :]  # P x E
+#
+#         if cfg.model.attw:
+#             instance_params = self.vrepr_to_emb(vrepr)
+#             instance_means = instance_params[:, :instance_params.shape[1] // 2]  # P x E
+#             instance_logstd = instance_params[:, instance_params.shape[1] // 2:]  # P x E
+#             instance_logstd = instance_logstd.unsqueeze(dim=1)
+#             class_logprobs = - 0.5 * (2 * instance_logstd.sum(dim=2) +  # NOTE: constant term is missing
+#                                       ((instance_means.unsqueeze(dim=1) - class_embs.unsqueeze(dim=0)) / instance_logstd.exp()).norm(dim=2) ** 2)
+#             act_predictors = self.emb_to_predictor(class_logprobs.exp().unsqueeze(dim=2) *
+#                                                    F.normalize(class_embs, dim=1).unsqueeze(dim=0))  # N x P x D
+#             action_logits = torch.bmm(vrepr.unsqueeze(dim=1), act_predictors.transpose(1, 2)).squeeze(dim=1)
+#         else:
+#             act_predictors = self.emb_to_predictor(class_embs)  # P x D
+#             action_logits = vrepr @ act_predictors.t()
+#
+#         if cfg.model.oscore:
+#             action_logits_from_obj_score = self.obj_scores_to_act_logits(vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:])
+#             if vis_output.action_labels is not None and not cfg.model.softl:
+#                 action_logits_from_obj_score = action_logits_from_obj_score[:, self.seen_pred_inds]  # P x E
+#             action_logits = action_logits + action_logits_from_obj_score
+#
+#         if cfg.model.aereg > 0:
+#             reg_loss = -cfg.model.aereg * (F.normalize(self.emb_to_wemb(all_class_embs)) * self.pred_word_embs).sum(dim=1).mean()
+#         else:
+#             reg_loss = None
+#         return action_logits, action_labels, reg_loss, unseen_action_labels
