@@ -1,15 +1,14 @@
 import os
 
 import cv2
-import numpy as np
-from torch.utils.data import Dataset, Subset
-from typing import List
-
 import h5py
+import numpy as np
 import torch
+from torch.utils.data import Dataset, Subset
+
 from config import cfg
 from lib.dataset.hico.hico import Hico
-from lib.dataset.utils import Splits, preprocess_img
+from lib.dataset.utils import Splits
 
 
 class ImgEntry:
@@ -124,7 +123,7 @@ class HicoSplit(Dataset):
         if read_img:
             raw_image = cv2.imread(os.path.join(self.hico.get_img_dir(self.split), img_fn))
             img_h, img_w = raw_image.shape[:2]
-            image, img_scale_factor = preprocess_img(raw_image)  # FIXME This resizes based on the SMALLEST side
+            image, img_scale_factor = preprocess_img(raw_image, target_size=600)  # FIXME magic constant
             img_size = [img_h, img_w]
 
             entry.image = image
@@ -163,3 +162,19 @@ class HicoSplit(Dataset):
             splits[Splits.TRAIN] = train_split
 
         return splits
+
+
+def preprocess_img(im, target_size):
+    im = im.astype(np.float32, copy=False)
+
+    # Normalisation. Values are from PyTorch doc for pretrained models (https://pytorch.org/docs/stable/torchvision/models.html).
+    im -= [0.485, 0.456, 0.406]
+    im /= [0.229, 0.224, 0.225]
+
+    im_size = im.shape[:2]
+    im_size_min = np.min(im_size)
+    im_scale = float(target_size) / float(im_size_min)
+
+    im_resized = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
+    processed_im = np.transpose(im_resized, axes=(2, 0, 1))  # to CHW
+    return processed_im, im_scale
