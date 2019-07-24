@@ -408,7 +408,7 @@ class GCModel(GenericModel):
         self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
         if cfg.model.greg > 0:
             nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
-            self.vv_adj = (nv_adj.t() @ nv_adj).clamp(max=1).byte()
+            self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
@@ -461,14 +461,17 @@ class GCModel(GenericModel):
         if cfg.model.greg > 0:
             act_predictors_norm = F.normalize(act_predictors, dim=1)
             act_predictors_sim = act_predictors_norm @ act_predictors_norm.t()
+            arange = torch.arange(act_predictors_sim.shape[0])
 
             neigh_mask = torch.full_like(act_predictors_sim, np.inf)
             neigh_mask[self.vv_adj] = 1
-            min_neigh_sim = (act_predictors_sim * neigh_mask).min(dim=1)[0]
+            argmin_neigh_sim = (act_predictors_sim * neigh_mask.detach()).argmin(dim=1)
+            min_neigh_sim = act_predictors_sim[arange, argmin_neigh_sim]
 
             non_neigh_mask = torch.full_like(act_predictors_sim, -np.inf)
             non_neigh_mask[~self.vv_adj] = 1
-            max_non_neigh_sim = (act_predictors_sim * non_neigh_mask).max(dim=1)[0]
+            argmax_non_neigh_sim = (act_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)[0]
+            max_non_neigh_sim = act_predictors_sim[arange, argmax_non_neigh_sim]
 
             # Exclude null interaction
             min_neigh_sim = min_neigh_sim[1:]
