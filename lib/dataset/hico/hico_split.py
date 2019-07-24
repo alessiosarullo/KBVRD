@@ -49,7 +49,17 @@ class HicoSplit(Dataset):
         # self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.hico.objects], dtype=np.int)
 
         ############################
-        # TODO precomputed feats
+        try:
+            precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
+            self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
+            self.pc_img_feats = self.pc_feats_file['img_feats'][:]
+            self.pc_img_infos = self.pc_feats_file['img_infos'][:]
+            if 'labels' in self.pc_feats_file.keys():
+                self.pc_labels = self.pc_feats_file['labels'][:]
+            else:
+                self.pc_labels = None
+        except OSError:
+            self.pc_feats_file = None
 
     @property
     def precomputed_visual_feat_dim(self):
@@ -76,8 +86,14 @@ class HicoSplit(Dataset):
         return self.hico.split_annotations[self.split].shape[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
-        def collate():
-            pass
+        def collate(idx_list):
+            # TODO filter interactions
+            idxs = np.array(idx_list)
+            feats = self.pc_img_feats[idxs, :]
+            feats = self.pc_img_feats[idxs, :]
+
+        if self.pc_feats_file is None:
+            raise NotImplementedError('This is only possible with precomputed features.')
 
         if shuffle is None:
             shuffle = True if self.split == Splits.TRAIN else False
@@ -91,7 +107,7 @@ class HicoSplit(Dataset):
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
-            collate_fn=lambda x: PrecomputedMinibatch.collate(x),
+            collate_fn=lambda x: collate(x),
             drop_last=drop_last,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
@@ -102,7 +118,6 @@ class HicoSplit(Dataset):
         img_fn = self.hico.split_filenames[self.split][img_id]
         entry = ImgEntry(img_id=img_id, filename=img_fn, split=self.split)
         entry.interactions = self.hico.split_annotations[self.split][img_id, :]
-        # TODO filter interactions
         if read_img:
             raw_image = cv2.imread(os.path.join(self.hico.get_img_dir(self.split), img_fn))
             img_h, img_w = raw_image.shape[:2]
@@ -115,7 +130,7 @@ class HicoSplit(Dataset):
         return entry
 
     def __getitem__(self, idx):
-        return self.get_img_entry(idx)
+        return idx
 
     def __len__(self):
         return self.num_images

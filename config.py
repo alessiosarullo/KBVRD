@@ -76,12 +76,8 @@ class ProgramConfig(BaseConfigs):
         return os.path.join(self.data_root, 'pretrained_model', '%s.pkl')
 
     @property
-    def precomputed_data_dir_format(self):
-        return os.path.join(cfg.program.cache_root, 'precomputed__%s_%s')
-
-    @property
-    def precomputed_feats_file_format(self):
-        return os.path.join(self.cache_root, 'precomputed__%s_%s.h5')
+    def precomputed_feats_format(self):
+        return os.path.join(self.cache_root, 'precomputed_%s__%s_%s.h5')
 
     @property
     def output_path(self):

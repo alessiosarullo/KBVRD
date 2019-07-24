@@ -636,7 +636,7 @@ class ZSGCModel(ZSGenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
         nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
         if cfg.model.greg > 0:
             self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
@@ -658,7 +658,6 @@ class ZSGCModel(ZSGenericModel):
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 action_logits = action_logits[:, self.seen_pred_inds]  # P x E
-
         reg_loss = None
         if cfg.model.greg > 0:
             act_predictors_norm = F.normalize(act_predictors, dim=1)

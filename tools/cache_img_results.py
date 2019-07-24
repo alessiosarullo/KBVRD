@@ -63,7 +63,7 @@ def save_feats():
         all_img_infos = np.stack(all_img_infos, axis=0)
         assert all_img_infos.shape[0] == num_imgs
 
-        precomputed_feats_fn = cfg.program.precomputed_feats_file_format % (cfg.model.rcnn_arch, split.value)
+        precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
             feat_file.create_dataset('img_feats', data=img_feats)
             feat_file.create_dataset('img_infos', data=all_img_infos)
