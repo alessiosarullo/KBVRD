@@ -470,7 +470,7 @@ class GCModel(GenericModel):
 
             non_neigh_mask = torch.full_like(act_predictors_sim, -np.inf)
             non_neigh_mask[~self.vv_adj] = 1
-            argmax_non_neigh_sim = (act_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)[0]
+            argmax_non_neigh_sim = (act_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
             max_non_neigh_sim = act_predictors_sim[arange, argmax_non_neigh_sim]
 
             # Exclude null interaction
