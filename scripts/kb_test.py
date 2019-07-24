@@ -10,7 +10,8 @@ from lib.dataset.utils import Splits
 from lib.dataset.utils import get_counts
 from lib.dataset.imsitu import ImSituKnowledgeExtractor
 from lib.models.containers import Prediction
-from lib.stats.evaluator import Evaluator, MetricFormatter
+from lib.stats.evaluator import Evaluator
+from lib.stats.utils import MetricFormatter
 
 matplotlib.use('Qt5Agg')
 

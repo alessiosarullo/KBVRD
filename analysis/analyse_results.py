@@ -16,8 +16,8 @@ from config import cfg
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example, Minibatch
 from lib.models.containers import Prediction
-from lib.stats.evaluator import Evaluator, MetricFormatter
-from lib.stats.utils import Timer
+from lib.stats.evaluator import Evaluator
+from lib.stats.utils import Timer, sort_and_filter, MetricFormatter
 
 try:
     matplotlib.use('Qt5Agg')
@@ -355,10 +355,10 @@ def compare():
 
     assert np.all(gt_hoi_labels2 == gt_hoi_labels1)
     c_hoi_metrics = {k: hoi_metrics2[k] - hoi_metrics1[k] for k in hoi_metrics2.keys()}
-    gt_hoi_class_hist, _, hoi_class_inds = evaluator.sort_and_filter(metrics=c_hoi_metrics,
-                                                                     gt_labels=gt_hoi_labels2,
-                                                                     all_classes=list(range(hds.hicodet.num_interactions)),
-                                                                     sort=True)
+    gt_hoi_class_hist, _, hoi_class_inds = sort_and_filter(metrics=c_hoi_metrics,
+                                                           gt_labels=gt_hoi_labels2,
+                                                           all_classes=list(range(hds.hicodet.num_interactions)),
+                                                           sort=True)
 
     mf = MetricFormatter()
     mf.format_metric_and_gt_lines(gt_hoi_class_hist, c_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')

@@ -56,7 +56,7 @@ class HicoSplit(Dataset):
 
     @property
     def precomputed_visual_feat_dim(self):
-        return self.pc_feats.shape[1]
+        return self.pc_img_feats.shape[1]
 
     @property
     def human_class(self) -> int:
@@ -80,11 +80,15 @@ class HicoSplit(Dataset):
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
-            # TODO filter interactions
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)
             if self.pc_labels is not None:
-                labels = torch.tensor(self.pc_labels[idxs, :], device=device)
+                labels = self.pc_labels[idxs, :]
+                if self.active_interactions.size < self.hico.num_interactions:
+                    all_labels = labels
+                    labels = np.zeros_like(all_labels)
+                    labels[self.active_interactions] = all_labels[self.active_interactions]
+                labels = torch.tensor(labels, device=device)
             else:
                 labels = None
             return feats, labels

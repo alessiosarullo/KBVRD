@@ -5,9 +5,9 @@ import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
 from lib.models.containers import Prediction
-from lib.stats.utils import Timer
+from lib.stats.utils import Timer, sort_and_filter, MetricFormatter
 
 
 class BaseEvaluator:
@@ -106,10 +106,10 @@ class Evaluator(BaseEvaluator):
         mf = MetricFormatter()
 
         obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        gt_obj_class_hist, obj_metrics, obj_class_inds = self.sort_and_filter(metrics=obj_metrics,
-                                                                              gt_labels=self.dataset_split.obj_labels,
-                                                                              all_classes=list(range(self.hicodet.num_object_classes)),
-                                                                              sort=sort)
+        gt_obj_class_hist, obj_metrics, obj_class_inds = sort_and_filter(metrics=obj_metrics,
+                                                                         gt_labels=self.dataset_split.obj_labels,
+                                                                         all_classes=list(range(self.hicodet.num_object_classes)),
+                                                                         sort=sort)
         mf.format_metric_and_gt_lines(gt_obj_class_hist, obj_metrics, obj_class_inds, gt_str='GT objects')
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
@@ -117,11 +117,11 @@ class Evaluator(BaseEvaluator):
         hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
         gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
-        gt_hoi_class_hist, hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=hoi_metrics,
-                                                                              gt_labels=gt_hoi_labels,
-                                                                              all_classes=list(range(self.hicodet.num_interactions)),
-                                                                              sort=sort,
-                                                                              keep_inds=interactions_to_keep)
+        gt_hoi_class_hist, hoi_metrics, hoi_class_inds = sort_and_filter(metrics=hoi_metrics,
+                                                                         gt_labels=gt_hoi_labels,
+                                                                         all_classes=list(range(self.hicodet.num_interactions)),
+                                                                         sort=sort,
+                                                                         keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
         # Same, but with null interaction filtered
@@ -129,11 +129,11 @@ class Evaluator(BaseEvaluator):
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
         pos_hoi_metrics = {f'+{k}': v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = self.sort_and_filter(metrics=pos_hoi_metrics,
-                                                                                  gt_labels=pos_gt_hoi_labels,
-                                                                                  all_classes=list(range(self.hicodet.num_interactions)),
-                                                                                  sort=sort,
-                                                                                  keep_inds=interactions_to_keep)
+        gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = sort_and_filter(metrics=pos_hoi_metrics,
+                                                                             gt_labels=pos_gt_hoi_labels,
+                                                                             all_classes=list(range(self.hicodet.num_interactions)),
+                                                                             sort=sort,
+                                                                             keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
         for k, v in pos_hoi_metrics.items():
@@ -272,61 +272,4 @@ class Evaluator(BaseEvaluator):
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
 
-    def sort_and_filter(self, metrics, gt_labels, all_classes, sort=False, keep_inds=None):
-        gt_labels_hist = Counter(gt_labels)
-        for c in all_classes:
-            gt_labels_hist.setdefault(c, 0)
 
-        if keep_inds:
-            del_inds = set(gt_labels_hist.keys()) - set(keep_inds)
-            for k in del_inds:
-                del gt_labels_hist[k]
-
-        if sort:
-            class_inds = [p for p, num in gt_labels_hist.most_common()]
-        else:
-            class_inds = sorted(gt_labels_hist.keys())
-
-        metrics = {k: v[class_inds] if v.size > 1 else v for k, v in metrics.items()}
-        return gt_labels_hist, metrics, class_inds
-
-
-class MetricFormatter:
-    def __init__(self):
-        super().__init__()
-
-    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str=None, print_out=True):
-        num_gt = sum(gt_label_hist.values())
-
-        pad = len(gt_str) if gt_str is not None else 0
-        if metrics:
-            pad = max(pad, max([len(k) for k in metrics.keys()]))
-
-        p = 2
-        lines = []
-        for k, v in metrics.items():
-            lines += [self.format_metric(k, v, pad, precision=p)]
-        format_str = '%{}s %{}s [%s]'.format(pad + 1, p + 8)
-        if gt_str is not None:
-            lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join([('%{:d}d '.format(p + 5)) % i for i in class_inds]))]
-            lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt, precision=p) for i in class_inds]))]
-
-        if print_out:
-            print('\n'.join(lines))
-        return lines
-
-    def format_metric(self, metric_name, data, metric_str_len=None, **kwargs):
-        metric_str_len = metric_str_len or len(metric_name)
-        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x, **kwargs) for x in data]) if data.size > 1 else ''
-        f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data), **kwargs), per_class_str)
-        return f_str
-
-    @staticmethod
-    def _format_percentage(value, precision=2):
-        if -1 < value < 1:
-            if value != 0:
-                return ('% {}.{}f%%'.format(precision + 5, precision)) % (value * 100)
-            else:
-                return ('% {}.{}f%%'.format(precision + 5, 0)) % (value * 100)
-        else:
-            return ('% {}d%%'.format(precision + 5)) % (100 * np.sign(value))

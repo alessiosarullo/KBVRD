@@ -555,6 +555,7 @@ class ZSGCModel(ZSGenericModel):
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 action_logits = action_logits[:, self.seen_pred_inds]  # P x E
+
         reg_loss = None
         if cfg.model.greg > 0:
             act_predictors_norm = F.normalize(act_predictors, dim=1)

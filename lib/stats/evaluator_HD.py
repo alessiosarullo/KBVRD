@@ -2,7 +2,7 @@ from typing import List, Dict
 
 import numpy as np
 
-from lib.stats.evaluator import MetricFormatter
+from lib.stats.utils import MetricFormatter
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet import HicoDetInstanceSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Example
