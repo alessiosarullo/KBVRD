@@ -31,15 +31,10 @@ class HicoSplit(Dataset):
 
         try:
             precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
-            self.pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
-            self.pc_img_feats = self.pc_feats_file['img_feats'][:]
-            self.pc_img_infos = self.pc_feats_file['img_infos'][:]
-            if 'labels' in self.pc_feats_file.keys():
-                self.pc_labels = self.pc_feats_file['labels'][:]
-            else:
-                self.pc_labels = None
+            pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
+            self.pc_img_feats = pc_feats_file['img_feats'][:]
         except OSError:
-            self.pc_feats_file = None
+            self.pc_img_feats = None
 
     @property
     def precomputed_visual_feat_dim(self):
@@ -69,8 +64,8 @@ class HicoSplit(Dataset):
         def collate(idx_list):
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)
-            if self.pc_labels is not None:
-                labels = self.pc_labels[idxs, :]
+            if self.split != Splits.TEST:
+                labels = self.hico.split_annotations[self.split][idxs, :]
                 if self.active_interactions.size < self.hico.num_interactions:
                     all_labels = labels
                     labels = np.zeros_like(all_labels)
@@ -80,15 +75,12 @@ class HicoSplit(Dataset):
                 labels = None
             return feats, labels
 
-        if self.pc_feats_file is None:
+        if self.pc_img_feats is None:
             raise NotImplementedError('This is only possible with precomputed features.')
 
         if shuffle is None:
             shuffle = True if self.split == Splits.TRAIN else False
         batch_size = batch_size * num_gpus
-        if self.split == Splits.TEST and batch_size > 1:
-            print('! Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
-            batch_size = 1
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -105,32 +97,15 @@ class HicoSplit(Dataset):
         return data_loader
 
     def get_img_loader(self):
-        img_fn = self.hico.split_filenames[self.split][img_id]
-        entry.interactions = self.hico.split_annotations[self.split][img_id, :]
-        if read_img:
-            raw_image = cv2.imread(os.path.join(self.hico.get_img_dir(self.split), img_fn))
-            entry.image = torch.tensor(image, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-
-        if self.split == Splits.TRAIN:
-            data_transform = transforms.Compose([
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
-        else:
-            assert self.split == Splits.TEST
-            data_transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-            ])
-        image_dataset = datasets.ImageFolder(root=self.hico.get_img_dir(self.split),
-                                              transform=data_transform)
-        data_loader = torch.utils.data.DataLoader(image_dataset, batch_size=4, shuffle=True, num_workers=4)
+        data_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+        image_dataset = datasets.ImageFolder(root=self.hico.get_img_dir(self.split), transform=data_transform)
+        data_loader = torch.utils.data.DataLoader(image_dataset, batch_size=1, shuffle=False, num_workers=0)
         return data_loader
-
 
     def __getitem__(self, idx):
         return idx

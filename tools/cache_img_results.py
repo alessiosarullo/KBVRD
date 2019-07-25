@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit, ImgEntry
+from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.utils import Splits
 from torchvision.models import resnet152
 
@@ -30,46 +30,32 @@ def save_feats():
     vm = resnet152(pretrained=True)
     if torch.cuda.is_available():
         vm.cuda()
+        device = torch.device('cuda')
     else:
         print('!!!!!!!!!!!!!!!!! Running on CPU!')
+        device = torch.device('cpu')
     vm.eval()
     for split in [Splits.TRAIN, Splits.TEST]:
         hds = splits[split]
 
-        all_labels, all_img_infos, img_feats = [], [], []
+        all_img_feats = []
         num_imgs = len(hds)
-        for im_id in range(num_imgs):
-            im_data = hds.get_img_entry(im_id)  # type: ImgEntry
-
-            vout = vm(im_data.image.unsqueeze(dim=0))
-            img_feats.append(vout)
-
-            if split != Splits.TEST:
-                all_labels.append(im_data.interactions)
-
-            if im_id % 10 == 0 or im_id == num_imgs - 1:
+        hds_data_loader = hds.get_img_loader()
+        for im_id, img in enumerate(hds_data_loader):
+            feats = vm(img.to(device=device))
+            all_img_feats.append(feats)
+            if im_id % 100 == 0 or im_id == num_imgs - 1:
                 print('Image %6d/%d' % (im_id, num_imgs))
+                torch.cuda.empty_cache()
 
-            torch.cuda.empty_cache()
-
-        img_feats = np.concatenate(img_feats, axis=0)
-        num_cached_imgs, feat_dim = img_feats.shape
+        all_img_feats = np.concatenate(all_img_feats, axis=0)
+        num_cached_imgs, feat_dim = all_img_feats.shape
         assert feat_dim == vm.vis_feat_dim
         assert num_cached_imgs == num_imgs
 
-        all_img_infos = np.stack(all_img_infos, axis=0)
-        assert all_img_infos.shape[0] == num_imgs
-
         precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
-            feat_file.create_dataset('img_feats', data=img_feats)
-
-            if all_labels:
-                all_labels = np.concatenate(all_labels, axis=0)
-                num_cached_imgs, num_interactions = all_labels.shape
-                assert num_interactions == hds.hico.num_interactions
-                assert num_cached_imgs == num_imgs
-                feat_file.create_dataset('labels', data=all_labels.astype(np.int))
+            feat_file.create_dataset('img_feats', data=all_img_feats)
 
 
 if __name__ == '__main__':
