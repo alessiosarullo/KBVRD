@@ -307,12 +307,12 @@ class ExtKnowledgeGenericModel(GenericModel):
         return unseen_action_labels.detach()
 
     def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
-        action_output = outputs[0]
         if inference and self.load_backbone:
+            action_output, action_labels, reg_loss, unseen_action_labels = outputs
             pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
             pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
             action_output[:, self.seen_pred_inds] = pretrained_action_output
-        outputs[0] = action_output
+            outputs = action_output, action_labels, reg_loss, unseen_action_labels
         return outputs
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
