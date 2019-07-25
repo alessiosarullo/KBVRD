@@ -15,9 +15,10 @@ from lib.dataset.hoi_dataset import HoiDataset
 
 
 class HicoSplit(HoiDataset):
-    def __init__(self, split, hico: Hico, object_inds=None, predicate_inds=None):
+    def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, predicate_inds=None):
         self.hico = hico  # type: Hico
         self.split = split
+        self.image_inds = image_inds
 
         object_inds = sorted(object_inds) if object_inds is not None else range(self.hico.num_object_classes)
         self.objects = [hico.objects[i] for i in object_inds]
@@ -94,7 +95,7 @@ class HicoSplit(HoiDataset):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         data_loader = torch.utils.data.DataLoader(
-            dataset=self,
+            dataset=self if self.image_inds is None else Subset(self, self.image_inds),
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
@@ -129,16 +130,16 @@ class HicoSplit(HoiDataset):
             print(f'{Splits.TRAIN.value.capitalize()} predicates:', pred_inds)
             assert 0 in pred_inds
 
-        train_split = cls(split=Splits.TRAIN, hico=hico, object_inds=obj_inds, predicate_inds=pred_inds)
-        splits[Splits.TEST] = cls(split=Splits.TEST, hico=hico)
-
         # Split train/val if needed
         if cfg.val_ratio > 0:
-            num_imgs = train_split.num_images
+            num_imgs = len(hico.split_filenames[Splits.TRAIN])
             num_val_imgs = int(num_imgs * cfg.val_ratio)
-            splits[Splits.TRAIN] = Subset(train_split, range(0, num_imgs - num_val_imgs))
-            splits[Splits.VAL] = Subset(train_split, range(num_imgs - num_val_imgs, num_imgs))
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, image_inds=list(range(0, num_imgs - num_val_imgs)),
+                                       object_inds=obj_inds, predicate_inds=pred_inds)
+            splits[Splits.VAL] = cls(split=Splits.TRAIN, hico=hico, image_inds=list(range(num_imgs - num_val_imgs, num_imgs)),
+                                     object_inds=obj_inds, predicate_inds=pred_inds)
         else:
-            splits[Splits.TRAIN] = train_split
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, object_inds=obj_inds, predicate_inds=pred_inds)
+        splits[Splits.TEST] = cls(split=Splits.TEST, hico=hico)
 
         return splits

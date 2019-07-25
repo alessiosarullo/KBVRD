@@ -291,10 +291,10 @@ class Configs:
         print(str(self), '\n')
 
     def __str__(self):
-        s = ['{0}\nConfigs\n{0}'.format('=' * 70)]
+        s = []
         for k in sorted(self.__dict__.keys()):
             s += ['%-30s %s' % (k, self.__dict__[k])]
-        return '\n'.join(s)
+        return '{0}\nConfigs\n{0}\n{1}\n{0}\n{0}'.format('=' * 70, '\n'.join(s))
 
 
 # Instantiate
