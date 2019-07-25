@@ -218,8 +218,11 @@ class Launcher:
         stats.epoch_tic()
         epoch_loss = 0
         for batch_idx, batch in enumerate(data_loader):
-            batch.epoch = epoch_idx
-            batch.iter = self.curr_train_iter
+            try:
+                batch.epoch = epoch_idx
+                batch.iter = self.curr_train_iter
+            except AttributeError:
+                pass
 
             stats.batch_tic()
             batch_loss = self.loss_batch(batch, stats, optimizer)
