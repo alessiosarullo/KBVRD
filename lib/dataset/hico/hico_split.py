@@ -106,7 +106,7 @@ class HicoSplit(Dataset):
 
     def get_img(self, img_id):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        img = Image.open(os.path.join(self.hico.get_img_dir(self.split), self.hico.split_filenames[self.split][img_id]))
+        img = Image.open(os.path.join(self.hico.get_img_dir(self.split), self.hico.split_filenames[self.split][img_id])).convert('RGB')
         img = self.img_transform(img).to(device=device)
         return img
 
