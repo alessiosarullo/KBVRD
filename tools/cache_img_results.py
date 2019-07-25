@@ -41,7 +41,7 @@ def save_feats():
         all_img_feats = []
         num_imgs = len(hds)
         for img_id in range(num_imgs):
-            feats = vm(hds.get_img(img_id))
+            feats = vm(hds.get_img(img_id).unsqueeze(dim=0))
             all_img_feats.append(feats)
             if img_id % 100 == 0 or img_id == num_imgs - 1:
                 print('Image %6d/%d' % (img_id, num_imgs))
