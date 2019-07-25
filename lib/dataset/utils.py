@@ -91,15 +91,3 @@ def calculate_im_scale(im_size):
     if np.round(im_scale * im_size_max) > max_size:  # Prevent the biggest axis from being more than max_size
         im_scale = float(max_size) / float(im_size_max)
     return im_scale
-
-
-def get_counts(dataset):
-    counts = np.zeros((dataset.num_object_classes, dataset.num_predicates), dtype=np.int64)
-    for i in range(len(dataset)):
-        ex = dataset.get_img_entry(i, read_img=False)  # type: Example
-        gt_hois = ex.gt_hois
-        objs = ex.gt_obj_classes[gt_hois[:, 2]]
-        assert np.all(ex.gt_obj_classes[gt_hois[:, 0]] == dataset.human_class)
-        for o, pred in zip(objs, gt_hois[:, 1]):
-            counts[o, pred] += 1
-    return counts

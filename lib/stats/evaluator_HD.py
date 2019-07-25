@@ -4,13 +4,12 @@ import numpy as np
 
 from lib.stats.utils import MetricFormatter
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet import HicoDetInstanceSplit
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
 from lib.models.containers import Prediction
 
 
 class Evaluator:
-    def __init__(self, dataset: HicoDetInstanceSplit, iou_thresh=0.5):
+    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5):
         self.iou_thresh = iou_thresh
         self.dataset = dataset
         self.op_pair_to_inter, self.inter_to_op_pair = self.parse_interactions()
@@ -40,7 +39,7 @@ class Evaluator:
         return self.inter_to_op_pair.shape[0]
 
     @classmethod
-    def evaluate_predictions(cls, dataset: HicoDetInstanceSplit, predictions: List[Dict], **kwargs):
+    def evaluate_predictions(cls, dataset: HicoDetSplit, predictions: List[Dict], **kwargs):
         assert len(predictions) == dataset.num_images, (len(predictions), dataset.num_images)
 
         evaluator = cls(dataset, **kwargs)

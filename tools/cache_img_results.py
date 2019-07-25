@@ -41,9 +41,6 @@ def save_feats():
         for im_id in range(num_imgs):
             im_data = hds.get_img_entry(im_id)  # type: ImgEntry
 
-            im_infos = np.array([*im_data.img_size, im_data.scale])  # size is the original one
-            all_img_infos.append(im_infos)
-
             vout = vm(im_data.image.unsqueeze(dim=0))
             img_feats.append(vout)
 
@@ -66,7 +63,6 @@ def save_feats():
         precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
             feat_file.create_dataset('img_feats', data=img_feats)
-            feat_file.create_dataset('img_infos', data=all_img_infos)
 
             if all_labels:
                 all_labels = np.concatenate(all_labels, axis=0)

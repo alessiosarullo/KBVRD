@@ -76,20 +76,16 @@ class GenericModel(AbstractModel):
             vis_output = self.visual_module(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos_np is not None:
-                output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
+                outputs = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
+                outputs = self._refine_output(x, inference, vis_output, outputs)
             else:
                 assert inference
-                output = None
+                outputs = None
 
             if not inference:
-                if cfg.model.phoi:
-                    losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
-                else:
-                    losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
-                return losses
+                return self._get_losses(vis_output, outputs)
             else:
                 prediction = Prediction()
-
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
                     im_scales = x.img_infos[:, 2]
@@ -101,27 +97,40 @@ class GenericModel(AbstractModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos_np is not None:
-                        assert output is not None
-
                         prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
 
-                        if cfg.model.phoi:
-                            ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
-                            hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
-                            prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores
-                        else:
-                            if output.shape[1] < self.dataset.hicodet.num_predicates:
-                                assert output.shape[1] == self.dataset.num_predicates
-                                restricted_action_output = output
-                                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.hicodet.num_predicates))
-                                output[:, self.dataset.active_predicates] = restricted_action_output
-                            prediction.action_scores = torch.sigmoid(output).cpu().numpy()
-
+                        assert outputs is not None
+                        self._finalize_prediction(prediction, vis_output, outputs)
                 return prediction
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         raise NotImplementedError()
+
+    def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
+        return outputs
+
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        output = outputs
+        if cfg.model.phoi:
+            losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
+        else:
+            losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
+        return losses
+
+    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+        output = outputs
+        if cfg.model.phoi:
+            ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
+            hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
+            prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores
+        else:
+            if output.shape[1] < self.dataset.hicodet.num_predicates:
+                assert output.shape[1] == self.dataset.num_predicates
+                restricted_action_output = output
+                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.hicodet.num_predicates))
+                output[:, self.dataset.active_predicates] = restricted_action_output
+            prediction.action_scores = torch.sigmoid(output).cpu().numpy()
 
     def get_geo_feats(self, vis_output: VisualOutput, batch: PrecomputedMinibatch):
         boxes_ext = vis_output.boxes_ext

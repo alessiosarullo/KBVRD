@@ -200,12 +200,9 @@ class ModelConfig(BaseConfigs):
         self.nullzs = False
         self.lis = False
 
-        self.aereg = 0.0
-        self.regsmall = False
-
         # ZS GCN
         self.vv = False
-        self.large = False
+        self.puregc = False
         self.iso_null = False
         self.aggp = False
 

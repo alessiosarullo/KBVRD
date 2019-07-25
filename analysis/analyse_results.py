@@ -578,7 +578,7 @@ def visualise_images():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)

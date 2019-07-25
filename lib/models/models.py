@@ -144,12 +144,6 @@ class NonParamBaseModel(GenericModel):
             return hoi_act_repr
 
         output_logits = hoi_act_repr @ self.predictors
-
-        if cfg.program.monitor:
-            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
-            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
-            self.values_to_monitor['act_repr'] = act_repr
-            self.values_to_monitor['output_logits'] = output_logits
         return output_logits
 
 
@@ -201,51 +195,27 @@ class MultiModel(GenericModel):
         self.hoi_output_mlp = nn.Linear(self.final_repr_dim, dataset.hicodet.num_interactions, bias=False)
         torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        act_output, hoi_output = outputs
+        losses = {'hoi_loss': bce_loss(hoi_output, vis_output.hoi_labels),
+                  'action_loss': bce_loss(act_output, vis_output.action_labels)}
+        return losses
 
-            if vis_output.ho_infos_np is not None:
-                act_output, hoi_output = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
-            else:
-                assert inference
-                act_output = hoi_output = None
+    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+        act_output, hoi_output = outputs
 
-            if not inference:
-                losses = {'hoi_loss': bce_loss(hoi_output, vis_output.hoi_labels),
-                          'action_loss': bce_loss(act_output, vis_output.action_labels)}
-                return losses
-            else:
-                prediction = Prediction()
+        if act_output.shape[1] < self.dataset.hicodet.num_predicates:
+            assert act_output.shape[1] == self.dataset.num_predicates
+            restricted_action_output = act_output
+            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.hicodet.num_predicates))
+            act_output[:, self.dataset.active_predicates] = restricted_action_output
+        prediction.action_scores = torch.sigmoid(act_output).cpu().numpy()
 
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-
-                        if act_output.shape[1] < self.dataset.hicodet.num_predicates:
-                            assert act_output.shape[1] == self.dataset.num_predicates
-                            restricted_action_output = act_output
-                            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.hicodet.num_predicates))
-                            act_output[:, self.dataset.active_predicates] = restricted_action_output
-                        prediction.action_scores = torch.sigmoid(act_output).cpu().numpy()
-
-                        ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
-                        hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
-                        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy() * \
-                                                hoi_obj_scores * \
-                                                prediction.action_scores[:, self.dataset.hicodet.interactions[:, 0]]
-
-                return prediction
+        ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
+        hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
+        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy() * \
+                                hoi_obj_scores * \
+                                prediction.action_scores[:, self.dataset.hicodet.interactions[:, 0]]
 
     @property
     def final_repr_dim(self):
@@ -273,127 +243,11 @@ class MultiModel(GenericModel):
         return act_logits, hoi_logits
 
 
-class GCModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'gc'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.base_model = BaseModel(dataset, **kwargs)
-        self.predictor_dim = 1024
-
-        gcemb_dim = 1024
-
-        latent_dim = 200
-        # input_dim = self.predictor_dim
-        # self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-        #                                       nn.ReLU(inplace=True),
-        #                                       nn.Dropout(p=cfg.model.dropout),
-        #                                       nn.Linear(600, 800),
-        #                                       nn.ReLU(inplace=True),
-        #                                       nn.Dropout(p=cfg.model.dropout),
-        #                                       nn.Linear(800, input_dim),
-        #                                       )
-        # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
-
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
-        if cfg.model.greg > 0:
-            nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
-            self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
-            assert (self.vv_adj.diag()[1:] == 1).all()
-
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos_np is not None:
-                action_output, reg_loss = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-            else:
-                assert inference
-                action_output = reg_loss = None
-
-            if not inference:
-                action_labels = vis_output.action_labels
-                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
-
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        _, act_class_embs = self.gcn()  # P x E
-        # act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
-        act_predictors = act_class_embs  # P x D
-        action_logits = vrepr @ act_predictors.t()
-
-        reg_loss = None
-        if cfg.model.greg > 0:
-            act_predictors_norm = F.normalize(act_predictors, dim=1)
-            act_predictors_sim = act_predictors_norm @ act_predictors_norm.t()
-            arange = torch.arange(act_predictors_sim.shape[0])
-
-            # Done with argmin/argmax because using min/max directly resulted in NaNs.
-            neigh_mask = torch.full_like(act_predictors_sim, np.inf)
-            neigh_mask[self.vv_adj] = 1
-            argmin_neigh_sim = (act_predictors_sim * neigh_mask.detach()).argmin(dim=1)
-            min_neigh_sim = act_predictors_sim[arange, argmin_neigh_sim]
-
-            non_neigh_mask = torch.full_like(act_predictors_sim, -np.inf)
-            non_neigh_mask[~self.vv_adj] = 1
-            argmax_non_neigh_sim = (act_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-            max_non_neigh_sim = act_predictors_sim[arange, argmax_non_neigh_sim]
-
-            # Exclude null interaction
-            min_neigh_sim = min_neigh_sim[1:]
-            max_non_neigh_sim = max_non_neigh_sim[1:]
-
-            assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-            assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
-
-            reg_loss = F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
-            reg_loss = cfg.model.greg * reg_loss.mean()
-        return action_logits, reg_loss
-
-
 class ZSGenericModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
-        self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
-        self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
-        self.load_backbone = len(cfg.model.hoi_backbone) > 0
-        if self.load_backbone:
-            ckpt = torch.load(cfg.model.hoi_backbone)
-            self.pretrained_base_model = BaseModel(dataset)
-            self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-            self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
-            assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
-            # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
@@ -404,7 +258,7 @@ class ZSGenericModel(GenericModel):
                     continue
                 new_pred_emb = pe
                 for i, oe in enumerate(obj_wembs):
-                    if self.gcn.noun_verb_links[i, j]:
+                    if self.nv_adj[i, j]:
                         ope = (pe + oe) / 2
                         ope /= np.linalg.norm(ope)
                         new_pred_emb += ope
@@ -414,8 +268,25 @@ class ZSGenericModel(GenericModel):
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
+        self.zs_enabled = (cfg.program.seenf >= 0)
+        if self.zs_enabled:
+            print('Zero-shot enabled.')
+            seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+            unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
+            self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
+            self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
+
+            self.load_backbone = len(cfg.model.hoi_backbone) > 0
+            if self.load_backbone:
+                ckpt = torch.load(cfg.model.hoi_backbone)
+                self.pretrained_base_model = BaseModel(dataset)
+                self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
+                self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
+                assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
+                # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+
+            if cfg.model.softl:
+                self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
         # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
@@ -435,60 +306,39 @@ class ZSGenericModel(GenericModel):
         unseen_action_labels[fg_ho_pair, :] = act_sim[fg_ho_pair, :] * self.obj_act_feasibility[:, self.unseen_pred_inds][obj_labels[fg_ho_pair], :]
         return unseen_action_labels.detach()
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+    def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
+        action_output = outputs[0]
+        if inference and self.load_backbone:
+            pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+            pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
+            action_output[:, self.seen_pred_inds] = pretrained_action_output
+        outputs[0] = action_output
+        return outputs
 
-            if vis_output.ho_infos_np is not None:
-                action_output, action_labels, reg_loss, unseen_action_labels = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                if inference and self.load_backbone:
-                    pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-                    pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        action_output, action_labels, reg_loss, unseen_action_labels = outputs
+        if cfg.model.softl > 0:
+            assert unseen_action_labels is not None
+            unseen_action_logits = action_output[:, self.unseen_pred_inds]
+            if cfg.model.nullzs:
+                unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
 
-                    action_output[:, self.seen_pred_inds] = pretrained_action_output
-            else:
-                assert inference
-                action_output = action_labels = None
+            seen_action_logits = action_output[:, self.seen_pred_inds]
+            losses = {'action_loss': F.binary_cross_entropy_with_logits(seen_action_logits, action_labels) * seen_action_logits.shape[1],
+                      'action_loss_unseen': cfg.model.softl *
+                                            F.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
+                                            unseen_action_labels.shape[1]}
+        else:
+            losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+        if reg_loss is not None:
+            losses['reg_loss'] = reg_loss
+        return losses
 
-            if not inference:
-                if cfg.model.softl > 0:
-                    assert unseen_action_labels is not None
-                    unseen_action_logits = action_output[:, self.unseen_pred_inds]
-                    if cfg.model.nullzs:
-                        unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
-
-                    seen_action_logits = action_output[:, self.seen_pred_inds]
-                    losses = {'action_loss': F.binary_cross_entropy_with_logits(seen_action_logits, action_labels) * seen_action_logits.shape[1],
-                              'action_loss_unseen': cfg.model.softl *
-                                                    F.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
-                                                    unseen_action_labels.shape[1]}
-                else:
-                    losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
+    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+        action_output = outputs[0]
+        assert not cfg.model.phoi
+        assert action_output.shape[1] == self.dataset.hicodet.num_predicates
+        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
 
 class ZSBaseModel(ZSGenericModel):
@@ -499,7 +349,7 @@ class ZSBaseModel(ZSGenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
-        assert cfg.model.softl > 0
+        assert self.zs_enabled and cfg.model.softl > 0
 
         num_classes = dataset.hicodet.num_predicates  # ALL predicates
         self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
@@ -529,32 +379,29 @@ class ZSGCModel(ZSGenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
+        if cfg.model.puregc:
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+        else:
+            latent_dim = 200
+            input_dim = self.predictor_dim
+            self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
+                                                  nn.ReLU(inplace=True),
+                                                  nn.Dropout(p=cfg.model.dropout),
+                                                  nn.Linear(600, 800),
+                                                  nn.ReLU(inplace=True),
+                                                  nn.Dropout(p=cfg.model.dropout),
+                                                  nn.Linear(800, input_dim),
+                                                  )
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
-        latent_dim = 200
-        input_dim = self.predictor_dim
-        self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
-                                              nn.Linear(600, 800),
-                                              nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
-                                              nn.Linear(800, input_dim),
-                                              )
-        self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
-
-        nv_adj = get_noun_verb_adj_mat(self.dataset, iso_null=True)
         if cfg.model.greg > 0:
-            self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
+            self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
-
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(nv_adj, requires_grad=False)
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, act_class_embs = self.gcn()  # P x E
-        act_predictors = act_class_embs  # P x D
+        # act_predictors = act_class_embs  # P x D
         act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
         action_logits = vrepr @ act_predictors.t()
 
@@ -592,6 +439,7 @@ class ZSGCModel(ZSGenericModel):
 
             reg_loss = F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
             reg_loss = cfg.model.greg * reg_loss.mean()
+
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
@@ -602,7 +450,7 @@ class ZSSimModel(ZSBaseModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        assert cfg.model.softl
+        assert cfg.model.softl > 0
 
         seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         seen_transfer_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
@@ -698,44 +546,17 @@ class KatoModel(GenericModel):
     def final_repr_dim(self):
         return self._hoi_repr_dim
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        hoi_output = outputs
+        hoi_labels = vis_output.hoi_labels
+        losses = {'hoi_loss': F.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]}
+        return losses
 
-            if vis_output.ho_infos_np is not None:
-                hoi_output = self._forward(vis_output, )
-            else:
-                assert inference
-                hoi_output = None
-
-            if not inference:
-                hoi_labels = vis_output.hoi_labels
-                losses = {'hoi_loss': F.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]}
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert hoi_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-                        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy()
-
-                return prediction
+    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+        hoi_output = outputs
+        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy()
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = vis_output.ho_infos
@@ -797,65 +618,40 @@ class PeyreModel(GenericModel):
                                                       nn.ReLU(),
                                                       nn.Linear(output_dim, output_dim))
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = self.visual_module(x, inference)  # type: VisualOutput
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits  = outputs
+        box_labels = vis_output.box_labels
 
-            if vis_output.ho_infos_np is not None:
-                hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = self._forward(vis_output)
-            else:
-                assert inference
-                hoi_subj_logits = hoi_obj_logits = hoi_act_logits = hoi_logits = None
+        hoi_subj_labels = box_labels[vis_output.ho_infos_np[:, 1]]
+        subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
+        fg_objs = np.flatnonzero(hoi_subj_labels >= 0)
+        subj_labels_1hot[fg_objs, hoi_subj_labels[fg_objs]] = 1
 
-            if not inference:
-                box_labels = vis_output.box_labels
+        hoi_obj_labels = box_labels[vis_output.ho_infos_np[:, 2]]
+        obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
+        fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
+        obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
 
-                hoi_subj_labels = box_labels[vis_output.ho_infos_np[:, 1]]
-                subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
-                fg_objs = np.flatnonzero(hoi_subj_labels >= 0)
-                subj_labels_1hot[fg_objs, hoi_subj_labels[fg_objs]] = 1
+        action_labels = vis_output.action_labels
+        hoi_labels = vis_output.hoi_labels
 
-                hoi_obj_labels = box_labels[vis_output.ho_infos_np[:, 2]]
-                obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
-                fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
-                obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
+        hoi_subj_loss = bce_loss(hoi_subj_logits, subj_labels_1hot)
+        hoi_obj_loss = bce_loss(hoi_obj_logits, obj_labels_1hot)
+        act_loss = bce_loss(hoi_act_logits, action_labels)
+        hoi_loss = bce_loss(hoi_logits, hoi_labels)
+        return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
 
-                action_labels = vis_output.action_labels
-                hoi_labels = vis_output.hoi_labels
+    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits  = outputs
+        interactions = self.dataset.hicodet.interactions
+        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, [self.dataset.human_class]]) * \
+                             torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
+                             torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
+                             torch.sigmoid(hoi_logits)
+        assert hoi_overall_scores.shape[0] == vis_output.ho_infos_np.shape[0] and \
+               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
 
-                hoi_subj_loss = bce_loss(hoi_subj_logits, subj_labels_1hot)
-                hoi_obj_loss = bce_loss(hoi_obj_logits, obj_labels_1hot)
-                act_loss = bce_loss(hoi_act_logits, action_labels)
-                hoi_loss = bce_loss(hoi_logits, hoi_labels)
-                return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert hoi_subj_logits is not None and hoi_obj_logits is not None and hoi_act_logits is not None and hoi_logits is not None
-                        interactions = self.dataset.hicodet.interactions
-                        hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, [self.dataset.human_class]]) * \
-                                             torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
-                                             torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
-                                             torch.sigmoid(hoi_logits)
-                        assert hoi_overall_scores.shape[0] == vis_output.ho_infos_np.shape[0] and \
-                               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-                        prediction.hoi_scores = hoi_overall_scores
-
-                return prediction
+        prediction.hoi_scores = hoi_overall_scores
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
 

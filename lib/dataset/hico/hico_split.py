@@ -5,23 +5,11 @@ import h5py
 import numpy as np
 import torch
 from torch.utils.data import Dataset, Subset
+from torchvision import datasets, transforms
 
 from config import cfg
 from lib.dataset.hico.hico import Hico
 from lib.dataset.utils import Splits
-
-
-class ImgEntry:
-    def __init__(self, img_id, filename, split):
-        self.id = img_id
-        self.filename = filename
-        self.split = split
-
-        self.interactions = None
-
-        self.image = None
-        self.img_size = None
-        self.scale = None
 
 
 class HicoSplit(Dataset):
@@ -77,7 +65,7 @@ class HicoSplit(Dataset):
     def num_images(self):
         return self.hico.split_annotations[self.split].shape[0]
 
-    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
+    def get_feat_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)
@@ -116,41 +104,33 @@ class HicoSplit(Dataset):
         )
         return data_loader
 
-    def get_img_entry(self, img_id, read_img=True):
+    def get_img_loader(self):
         img_fn = self.hico.split_filenames[self.split][img_id]
-        entry = ImgEntry(img_id=img_id, filename=img_fn, split=self.split)
         entry.interactions = self.hico.split_annotations[self.split][img_id, :]
         if read_img:
             raw_image = cv2.imread(os.path.join(self.hico.get_img_dir(self.split), img_fn))
-            img_h, img_w = raw_image.shape[:2]
-            image, img_scale_factor = preprocess_img(raw_image, target_size=600)  # FIXME magic constant
-            img_size = [img_h, img_w]
-
             entry.image = torch.tensor(image, device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-            entry.img_size = img_size
-            entry.scale = img_scale_factor
-        return entry
 
-    # FIXME use this
-    # data_transforms = {
-    #     'train': transforms.Compose([
-    #         transforms.RandomResizedCrop(224),
-    #         transforms.RandomHorizontalFlip(),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    #     ]),
-    #     'val': transforms.Compose([
-    #         transforms.Resize(256),
-    #         transforms.CenterCrop(224),
-    #         transforms.ToTensor(),
-    #         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    #     ]),
-    # }
-    # image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
-    #                                           data_transforms[x])
-    #                   for x in ['train', 'val']}
-    # dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4,
-    #                                               shuffle=True, num_workers=4)
+        if self.split == Splits.TRAIN:
+            data_transform = transforms.Compose([
+                transforms.RandomResizedCrop(224),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+        else:
+            assert self.split == Splits.TEST
+            data_transform = transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+        image_dataset = datasets.ImageFolder(root=self.hico.get_img_dir(self.split),
+                                              transform=data_transform)
+        data_loader = torch.utils.data.DataLoader(image_dataset, batch_size=4, shuffle=True, num_workers=4)
+        return data_loader
+
 
     def __getitem__(self, idx):
         return idx
@@ -183,19 +163,3 @@ class HicoSplit(Dataset):
             splits[Splits.TRAIN] = train_split
 
         return splits
-
-
-def preprocess_img(im, target_size):
-    im = im.astype(np.float32, copy=False)
-
-    # Normalisation. Values are from PyTorch doc for pretrained models (https://pytorch.org/docs/stable/torchvision/models.html).
-    im -= [0.485, 0.456, 0.406]
-    im /= [0.229, 0.224, 0.225]
-
-    im_size = im.shape[:2]
-    im_size_min = np.min(im_size)
-    im_scale = float(target_size) / float(im_size_min)
-
-    im_resized = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
-    processed_im = np.transpose(im_resized, axes=(2, 0, 1))  # to CHW
-    return processed_im, im_scale
