@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Subset
 from torchvision import datasets, transforms
+from PIL import Image
 
 from config import cfg
 from lib.dataset.hico.hico import Hico
@@ -28,6 +29,13 @@ class HicoSplit(Dataset):
         self.active_interactions = np.array(sorted(set(np.unique(self.hico.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}),
                                             dtype=np.int)
         self.interactions = self.hico.interactions[self.active_interactions, :]  # original predicate and object inds
+
+        self.img_transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
 
         try:
             precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
@@ -96,16 +104,11 @@ class HicoSplit(Dataset):
         )
         return data_loader
 
-    def get_img_loader(self):
-        data_transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
-        image_dataset = datasets.ImageFolder(root=self.hico.get_img_dir(self.split), transform=data_transform)
-        data_loader = torch.utils.data.DataLoader(image_dataset, batch_size=1, shuffle=False, num_workers=0)
-        return data_loader
+    def get_img(self, img_id):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        img = Image.open(self.hico.split_filenames[self.split][img_id])
+        img = self.img_transform(img).to(device=device)
+        return img
 
     def __getitem__(self, idx):
         return idx

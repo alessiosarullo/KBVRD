@@ -40,12 +40,11 @@ def save_feats():
 
         all_img_feats = []
         num_imgs = len(hds)
-        hds_data_loader = hds.get_img_loader()
-        for im_id, img in enumerate(hds_data_loader):
-            feats = vm(img.to(device=device))
+        for img_id in range(num_imgs):
+            feats = vm(hds.get_img(img_id))
             all_img_feats.append(feats)
-            if im_id % 100 == 0 or im_id == num_imgs - 1:
-                print('Image %6d/%d' % (im_id, num_imgs))
+            if img_id % 100 == 0 or img_id == num_imgs - 1:
+                print('Image %6d/%d' % (img_id, num_imgs))
                 torch.cuda.empty_cache()
 
         all_img_feats = np.concatenate(all_img_feats, axis=0)
