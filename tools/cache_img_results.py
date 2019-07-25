@@ -44,9 +44,9 @@ def save_feats():
             img = hds.get_img(img_id)
             feats = vm(img.unsqueeze(dim=0))
             all_img_feats.append(feats)
-            if img_id % 100 == 0 or img_id == num_imgs - 1:
+            if img_id % 10 == 0 or img_id == num_imgs - 1:
                 print('Image %6d/%d' % (img_id, num_imgs))
-                torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
         all_img_feats = np.concatenate(all_img_feats, axis=0)
         num_cached_imgs, feat_dim = all_img_feats.shape
