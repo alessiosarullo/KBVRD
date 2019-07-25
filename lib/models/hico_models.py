@@ -15,6 +15,7 @@ class HicoBaseModel(AbstractModel):
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        assert cfg.hico
         self.dataset = dataset
 
         vis_feat_dim = self.dataset.precomputed_visual_feat_dim

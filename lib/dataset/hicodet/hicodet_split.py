@@ -1,13 +1,13 @@
 import os
-from typing import Dict, List, Type, Union
+from typing import Dict, List, Type
 
 import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
+from lib.dataset.hoi_dataset import HoiDataset
 from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor
 from lib.detection.wrappers import COCO_CLASSES
 
@@ -89,7 +89,7 @@ class Minibatch:
         return minibatch
 
 
-class HicoDetSplit(Dataset):
+class HicoDetSplit(HoiDataset):
     def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds, inter_inds):
         assert split in Splits
 

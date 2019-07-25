@@ -11,9 +11,10 @@ from PIL import Image
 from config import cfg
 from lib.dataset.hico.hico import Hico
 from lib.dataset.utils import Splits
+from lib.dataset.hoi_dataset import HoiDataset
 
 
-class HicoSplit(Dataset):
+class HicoSplit(HoiDataset):
     def __init__(self, split, hico: Hico, object_inds=None, predicate_inds=None):
         self.hico = hico  # type: Hico
         self.split = split
@@ -68,7 +69,7 @@ class HicoSplit(Dataset):
     def num_images(self):
         return self.hico.split_annotations[self.split].shape[0]
 
-    def get_feat_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
+    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)

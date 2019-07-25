@@ -2,10 +2,11 @@ import pickle
 
 from torch.nn import functional as F
 
+from config import cfg
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
+from lib.models.branches import *
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
-from lib.models.branches import *
 from lib.models.misc import bce_loss, LIS, get_noun_verb_adj_mat
 
 
@@ -619,7 +620,7 @@ class PeyreModel(GenericModel):
                                                       nn.Linear(output_dim, output_dim))
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
-        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits  = outputs
+        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs
         box_labels = vis_output.box_labels
 
         hoi_subj_labels = box_labels[vis_output.ho_infos_np[:, 1]]
@@ -642,7 +643,7 @@ class PeyreModel(GenericModel):
         return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
-        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits  = outputs
+        hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs
         interactions = self.dataset.hicodet.interactions
         hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, [self.dataset.human_class]]) * \
                              torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \

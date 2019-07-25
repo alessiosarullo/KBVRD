@@ -1,9 +1,7 @@
 import argparse
 import os
-import sys
-import random
-
 import pickle
+import sys
 
 
 class Configs:
@@ -18,6 +16,7 @@ class Configs:
         self.debug = False
         self.monitor = False
         self.save_memory = False
+        self.nworkers = 0
 
         # Print
         self.print_interval = 50
@@ -33,23 +32,26 @@ class Configs:
         ##########################################
         # Data options                           #
         ##########################################
+
+        # Image
         self.pixel_mean = None
         self.pixel_std = None
         self.im_scale = None
         self.im_max_size = None
 
+        # Null/background
         self.filter_bg_only = False
         self.null_as_bg = False
 
+        # Dataset
         self.val_ratio = 0.1
-
-        self.nw = 0
+        self.hico = False  # use HICO [True] or HICO-DET [False]
 
         ##########################################
         # Model options                          #
         ##########################################
         self.model = None
-        self.phoi = False  # Predict action or interaction?
+        self.phoi = False  # Predict action [False] or interaction [True]?
 
         # Detector
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
@@ -61,17 +63,17 @@ class Configs:
         self.dropout = 0.5
         self.repr_dim = 1024
 
-        # HICO
+        # Loss
+        self.fl_gamma = 0.0  # gamma in focal loss
+        self.meanc = False  # mean or sum over classes for BCE loss?
+
+        # HICO specific
         self.hico_lhard = False
 
-        # BG
+        # BG specific
         self.filter = False
 
-        # GC
-        self.greg = 0.0
-        self.greg_margin = 0.3
-
-        # ZS
+        # ZS specific
         self.attw = False
         self.oprior = False
         self.oscore = False
@@ -80,7 +82,9 @@ class Configs:
         self.nullzs = False
         self.lis = False
 
-        # ZS GCN
+        # ZS GCN specific
+        self.greg = 0.0
+        self.greg_margin = 0.3
         self.vv = False
         self.puregc = False
         self.iso_null = False
@@ -90,7 +94,7 @@ class Configs:
         # Optimiser options                      #
         ##########################################
 
-        # Optimiser parameters
+        # Optimiser
         self.adam = False
         self.adamb1 = 0.9
         self.adamb2 = 0.999
@@ -99,25 +103,19 @@ class Configs:
         self.grad_clip = 5.0
         self.num_epochs = 10
 
-        # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
+        # Learning rate. A value of 0 means that option is disabled.
         self.lr = 1e-3
         self.lr_gamma = 0.1
         self.lr_decay_period = 0
         self.lr_warmup = 0
         self.c_lr_gcn = 0.0
 
-        # Batch parameters
+        # Batch
         self.group = False  # group HOIs belonging to the same image
         self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
         self.img_batch_size = 8  # only used when grouping
         self.batch_size = 64
         self.hoi_bg_ratio = 3
-
-        # Loss parameters
-        self.margin = 0.0
-        self.bg_coeff = 1.0
-        self.fl_gamma = 0.0  # gamma in focal loss
-        self.meanc = False  # mean or sum over classes for BCE loss?
 
     @property
     def output_root(self):
@@ -300,7 +298,7 @@ class Configs:
 
 
 # Instantiate
-cfg = Configs()
+cfg = Configs()  # type: Configs
 
 
 def test():

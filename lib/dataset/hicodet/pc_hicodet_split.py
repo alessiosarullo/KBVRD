@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, remap_box_pairs
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
@@ -145,7 +145,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         super().__init__(*args, **kwargs)
 
         self.precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch,
-                                                                            (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
+                                                                    (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
         print('Loading precomputed feats for %s split from %s.' % (self.split.value, self.precomputed_feats_fn))
 
         self.pc_image_ids = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'image_ids', load_in_memory=True)

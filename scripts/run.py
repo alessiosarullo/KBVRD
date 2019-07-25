@@ -10,12 +10,13 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits
+from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
+from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHicoDetSingleHOIsOnehotSplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
-from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hoi_dataset import HoiDataset
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
@@ -44,7 +45,7 @@ class Launcher:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
-        self.train_split, self.val_split, self.test_split = None, None, None  # type: Union[None, HicoDetSplit]
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: HoiDataset
         self.curr_train_iter = 0
         self.start_epoch = 0
 
@@ -85,18 +86,22 @@ class Launcher:
                 pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
-        if cfg.group:
-            assert not cfg.ohtrain
-            train_ds_class = PrecomputedHicoDetImgHOISplit
-        elif cfg.ohtrain:
-            train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
+        if cfg.hico:
+            splits = HicoSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
+            self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
         else:
-            train_ds_class = PrecomputedHicoDetSingleHOIsSplit
-        self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
-                                                         obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
-        self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
-                                                       obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
-        self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+            if cfg.group:
+                assert not cfg.ohtrain
+                train_ds_class = PrecomputedHicoDetImgHOISplit
+            elif cfg.ohtrain:
+                train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
+            else:
+                train_ds_class = PrecomputedHicoDetSingleHOIsSplit
+            self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
+                                                             obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
+            self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
+                                                           obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
+            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         # Model
         self.detector = get_all_models_by_name()[cfg.model](self.train_split)  # type: AbstractModel
@@ -153,7 +158,7 @@ class Launcher:
 
         optimizer, scheduler = self.get_optim()
 
-        train_loader = self.train_split.get_loader(batch_size=cfg.batch_size, num_workers=cfg.nw)
+        train_loader = self.train_split.get_loader(batch_size=cfg.batch_size, num_workers=cfg.nworkers)
         val_loader = self.val_split.get_loader(batch_size=cfg.batch_size)
         test_loader = self.test_split.get_loader(batch_size=1)
 
