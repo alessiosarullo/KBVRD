@@ -1,17 +1,17 @@
 import os
 
-import cv2
 import h5py
 import numpy as np
 import torch
-from torch.utils.data import Dataset, Subset
-from torchvision import datasets, transforms
 from PIL import Image
+from torch.utils.data import Dataset, Subset
+from torchvision import transforms
 
 from config import cfg
 from lib.dataset.hico.hico import Hico
-from lib.dataset.utils import Splits
 from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.utils import Splits
+from lib.stats.utils import Timer
 
 
 class HicoSplit(HoiDataset):
@@ -72,6 +72,7 @@ class HicoSplit(HoiDataset):
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
+            Timer.get('GetBatch').tic()
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], dtype=torch.float32, device=device)
             if self.split != Splits.TEST:
@@ -83,6 +84,7 @@ class HicoSplit(HoiDataset):
                 labels = torch.tensor(labels, dtype=torch.float32, device=device)
             else:
                 labels = None
+            Timer.get('GetBatch').toc()
             return feats, labels
 
         if self.pc_img_feats is None:
