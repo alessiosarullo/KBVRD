@@ -4,6 +4,7 @@ from lib.models.abstract_model import AbstractModel
 
 try:  # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
     from lib.models.models import *
+    from lib.models.hico_models import *
 except ImportError:
     pass
 
@@ -24,7 +25,7 @@ def get_all_models_by_name() -> Dict[str, Type[AbstractModel]]:
 
 def print_params(model, breakdown=False):
     """
-    Prints parameters of a model
+    Prints parameters of a model # FIXME outdated. Also, use Torch modules
     """
 
     def _format(_n):
@@ -35,7 +36,6 @@ def print_params(model, breakdown=False):
         else:
             return '%.1fM' % (_n / 10 ** 6)
 
-    # FIXME outdated. Also, use Torch modules
     modules = {'Visual module': {}, 'Object branch': {}, 'Spatial branch': {}, 'Human-Object-Interaction branch': {}, 'Other': {}}
     for p_name, p in model.named_parameters():
         if not ('bias' in p_name.split('.')[-1] or 'bn' in p_name.split('.')[-1]):

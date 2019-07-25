@@ -15,6 +15,7 @@ from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHi
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
 from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
+from lib.dataset.hico.hico_split import HicoSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator

@@ -37,23 +37,30 @@ class BaseConfigs:
 
 class ProgramConfig(BaseConfigs):
     def __init__(self):
-        self.print_interval = 50
-        self.log_interval = 100
-        self.sync = False
-        self.verbose = False
 
+        ##########################################
+        # General options                        #
+        ##########################################
+
+        # Program options
+        self.sync = False
         self.debug = False
         self.monitor = False
-        self.save_mem = False
+        self.save_memory = False
 
+        # Print options
+        self.print_interval = 50
+        self.log_interval = 100  # Tensorboard
+        self.verbose = False
+
+        # Experiment options
         self.randomize = False
-
         self.resume = False
-
-        self.model = None
+        self.save_dir = ''
         self.seenf = -1
 
-        self.save_dir = ''
+        # Model options
+        self.model = None
 
     @property
     def output_root(self):
@@ -352,15 +359,15 @@ class Configs:
 cfg = Configs
 
 
-def main():
+def test():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'nmotifs', '--save_dir', 'blabla', '--bn', '--grad_clip', '1.5']
+    sys.argv += ['--sync', '--model', 'hicobase', '--save_dir', 'blabla']
     Configs.parse_args()
     # print('Updated with args:', sys.argv)
     Configs.print()
 
 
 if __name__ == '__main__':
-    main()
+    test()

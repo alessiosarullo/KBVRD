@@ -1,13 +1,11 @@
-import pickle
-
-from lib.models.abstract_model import AbstractModel
 from typing import List
 
-import torch.nn.functional as F
+from config import cfg
 from lib.dataset.hico.hico_split import HicoSplit
+from lib.models.abstract_model import AbstractModel
 from lib.models.branches import *
-from lib.models.misc import bce_loss
 from lib.models.containers import Prediction
+from lib.models.misc import bce_loss
 
 
 class HicoBaseModel(AbstractModel):
