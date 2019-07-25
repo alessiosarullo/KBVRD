@@ -243,7 +243,7 @@ class MultiModel(GenericModel):
         return act_logits, hoi_logits
 
 
-class ZSGenericModel(GenericModel):
+class ExtKnowledgeGenericModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
@@ -341,7 +341,7 @@ class ZSGenericModel(GenericModel):
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
 
-class ZSBaseModel(ZSGenericModel):
+class ZSBaseModel(ExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsb'
@@ -368,7 +368,7 @@ class ZSBaseModel(ZSGenericModel):
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
 
-class ZSGCModel(ZSGenericModel):
+class ZSGCModel(ExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
         return 'zsgc'
@@ -407,7 +407,7 @@ class ZSGCModel(ZSGenericModel):
 
         action_labels = vis_output.action_labels
         unseen_action_labels = None
-        if action_labels is not None:
+        if action_labels is not None and self.zs_enabled:
             if cfg.model.softl > 0:
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
