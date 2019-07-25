@@ -20,6 +20,7 @@ from lib.dataset.hoi_dataset import HoiDataset
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
+from lib.stats.evaluator_hico import HicoEvaluator
 from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
@@ -311,7 +312,7 @@ class Launcher:
                 with open(cfg.watched_values_file, 'wb') as f:
                     pickle.dump(watched_values, f)
 
-        evaluator = Evaluator(data_loader.dataset)
+        evaluator = HicoEvaluator(data_loader.dataset) if cfg.hico else Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.eval_res_file)
         metric_dicts = evaluator.output_metrics()

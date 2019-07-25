@@ -1,14 +1,15 @@
 from typing import List, Dict
+import pickle
 
 import numpy as np
 from sklearn.metrics import average_precision_score
 
 from lib.dataset.hico.hico_split import HicoSplit
 from lib.models.containers import Prediction
-from lib.stats.utils import Timer, sort_and_filter, MetricFormatter
+from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 
 
-class HicoEvaluator:
+class HicoEvaluator(BaseEvaluator):
     def __init__(self, dataset_split: HicoSplit):
         super().__init__()
 
@@ -16,6 +17,10 @@ class HicoEvaluator:
         self.hico = dataset_split.full_dataset
         self.gt_scores = self.hico.split_annotations[self.dataset_split.split]
         self.metrics = {}  # type: Dict[str, np.ndarray]
+
+    def save(self, fn):
+        with open(fn, 'wb') as f:
+            pickle.dump({'metrics': self.metrics}, f)
 
     def evaluate_predictions(self, predictions: List[Dict]):
         assert len(predictions) == self.dataset_split.num_images, (len(predictions), self.dataset_split.num_images)

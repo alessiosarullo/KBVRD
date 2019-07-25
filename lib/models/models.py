@@ -325,12 +325,10 @@ class ExtKnowledgeGenericModel(GenericModel):
                 unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
 
             seen_action_logits = action_output[:, self.seen_pred_inds]
-            losses = {'action_loss': F.binary_cross_entropy_with_logits(seen_action_logits, action_labels) * seen_action_logits.shape[1],
-                      'action_loss_unseen': cfg.softl *
-                                            F.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
-                                            unseen_action_labels.shape[1]}
+            losses = {'action_loss': bce_loss(seen_action_logits, action_labels),
+                      'action_loss_unseen': cfg.softl * bce_loss(unseen_action_logits, unseen_action_labels)}
         else:
-            losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+            losses = {'action_loss': bce_loss(action_output, action_labels)}
         if reg_loss is not None:
             losses['reg_loss'] = reg_loss
         return losses
@@ -499,7 +497,7 @@ class ZSSimModel(ZSBaseModel):
 
         # Loss is for transfer only, actual labels for unseen only
         transfer_labels = known_labels[:, self.rel_seen_transfer_inds].detach()
-        unseen_action_label_loss = F.binary_cross_entropy(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)
+        unseen_action_label_loss = F.binary_cross_entropy(surrogate_action_labels[:, self.seen_transfer_inds], transfer_labels)  # Correct! No logits!
 
         unseen_action_labels = surrogate_action_labels[:, self.unseen_pred_inds]
         return unseen_action_labels.detach(), unseen_action_label_loss
@@ -550,7 +548,7 @@ class KatoModel(GenericModel):
     def _get_losses(self, vis_output: VisualOutput, outputs):
         hoi_output = outputs
         hoi_labels = vis_output.hoi_labels
-        losses = {'hoi_loss': F.binary_cross_entropy_with_logits(hoi_output, hoi_labels) * hoi_output.shape[1]}
+        losses = {'hoi_loss': bce_loss(hoi_output, hoi_labels)}
         return losses
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):

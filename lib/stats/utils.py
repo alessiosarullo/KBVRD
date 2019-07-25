@@ -1,6 +1,7 @@
+import pickle
 import time
 from collections import Counter
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import torch
@@ -153,3 +154,22 @@ class MetricFormatter:
                 return ('% {}.{}f%%'.format(precision + 5, 0)) % (value * 100)
         else:
             return ('% {}d%%'.format(precision + 5)) % (100 * np.sign(value))
+
+
+class BaseEvaluator:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def load(self, fn):
+        with open(fn, 'rb') as f:
+            d = pickle.load(f)
+            self.__dict__.update(d)
+
+    def save(self, fn):
+        raise NotImplementedError
+
+    def evaluate_predictions(self, predictions: List[Dict]):
+        raise NotImplementedError()
+
+    def output_metrics(self, sort=False, actions_to_keep=None):
+        raise NotImplementedError()

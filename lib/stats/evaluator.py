@@ -7,24 +7,7 @@ import numpy as np
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
 from lib.models.containers import Prediction
-from lib.stats.utils import Timer, sort_and_filter, MetricFormatter
-
-
-class BaseEvaluator:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def load(self, fn):
-        with open(fn, 'rb') as f:
-            d = pickle.load(f)
-            self.__dict__.update(d)
-
-    def save(self, fn):
-        with open(fn, 'wb') as f:
-            pickle.dump({k: v for k, v in vars(self).items() if k not in ['dataset']}, f)
-
-    def evaluate_predictions(self, predictions: List[Dict]):
-        raise NotImplementedError()
+from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 
 
 class Evaluator(BaseEvaluator):
