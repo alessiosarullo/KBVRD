@@ -13,8 +13,8 @@ class CheatGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
-        self.num_objects = dataset.hicodet.num_object_classes
-        self.num_predicates = dataset.hicodet.num_predicates
+        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_predicates = dataset.full_dataset.num_predicates
 
         # Normalised adjacency matrix
         self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
@@ -64,16 +64,16 @@ class ExtCheatGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
-        self.num_objects = dataset.hicodet.num_object_classes
-        self.num_predicates = dataset.hicodet.num_predicates
+        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_predicates = dataset.full_dataset.num_predicates
 
         self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
         pred_emb_sim = pred_word_embs @ pred_word_embs.T
         pred_emb_sim[np.arange(pred_emb_sim.shape[0]), np.arange(pred_emb_sim.shape[0])] = 1
 
         # Normalised adjacency matrix
-        self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
+        self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.full_dataset.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
         adj = torch.eye(self.num_objects + self.num_predicates).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
@@ -123,11 +123,11 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
-        self.num_objects = dataset.hicodet.num_object_classes
-        self.num_predicates = dataset.hicodet.num_predicates
-        self.num_interactions = dataset.hicodet.num_interactions
+        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_predicates = dataset.full_dataset.num_predicates
+        self.num_interactions = dataset.full_dataset.num_interactions
 
-        interactions = dataset.hicodet.interactions  # each is [p, o]
+        interactions = dataset.full_dataset.interactions  # each is [p, o]
         assert self.num_interactions == interactions.shape[0] == 600
         interactions_to_obj = np.zeros((self.num_interactions, self.num_objects))
         interactions_to_obj[np.arange(self.num_interactions), interactions[:, 1]] = 1
@@ -176,7 +176,7 @@ class KatoGCNBranch(AbstractHOIBranch):
         self.word_emb_dim = 200
         super().__init__(**kwargs)
 
-        interactions = dataset.hicodet.interactions  # each is [p, o]
+        interactions = dataset.full_dataset.interactions  # each is [p, o]
         num_interactions = interactions.shape[0]
         assert num_interactions == 600
         interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))

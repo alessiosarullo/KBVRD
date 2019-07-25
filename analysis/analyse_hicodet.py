@@ -27,7 +27,7 @@ def stats():
 
     os.makedirs(output_dir, exist_ok=True)
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)  # type: HicoDetSplit
-    hd = hds.hicodet
+    hd = hds.full_dataset
 
     op_mat = np.zeros([hds.num_object_classes, hds.num_predicates])
     for _, p, o in hds.hoi_triplets:
@@ -70,7 +70,7 @@ def find():
         ['fly', 'kite'],
         ['carry', 'kite'],
     ]
-    queries = [hds.hicodet.op_pair_to_interaction[hds.hicodet.object_index[q[1]], hds.hicodet.predicate_index[q[0]]] for q in queries_str]
+    queries = [hds.full_dataset.op_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.predicate_index[q[0]]] for q in queries_str]
     if np.any(np.array(queries) < 0):
         raise ValueError('Unknown interaction(s).')
     output_dir = os.path.join('analysis', 'output', 'gt', 'find', '_'.join(['-'.join(q) for q in queries_str]))
@@ -88,7 +88,7 @@ def find():
         boxes = example.gt_boxes
         box_classes = example.gt_obj_classes
         hois = example.gt_hois
-        gt_interactions = hds.hicodet.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+        gt_interactions = hds.full_dataset.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
         misses = queries_set - set(gt_interactions.tolist())
         if misses:
             continue

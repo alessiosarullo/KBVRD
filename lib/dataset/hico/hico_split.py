@@ -16,21 +16,21 @@ from lib.stats.utils import Timer
 
 class HicoSplit(HoiDataset):
     def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, predicate_inds=None):
-        self.hico = hico  # type: Hico
+        self.full_dataset = hico  # type: Hico
         self.split = split
         self.image_inds = image_inds
 
-        object_inds = sorted(object_inds) if object_inds is not None else range(self.hico.num_object_classes)
+        object_inds = sorted(object_inds) if object_inds is not None else range(self.full_dataset.num_object_classes)
         self.objects = [hico.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
 
-        predicate_inds = sorted(predicate_inds) if predicate_inds is not None else range(self.hico.num_predicates)
+        predicate_inds = sorted(predicate_inds) if predicate_inds is not None else range(self.full_dataset.num_predicates)
         self.predicates = [hico.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
 
-        self.active_interactions = np.array(sorted(set(np.unique(self.hico.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}),
-                                            dtype=np.int)
-        self.interactions = self.hico.interactions[self.active_interactions, :]  # original predicate and object inds
+        active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
+        self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
+        self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
 
         self.img_transform = transforms.Compose([
             transforms.Resize(256),
@@ -52,7 +52,7 @@ class HicoSplit(HoiDataset):
 
     @property
     def human_class(self) -> int:
-        return self.hico.human_class
+        return self.full_dataset.human_class
 
     @property
     def num_object_classes(self):
@@ -68,7 +68,7 @@ class HicoSplit(HoiDataset):
 
     @property
     def num_images(self):
-        return self.hico.split_annotations[self.split].shape[0]
+        return self.full_dataset.split_annotations[self.split].shape[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
@@ -76,8 +76,8 @@ class HicoSplit(HoiDataset):
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], dtype=torch.float32, device=device)
             if self.split != Splits.TEST:
-                labels = self.hico.split_annotations[self.split][idxs, :]
-                if self.active_interactions.size < self.hico.num_interactions:
+                labels = self.full_dataset.split_annotations[self.split][idxs, :]
+                if self.active_interactions.size < self.full_dataset.num_interactions:
                     all_labels = labels
                     labels = np.zeros_like(all_labels)
                     labels[self.active_interactions] = all_labels[self.active_interactions]
@@ -110,7 +110,7 @@ class HicoSplit(HoiDataset):
 
     def get_img(self, img_id):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        img = Image.open(os.path.join(self.hico.get_img_dir(self.split), self.hico.split_filenames[self.split][img_id])).convert('RGB')
+        img = Image.open(os.path.join(self.full_dataset.get_img_dir(self.split), self.full_dataset.split_filenames[self.split][img_id])).convert('RGB')
         img = self.img_transform(img).to(device=device)
         return img
 

@@ -192,14 +192,14 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
 
         # Filter HOIs. Object class filtering is currently not supported.
-        if self.active_object_classes.size < self.hicodet.num_object_classes:
+        if self.active_object_classes.size < self.full_dataset.num_object_classes:
             raise NotImplementedError('Object class filtering is not supported.')
-        if len(self.active_predicates) < self.hicodet.num_predicates and self.split != Splits.TEST:
+        if len(self.active_predicates) < self.full_dataset.num_predicates and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
             # Note: boxes with no interactions are NOT filtered
-        elif len(self.active_interactions) < self.hicodet.num_interactions and self.split != Splits.TEST:
+        elif len(self.active_interactions) < self.full_dataset.num_interactions and self.split != Splits.TEST:
             op_pair_is_valid = np.zeros([self.num_object_classes, self.num_predicates])
-            assert op_pair_is_valid.size == self.hicodet.op_pair_to_interaction.size
+            assert op_pair_is_valid.size == self.full_dataset.op_pair_to_interaction.size
             op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
             num_hois = self.pc_action_labels.sum()
             for i in range(self.pc_action_labels.shape[0]):
@@ -276,7 +276,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                     num_boxes = precomp_box_labels.shape[0]
                     bg_box_mask = (precomp_box_labels < 0)
 
-                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self.hicodet.objects)], dtype=precomp_box_labels.dtype)
+                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self.full_dataset.objects)], dtype=precomp_box_labels.dtype)
                     precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
                     precomp_box_labels_one_hot[bg_box_mask, :] = 0
                     precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.active_object_classes]

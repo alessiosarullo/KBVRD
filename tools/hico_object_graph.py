@@ -45,15 +45,15 @@ def main():
     cum_num_boxes_per_img[0] = 0
     ho_infos = cum_num_boxes_per_img[train_split.pc_ho_im_idxs, :] + train_split.pc_ho_infos[:, 1:]
 
-    persons_per_interaction = {iid: [] for iid in range(train_split.hicodet.num_interactions)}
+    persons_per_interaction = {iid: [] for iid in range(train_split.full_dataset.num_interactions)}
     for int_idx in range(train_split.pc_ho_infos.shape[0]):
         obj_class = train_split.pc_box_labels[train_split.pc_ho_infos[int_idx, 2]]
         actions = np.flatnonzero(train_split.pc_action_labels[int_idx, :])
 
 
     entities = [f'im{imid}_node{bid}' for bid, imid in enumerate(box_im_ids)]
-    relations = [f'OnSameObj_{o}' for o in train_split.hicodet.objects] + \
-                [f'Action_{a}' for a in train_split.hicodet.predicates]
+    relations = [f'OnSameObj_{o}' for o in train_split.full_dataset.objects] + \
+                [f'Action_{a}' for a in train_split.full_dataset.predicates]
     triples = []
     for i, pi in enumerate(box_im_ids):
         for j, pj in enumerate(hd.predicates):

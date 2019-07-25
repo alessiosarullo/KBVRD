@@ -18,7 +18,7 @@ class GenericModel(AbstractModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         # Instance parameters defined before superclass' constructor's invocation will be updated according to keyword arguments.
         super().__init__(**kwargs)
-        self.dataset = dataset
+        self.dataset = dataset  # type: HicoDetSplit
         self.visual_module = VisualModule(dataset)
 
         # if cfg.csloss:
@@ -122,13 +122,13 @@ class GenericModel(AbstractModel):
         output = outputs
         if cfg.phoi:
             ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
-            hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
+            hoi_obj_scores = ho_obj_scores[:, self.dataset.full_dataset.interactions[:, 1]]  # This helps
             prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores
         else:
-            if output.shape[1] < self.dataset.hicodet.num_predicates:
+            if output.shape[1] < self.dataset.full_dataset.num_predicates:
                 assert output.shape[1] == self.dataset.num_predicates
                 restricted_action_output = output
-                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.hicodet.num_predicates))
+                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_predicates))
                 output[:, self.dataset.active_predicates] = restricted_action_output
             prediction.action_scores = torch.sigmoid(output).cpu().numpy()
 

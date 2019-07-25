@@ -24,7 +24,7 @@ class Evaluator:
         self.metrics = {}  # type: Dict[str, np.ndarray]
 
     def parse_interactions(self):
-        interactions = self.dataset.hicodet.interactions
+        interactions = self.dataset.full_dataset.interactions
         num_interactions = interactions.shape[0]
 
         op_pair_to_inter = np.full([self.dataset.num_object_classes, self.dataset.num_predicates], fill_value=-1, dtype=np.int)

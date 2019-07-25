@@ -45,7 +45,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        num_classes = dataset.hicodet.num_interactions if cfg.phoi else dataset.num_predicates
+        num_classes = dataset.full_dataset.num_interactions if cfg.phoi else dataset.num_predicates
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -193,7 +193,7 @@ class MultiModel(GenericModel):
 
         self.act_output_mlp = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
-        self.hoi_output_mlp = nn.Linear(self.final_repr_dim, dataset.hicodet.num_interactions, bias=False)
+        self.hoi_output_mlp = nn.Linear(self.final_repr_dim, dataset.full_dataset.num_interactions, bias=False)
         torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
@@ -205,18 +205,18 @@ class MultiModel(GenericModel):
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         act_output, hoi_output = outputs
 
-        if act_output.shape[1] < self.dataset.hicodet.num_predicates:
+        if act_output.shape[1] < self.dataset.full_dataset.num_predicates:
             assert act_output.shape[1] == self.dataset.num_predicates
             restricted_action_output = act_output
-            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.hicodet.num_predicates))
+            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.full_dataset.num_predicates))
             act_output[:, self.dataset.active_predicates] = restricted_action_output
         prediction.action_scores = torch.sigmoid(act_output).cpu().numpy()
 
         ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
-        hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
+        hoi_obj_scores = ho_obj_scores[:, self.dataset.full_dataset.interactions[:, 1]]  # This helps
         prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy() * \
                                 hoi_obj_scores * \
-                                prediction.action_scores[:, self.dataset.hicodet.interactions[:, 0]]
+                                prediction.action_scores[:, self.dataset.full_dataset.interactions[:, 0]]
 
     @property
     def final_repr_dim(self):
@@ -251,8 +251,8 @@ class ExtKnowledgeGenericModel(GenericModel):
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
+        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
         if cfg.aggp:
             for j, pe in enumerate(pred_wembs):
                 if j == 0:
@@ -274,7 +274,7 @@ class ExtKnowledgeGenericModel(GenericModel):
         if self.zs_enabled:
             print('Zero-shot enabled.')
             seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-            unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
+            unseen_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_predicates)) - set(seen_pred_inds.tolist())))
             self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
             self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
@@ -338,7 +338,7 @@ class ExtKnowledgeGenericModel(GenericModel):
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         action_output = outputs[0]
         assert not cfg.phoi
-        assert action_output.shape[1] == self.dataset.hicodet.num_predicates
+        assert action_output.shape[1] == self.dataset.full_dataset.num_predicates
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
 
@@ -352,7 +352,7 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
         self.base_model = BaseModel(dataset, **kwargs)
         assert self.zs_enabled and cfg.softl > 0
 
-        num_classes = dataset.hicodet.num_predicates  # ALL predicates
+        num_classes = dataset.full_dataset.num_predicates  # ALL predicates
         self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -456,7 +456,7 @@ class ZSSimModel(ZSBaseModel):
         seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         seen_transfer_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
         seen_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
-        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_train_pred_inds.tolist())))
+        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_predicates)) - set(seen_train_pred_inds.tolist())))
         self.seen_train_inds = nn.Parameter(torch.from_numpy(seen_train_pred_inds), requires_grad=False)
         self.seen_transfer_inds = nn.Parameter(torch.from_numpy(seen_transfer_pred_inds), requires_grad=False)
         self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)
@@ -585,7 +585,7 @@ class PeyreModel(GenericModel):
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
 
-        interactions = dataset.hicodet.interactions  # each is [p, o]
+        interactions = dataset.full_dataset.interactions  # each is [p, o]
         person_word_emb = np.tile(obj_word_embs[dataset.human_class], reps=[interactions.shape[0], 1])
         hoi_embs = np.concatenate([person_word_emb,
                                    pred_word_embs[interactions[:, 0]],
@@ -644,13 +644,13 @@ class PeyreModel(GenericModel):
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs
-        interactions = self.dataset.hicodet.interactions
+        interactions = self.dataset.full_dataset.interactions
         hoi_overall_scores = torch.sigmoid(hoi_subj_logits[:, [self.dataset.human_class]]) * \
                              torch.sigmoid(hoi_obj_logits)[:, interactions[:, 1]] * \
                              torch.sigmoid(hoi_act_logits)[:, interactions[:, 0]] * \
                              torch.sigmoid(hoi_logits)
         assert hoi_overall_scores.shape[0] == vis_output.ho_infos_np.shape[0] and \
-               hoi_overall_scores.shape[1] == self.dataset.hicodet.num_interactions
+               hoi_overall_scores.shape[1] == self.dataset.full_dataset.num_interactions
 
         prediction.hoi_scores = hoi_overall_scores
 

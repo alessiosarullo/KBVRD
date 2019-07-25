@@ -94,7 +94,7 @@ class HicoDetSplit(HoiDataset):
         assert split in Splits
 
         self.split = split
-        self.hicodet = hicodet  # type: HicoDet
+        self.full_dataset = hicodet  # type: HicoDet
         self.image_ids = image_ids
         self._data = data
 
@@ -102,39 +102,39 @@ class HicoDetSplit(HoiDataset):
         self.objects = [hicodet.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
         reduced_object_index = {obj: i for i, obj in enumerate(self.objects)}
-        if len(object_inds) < self.hicodet.num_object_classes:
+        if len(object_inds) < self.full_dataset.num_object_classes:
             print(f'{split.value.capitalize()} objects:', object_inds)
 
         predicate_inds = sorted(predicate_inds)
         self.predicates = [hicodet.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
         reduced_predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
-        if len(predicate_inds) < self.hicodet.num_predicates:
+        if len(predicate_inds) < self.full_dataset.num_predicates:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
         if inter_inds is not None:
-            assert len(object_inds) == self.hicodet.num_object_classes and len(predicate_inds) == self.hicodet.num_predicates
+            assert len(object_inds) == self.full_dataset.num_object_classes and len(predicate_inds) == self.full_dataset.num_predicates
             inter_inds = sorted(inter_inds)
             self.active_interactions = np.array(inter_inds, dtype=np.int)
-            self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
+            self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
             self.reduced_interactions = self.interactions
             print(f'{split.value.capitalize()} interactions:', inter_inds)
         else:
-            reduced_interactions = np.array([[reduced_predicate_index.get(self.hicodet.predicates[p], -1),
-                                              reduced_object_index.get(self.hicodet.objects[o], -1)]
-                                             for p, o in self.hicodet.interactions])
+            reduced_interactions = np.array([[reduced_predicate_index.get(self.full_dataset.predicates[p], -1),
+                                              reduced_object_index.get(self.full_dataset.objects[o], -1)]
+                                             for p, o in self.full_dataset.interactions])
             self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
-            active_interactions = set(np.unique(self.hicodet.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
+            active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
             self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
-            self.interactions = self.hicodet.interactions[self.active_interactions, :]  # original predicate and object inds
+            self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
 
             # Checks
-            interactions = np.array([[p if self.hicodet.predicates[p] in reduced_predicate_index else -1,
-                                      o if self.hicodet.objects[o] in reduced_object_index else -1]
-                                     for p, o in self.hicodet.interactions])
+            interactions = np.array([[p if self.full_dataset.predicates[p] in reduced_predicate_index else -1,
+                                      o if self.full_dataset.objects[o] in reduced_object_index else -1]
+                                     for p, o in self.full_dataset.interactions])
             assert np.all(self.interactions == interactions[np.all(interactions >= 0, axis=1), :])
-            assert np.all([reduced_predicate_index[self.hicodet.predicates[p]] == self.reduced_interactions[i, 0] and
-                           reduced_object_index[self.hicodet.objects[o]] == self.reduced_interactions[i, 1]
+            assert np.all([reduced_predicate_index[self.full_dataset.predicates[p]] == self.reduced_interactions[i, 0] and
+                           reduced_object_index[self.full_dataset.objects[o]] == self.reduced_interactions[i, 1]
                            for i, (p, o) in enumerate(self.interactions)])
 
         # Compute mappings to and from COCO
@@ -155,7 +155,7 @@ class HicoDetSplit(HoiDataset):
 
     @property
     def human_class(self) -> int:
-        return self.hicodet.human_class
+        return self.full_dataset.human_class
 
     @property
     def num_object_classes(self):
@@ -176,12 +176,12 @@ class HicoDetSplit(HoiDataset):
     @property
     def img_dir(self):
         split = Splits.TEST if self.split == Splits.TEST else Splits.TRAIN  # val -> train
-        return self.hicodet.get_img_dir(split)
+        return self.full_dataset.get_img_dir(split)
 
     def get_preds_for_embs(self, keep_prepositions=False):
         preds = []
         for p in self.predicates:
-            if p != self.hicodet.null_interaction:
+            if p != self.full_dataset.null_interaction:
                 p = p.replace('_', ' ')
             if not keep_prepositions:
                 p = p.split(' ')[0]

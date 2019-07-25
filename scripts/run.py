@@ -315,13 +315,13 @@ class Launcher:
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.eval_res_file)
         metric_dicts = evaluator.output_metrics()
-        if self.train_split.active_predicates.size < self.train_split.hicodet.num_predicates:
+        if cfg.seenf >= 0:
             seen_preds = sorted(self.train_split.active_predicates)
             print('Trained on:')
             _, tr_hoi_metrics = evaluator.output_metrics(actions_to_keep=seen_preds)
             tr_hoi_metrics = {f'tr_{k}': v for k, v in tr_hoi_metrics.items()}
 
-            unseen_preds = sorted(set(range(self.train_split.hicodet.num_predicates)) - set(self.train_split.active_predicates))
+            unseen_preds = sorted(set(range(self.train_split.full_dataset.num_predicates)) - set(self.train_split.active_predicates))
             print('Zero-shot:')
             _, zs_hoi_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
             zs_hoi_metrics = {f'zs_{k}': v for k, v in zs_hoi_metrics.items()}

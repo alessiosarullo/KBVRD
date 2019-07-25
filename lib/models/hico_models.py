@@ -30,7 +30,7 @@ class HicoBaseModel(AbstractModel):
         nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.hoi_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.output_mlp = nn.Linear(self.repr_dim, dataset.hico.num_interactions, bias=False)
+        self.output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):

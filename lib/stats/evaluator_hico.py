@@ -13,7 +13,7 @@ class HicoEvaluator:
         super().__init__()
 
         self.dataset_split = dataset_split
-        self.hico = dataset_split.hico
+        self.hico = dataset_split.full_dataset
         self.gt_scores = self.hico.split_annotations[self.dataset_split.split]
         self.metrics = {}  # type: Dict[str, np.ndarray]
 

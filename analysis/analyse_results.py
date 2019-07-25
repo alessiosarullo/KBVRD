@@ -219,7 +219,7 @@ class Analyser:
 
 
 def compute_cooccs(dataset: HicoDetSplit, gt_iou_thresh=0.5):
-    act_cooccs = np.zeros((dataset.hicodet.num_predicates, dataset.hicodet.num_predicates))
+    act_cooccs = np.zeros((dataset.full_dataset.num_predicates, dataset.full_dataset.num_predicates))
     for gt_idx in range(len(dataset)):
         gt_entry = dataset.get_img_entry(gt_idx, read_img=False)
         gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
@@ -268,7 +268,7 @@ def _print_confidence_scores(analyser: Analyser, marked_preds=None):
         marked_preds = {x for x in marked_preds}
     else:
         marked_preds = []
-    hicodet = analyser.dataset.hicodet
+    hicodet = analyser.dataset.full_dataset
     num_gt_act = np.sum(analyser.num_gt, axis=0).astype(np.int)
     print(' ' * 20,
           ' '.join([f'{x:6.2f}{"":7s}' for x in analyser.ph_bins[1:]]),
@@ -296,8 +296,8 @@ def evaluate():
     # evaluator.evaluate_predictions(results)
     evaluator.load(cfg.eval_res_file)
 
-    hois = [inter for imdata in hdtest.hicodet.split_data[Splits.TRAIN]
-            for inter in hdtest.hicodet.op_pair_to_interaction[imdata.box_classes[imdata.hois[:, 2]], imdata.hois[:, 1]]]
+    hois = [inter for imdata in hdtest.full_dataset.split_data[Splits.TRAIN]
+            for inter in hdtest.full_dataset.op_pair_to_interaction[imdata.box_classes[imdata.hois[:, 2]], imdata.hois[:, 1]]]
     hoi_hist = Counter(hois)
     non_rare_classes = np.array(sorted([c for c, n in hoi_hist.items() if n >= 10]))
     assert len(non_rare_classes) == 600 - 138
@@ -357,7 +357,7 @@ def compare():
     c_hoi_metrics = {k: hoi_metrics2[k] - hoi_metrics1[k] for k in hoi_metrics2.keys()}
     gt_hoi_class_hist, _, hoi_class_inds = sort_and_filter(metrics=c_hoi_metrics,
                                                            gt_labels=gt_hoi_labels2,
-                                                           all_classes=list(range(hds.hicodet.num_interactions)),
+                                                           all_classes=list(range(hds.full_dataset.num_interactions)),
                                                            sort=True)
 
     mf = MetricFormatter()
@@ -380,7 +380,7 @@ def stats():
     os.makedirs(res_save_path, exist_ok=True)
 
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
-    hicodet = hdtrain.hicodet
+    hicodet = hdtrain.full_dataset
 
     hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
@@ -459,7 +459,7 @@ def zs_stats():
     seen_obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
-    hicodet = hdtrain.hicodet
+    hicodet = hdtrain.full_dataset
     seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
