@@ -73,14 +73,14 @@ class HicoSplit(HoiDataset):
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         def collate(idx_list):
             idxs = np.array(idx_list)
-            feats = torch.tensor(self.pc_img_feats[idxs, :], device=device)
+            feats = torch.tensor(self.pc_img_feats[idxs, :], dtype=torch.float32, device=device)
             if self.split != Splits.TEST:
                 labels = self.hico.split_annotations[self.split][idxs, :]
                 if self.active_interactions.size < self.hico.num_interactions:
                     all_labels = labels
                     labels = np.zeros_like(all_labels)
                     labels[self.active_interactions] = all_labels[self.active_interactions]
-                labels = torch.tensor(labels, device=device)
+                labels = torch.tensor(labels, dtype=torch.float32, device=device)
             else:
                 labels = None
             return feats, labels
