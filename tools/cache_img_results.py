@@ -49,9 +49,7 @@ def save_feats():
             torch.cuda.empty_cache()
 
         all_img_feats = np.concatenate(all_img_feats, axis=0)
-        num_cached_imgs, feat_dim = all_img_feats.shape
-        assert feat_dim == vm.vis_feat_dim
-        assert num_cached_imgs == num_imgs
+        assert all_img_feats.shape[0] == num_imgs
 
         precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:

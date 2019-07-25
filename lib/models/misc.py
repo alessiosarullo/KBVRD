@@ -3,6 +3,7 @@ import torch
 from torch.nn import functional
 
 from config import cfg
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 
 
 def bce_loss(logits, labels, reduce=True):
@@ -35,3 +36,12 @@ def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
             T = 1 + np.exp(k - w).item()
     assert w is not None and k is not None and T is not None
     return T * torch.sigmoid(w * x - k)
+
+
+def get_noun_verb_adj_mat(dataset: HicoDetSplit, iso_null=None):
+    noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32))
+    if iso_null is None:
+        iso_null = cfg.model.iso_null
+    if iso_null:
+        noun_verb_links[:, 0] = 0
+    return noun_verb_links

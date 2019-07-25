@@ -6,7 +6,7 @@ from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
 from lib.models.branches import *
-from lib.models.misc import bce_loss, LIS
+from lib.models.misc import bce_loss, LIS, get_noun_verb_adj_mat
 
 
 class BaseModel(GenericModel):
