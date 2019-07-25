@@ -38,7 +38,7 @@ class HicoSplit(Dataset):
         ])
 
         try:
-            precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
+            precomputed_feats_fn = cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
             pc_feats_file = h5py.File(precomputed_feats_fn, 'r')
             self.pc_img_feats = pc_feats_file['img_feats'][:]
         except OSError:
@@ -132,9 +132,9 @@ class HicoSplit(Dataset):
         splits[Splits.TEST] = cls(split=Splits.TEST, hico=hico)
 
         # Split train/val if needed
-        if cfg.data.val_ratio > 0:
+        if cfg.val_ratio > 0:
             num_imgs = train_split.num_images
-            num_val_imgs = int(num_imgs * cfg.data.val_ratio)
+            num_val_imgs = int(num_imgs * cfg.val_ratio)
             splits[Splits.TRAIN] = Subset(train_split, range(0, num_imgs - num_val_imgs))
             splits[Splits.VAL] = Subset(train_split, range(num_imgs - num_val_imgs, num_imgs))
         else:

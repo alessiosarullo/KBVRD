@@ -73,7 +73,7 @@ def preprocess_img(im):
         """
 
     im = im.astype(np.float32, copy=False)
-    im -= cfg.data.pixel_mean
+    im -= cfg.pixel_mean
     im_scale = calculate_im_scale(im.shape[:2])
     im_resized = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
     processed_im = np.transpose(im_resized, axes=(2, 0, 1))  # to CHW
@@ -82,8 +82,8 @@ def preprocess_img(im):
 
 def calculate_im_scale(im_size):
     """ Calculate target resize scale. """
-    max_size = cfg.data.im_max_size
-    target_size = cfg.data.im_scale
+    max_size = cfg.im_max_size
+    target_size = cfg.im_scale
 
     im_size_min = np.min(im_size)
     im_size_max = np.max(im_size)

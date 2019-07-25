@@ -129,7 +129,7 @@ class BalancedImgSampler(torch.utils.data.BatchSampler):
             if bg_hois_inds.size > 0:
                 assert np.all(fg_hois_inds == np.arange(bg_hois_inds[0]))  # all positives, then all negatives
 
-        self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
+        self.neg_pos_ratio = cfg.hoi_bg_ratio
         self.pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
         assert self.pos_per_batch == int(self.pos_per_batch)
         self.pos_per_batch = int(self.pos_per_batch)

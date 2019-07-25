@@ -17,7 +17,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
 
-        if not cfg.program.save_memory:
+        if not cfg.save_memory:
             self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=True)
             self.pc_union_boxes_feats =  PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=True)
 
@@ -111,7 +111,7 @@ class BalancedTripletMLSampler(torch.utils.data.Sampler):
         self.shuffle = shuffle
         self.dataset = dataset
 
-        if cfg.data.null_as_bg:
+        if cfg.null_as_bg:
             pos_hois_mask = np.any(dataset.pc_action_labels[:, 1:], axis=1)
             neg_hois_mask = (dataset.pc_action_labels[:, 0] > 0)
         else:
@@ -130,7 +130,7 @@ class BalancedTripletMLSampler(torch.utils.data.Sampler):
         neg_hois_mask = neg_hois_mask & split_mask
         self.neg_samples = np.flatnonzero(neg_hois_mask)
 
-        self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
+        self.neg_pos_ratio = cfg.hoi_bg_ratio
         pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
         self.pos_per_batch = int(pos_per_batch)
         self.neg_per_batch = hoi_batch_size - self.pos_per_batch

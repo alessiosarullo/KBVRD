@@ -144,7 +144,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hicodet', cfg.model.rcnn_arch,
+        self.precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch,
                                                                             (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
         print('Loading precomputed feats for %s split from %s.' % (self.split.value, self.precomputed_feats_fn))
 

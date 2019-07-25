@@ -7,8 +7,8 @@ from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 
 
 def bce_loss(logits, labels, reduce=True):
-    if cfg.opt.fl_gamma != 0:  # Focal loss
-        gamma = cfg.opt.fl_gamma
+    if cfg.fl_gamma != 0:  # Focal loss
+        gamma = cfg.fl_gamma
         s = logits
         t = labels
         m = s.clamp(min=0)  # m = max(s, 0)
@@ -21,7 +21,7 @@ def bce_loss(logits, labels, reduce=True):
             loss = loss_mat
     else:  # standard BCE loss
         loss = functional.binary_cross_entropy_with_logits(logits, labels, reduction='elementwise_mean' if reduce else 'none')
-    if reduce and not cfg.opt.meanc:
+    if reduce and not cfg.meanc:
         loss *= logits.shape[1]
     return loss
 
@@ -41,7 +41,7 @@ def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
 def get_noun_verb_adj_mat(dataset: HicoDetSplit, iso_null=None):
     noun_verb_links = torch.from_numpy((dataset.hicodet.op_pair_to_interaction >= 0).astype(np.float32))
     if iso_null is None:
-        iso_null = cfg.model.iso_null
+        iso_null = cfg.iso_null
     if iso_null:
         noun_verb_links[:, 0] = 0
     return noun_verb_links

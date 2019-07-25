@@ -18,11 +18,11 @@ class BaseModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         hidden_dim = 1024
-        self.act_repr_dim = cfg.model.repr_dim
+        self.act_repr_dim = cfg.repr_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -30,7 +30,7 @@ class BaseModel(GenericModel):
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                nn.ReLU(inplace=True),
-                                               nn.Dropout(p=cfg.model.dropout),
+                                               nn.Dropout(p=cfg.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -38,13 +38,13 @@ class BaseModel(GenericModel):
 
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.final_repr_dim),
                                             ])
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        num_classes = dataset.hicodet.num_interactions if cfg.model.phoi else dataset.num_predicates
+        num_classes = dataset.hicodet.num_interactions if cfg.phoi else dataset.num_predicates
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -73,7 +73,7 @@ class BaseModel(GenericModel):
 
         output_logits = self.output_mlp(hoi_act_repr)
 
-        if cfg.program.monitor:
+        if cfg.monitor:
             self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
             self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
             self.values_to_monitor['act_repr'] = act_repr
@@ -90,11 +90,11 @@ class NonParamBaseModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         hidden_dim = 1024
-        self.act_repr_dim = cfg.model.repr_dim
+        self.act_repr_dim = cfg.repr_dim
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -102,7 +102,7 @@ class NonParamBaseModel(GenericModel):
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                nn.ReLU(inplace=True),
-                                               nn.Dropout(p=cfg.model.dropout),
+                                               nn.Dropout(p=cfg.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -110,7 +110,7 @@ class NonParamBaseModel(GenericModel):
 
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.final_repr_dim),
                                             ])
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -156,37 +156,37 @@ class MultiModel(GenericModel):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         hidden_dim = 1024
-        self.output_repr_dim = cfg.model.repr_dim
+        self.output_repr_dim = cfg.repr_dim
 
         self.hoi_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                  nn.ReLU(inplace=True),
-                                                 nn.Dropout(p=cfg.model.dropout),
+                                                 nn.Dropout(p=cfg.dropout),
                                                  nn.Linear(hidden_dim, self.final_repr_dim),
                                                  ])
         self.hoi_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
         self.hoi_act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
 
         self.act_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                  nn.ReLU(inplace=True),
-                                                 nn.Dropout(p=cfg.model.dropout),
+                                                 nn.Dropout(p=cfg.dropout),
                                                  nn.Linear(hidden_dim, self.final_repr_dim),
                                                  ])
         self.act_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
                                                 nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
                                                 ])
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.final_repr_dim),
                                             ])
 
@@ -252,7 +252,7 @@ class ExtKnowledgeGenericModel(GenericModel):
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
         pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
-        if cfg.model.aggp:
+        if cfg.aggp:
             for j, pe in enumerate(pred_wembs):
                 if j == 0:
                     continue
@@ -268,24 +268,24 @@ class ExtKnowledgeGenericModel(GenericModel):
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
-        self.zs_enabled = (cfg.program.seenf >= 0)
-        self.load_backbone = len(cfg.model.hoi_backbone) > 0
+        self.zs_enabled = (cfg.seenf >= 0)
+        self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
-            seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+            seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
             unseen_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_pred_inds.tolist())))
             self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
             self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
             if self.load_backbone:
-                ckpt = torch.load(cfg.model.hoi_backbone)
+                ckpt = torch.load(cfg.hoi_backbone)
                 self.pretrained_base_model = BaseModel(dataset)
                 self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
                 self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
                 assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
                 # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
 
-            if cfg.model.softl:
+            if cfg.softl:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
     def get_soft_labels(self, vis_output: VisualOutput):
@@ -295,7 +295,7 @@ class ExtKnowledgeGenericModel(GenericModel):
 
         action_labels = vis_output.action_labels
         pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds]
-        if cfg.model.lis:
+        if cfg.lis:
             act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
             # act_sim = torch.sigmoid(action_labels @ pred_sims)
@@ -317,15 +317,15 @@ class ExtKnowledgeGenericModel(GenericModel):
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
         action_output, action_labels, reg_loss, unseen_action_labels = outputs
-        if cfg.model.softl > 0:
+        if cfg.softl > 0:
             assert unseen_action_labels is not None
             unseen_action_logits = action_output[:, self.unseen_pred_inds]
-            if cfg.model.nullzs:
+            if cfg.nullzs:
                 unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
 
             seen_action_logits = action_output[:, self.seen_pred_inds]
             losses = {'action_loss': F.binary_cross_entropy_with_logits(seen_action_logits, action_labels) * seen_action_logits.shape[1],
-                      'action_loss_unseen': cfg.model.softl *
+                      'action_loss_unseen': cfg.softl *
                                             F.binary_cross_entropy_with_logits(unseen_action_logits, unseen_action_labels) *
                                             unseen_action_labels.shape[1]}
         else:
@@ -336,7 +336,7 @@ class ExtKnowledgeGenericModel(GenericModel):
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         action_output = outputs[0]
-        assert not cfg.model.phoi
+        assert not cfg.phoi
         assert action_output.shape[1] == self.dataset.hicodet.num_predicates
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
@@ -349,7 +349,7 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
-        assert self.zs_enabled and cfg.model.softl > 0
+        assert self.zs_enabled and cfg.softl > 0
 
         num_classes = dataset.hicodet.num_predicates  # ALL predicates
         self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
@@ -379,22 +379,22 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         self.predictor_dim = 1024
 
         gcemb_dim = 1024
-        if cfg.model.puregc:
+        if cfg.puregc:
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
         else:
             latent_dim = 200
             input_dim = self.predictor_dim
             self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
                                                   nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.model.dropout),
+                                                  nn.Dropout(p=cfg.dropout),
                                                   nn.Linear(600, 800),
                                                   nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.model.dropout),
+                                                  nn.Dropout(p=cfg.dropout),
                                                   nn.Linear(800, input_dim),
                                                   )
             self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
-        if cfg.model.greg > 0:
+        if cfg.greg > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
 
@@ -408,13 +408,13 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         action_labels = vis_output.action_labels
         unseen_action_labels = None
         if action_labels is not None and self.zs_enabled:
-            if cfg.model.softl > 0:
+            if cfg.softl > 0:
                 unseen_action_labels = self.get_soft_labels(vis_output)
             else:  # restrict training to seen predicates only
                 action_logits = action_logits[:, self.seen_pred_inds]  # P x E
 
         reg_loss = None
-        if cfg.model.greg > 0:
+        if cfg.greg > 0:
             act_predictors_norm = F.normalize(act_predictors, dim=1)
             act_predictors_sim = act_predictors_norm @ act_predictors_norm.t()
             arange = torch.arange(act_predictors_sim.shape[0])
@@ -437,8 +437,8 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
             assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
 
-            reg_loss = F.relu(cfg.model.greg_margin - min_neigh_sim + max_non_neigh_sim)
-            reg_loss = cfg.model.greg * reg_loss.mean()
+            reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
+            reg_loss = cfg.greg * reg_loss.mean()
 
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
@@ -450,10 +450,10 @@ class ZSSimModel(ZSBaseModel):
 
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        assert cfg.model.softl > 0
+        assert cfg.softl > 0
 
-        seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        seen_transfer_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
+        seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        seen_transfer_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
         seen_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
         all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.hicodet.num_predicates)) - set(seen_train_pred_inds.tolist())))
         self.seen_train_inds = nn.Parameter(torch.from_numpy(seen_train_pred_inds), requires_grad=False)
@@ -469,7 +469,7 @@ class ZSSimModel(ZSBaseModel):
         wemb_dim = self.pred_word_embs.shape[1]
         self.soft_labels_emb_mlp = nn.Sequential(*[nn.Linear(wemb_dim * 2, wemb_dim * 2),
                                                    nn.ReLU(inplace=True),
-                                                   # nn.Dropout(p=cfg.model.dropout),
+                                                   # nn.Dropout(p=cfg.dropout),
                                                    nn.Linear(wemb_dim * 2, wemb_dim),
                                                    ])
 
@@ -493,7 +493,7 @@ class ZSSimModel(ZSBaseModel):
         action_labels_mask[bg_objs_mask, :] = 0
         surrogate_action_labels = (F.normalize(unseen_action_embs, dim=1) @ self.pred_word_embs.t()) * action_labels_mask
         surrogate_action_labels.clamp_(min=0, max=1)
-        if cfg.model.lis:
+        if cfg.lis:
             surrogate_action_labels = LIS(surrogate_action_labels, w=18, k=7)
 
         # Loss is for transfer only, actual labels for unseen only
@@ -528,14 +528,14 @@ class KatoModel(GenericModel):
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                                nn.Dropout(p=cfg.model.dropout),
+                                                nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                 ])
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
 
         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                               nn.Dropout(p=cfg.model.dropout),
+                                               nn.Dropout(p=cfg.dropout),
                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
                                                ])
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))

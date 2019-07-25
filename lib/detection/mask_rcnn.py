@@ -19,12 +19,12 @@ class MaskRCNN(nn.Module):
         if not torch.cuda.is_available():
             raise ValueError("Need a CUDA device to run the code.")
 
-        self.mask_resolution = cfg.model.mask_resolution
+        self.mask_resolution = cfg.mask_resolution
         self.output_feat_dim = 2048  # this is hardcoded in `ResNet_roi_conv5_head_for_masks()`, so I can't actually read it from configs
         self.mask_rcnn = Generalized_RCNN()
         self.allow_train = False
 
-        weight_file = cfg.program.detectron_pretrained_file_format % cfg.model.rcnn_arch
+        weight_file = cfg.detectron_pretrained_file_format % cfg.rcnn_arch
         print("Loading Mask-RCNN's weights from {}.".format(weight_file))
         load_detectron_weight(self.mask_rcnn, weight_file)
 

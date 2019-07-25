@@ -22,7 +22,7 @@ def export_to_rotate_edge_list(output_dir, edges, nodes: List[str], relations: L
 
 def main():
     cfg.parse_args(fail_if_missing=False)
-    cfg.data.val_ratio = 0
+    cfg.val_ratio = 0
 
     # FIXME delete, it's for RotatE
     # self.entity_embedding = nn.Parameter(torch.from_numpy(np.load(os.path.join(emb_path, 'entity_embedding.npy'))))

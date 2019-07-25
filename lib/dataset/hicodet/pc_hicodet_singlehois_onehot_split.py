@@ -116,7 +116,7 @@ class BalancedTripletOnehotSampler(torch.utils.data.Sampler):
         self.neg_samples = np.stack([neg_hois_ids[neg_samples_mask_inds], neg_samples_labels], axis=1)
         assert np.all(self.neg_samples[:, 1] == 0)
 
-        self.neg_pos_ratio = cfg.opt.hoi_bg_ratio
+        self.neg_pos_ratio = cfg.hoi_bg_ratio
         pos_per_batch = hoi_batch_size / (self.neg_pos_ratio + 1)
         self.pos_per_batch = int(pos_per_batch)
         self.neg_per_batch = hoi_batch_size - self.pos_per_batch

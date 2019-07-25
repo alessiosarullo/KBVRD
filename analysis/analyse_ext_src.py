@@ -154,7 +154,7 @@ def plot_embedding_pp_sim():
     # # plot_mat(sim_mat, hd.predicates, hd.predicates, vrange=None, plot=False)
 
     # # GloVe word embeddings
-    with open(os.path.join(cfg.program.cache_root, 'glove_300_norm_pred-avg.pkl'), 'rb') as f:
+    with open(os.path.join(cfg.cache_root, 'glove_300_norm_pred-avg.pkl'), 'rb') as f:
         pe = pickle.load(f)
     pp_sim = np.sum(pe[:, None, :] * pe[None, :, :], axis=2)
     most_similar(pp_sim, dataset.predicates)
@@ -228,7 +228,7 @@ def plot_feasible_hois():
     op_mats.append(hcvrd_op_mat)
 
     # VG
-    with open(os.path.join(cfg.program.cache_root, 'vg_predicate_objects.pkl'), 'rb') as f:
+    with open(os.path.join(cfg.cache_root, 'vg_predicate_objects.pkl'), 'rb') as f:
         vg_po = pickle.load(f)  # type: Dict[str, List[str]]
     vg_hd_po = {pred: [o for o in vg_objs if o in dataset.objects] for pred, vg_objs in vg_po.items()}
     vg_op_mat = np.zeros((dataset.num_object_classes, dataset.num_predicates))

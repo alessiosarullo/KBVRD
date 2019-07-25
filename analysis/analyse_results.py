@@ -257,7 +257,7 @@ def compute_cooccs(dataset: HicoDetSplit, gt_iou_thresh=0.5):
 def _setup_and_load():
     cfg.parse_args(fail_if_missing=False, reset=True)
 
-    with open(cfg.program.prediction_file, 'rb') as f:
+    with open(cfg.prediction_file, 'rb') as f:
         results = pickle.load(f)
     cfg.load()
     return results
@@ -294,7 +294,7 @@ def evaluate():
     evaluator = Evaluator(dataset_split=hdtest, hoi_score_thr=None, num_hoi_thr=None)
 
     # evaluator.evaluate_predictions(results)
-    evaluator.load(cfg.program.eval_res_file)
+    evaluator.load(cfg.eval_res_file)
 
     hois = [inter for imdata in hdtest.hicodet.split_data[Splits.TRAIN]
             for inter in hdtest.hicodet.op_pair_to_interaction[imdata.box_classes[imdata.hois[:, 2]], imdata.hois[:, 1]]]
@@ -339,7 +339,7 @@ def compare():
     _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
-    evaluator.load(cfg.program.eval_res_file)
+    evaluator.load(cfg.eval_res_file)
     obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True, return_labels=True)
 
     print('=' * 100, '\n')
@@ -348,7 +348,7 @@ def compare():
     _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
-    evaluator.load(cfg.program.eval_res_file)
+    evaluator.load(cfg.eval_res_file)
     obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True, return_labels=True)
 
     print('=' * 100, '\n')
@@ -376,7 +376,7 @@ def compare():
 
 def stats():
     results = _setup_and_load()
-    res_save_path = cfg.program.res_stats_path
+    res_save_path = cfg.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
@@ -451,10 +451,10 @@ def stats():
 
 def zs_stats():
     results = _setup_and_load()
-    res_save_path = cfg.program.res_stats_path
+    res_save_path = cfg.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    inds_dict = pickle.load(open(cfg.program.active_classes_file, 'rb'))
+    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
     seen_act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
     seen_obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
@@ -580,7 +580,7 @@ def visualise_images():
     results = _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
 
-    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.program.output_path.split('/')[1:]))
+    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)
 
     for b_idx in range(len(hds)):

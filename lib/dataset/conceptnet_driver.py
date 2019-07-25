@@ -15,8 +15,8 @@ class Conceptnet:
                                'dbpedia/capital', 'dbpedia/field', 'dbpedia/genre', 'dbpedia/genus', 'dbpedia/influencedBy',
                                'dbpedia/knownFor', 'dbpedia/language', 'dbpedia/leader', 'dbpedia/occupation', 'dbpedia/product']
 
-        data_dir = os.path.join(cfg.program.data_root, 'ConceptNet')
-        self.path_cnet = os.path.join(cfg.program.cache_root, 'conceptnet.pkl')
+        data_dir = os.path.join(cfg.data_root, 'ConceptNet')
+        self.path_cnet = os.path.join(cfg.cache_root, 'conceptnet.pkl')
         self.path_raw_cnet = os.path.join(data_dir, 'raw_conceptnet.pkl')
         self.path_raw_cnet_eng = os.path.join(data_dir, 'conceptnet560_en.txt')
         self.path_raw_cnet_orig = os.path.join(data_dir, 'conceptnet560.csv')
@@ -162,7 +162,7 @@ class Conceptnet:
             if relationship is None or edge['rel'] == relationship:
                 output.append('%d %d' % (node_index[edge['src']], node_index[edge['dst']]))
         lines = '\n'.join(output)
-        with open(os.path.join(cfg.program.cache_root, 'cnet.edgelist'), 'w') as f:
+        with open(os.path.join(cfg.cache_root, 'cnet.edgelist'), 'w') as f:
             f.write(lines)
 
     def export_to_rotate_edge_list(self, output_dir, relationship=None):

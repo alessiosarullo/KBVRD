@@ -226,19 +226,19 @@ class HicoDetSplitBuilder:
         class_splits = cls.splits.setdefault(split_class, {})
         if split not in class_splits:
             if split == Splits.VAL:
-                assert Splits.TRAIN not in class_splits or cfg.data.val_ratio == 0, 'Training split must be instantiated before validation split.'
+                assert Splits.TRAIN not in class_splits or cfg.val_ratio == 0, 'Training split must be instantiated before validation split.'
 
             if cls.hicodet is None:
                 cls.hicodet = HicoDet()
 
             split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds, inter_inds,
                                                                              filter_empty_imgs=split == Splits.TRAIN,
-                                                                             filter_null_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
+                                                                             filter_null_imgs=(split == Splits.TRAIN and cfg.filter_bg_only))
             assert len(split_data) == len(image_ids)
 
             # Split train/val if needed
-            if cfg.data.val_ratio > 0 and split == Splits.TRAIN:
-                num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
+            if cfg.val_ratio > 0 and split == Splits.TRAIN:
+                num_val_imgs = int(len(split_data) * cfg.val_ratio)
                 class_splits[Splits.TRAIN] = split_class(split=Splits.TRAIN, hicodet=cls.hicodet,
                                                          data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
                                                          object_inds=object_inds, predicate_inds=predicate_inds, inter_inds=inter_inds)
@@ -259,7 +259,7 @@ class HicoDetSplitBuilder:
     #         cls.hicodet = HicoDet()
     #     if Splits.VAL in splits:
     #         assert Splits.TRAIN in splits, 'Validation split requires train.'
-    #         assert cfg.data.val_ratio > 0
+    #         assert cfg.val_ratio > 0
     #         val = True
     #     else:
     #         val = False
@@ -267,16 +267,16 @@ class HicoDetSplitBuilder:
     #     class_splits = {}
     #     for split in [s for s in splits if s != Splits.VAL]:
     #         # Load inds from configs first. Note that these might still be None after this step, which means all possible indices will be used.
-    #         obj_inds = obj_inds or cfg.data.obj_inds
-    #         pred_inds = pred_inds or cfg.data.pred_inds
+    #         obj_inds = obj_inds or cfg.obj_inds
+    #         pred_inds = pred_inds or cfg.pred_inds
     #
     #         split_data, image_ids, object_inds, predicate_inds = filter_data(split, cls.hicodet, obj_inds, pred_inds,
-    #                                                                          filter_empty_imgs=(split == Splits.TRAIN and cfg.data.filter_bg_only))
+    #                                                                          filter_empty_imgs=(split == Splits.TRAIN and cfg.filter_bg_only))
     #         assert len(split_data) == len(image_ids)
     #
     #         # Split train/val if needed
     #         if val:
-    #             num_val_imgs = int(len(split_data) * cfg.data.val_ratio)
+    #             num_val_imgs = int(len(split_data) * cfg.val_ratio)
     #             class_splits[Splits.TRAIN] = hdsplit_class(split=Splits.TRAIN, hicodet=cls.hicodet,
     #                                                        data=split_data[:-num_val_imgs], image_ids=image_ids[:-num_val_imgs],
     #                                                        object_inds=object_inds, predicate_inds=predicate_inds)

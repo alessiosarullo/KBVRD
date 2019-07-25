@@ -130,14 +130,14 @@ class WordEmbeddings:
         src_fn = self.loaders[source]['src_file']
         if dim is not None:
             src_fn = src_fn % dim
-        path_cache_file = os.path.join(cfg.program.cache_root, os.path.splitext(src_fn)[0] + '_cache.pkl')
+        path_cache_file = os.path.join(cfg.cache_root, os.path.splitext(src_fn)[0] + '_cache.pkl')
         try:
             with open(path_cache_file, 'rb') as f:
                 print('Loading cached %s embeddings.' % source)
                 embedding_mat, vocabulary = pickle.load(f)
         except FileNotFoundError:
             print('Parsing and caching %s embeddings.' % source)
-            embedding_mat, vocabulary = self.loaders[source]['parser'](os.path.join(cfg.program.embedding_dir, src_fn))
+            embedding_mat, vocabulary = self.loaders[source]['parser'](os.path.join(cfg.embedding_dir, src_fn))
             # Cleaning
             clean_words_inds = [i for i, word in enumerate(vocabulary) if not bool(re.search(r"[^a-zA-Z0-9_'\-]", word))]
             vocabulary = [vocabulary[i].replace('_', ' ').strip() for i in clean_words_inds]

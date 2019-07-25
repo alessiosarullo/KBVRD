@@ -21,7 +21,7 @@ class GenericModel(AbstractModel):
         self.dataset = dataset
         self.visual_module = VisualModule(dataset)
 
-        # if cfg.model.csloss:
+        # if cfg.csloss:
         #     prcls_hist = Counter(dataset.hoi_triplets[:, 1])
         #     prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
         #     num_predicate_classes = prcls_hist.size
@@ -112,7 +112,7 @@ class GenericModel(AbstractModel):
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
         output = outputs
-        if cfg.model.phoi:
+        if cfg.phoi:
             losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
         else:
             losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
@@ -120,7 +120,7 @@ class GenericModel(AbstractModel):
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         output = outputs
-        if cfg.model.phoi:
+        if cfg.phoi:
             ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
             hoi_obj_scores = ho_obj_scores[:, self.dataset.hicodet.interactions[:, 1]]  # This helps
             prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores

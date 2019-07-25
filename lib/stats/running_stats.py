@@ -40,7 +40,7 @@ class History:
 class RunningStats:
     def __init__(self, split, data_loader: DataLoader, history_window=None, tboard_log=True, remove_if_exist=False):
         if history_window is None:
-            history_window = cfg.program.log_interval
+            history_window = cfg.log_interval
 
         self.split = split
         self.data_loader = data_loader
@@ -48,7 +48,7 @@ class RunningStats:
         self.tb_ignored_keys = ['iter']
 
         if tboard_log:
-            tboard_dir = os.path.join(cfg.program.tensorboard_dir, self.split_str)
+            tboard_dir = os.path.join(cfg.tensorboard_dir, self.split_str)
             if remove_if_exist:
                 try:
                     shutil.rmtree(tboard_dir)
@@ -106,7 +106,7 @@ class RunningStats:
                 print('%-20s %f' % (loss_name, loss_value))
 
         if verbose:
-            if cfg.program.verbose:
+            if cfg.verbose:
                 for k, v in stats['Hist'].items():
                     print('%30s: mean=% 6.4f, std=%6.4f' % (k, v.mean(), v.std()))
             print('-' * 10, flush=True)
@@ -145,7 +145,7 @@ class RunningStats:
             batches = self.data_loader.batch_sampler.batches
             batch_size = sum([len(b) for b in batches]) / len(batches)
         time_to_load_per_batch = time_to_load * batch_size
-        time_for_stats_per_batch = time_for_stats / cfg.program.log_interval
+        time_for_stats_per_batch = time_for_stats / cfg.log_interval
         avg_time_per_batch = time_per_call + time_to_load_per_batch + time_for_stats_per_batch
         est_time_per_epoch = avg_time_per_batch * num_batches
 

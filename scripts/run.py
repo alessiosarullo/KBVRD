@@ -27,10 +27,10 @@ from scripts.utils import print_params, get_all_models_by_name
 class Launcher:
     # FIXME general: rename "object" in SPO triplets as "target" or something else to avoid ambiguity. Also "verb" might be better than "predicate"
     def __init__(self):
-        Timer.gpu_sync = cfg.program.sync
+        Timer.gpu_sync = cfg.sync
         cfg.parse_args()
 
-        if cfg.program.debug:
+        if cfg.debug:
             try:  # PyCharm debugging
                 print('Starting remote debugging (resume from debug server)')
                 import pydevd_pycharm
@@ -40,7 +40,7 @@ class Launcher:
                 print('Remote debugging failed.')
                 raise
 
-        if cfg.program.eval_only or cfg.program.resume:
+        if cfg.eval_only or cfg.resume:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
@@ -50,24 +50,24 @@ class Launcher:
 
     def run(self):
         self.setup()
-        if cfg.program.eval_only:
+        if cfg.eval_only:
             print('Start eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.evaluate()
             print('End eval:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         else:
             try:
-                os.remove(cfg.program.prediction_file)
+                os.remove(cfg.prediction_file)
             except FileNotFoundError:
                 pass
             print('Start train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             all_predictions = self.train()
             print('End train:', datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        with open(cfg.program.prediction_file, 'wb') as f:
+        with open(cfg.prediction_file, 'wb') as f:
             pickle.dump(all_predictions, f)
-        print('Wrote results to %s.' % cfg.program.prediction_file)
+        print('Wrote results to %s.' % cfg.prediction_file)
 
     def setup(self):
-        seed = 3 if not cfg.program.randomize else np.random.randint(1_000_000_000)
+        seed = 3 if not cfg.randomize else np.random.randint(1_000_000_000)
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
@@ -77,18 +77,18 @@ class Launcher:
         # Data
         # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
         obj_inds = pred_inds = inter_inds = None
-        if cfg.program.seenf >= 0:
-            inds_dict = pickle.load(open(cfg.program.active_classes_file, 'rb'))
+        if cfg.seenf >= 0:
+            inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
             try:
                 inter_inds = sorted(inds_dict[Splits.TRAIN.value]['inter'].tolist())
             except KeyError:
                 pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
-        if cfg.opt.group:
-            assert not cfg.opt.ohtrain
+        if cfg.group:
+            assert not cfg.ohtrain
             train_ds_class = PrecomputedHicoDetImgHOISplit
-        elif cfg.opt.ohtrain:
+        elif cfg.ohtrain:
             train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
         else:
             train_ds_class = PrecomputedHicoDetSingleHOIsSplit
@@ -99,62 +99,62 @@ class Launcher:
         self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
 
         # Model
-        self.detector = get_all_models_by_name()[cfg.program.model](self.train_split)  # type: AbstractModel
+        self.detector = get_all_models_by_name()[cfg.model](self.train_split)  # type: AbstractModel
         if torch.cuda.is_available():
             self.detector.cuda()
         else:
             print('!!!!!!!!!!!!!!!!! Running on CPU!')
         print_params(self.detector, breakdown=False)
 
-        if cfg.program.resume:
+        if cfg.resume:
             try:
-                ckpt = torch.load(cfg.program.saved_model_file)
-                os.rename(cfg.program.saved_model_file, cfg.program.checkpoint_file)
+                ckpt = torch.load(cfg.saved_model_file)
+                os.rename(cfg.saved_model_file, cfg.checkpoint_file)
             except FileNotFoundError:
-                ckpt = torch.load(cfg.program.checkpoint_file)
+                ckpt = torch.load(cfg.checkpoint_file)
             self.detector.load_state_dict(ckpt['state_dict'])
             self.start_epoch = ckpt['epoch'] + 1
             self.curr_train_iter = ckpt['curr_iter'] + 1
             print(f'Continuing from epoch {self.start_epoch} @ iteration {self.curr_train_iter}.')
-        elif cfg.program.eval_only:
-            ckpt = torch.load(cfg.program.saved_model_file)
+        elif cfg.eval_only:
+            ckpt = torch.load(cfg.saved_model_file)
             self.detector.load_state_dict(ckpt['state_dict'])
 
     def get_optim(self):
         params = self.detector.parameters()
-        if cfg.opt.c_lr_gcn != 0:
-            assert not cfg.program.resume, 'Not implemented'
+        if cfg.c_lr_gcn != 0:
+            assert not cfg.resume, 'Not implemented'
             gcn_params = [p for n, p in self.detector.named_parameters() if 'gcn' in n and p.requires_grad]
             non_gcn_params = [p for n, p in self.detector.named_parameters() if 'gcn' not in n and p.requires_grad]
-            params = [{'params': gcn_params, 'lr': cfg.opt.lr * cfg.opt.c_lr_gcn}, {'params': non_gcn_params}]
-        if cfg.program.resume:
-            params = [{'params': p, 'initial_lr': cfg.opt.lr} for p in self.detector.parameters() if p.requires_grad]
+            params = [{'params': gcn_params, 'lr': cfg.lr * cfg.c_lr_gcn}, {'params': non_gcn_params}]
+        if cfg.resume:
+            params = [{'params': p, 'initial_lr': cfg.lr} for p in self.detector.parameters() if p.requires_grad]
 
-        if cfg.opt.adam:
-            optimizer = torch.optim.Adam(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, betas=(cfg.opt.adamb1, cfg.opt.adamb2))
+        if cfg.adam:
+            optimizer = torch.optim.Adam(params, weight_decay=cfg.l2_coeff, lr=cfg.lr, betas=(cfg.adamb1, cfg.adamb2))
         else:
-            optimizer = torch.optim.SGD(params, weight_decay=cfg.opt.l2_coeff, lr=cfg.opt.lr, momentum=cfg.opt.momentum)
+            optimizer = torch.optim.SGD(params, weight_decay=cfg.l2_coeff, lr=cfg.lr, momentum=cfg.momentum)
 
-        lr_decay = cfg.opt.lr_decay_period
-        lr_warmup = cfg.opt.lr_warmup
+        lr_decay = cfg.lr_decay_period
+        lr_warmup = cfg.lr_warmup
         if lr_warmup > 0:
             assert lr_decay == 0
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[lr_warmup], gamma=cfg.opt.lr_gamma,
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[lr_warmup], gamma=cfg.lr_gamma,
                                                              last_epoch=self.start_epoch - 1)
         elif lr_decay > 0:
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.opt.lr_decay_period, gamma=cfg.opt.lr_gamma,
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.lr_decay_period, gamma=cfg.lr_gamma,
                                                         last_epoch=self.start_epoch - 1)
         else:
-            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=cfg.opt.lr_gamma, verbose=True, threshold_mode='abs', cooldown=0)
+            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=cfg.lr_gamma, verbose=True, threshold_mode='abs', cooldown=0)
         return optimizer, scheduler
 
     def train(self):
-        os.makedirs(cfg.program.output_path, exist_ok=True)
+        os.makedirs(cfg.output_path, exist_ok=True)
 
         optimizer, scheduler = self.get_optim()
 
-        train_loader = self.train_split.get_loader(batch_size=cfg.opt.batch_size, num_workers=cfg.data.nw)
-        val_loader = self.val_split.get_loader(batch_size=cfg.opt.batch_size)
+        train_loader = self.train_split.get_loader(batch_size=cfg.batch_size, num_workers=cfg.nw)
+        val_loader = self.val_split.get_loader(batch_size=cfg.batch_size)
         test_loader = self.test_split.get_loader(batch_size=1)
 
         training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
@@ -165,23 +165,23 @@ class Launcher:
             cfg.save()
             pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
                          Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
-                         }, open(cfg.program.ds_inds_file, 'wb'))
-            if cfg.opt.num_epochs == 0:
+                         }, open(cfg.ds_inds_file, 'wb'))
+            if cfg.num_epochs == 0:
                 torch.save({'epoch': -1,
                             'curr_iter': -1,
                             'state_dict': self.detector.state_dict()},
-                           cfg.program.checkpoint_file)
+                           cfg.checkpoint_file)
                 self.detector.eval()
                 all_predictions = self.eval_epoch(None, test_loader, test_stats)
             else:
-                for epoch in range(self.start_epoch, cfg.opt.num_epochs):
+                for epoch in range(self.start_epoch, cfg.num_epochs):
                     print('Epoch %d start.' % epoch)
                     self.detector.train()
                     self.loss_epoch(epoch, train_loader, training_stats, optimizer)
                     torch.save({'epoch': epoch,
                                 'curr_iter': self.curr_train_iter,
                                 'state_dict': self.detector.state_dict()},
-                               cfg.program.checkpoint_file)
+                               cfg.checkpoint_file)
 
                     self.detector.eval()
                     val_loss = self.loss_epoch(epoch, val_loader, val_stats)
@@ -201,10 +201,10 @@ class Launcher:
             training_stats.close_tensorboard_logger()
 
         try:
-            os.remove(cfg.program.saved_model_file)
+            os.remove(cfg.saved_model_file)
         except FileNotFoundError:
             pass
-        os.rename(cfg.program.checkpoint_file, cfg.program.saved_model_file)
+        os.rename(cfg.checkpoint_file, cfg.saved_model_file)
 
         # noinspection PyUnboundLocalVariable
         return all_predictions
@@ -222,9 +222,9 @@ class Launcher:
                 epoch_loss += batch_loss.detach()
             stats.batch_toc()
 
-            verbose = (batch_idx % (cfg.program.print_interval * (100 if optimizer is None else 1)) == 0)
+            verbose = (batch_idx % (cfg.print_interval * (100 if optimizer is None else 1)) == 0)
             if optimizer is not None:
-                if batch_idx % cfg.program.log_interval == 0:
+                if batch_idx % cfg.log_interval == 0:
                     stats.log_stats(self.curr_train_iter, verbose=verbose,
                                     lr=optimizer.param_groups[0]['lr'], epoch=epoch_idx, batch=batch_idx)
                 self.curr_train_iter += 1
@@ -256,10 +256,10 @@ class Launcher:
         if optimizer:
             optimizer.zero_grad()
             loss.backward()
-            if cfg.opt.grad_clip > 0:
-                nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.opt.grad_clip)
+            if cfg.grad_clip > 0:
+                nn.utils.clip_grad_norm_([p for p in self.detector.parameters() if p.grad is not None], max_norm=cfg.grad_clip)
 
-            if cfg.program.monitor:
+            if cfg.monitor:
                 batch_stats['grads'] = {k + '_gradnorm': v.grad.detach().cpu().norm() for k, v in self.detector.named_parameters()
                                         if v.requires_grad and 'bias' not in k}
 
@@ -273,9 +273,9 @@ class Launcher:
         self.detector.eval()
 
         try:
-            with open(cfg.program.prediction_file, 'rb') as f:
+            with open(cfg.prediction_file, 'rb') as f:
                 all_predictions = pickle.load(f)
-            print('Results loaded from %s.' % cfg.program.prediction_file)
+            print('Results loaded from %s.' % cfg.prediction_file)
         except FileNotFoundError:
             all_predictions = []
 
@@ -300,12 +300,12 @@ class Launcher:
                     stats.print_times(epoch_idx, batch=batch_idx, curr_iter=self.curr_train_iter)
 
             if watched_values:
-                with open(cfg.program.watched_values_file, 'wb') as f:
+                with open(cfg.watched_values_file, 'wb') as f:
                     pickle.dump(watched_values, f)
 
         evaluator = Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
-        evaluator.save(cfg.program.eval_res_file)
+        evaluator.save(cfg.eval_res_file)
         metric_dicts = evaluator.output_metrics()
         if self.train_split.active_predicates.size < self.train_split.hicodet.num_predicates:
             seen_preds = sorted(self.train_split.active_predicates)

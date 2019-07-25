@@ -14,7 +14,7 @@ def save_feats():
     sys.argv += ['--val_ratio', '0']
     cfg.parse_args(fail_if_missing=False)
 
-    if cfg.program.debug:
+    if cfg.debug:
         try:  # PyCharm debugging
             print('Starting remote debugging (resume from debug server)')
             import pydevd_pycharm
@@ -51,7 +51,7 @@ def save_feats():
         all_img_feats = np.concatenate(all_img_feats, axis=0)
         assert all_img_feats.shape[0] == num_imgs
 
-        precomputed_feats_fn = cfg.program.precomputed_feats_format % ('hico', cfg.model.rcnn_arch, split.value)
+        precomputed_feats_fn = cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
             feat_file.create_dataset('img_feats', data=all_img_feats)
 

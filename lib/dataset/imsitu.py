@@ -12,7 +12,7 @@ from lib.dataset.hicodet.hicodet import HicoDet
 
 class ImSituKnowledgeExtractor:
     def __init__(self):
-        self.cache_file = os.path.join(cfg.program.cache_root, 'imsitu_dobjs.pkl')
+        self.cache_file = os.path.join(cfg.cache_root, 'imsitu_dobjs.pkl')
 
         self.imsitu = ImSituDriver()
 
@@ -239,7 +239,7 @@ class ImSituDriver:
                                 ]
                     }
         """
-        data_dir = os.path.join(cfg.program.data_root, 'imSitu')
+        data_dir = os.path.join(cfg.data_root, 'imSitu')
         self.image_dir = os.path.join(data_dir, 'images')
         self.path_domain_file = os.path.join(data_dir, 'imsitu_space.json')
         self.path_train_file = os.path.join(data_dir, 'train.json')

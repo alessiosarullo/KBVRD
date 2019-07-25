@@ -23,7 +23,7 @@ class HicoBaseModel(AbstractModel):
 
         self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.model.dropout),
+                                            nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.repr_dim),
                                             ])
         nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
@@ -42,7 +42,7 @@ class HicoBaseModel(AbstractModel):
                 zero_labels = (labels == 0)
                 labels.clamp_(min=0)
                 loss_mat = bce_loss(output, labels, reduce=False)
-                if cfg.model.hico_lhard:
+                if cfg.hico_lhard:
                     loss_mat[zero_labels] = 0
                 losses = {'hoi_loss': loss_mat.sum(dim=1).mean()}
                 return losses

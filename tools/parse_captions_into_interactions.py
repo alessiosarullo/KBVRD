@@ -85,32 +85,32 @@ def parse_captions(captions):
 
 
 def vg():
-    data_dir = os.path.join(cfg.program.data_root, 'VG')
+    data_dir = os.path.join(cfg.data_root, 'VG')
     try:
-        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
+        with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
             region_descr = [l.strip() for l in f.readlines()]
     except FileNotFoundError:
         region_descr = json.load(open(os.path.join(data_dir, 'region_descriptions.json'), 'r'))
         region_descr = [r['phrase'] for rd in region_descr for r in rd['regions']]
-        with open(os.path.join(cfg.program.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
+        with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
             f.write('\n'.join(region_descr))
     print('\n'.join(region_descr[:10]))
     print()
 
     objs_per_pred = parse_captions(region_descr)
-    with open(os.path.join(cfg.program.cache_root, 'vg_predicate_objects.pkl'), 'wb') as f:
+    with open(os.path.join(cfg.cache_root, 'vg_predicate_objects.pkl'), 'wb') as f:
         pickle.dump(objs_per_pred, f)
     print(len(region_descr))
 
 
 def vcap():
-    d = json.load(open(os.path.join(cfg.program.data_root, 'VideoCaptions', 'train.json'), 'r'))
+    d = json.load(open(os.path.join(cfg.data_root, 'VideoCaptions', 'train.json'), 'r'))
     captions = [s for v in d.values() for s in v['sentences']]
     print('\n'.join(captions[:10]))
     print()
 
     objs_per_pred = parse_captions(captions)
-    # with open(os.path.join(cfg.program.cache_root, 'vcap_predicate_objects.pkl'), 'wb') as f:
+    # with open(os.path.join(cfg.cache_root, 'vcap_predicate_objects.pkl'), 'wb') as f:
     #     pickle.dump(objs_per_pred, f)
     # print(len(captions))
 

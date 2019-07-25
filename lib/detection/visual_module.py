@@ -18,7 +18,7 @@ class VisualModule(nn.Module):
 
         if isinstance(self.dataset, PrecomputedHicoDetSplit):
             self._precomputed = True
-            self.mask_resolution = cfg.model.mask_resolution
+            self.mask_resolution = cfg.mask_resolution
             self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
         else:
             from lib.detection.mask_rcnn import MaskRCNN
@@ -144,11 +144,11 @@ class VisualModule(nn.Module):
         if coco_box_classes is not None:
             keep &= (coco_box_classes > 0)  # only keep foreground detections
 
-        if cfg.model.hum_thr > 0 or cfg.model.obj_thr > 0:  # only keep detections above a certain threshold
+        if cfg.hum_thr > 0 or cfg.obj_thr > 0:  # only keep detections above a certain threshold
             box_classes = np.argmax(boxes_ext_np[:, 5:], axis=1)
             max_scores = np.max(boxes_ext_np[:, 5:], axis=1)
             human_boxes = (box_classes == self.dataset.human_class)
-            keep &= (human_boxes & (max_scores >= cfg.model.hum_thr)) | (~human_boxes & (max_scores >= cfg.model.obj_thr))
+            keep &= (human_boxes & (max_scores >= cfg.hum_thr)) | (~human_boxes & (max_scores >= cfg.obj_thr))
 
         if not np.any(keep):  # all boxes would be discarded. Keep just the first one.
             boxes_ext_np = boxes_ext_np[:1, :]
@@ -183,7 +183,7 @@ class VisualModule(nn.Module):
         return boxes_ext, box_labels
 
     def hoi_gt_assignments(self, batch: Minibatch, boxes_ext, box_labels, resample_bg=False):
-        bg_ratio = cfg.opt.hoi_bg_ratio
+        bg_ratio = cfg.hoi_bg_ratio
 
         gt_boxes, gt_box_im_ids, gt_box_classes = batch.gt_boxes, batch.gt_box_im_ids, batch.gt_obj_classes
         gt_inters, gt_inters_im_ids = batch.gt_hois, batch.gt_hoi_im_ids
@@ -217,7 +217,7 @@ class VisualModule(nn.Module):
                         if head_predict_ind != tail_predict_ind:
                             action_labels_i[head_predict_ind, tail_predict_ind, rel_id] = 1.0
 
-            if cfg.data.null_as_bg:  # treat null action as negative/background
+            if cfg.null_as_bg:  # treat null action as negative/background
                 ho_fg_mask = action_labels_i[:, :, 1:].any(axis=2)
                 assert not np.any(action_labels_i[:, :, 0].astype(bool) & ho_fg_mask)  # it's either foreground or background
                 ho_bg_mask = ~ho_fg_mask

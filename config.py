@@ -6,61 +6,118 @@ import random
 import pickle
 
 
-class BaseConfigs:
-    def parse_args(self, args, fail_if_missing=True):
-        parser = argparse.ArgumentParser(description='%s settings' % type(self).__name__.split('Config')[0].capitalize())
-        for k, v in vars(self).items():
-            self._add_argument(parser, k, v, fail_if_missing=fail_if_missing)
-        namespace = parser.parse_known_args(args)
-        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
-        self._postprocess_args(fail_if_missing)
-        return namespace[1]
-
-    def _add_argument(self, parser, param_name, param_value, fail_if_missing=True):
-        if param_value is not None:
-            parser_kwargs = {'dest': param_name}
-            if type(param_value) == bool:
-                parser_kwargs['action'] = 'store_%s' % str(not param_value).lower()
-            else:
-                parser_kwargs['type'] = type(param_value)
-            parser.add_argument('--%s' % param_name, **parser_kwargs)
-
-    def _postprocess_args(self, fail_if_missing):
-        pass
-
-    def __str__(self):
-        s = []
-        for k in sorted(self.__dict__.keys()):
-            s += ['%-30s %s' % (k, self.__dict__[k])]
-        return '\n'.join(s)
-
-
-class ProgramConfig(BaseConfigs):
+class Configs:
     def __init__(self):
 
         ##########################################
         # General options                        #
         ##########################################
 
-        # Program options
+        # Program
         self.sync = False
         self.debug = False
         self.monitor = False
         self.save_memory = False
 
-        # Print options
+        # Print
         self.print_interval = 50
         self.log_interval = 100  # Tensorboard
         self.verbose = False
 
-        # Experiment options
+        # Experiment
         self.randomize = False
         self.resume = False
         self.save_dir = ''
         self.seenf = -1
 
-        # Model options
+        ##########################################
+        # Data options                           #
+        ##########################################
+        self.pixel_mean = None
+        self.pixel_std = None
+        self.im_scale = None
+        self.im_max_size = None
+
+        self.filter_bg_only = False
+        self.null_as_bg = False
+
+        self.val_ratio = 0.1
+
+        self.nw = 0
+
+        ##########################################
+        # Model options                          #
+        ##########################################
         self.model = None
+        self.phoi = False  # Predict action or interaction?
+
+        # Detector
+        self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
+        self.mask_resolution = None
+        self.hum_thr = 0.7
+        self.obj_thr = 0.3
+
+        # Architecture
+        self.dropout = 0.5
+        self.repr_dim = 1024
+
+        # HICO
+        self.hico_lhard = False
+
+        # BG
+        self.filter = False
+
+        # GC
+        self.greg = 0.0
+        self.greg_margin = 0.3
+
+        # ZS
+        self.attw = False
+        self.oprior = False
+        self.oscore = False
+        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
+        self.softl = 0.0
+        self.nullzs = False
+        self.lis = False
+
+        # ZS GCN
+        self.vv = False
+        self.puregc = False
+        self.iso_null = False
+        self.aggp = False
+
+        ##########################################
+        # Optimiser options                      #
+        ##########################################
+
+        # Optimiser parameters
+        self.adam = False
+        self.adamb1 = 0.9
+        self.adamb2 = 0.999
+        self.momentum = 0.9
+        self.l2_coeff = 5e-4
+        self.grad_clip = 5.0
+        self.num_epochs = 10
+
+        # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
+        self.lr = 1e-3
+        self.lr_gamma = 0.1
+        self.lr_decay_period = 0
+        self.lr_warmup = 0
+        self.c_lr_gcn = 0.0
+
+        # Batch parameters
+        self.group = False  # group HOIs belonging to the same image
+        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
+        self.img_batch_size = 8  # only used when grouping
+        self.batch_size = 64
+        self.hoi_bg_ratio = 3
+
+        # Loss parameters
+        self.margin = 0.0
+        self.bg_coeff = 1.0
+        self.fl_gamma = 0.0  # gamma in focal loss
+        self.meanc = False  # mean or sum over classes for BCE loss?
 
     @property
     def output_root(self):
@@ -135,15 +192,28 @@ class ProgramConfig(BaseConfigs):
     def eval_only(self):
         return os.path.exists(self.saved_model_file) and not self.resume
 
-    def _postprocess_args(self, fail_if_missing):
-        self.save_dir = self.save_dir.rstrip('/')
-        if '/' in self.save_dir:
-            old_save_dir = self.save_dir
-            self.save_dir = old_save_dir.split('/')[-1]
-            self.model = self.model or old_save_dir.split('/')[-2]
-            assert old_save_dir == self.output_path
-        if fail_if_missing and self.model is None:
-            raise ValueError('A model is required.')
+    def parse_args(self, fail_if_missing=True, reset=False):
+        args = sys.argv
+        if reset:
+            self.__init__()
+
+        parser = argparse.ArgumentParser(description='Settings')
+        for k, v in vars(self).items():
+            self._add_argument(parser, k, v, fail_if_missing=fail_if_missing)
+        namespace = parser.parse_known_args(args)
+        self.__dict__.update({k: v for k, v in vars(namespace[0]).items() if v is not None})
+        self._postprocess_args(fail_if_missing)
+
+        args = namespace[1]
+        if args[1:]:
+            # Invalid options: either unknown or ones initialised as None, which are Detectron's and should not be changed.
+            raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))
+        sys.argv = sys.argv[:1]
+
+        try:
+            self.init_detectron_cfgs()
+        except ModuleNotFoundError:
+            print('Detectron module not found')
 
     def _add_argument(self, parser, param_name, param_value, fail_if_missing=True):
         if param_name == 'model':
@@ -154,209 +224,83 @@ class ProgramConfig(BaseConfigs):
         elif param_name == 'save_dir':
             parser.add_argument('--%s' % param_name, dest=param_name, type=str, required=fail_if_missing)
         else:
-            super()._add_argument(parser, param_name, param_value)
+            if param_value is not None:
+                parser_kwargs = {'dest': param_name}
+                if type(param_value) == bool:
+                    parser_kwargs['action'] = 'store_%s' % str(not param_value).lower()
+                else:
+                    parser_kwargs['type'] = type(param_value)
+                parser.add_argument('--%s' % param_name, **parser_kwargs)
 
+    def _postprocess_args(self, fail_if_missing):
+        self.save_dir = self.save_dir.rstrip('/')
+        if '/' in self.save_dir:
+            old_save_dir = self.save_dir
+            self.save_dir = old_save_dir.split('/')[-1]
+            self.model = self.model or old_save_dir.split('/')[-2]
+            assert old_save_dir == self.output_path
+        if fail_if_missing and self.model is None:
+            raise ValueError('A model is required.')
 
-class DataConfig(BaseConfigs):
-    def __init__(self):
-        self.pixel_mean = None
-        self.pixel_std = None
-        self.im_scale = None
-        self.im_max_size = None
-
-        self.filter_bg_only = False
-        self.null_as_bg = False
-
-        self.num_images = 0  # restrict the dataset to this number of images if > 0
-        self.val_ratio = 0.1
-
-        self.nw = 0
-
-    @property
-    def im_inds(self):
-        return list(range(self.num_images)) if self.num_images > 0 else None
-
-
-class ModelConfig(BaseConfigs):
-    def __init__(self):
-        self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
-        self.mask_resolution = None
-        self.hum_thr = 0.7
-        self.obj_thr = 0.3
-
-        self.dropout = 0.5
-        self.repr_dim = 1024
-
-        # HICO
-        self.hico_lhard = False
-
-        # BG
-        self.filter = False
-
-        # GC
-        self.greg = 0.0
-        self.greg_margin = 0.3
-
-        # ZS
-        self.attw = False
-        self.oprior = False
-        self.oscore = False
-        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
-
-        self.softl = 0.0
-        self.nullzs = False
-        self.lis = False
-
-        # ZS GCN
-        self.vv = False
-        self.puregc = False
-        self.iso_null = False
-        self.aggp = False
-
-        # Predict action or interaction?
-        self.phoi = False
-
-
-class OptimizerConfig(BaseConfigs):
-    def __init__(self):
-        # Optimiser parameters
-        self.adam = False
-        self.adamb1 = 0.9
-        self.adamb2 = 0.999
-        self.momentum = 0.9
-        self.l2_coeff = 5e-4
-        self.grad_clip = 5.0
-        self.num_epochs = 10
-
-        # Learning rate parameters. Use gamma > 0 to enable decay at the specified interval
-        self.lr = 1e-3
-        self.lr_gamma = 0.1
-        self.lr_decay_period = 0
-        self.lr_warmup = 0
-        self.c_lr_gcn = 0.0
-
-        # Batch parameters
-        self.group = False  # group HOIs belonging to the same image
-        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
-        self.img_batch_size = 8  # only used when grouping
-        self.batch_size = 64
-        self.hoi_bg_ratio = 3
-
-        # Loss parameters
-        self.margin = 0.0
-        self.bg_coeff = 1.0
-        self.fl_gamma = 0.0  # gamma in focal loss
-        self.meanc = False  # mean or sum over classes for BCE loss?
-
-
-class Configs:
-    """
-    @type program: ProgramConfig
-    @type data: DataConfig
-    @type model: ModelConfig
-    @type opt: OptimizerConfig
-    """
-    program = ProgramConfig()
-    data = DataConfig()
-    model = ModelConfig()
-    opt = OptimizerConfig()
-
-    @classmethod
-    def parse_args(cls, fail_if_missing=True, reset=False):
-        args = sys.argv
-        for k, v in sorted(cls.__dict__.items()):
-            if isinstance(v, BaseConfigs):
-                if reset:
-                    v.__init__()
-                args = v.parse_args(args, fail_if_missing=fail_if_missing)
-        if args[1:]:
-            # Detectron configurations should not be changed.
-            raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))
-        sys.argv = sys.argv[:1]
-
-        try:
-            cls.init_detectron_cfgs()
-        except ModuleNotFoundError:
-            print('Detectron module not found')
-
-    @classmethod
-    def init_detectron_cfgs(cls):
+    def init_detectron_cfgs(self):
         import lib.detection.wrappers as pydet
         if pydet.cfg_from_file is None:
             assert pydet.cfg is None and pydet.assert_and_infer_cfg is None
-            cls.model.mask_resolution = 14  # FIXME magic constant
+            self.mask_resolution = 14  # FIXME magic constant
             raise ModuleNotFoundError()
         else:
             assert pydet.cfg is not None and pydet.assert_and_infer_cfg is not None
 
-        cfg_file = 'pydetectron/configs/baselines/%s.yaml' % cls.model.rcnn_arch
-
-        print("Loading Detectron's configs from {}.".format(cfg_file))
+        cfg_file = f'pydetectron/configs/baselines/{self.rcnn_arch}.yaml'
+        print(f"Loading Detectron's configs from {cfg_file}.")
         pydet.cfg_from_file(cfg_file)
         pydet.cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS = False  # Don't need to load imagenet pretrained weights
         pydet.cfg.MODEL.NUM_CLASSES = len(pydet.COCO_CLASSES)
         pydet.assert_and_infer_cfg()
 
-        cls.data.pixel_mean = pydet.cfg.PIXEL_MEANS
-        cls.data.im_scale = pydet.cfg.TEST.SCALE
-        cls.data.im_max_size = pydet.cfg.TEST.MAX_SIZE
-        cls.model.mask_resolution = pydet.cfg.MRCNN.RESOLUTION
+        self.pixel_mean = pydet.cfg.PIXEL_MEANS
+        self.im_scale = pydet.cfg.TEST.SCALE
+        self.im_max_size = pydet.cfg.TEST.MAX_SIZE
+        self.mask_resolution = pydet.cfg.MRCNN.RESOLUTION
 
-    @classmethod
-    def print(cls):
-        s = []
-        for k, v in sorted(cls.__dict__.items()):
-            if isinstance(v, BaseConfigs):
-                str_cfg = str(v)
-                if str_cfg.strip():
-                    s += ['{0}\n{1} configs\n{0}'.format('=' * 70, type(v).__name__.split('Config')[0].capitalize())]
-                    s += [str_cfg, '']
-        print('\n'.join(s))
-
-    @classmethod
-    def to_dict(cls):
-        d = {}
-        for k, v in vars(cls).items():
-            if isinstance(v, BaseConfigs):
-                d[k] = vars(v)
-        return d
-
-    @classmethod
-    def save(cls, file_path=None):
-        file_path = file_path or cls.program.config_file
+    def save(self, file_path=None):
+        file_path = file_path or self.config_file
         with open(file_path, 'wb') as f:
-            pickle.dump(cls.to_dict(), f)
+            pickle.dump(vars(self), f)
 
-    @classmethod
-    def load(cls, file_path=None):
-        file_path = file_path or cls.program.config_file
+    def load(self, file_path=None):
+        file_path = file_path or self.config_file
         with open(file_path, 'rb') as f:
             d = pickle.load(f)
 
-        # Program
-        output_path = cls.program.output_path
-        save_dir = cls.program.save_dir
-        resume = cls.program.resume
-        cls.program.__dict__.update(d['program'])
-        cls.program.save_dir = save_dir
-        cls.program.resume = resume
-        assert cls.program.output_path.rstrip('/') == output_path.rstrip('/'), (cls.program.output_path, output_path)
+        # Save options that should not be loaded
+        output_path = self.output_path
+        save_dir = self.save_dir
+        resume = self.resume
+        num_epochs = self.num_epochs
 
-        # Data
-        cls.data.__dict__.update(d['data'])
+        # Load
+        self.__dict__.update(d)
 
-        # Model
-        cls.model.__dict__.update(d['model'])
-
-        # Optimizer
-        num_epochs = cls.opt.num_epochs
-        cls.opt.__dict__.update(d['opt'])
+        # Restore
+        self.save_dir = save_dir
+        self.resume = resume
+        assert self.output_path.rstrip('/') == output_path.rstrip('/'), (self.output_path, output_path)
         if resume:
-            cls.opt.num_epochs += num_epochs
+            self.num_epochs += num_epochs
+
+    def print(self):
+        print(str(self), '\n')
+
+    def __str__(self):
+        s = ['{0}\nConfigs\n{0}'.format('=' * 70)]
+        for k in sorted(self.__dict__.keys()):
+            s += ['%-30s %s' % (k, self.__dict__[k])]
+        return '\n'.join(s)
 
 
-# Alias
-cfg = Configs
+# Instantiate
+cfg = Configs()
 
 
 def test():
@@ -364,9 +308,9 @@ def test():
     # Configs.print()
 
     sys.argv += ['--sync', '--model', 'hicobase', '--save_dir', 'blabla']
-    Configs.parse_args()
+    cfg.parse_args()
     # print('Updated with args:', sys.argv)
-    Configs.print()
+    cfg.print()
 
 
 if __name__ == '__main__':
