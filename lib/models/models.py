@@ -269,6 +269,7 @@ class ExtKnowledgeGenericModel(GenericModel):
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
         self.zs_enabled = (cfg.program.seenf >= 0)
+        self.load_backbone = len(cfg.model.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
             seen_pred_inds = pickle.load(open(cfg.program.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
@@ -276,7 +277,6 @@ class ExtKnowledgeGenericModel(GenericModel):
             self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
             self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
-            self.load_backbone = len(cfg.model.hoi_backbone) > 0
             if self.load_backbone:
                 ckpt = torch.load(cfg.model.hoi_backbone)
                 self.pretrained_base_model = BaseModel(dataset)
