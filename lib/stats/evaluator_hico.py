@@ -1,5 +1,5 @@
-from typing import List, Dict
 import pickle
+from typing import List, Dict
 
 import numpy as np
 from sklearn.metrics import average_precision_score
@@ -34,7 +34,9 @@ class HicoEvaluator(BaseEvaluator):
         Timer.get('Eval epoch', 'Predictions').toc()
 
         Timer.get('Eval epoch', 'Metrics').tic()
-        self.metrics['M-mAP'] = average_precision_score(self.gt_scores, predict_hoi_scores)
+        gt_scores = self.gt_scores
+        gt_scores[gt_scores < 0] = 0
+        self.metrics['M-mAP'] = average_precision_score(gt_scores, predict_hoi_scores)
         Timer.get('Eval epoch', 'Metrics').toc()
 
         Timer.get('Eval epoch').toc()
