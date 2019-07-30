@@ -154,6 +154,24 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
                 return prediction
 
 
+class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'zsb'
+
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.base_model = HicoBaseModel(dataset, **kwargs)
+        assert self.zs_enabled and cfg.softl > 0
+
+    def _forward(self, feats, labels):
+        logits = self.base_model._forward(feats, labels)
+        if labels:
+            labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
+        reg_loss = None
+        return logits, labels, reg_loss
+
+
 class HicoZSGCModel(HicoExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):

@@ -151,7 +151,8 @@ class Launcher:
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.lr_decay_period, gamma=cfg.lr_gamma,
                                                         last_epoch=self.start_epoch - 1)
         else:
-            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=cfg.lr_gamma, verbose=True, threshold_mode='abs', cooldown=0)
+            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=cfg.num_epochs // 5,
+                                          factor=cfg.lr_gamma, verbose=True, threshold_mode='abs', cooldown=cfg.num_epochs // 20)
         return optimizer, scheduler
 
     def train(self):
