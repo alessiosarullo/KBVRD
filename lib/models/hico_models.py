@@ -123,7 +123,7 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         hico = self.dataset.full_dataset
         hois_np = hois.detach().cpu().numpy()
         all_hois = np.stack(np.where(hois_np > 0), axis=1)
-        all_interactions = np.stack([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
+        all_interactions = np.concatenate([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
         inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_predicates))
         inter_mat[all_interactions] = 1
         inter_mat = torch.from_numpy(inter_mat).to(hois)
