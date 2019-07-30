@@ -134,7 +134,8 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         objects = self.interactions_to_objects(labels)
         inter_mat = self.interactions_to_mat(labels.clamp(min=0))
 
-        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0)) / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0).expand(inter_mat.shape[0], -1, -1))
+        act_sim_per_obj = act_sim_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
         interactions = self.dataset.full_dataset.interactions
         unseen_labels = act_sim_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
