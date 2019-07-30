@@ -6,6 +6,7 @@ import torch
 from PIL import ImageOps
 
 from config import cfg
+from lib.detection.wrappers import COCO_CLASSES
 
 
 class Splits(Enum):
@@ -91,3 +92,12 @@ def calculate_im_scale(im_size):
     if np.round(im_scale * im_size_max) > max_size:  # Prevent the biggest axis from being more than max_size
         im_scale = float(max_size) / float(im_size_max)
     return im_scale
+
+
+def get_hico_to_coco_mapping(hico_objects, split_objects=None):
+    if split_objects is None:
+        split_objects = hico_objects
+    coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
+    assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hico_objects)
+    mapping = np.array([coco_obj_to_idx[obj] for obj in split_objects], dtype=np.int)
+    return mapping

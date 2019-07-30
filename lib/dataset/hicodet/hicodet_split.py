@@ -8,8 +8,7 @@ import torch
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
 from lib.dataset.hoi_dataset import HoiDatasetSplit
-from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor
-from lib.detection.wrappers import COCO_CLASSES
+from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor, get_hico_to_coco_mapping
 
 
 class Example:
@@ -137,10 +136,8 @@ class HicoDetSplit(HoiDatasetSplit):
                            reduced_object_index[self.full_dataset.objects[o]] == self.reduced_interactions[i, 1]
                            for i, (p, o) in enumerate(self.interactions)])
 
-        # Compute mappings to and from COCO
-        coco_obj_to_idx = {('hair dryer' if c == 'hair drier' else c).replace(' ', '_'): i for i, c in COCO_CLASSES.items()}
-        assert set(coco_obj_to_idx.keys()) - {'__background__'} == set(hicodet.objects)
-        self.hico_to_coco_mapping = np.array([coco_obj_to_idx[obj] for obj in self.objects], dtype=np.int)
+        # Compute mappings to COCO
+        self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=hicodet.objects, split_objects=self.objects)
 
         # Compute HOI triplets. Each is [human, action, object].
         hoi_triplets = []
