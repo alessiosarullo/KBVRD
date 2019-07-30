@@ -88,43 +88,36 @@ class Evaluator(BaseEvaluator):
     def output_metrics(self, sort=False, actions_to_keep=None, return_labels=False):
         mf = MetricFormatter()
 
-        obj_metrics = {k: v for k, v in self.metrics.items() if k.lower().startswith('obj')}
-        gt_obj_class_hist, obj_metrics, obj_class_inds = sort_and_filter(metrics=obj_metrics,
-                                                                         gt_labels=self.dataset_split.obj_labels,
-                                                                         all_classes=list(range(self.full_dataset.num_object_classes)),
-                                                                         sort=sort)
-        mf.format_metric_and_gt_lines(gt_obj_class_hist, obj_metrics, obj_class_inds, gt_str='GT objects')
-
         gt_hoi_triplets = self.dataset_split.hoi_triplets
         orig_gt_hoi_labels = self.full_dataset.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
-        hoi_metrics = {k: v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
+        metrics = {k: v for k, v in self.metrics.items()}
         gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
-        gt_hoi_class_hist, hoi_metrics, hoi_class_inds = sort_and_filter(metrics=hoi_metrics,
+        gt_hoi_class_hist, metrics, hoi_class_inds = sort_and_filter(metrics=metrics,
                                                                          gt_labels=gt_hoi_labels,
                                                                          all_classes=list(range(self.full_dataset.num_interactions)),
                                                                          sort=sort,
                                                                          keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, metrics, hoi_class_inds, gt_str='GT HOIs')
 
         # Same, but with null interaction filtered
         actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_predicates)) - {0})
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
-        pos_hoi_metrics = {f'+{k}': v for k, v in self.metrics.items() if not k.lower().startswith('obj')}
-        gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds = sort_and_filter(metrics=pos_hoi_metrics,
+        pos_metrics = {f'+{k}': v for k, v in self.metrics.items()}
+        gt_hoi_class_hist, pos_metrics, hoi_class_inds = sort_and_filter(metrics=pos_metrics,
                                                                              gt_labels=pos_gt_hoi_labels,
                                                                              all_classes=list(range(self.full_dataset.num_interactions)),
                                                                              sort=sort,
                                                                              keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs')
 
-        for k, v in pos_hoi_metrics.items():
-            assert k not in hoi_metrics.keys()
-            hoi_metrics[k] = v
+        for k, v in pos_metrics.items():
+            assert k not in metrics.keys()
+            metrics[k] = v
         if return_labels:
-            return obj_metrics, hoi_metrics, self.dataset_split.obj_labels, gt_hoi_labels
-        return obj_metrics, hoi_metrics
+            return metrics, self.dataset_split.obj_labels, gt_hoi_labels
+        return metrics
 
     def filter_actions(self, gt_hoi_labels, actions_to_keep):
         if actions_to_keep is not None:

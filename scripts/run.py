@@ -315,21 +315,24 @@ class Launcher:
         evaluator = HicoEvaluator(data_loader.dataset) if cfg.hico else Evaluator(data_loader.dataset)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.eval_res_file)
-        metric_dicts = evaluator.output_metrics()
+        metric_dict = evaluator.output_metrics()
         if cfg.seenf >= 0:
             seen_preds = sorted(self.train_split.active_predicates)
             print('Trained on:')
-            _, tr_hoi_metrics = evaluator.output_metrics(actions_to_keep=seen_preds)
-            tr_hoi_metrics = {f'tr_{k}': v for k, v in tr_hoi_metrics.items()}
+            tr_metrics = evaluator.output_metrics(actions_to_keep=seen_preds)
+            tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
             unseen_preds = sorted(set(range(self.train_split.full_dataset.num_predicates)) - set(self.train_split.active_predicates))
             print('Zero-shot:')
-            _, zs_hoi_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
-            zs_hoi_metrics = {f'zs_{k}': v for k, v in zs_hoi_metrics.items()}
+            zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
+            zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
 
-            metric_dicts = list(metric_dicts) + [tr_hoi_metrics, zs_hoi_metrics]
+            for d in [tr_metrics, zs_metrics]:
+                for k, v in d.items():
+                    assert k not in metric_dict
+                    metric_dict[k] = v
 
-        metrics = {k: v for md in metric_dicts for k, v in md.items()}
+        metrics = {k: v for md in metric_dict for k, v in md.items()}
         stats.update_stats({'metrics': {k: np.mean(v) for k, v in metrics.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
 

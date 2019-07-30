@@ -60,4 +60,4 @@ class HicoEvaluator(BaseEvaluator):
                                                                          keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
 
-        return [hoi_metrics]  # list is for compatibility
+        return hoi_metrics
