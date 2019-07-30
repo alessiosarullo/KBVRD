@@ -318,15 +318,24 @@ class Launcher:
         evaluator.save(cfg.eval_res_file)
         metric_dict = evaluator.output_metrics()
         if cfg.seenf >= 0:
-            seen_preds = sorted(self.train_split.active_predicates)
-            print('Trained on:')
-            tr_metrics = evaluator.output_metrics(actions_to_keep=seen_preds)
-            tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
+            if cfg.hico:  # FIXME this is actually "interactions" instead of "actions", not necessarily tied with Hico
+                print('Trained on:')
+                tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(self.train_split.active_interactions))
+                tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
-            unseen_preds = sorted(set(range(self.train_split.full_dataset.num_predicates)) - set(self.train_split.active_predicates))
-            print('Zero-shot:')
-            zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
-            zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
+                unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
+                print('Zero-shot:')
+                zs_metrics = evaluator.output_metrics(interactions_to_keep= sorted(unseen_interactions))
+                zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
+            else:
+                print('Trained on:')
+                tr_metrics = evaluator.output_metrics(actions_to_keep=sorted(self.train_split.active_predicates))
+                tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
+
+                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_predicates)) - set(self.train_split.active_predicates))
+                print('Zero-shot:')
+                zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
+                zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
 
             for d in [tr_metrics, zs_metrics]:
                 for k, v in d.items():

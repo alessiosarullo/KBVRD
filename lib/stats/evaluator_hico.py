@@ -41,16 +41,14 @@ class HicoEvaluator(BaseEvaluator):
 
         Timer.get('Eval epoch').toc()
 
-    def output_metrics(self, sort=False, actions_to_keep=None):
+    def output_metrics(self, sort=False, interactions_to_keep=None, actions_to_keep=None):
         mf = MetricFormatter()
 
-        if actions_to_keep is not None:
+        if interactions_to_keep is None and actions_to_keep is not None:
             act_mask = np.zeros(self.hico.num_predicates, dtype=bool)
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
             interaction_mask = act_mask[self.hico.interactions[:, 0]]
             interactions_to_keep = sorted(set(np.flatnonzero(interaction_mask).tolist()))
-        else:
-            interactions_to_keep = None
 
         gt_labels_vec = np.where(self.gt_scores)[1]
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = sort_and_filter(metrics=self.metrics,
