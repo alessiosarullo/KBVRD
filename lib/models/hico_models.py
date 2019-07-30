@@ -84,7 +84,7 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         # self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         # self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
         oi_wembs_mat = (obj_wembs[:, None, :] + pred_wembs[None, :, :]) / 2
-        oi_wembs_mat /= oi_wembs_mat.sum(axis=2)  # normalise
+        oi_wembs_mat /= oi_wembs_mat.sum(axis=2, keepdims=True)  # normalise
         oi_wembs_mat[:, 0, :] = 0  # null interaction has null embedding, regardless of the object
         assert not np.any(np.isinf(oi_wembs_mat))
         hoi_wembs = oi_wembs_mat[dataset.full_dataset.interactions[:, 1], dataset.full_dataset.interactions[:, 0], :]
