@@ -80,7 +80,7 @@ class HicoSplit(HoiDatasetSplit):
                 if self.active_interactions.size < self.full_dataset.num_interactions:
                     all_labels = labels
                     labels = np.zeros_like(all_labels)
-                    labels[self.active_interactions] = all_labels[self.active_interactions]
+                    labels[:, self.active_interactions] = all_labels[:, self.active_interactions]
                 labels = torch.tensor(labels, dtype=torch.float32, device=device)
             else:
                 labels = None
