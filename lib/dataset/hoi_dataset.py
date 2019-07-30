@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-class HoiDataset(Dataset):
+class HoiDatasetSplit(Dataset):
     @property
     def human_class(self) -> int:
         raise NotImplementedError

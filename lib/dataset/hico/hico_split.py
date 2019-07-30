@@ -9,12 +9,12 @@ from torchvision import transforms
 
 from config import cfg
 from lib.dataset.hico.hico import Hico
-from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.hoi_dataset import HoiDatasetSplit
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class HicoSplit(HoiDataset):
+class HicoSplit(HoiDatasetSplit):
     def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, predicate_inds=None):
         self.full_dataset = hico  # type: Hico
         self.split = split

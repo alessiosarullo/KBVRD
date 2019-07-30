@@ -1,11 +1,19 @@
+import pickle
 from typing import List
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 from config import cfg
 from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.utils import Splits
+from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.branches import *
+from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch
 from lib.models.containers import Prediction
-from lib.models.misc import bce_loss
+from lib.models.misc import bce_loss, LIS
 
 
 class HicoBaseModel(AbstractModel):
@@ -52,7 +60,169 @@ class HicoBaseModel(AbstractModel):
                 prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
                 return prediction
 
-    def _forward(self, feats, labels):
+    def _forward(self, feats, labels, return_repr=False):
         hoi_repr = self.hoi_repr_mlp(feats)
-        output_logits = self.output_mlp(hoi_repr)
-        return output_logits
+        if return_repr:
+            return hoi_repr
+        else:
+            output_logits = self.output_mlp(hoi_repr)
+            return output_logits
+
+
+class HicoExtKnowledgeGenericModel(AbstractModel):
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        assert cfg.hico
+        self.dataset = dataset
+
+        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
+
+        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
+        # self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
+        # self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
+        # self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
+        oi_wembs_mat = (obj_wembs[:, None, :] + pred_wembs[None, :, :]) / 2
+        oi_wembs_mat /= oi_wembs_mat.sum(axis=2)  # normalise
+        oi_wembs_mat[:, 0, :] = 0  # null interaction has null embedding, regardless of the object
+        assert not np.any(np.isinf(oi_wembs_mat))
+        hoi_wembs = oi_wembs_mat[dataset.full_dataset.interactions[:, 1], dataset.full_dataset.interactions[:, 0], :]
+        self.hoi_wembs = nn.Parameter(torch.from_numpy(hoi_wembs), requires_grad=False)
+        self.hoi_wembs_sim = nn.Parameter(self.hoi_wembs @ self.hoi_wembs.t(), requires_grad=False)
+
+        self.zs_enabled = (cfg.seenf >= 0)
+        self.load_backbone = len(cfg.hoi_backbone) > 0
+        if self.zs_enabled:
+            print('Zero-shot enabled.')
+            seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+
+            seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_pred_inds]
+            seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
+            unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
+            self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
+            self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
+
+            if self.load_backbone:
+                raise NotImplementedError('Not currently supported.')
+
+    # def interactions_to_actions(self, hois):
+    #     hico = self.dataset.full_dataset
+    #     i_to_a_mat = np.zeros((hico.num_interactions, hico.num_predicates))
+    #     i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
+    #     i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
+    #     actions = (hois @ i_to_a_mat).clamp(max=1)
+    #     return actions
+    #
+    # def interactions_to_objects(self, hois):
+    #     hico = self.dataset.full_dataset
+    #     i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
+    #     i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
+    #     i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
+    #     objects = (hois @ i_to_o_mat).clamp(max=1)
+    #     return objects
+
+    def get_soft_labels(self, labels):
+        hoi_sims = self.hoi_wembs_sim[self.seen_hoi_inds, :][:, self.unseen_hoi_inds]
+        if cfg.lis:
+            hoi_sim = labels @ LIS(hoi_sims.clamp(min=0), w=18, k=7) / labels.sum(dim=1, keepdim=True).clamp(min=1)
+        else:
+            hoi_sim = labels @ hoi_sims.clamp(min=0) / labels.sum(dim=1, keepdim=True).clamp(min=1)
+        return hoi_sim.detach()
+
+    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+
+            feats, labels = x
+            logits, labels, reg_loss = self._forward(feats, labels)
+
+            if not inference:
+                labels.clamp_(min=0)
+                if cfg.softl > 0:
+                    # if cfg.nullzs:
+                    #     unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
+                    losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds]),
+                              'hoi_loss_unseen': cfg.softl * bce_loss(logits[:, self.unseen_hoi_inds], labels[:, self.unseen_hoi_inds])}
+                else:
+                    losses = {'hoi_loss': bce_loss(logits, labels)}
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
+                return losses
+            else:
+                prediction = Prediction()
+                prediction.hoi_scores = torch.sigmoid(logits).cpu().numpy()
+                return prediction
+
+
+class HicoZSGCModel(HicoExtKnowledgeGenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'hicozsgc'
+
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.base_model = HicoBaseModel(dataset, **kwargs)
+        self.predictor_dim = 1024
+
+        gcemb_dim = 1024
+        if cfg.puregc:
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+        else:
+            latent_dim = 200
+            input_dim = self.predictor_dim
+            self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
+                                                  nn.ReLU(inplace=True),
+                                                  nn.Dropout(p=cfg.dropout),
+                                                  nn.Linear(600, 800),
+                                                  nn.ReLU(inplace=True),
+                                                  nn.Dropout(p=cfg.dropout),
+                                                  nn.Linear(800, input_dim),
+                                                  )
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+
+        if cfg.greg > 0:
+            raise NotImplementedError
+            self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
+            assert (self.vv_adj.diag()[1:] == 1).all()
+
+    def _forward(self, feats, labels):
+        vrepr = self.base_model._forward(feats, labels, return_repr=True)
+
+        hico = self.dataset.full_dataset
+        obj_class_embs, act_class_embs = self.gcn()  # P x E
+        hoi_class_embs = (obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]]) / 2
+        hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
+        logits = vrepr @ hoi_predictors.t()
+
+        if labels is not None and self.zs_enabled:
+            if cfg.softl > 0:
+                labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
+
+        reg_loss = None
+        if cfg.greg > 0:
+            hoi_predictors_norm = F.normalize(hoi_predictors, dim=1)
+            hoi_predictors_sim = hoi_predictors_norm @ hoi_predictors_norm.t()
+            arange = torch.arange(hoi_predictors_sim.shape[0])
+
+            # Done with argmin/argmax because using min/max directly resulted in NaNs.
+            neigh_mask = torch.full_like(hoi_predictors_sim, np.inf)
+            neigh_mask[self.vv_adj] = 1
+            argmin_neigh_sim = (hoi_predictors_sim * neigh_mask.detach()).argmin(dim=1)
+            min_neigh_sim = hoi_predictors_sim[arange, argmin_neigh_sim]
+
+            non_neigh_mask = torch.full_like(hoi_predictors_sim, -np.inf)
+            non_neigh_mask[~self.vv_adj] = 1
+            argmax_non_neigh_sim = (hoi_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
+            max_non_neigh_sim = hoi_predictors_sim[arange, argmax_non_neigh_sim]
+
+            # Exclude null interaction
+            min_neigh_sim = min_neigh_sim[1:]
+            max_non_neigh_sim = max_non_neigh_sim[1:]
+
+            assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
+            assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
+
+            reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
+            reg_loss = cfg.greg * reg_loss.mean()
+
+        return logits, labels, reg_loss

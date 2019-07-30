@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from torch import nn as nn
+import torch.nn as nn
 
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.word_embeddings import WordEmbeddings

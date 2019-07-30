@@ -7,7 +7,7 @@ import torch
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
-from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.hoi_dataset import HoiDatasetSplit
 from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor
 from lib.detection.wrappers import COCO_CLASSES
 
@@ -89,7 +89,7 @@ class Minibatch:
         return minibatch
 
 
-class HicoDetSplit(HoiDataset):
+class HicoDetSplit(HoiDatasetSplit):
     def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds, inter_inds):
         assert split in Splits
 

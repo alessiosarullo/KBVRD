@@ -16,7 +16,7 @@ from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHO
 from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHicoDetSingleHOIsOnehotSplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
-from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.hoi_dataset import HoiDatasetSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
@@ -46,7 +46,7 @@ class Launcher:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
-        self.train_split, self.val_split, self.test_split = None, None, None  # type: HoiDataset
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: HoiDatasetSplit
         self.curr_train_iter = 0
         self.start_epoch = 0
 
