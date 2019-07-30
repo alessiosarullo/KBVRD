@@ -124,11 +124,12 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 
     def get_soft_labels(self, labels):
         hoi_sims = self.hoi_wembs_sim[self.seen_hoi_inds, :][:, self.unseen_hoi_inds]
+        seen_labels = labels[:, self.seen_hoi_inds]
         if cfg.lis:
-            hoi_sim = labels @ LIS(hoi_sims.clamp(min=0), w=18, k=7) / labels.sum(dim=1, keepdim=True).clamp(min=1)
+            unseen_labels = seen_labels @ LIS(hoi_sims.clamp(min=0), w=18, k=7) / seen_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
-            hoi_sim = labels @ hoi_sims.clamp(min=0) / labels.sum(dim=1, keepdim=True).clamp(min=1)
-        return hoi_sim.detach()
+            unseen_labels = seen_labels @ hoi_sims.clamp(min=0) / seen_labels.sum(dim=1, keepdim=True).clamp(min=1)
+        return unseen_labels.detach()
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
