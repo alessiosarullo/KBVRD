@@ -80,16 +80,10 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
         pred_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
-        # self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        # self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
-        # self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
-        oi_wembs_mat = (obj_wembs[:, None, :] + pred_wembs[None, :, :]) / 2
-        oi_wembs_mat /= np.linalg.norm(oi_wembs_mat, axis=2, keepdims=True)  # normalise
-        oi_wembs_mat *= self.nv_adj[:, :, None]  # filter out unfeasible interactions
-        oi_wembs_mat[:, 0, :] = 0  # null interaction has null embedding, regardless of the object
-        assert not np.any(np.isinf(oi_wembs_mat))
-        hoi_wembs = torch.from_numpy(oi_wembs_mat[dataset.full_dataset.interactions[:, 1], dataset.full_dataset.interactions[:, 0], :])
-        self.hoi_wembs_sim = nn.Parameter(hoi_wembs @ hoi_wembs.t(), requires_grad=False)
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
+        self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
+        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
+        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
         self.zs_enabled = (cfg.seenf >= 0)
         self.load_backbone = len(cfg.hoi_backbone) > 0
@@ -106,29 +100,44 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
             if self.load_backbone:
                 raise NotImplementedError('Not currently supported.')
 
-    # def interactions_to_actions(self, hois):
-    #     hico = self.dataset.full_dataset
-    #     i_to_a_mat = np.zeros((hico.num_interactions, hico.num_predicates))
-    #     i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
-    #     i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
-    #     actions = (hois @ i_to_a_mat).clamp(max=1)
-    #     return actions
-    #
-    # def interactions_to_objects(self, hois):
-    #     hico = self.dataset.full_dataset
-    #     i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
-    #     i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
-    #     i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
-    #     objects = (hois @ i_to_o_mat).clamp(max=1)
-    #     return objects
+            if cfg.softl:
+                self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
+
+    def interactions_to_actions(self, hois):
+        hico = self.dataset.full_dataset
+        i_to_a_mat = np.zeros((hico.num_interactions, hico.num_predicates))
+        i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
+        i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
+        actions = (hois @ i_to_a_mat).clamp(max=1)
+        return actions
+
+    def interactions_to_objects(self, hois):
+        hico = self.dataset.full_dataset
+        i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
+        i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
+        i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
+        objects = (hois @ i_to_o_mat).clamp(max=1)
+        return objects
+
+    def interactions_to_mat(self, hois):
+        hico = self.dataset.full_dataset
+        hois_np = hois.detach().cpu().numpy()
+        all_hois = np.stack(np.where(hois_np > 0), axis=1)
+        all_interactions = np.stack([all_hois[:, 0], hico.interactions[all_hois[:, 1], :]], axis=1)
+        inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_predicates))
+        inter_mat[all_interactions] = 1
+        inter_mat = torch.from_numpy(inter_mat).to(hois)
+        return inter_mat
 
     def get_soft_labels(self, labels):
-        hoi_sims = self.hoi_wembs_sim[self.seen_hoi_inds, :][:, self.unseen_hoi_inds]
-        seen_labels = labels[:, self.seen_hoi_inds].clamp(min=0)
-        if cfg.lis:
-            unseen_labels = seen_labels @ LIS(hoi_sims.clamp(min=0), w=18, k=7) / seen_labels.sum(dim=1, keepdim=True).clamp(min=1)
-        else:
-            unseen_labels = seen_labels @ hoi_sims.clamp(min=0) / seen_labels.sum(dim=1, keepdim=True).clamp(min=1)
+        actions = self.interactions_to_actions(labels)
+        objects = self.interactions_to_objects(labels)
+        inter_mat = self.interactions_to_mat(labels.clamp(min=0))
+
+        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0)) / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+
+        interactions = self.dataset.full_dataset.interactions
+        unseen_labels = act_sim_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
         return unseen_labels.detach()
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
