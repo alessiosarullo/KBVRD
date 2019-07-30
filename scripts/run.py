@@ -332,8 +332,7 @@ class Launcher:
                     assert k not in metric_dict
                     metric_dict[k] = v
 
-        metrics = {k: v for md in metric_dict for k, v in md.items()}
-        stats.update_stats({'metrics': {k: np.mean(v) for k, v in metrics.items()}})
+        stats.update_stats({'metrics': {k: np.mean(v) for k, v in metric_dict.items()}})
         stats.log_stats(self.curr_train_iter, epoch_idx)
 
         stats.epoch_toc()
