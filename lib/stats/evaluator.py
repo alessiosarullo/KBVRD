@@ -104,7 +104,7 @@ class Evaluator(BaseEvaluator):
         actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_predicates)) - {0})
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
-        pos_metrics = {f'+{k}': v for k, v in self.metrics.items()}
+        pos_metrics = {f'p{k}': v for k, v in self.metrics.items()}
         gt_hoi_class_hist, pos_metrics, hoi_class_inds = sort_and_filter(metrics=pos_metrics,
                                                                              gt_labels=pos_gt_hoi_labels,
                                                                              all_classes=list(range(self.full_dataset.num_interactions)),
