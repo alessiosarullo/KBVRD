@@ -219,7 +219,7 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
 
         hico = self.dataset.full_dataset
         obj_class_embs, act_class_embs = self.gcn()  # P x E
-        hoi_class_embs = (obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]]) / 2
+        hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
         hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
         logits = vrepr @ hoi_predictors.t()
 
