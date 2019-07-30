@@ -28,7 +28,8 @@ class HicoSplit(HoiDatasetSplit):
         self.predicates = [hico.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
 
-        active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
+        active_op_mat = self.full_dataset.op_pair_to_interaction[self.active_object_classes, :][:, self.active_predicates]
+        active_interactions = set(np.unique(active_op_mat).tolist()) - {-1}
         self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
         self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
 
@@ -125,13 +126,6 @@ class HicoSplit(HoiDatasetSplit):
         splits = {}
         hico = Hico()
 
-        if obj_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} objects:', obj_inds)
-            assert hico.human_class in obj_inds
-        if pred_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} predicates:', pred_inds)
-            assert 0 in pred_inds
-
         # Split train/val if needed
         if cfg.val_ratio > 0:
             num_imgs = len(hico.split_filenames[Splits.TRAIN])
@@ -143,5 +137,16 @@ class HicoSplit(HoiDatasetSplit):
         else:
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, object_inds=obj_inds, predicate_inds=pred_inds)
         splits[Splits.TEST] = cls(split=Splits.TEST, hico=hico)
+
+        tr = splits[Splits.TRAIN]
+        if obj_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_object_classes.size}):', tr.active_object_classes.tolist())
+            assert hico.human_class in obj_inds
+        if pred_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} predicates ({tr.active_predicates.size}):', tr.active_predicates.tolist())
+            assert 0 in pred_inds
+        if obj_inds is not None or pred_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} interactions ({tr.active_interactions.size}):', tr.active_interactions.tolist())
+            assert 0 in pred_inds
 
         return splits
