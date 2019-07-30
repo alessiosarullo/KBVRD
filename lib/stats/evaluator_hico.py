@@ -36,7 +36,7 @@ class HicoEvaluator(BaseEvaluator):
         Timer.get('Eval epoch', 'Metrics').tic()
         gt_scores = self.gt_scores
         gt_scores[gt_scores < 0] = 0
-        self.metrics['M-mAP'] = average_precision_score(gt_scores, predict_hoi_scores)
+        self.metrics['M-mAP'] = average_precision_score(gt_scores, predict_hoi_scores, average=None)
         Timer.get('Eval epoch', 'Metrics').toc()
 
         Timer.get('Eval epoch').toc()
