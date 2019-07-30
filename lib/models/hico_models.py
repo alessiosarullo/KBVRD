@@ -157,7 +157,7 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zsb'
+        return 'hicozsb'
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
