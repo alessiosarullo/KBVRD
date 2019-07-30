@@ -166,7 +166,7 @@ class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
 
     def _forward(self, feats, labels):
         logits = self.base_model._forward(feats, labels)
-        if labels:
+        if labels is not None:
             labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
         reg_loss = None
         return logits, labels, reg_loss
