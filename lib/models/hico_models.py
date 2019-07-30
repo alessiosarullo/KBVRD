@@ -124,7 +124,7 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 
     def get_soft_labels(self, labels):
         hoi_sims = self.hoi_wembs_sim[self.seen_hoi_inds, :][:, self.unseen_hoi_inds]
-        seen_labels = labels[:, self.seen_hoi_inds]
+        seen_labels = labels[:, self.seen_hoi_inds].clamp(min=0)
         if cfg.lis:
             unseen_labels = seen_labels @ LIS(hoi_sims.clamp(min=0), w=18, k=7) / seen_labels.sum(dim=1, keepdim=True).clamp(min=1)
         else:
