@@ -10,6 +10,23 @@ from lib.dataset.utils import Splits
 from torchvision.models import resnet152
 
 
+def forward(model, x):
+    x = model.conv1(x)
+    x = model.bn1(x)
+    x = model.relu(x)
+    x = model.maxpool(x)
+
+    x = model.layer1(x)
+    x = model.layer2(x)
+    x = model.layer3(x)
+    x = model.layer4(x)
+
+    x = model.avgpool(x)
+    img_feats = x.view(x.size(0), -1)
+    cl_unbounded_scores = model.fc(img_feats)
+
+    return img_feats, cl_unbounded_scores
+
 def save_feats():
     sys.argv += ['--val_ratio', '0']
     cfg.parse_args(fail_if_missing=False)
@@ -38,12 +55,13 @@ def save_feats():
     for split in [Splits.TRAIN, Splits.TEST]:
         hds = splits[split]
 
-        all_img_feats = []
+        all_img_feats, all_cl_unbounded_scores = [], []
         num_imgs = len(hds)
         for img_id in range(num_imgs):
             img = hds.get_img(img_id)
-            feats = vm(img.unsqueeze(dim=0)).detach().cpu().numpy()
-            all_img_feats.append(feats)
+            img_feats, cl_unbounded_scores = forward(vm, img.unsqueeze(dim=0)).detach().cpu().numpy()
+            all_img_feats.append(img_feats)
+            all_cl_unbounded_scores.append(cl_unbounded_scores)
             if img_id % 10 == 0 or img_id == num_imgs - 1:
                 print('Image %6d/%d' % (img_id, num_imgs))
             torch.cuda.empty_cache()
@@ -54,6 +72,7 @@ def save_feats():
         precomputed_feats_fn = cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
             feat_file.create_dataset('img_feats', data=all_img_feats)
+            feat_file.create_dataset('scores', data=all_cl_unbounded_scores)
 
 
 if __name__ == '__main__':
