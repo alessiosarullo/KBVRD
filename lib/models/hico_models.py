@@ -79,11 +79,12 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
+        act_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
         self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
-        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
+        self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
+        self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
+        self.act_obj_emb_sim = nn.Parameter(self.act_word_embs @ self.obj_word_embs.t(), requires_grad=False)
 
         self.zs_enabled = (cfg.seenf >= 0)
         self.load_backbone = len(cfg.hoi_backbone) > 0
@@ -131,18 +132,29 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         return inter_mat
 
     def get_soft_labels(self, labels):
-        # actions = self.interactions_to_actions(labels)
-        # objects = self.interactions_to_objects(labels)
+        batch_size = labels.shape[0]
+
         inter_mat = self.interactions_to_mat(labels.clamp(min=0))  # N x I -> N x O x P
 
-        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(inter_mat.shape[0], -1, -1))
-        act_sim_per_obj = act_sim_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+        objects = self.interactions_to_objects(labels)
+        similar_objs = objects @ self.obj_emb_sim
+
+        actions = self.interactions_to_actions(labels)
+        similar_objs_by_act = actions @ self.self.act_obj_emb_sim / actions.sum(dim=1, keepdim=True).clamp(min=1)
+
+        similar_objs = (similar_objs + similar_objs_by_act) / 2
+        similar_objs = similar_objs.unsqueeze(dim=2).expand(-1, -1, self.obj_act_feasibility.shape[1])
+        possible_interactions_by_obj = similar_objs * self.obj_act_feasibility.unsqueeze(dim=0).expand_as(similar_objs)
+        inter_mat = inter_mat + (1 - inter_mat) * possible_interactions_by_obj
+
+        similar_acts_per_obj = torch.bmm(inter_mat, self.act_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(batch_size, -1, -1))
+        similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
         if cfg.lis:
-            act_sim_per_obj = LIS(act_sim_per_obj, w=18, k=7)
+            similar_acts_per_obj = LIS(similar_acts_per_obj, w=18, k=7)
 
         interactions = self.dataset.full_dataset.interactions
-        unseen_labels = act_sim_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
+        unseen_labels = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
         return unseen_labels.detach()
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
