@@ -94,10 +94,10 @@ class Evaluator(BaseEvaluator):
         gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
         gt_hoi_class_hist, metrics, hoi_class_inds = sort_and_filter(metrics=metrics,
-                                                                         gt_labels=gt_hoi_labels,
-                                                                         all_classes=list(range(self.full_dataset.num_interactions)),
-                                                                         sort=sort,
-                                                                         keep_inds=interactions_to_keep)
+                                                                     gt_labels=gt_hoi_labels,
+                                                                     all_classes=list(range(self.full_dataset.num_interactions)),
+                                                                     sort=sort,
+                                                                     keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, metrics, hoi_class_inds, gt_str='GT HOIs')
 
         # Same, but with null interaction filtered
@@ -106,10 +106,10 @@ class Evaluator(BaseEvaluator):
         assert np.all(pos_gt_hoi_labels >= 0)
         pos_metrics = {f'p{k}': v for k, v in self.metrics.items()}
         gt_hoi_class_hist, pos_metrics, hoi_class_inds = sort_and_filter(metrics=pos_metrics,
-                                                                             gt_labels=pos_gt_hoi_labels,
-                                                                             all_classes=list(range(self.full_dataset.num_interactions)),
-                                                                             sort=sort,
-                                                                             keep_inds=interactions_to_keep)
+                                                                         gt_labels=pos_gt_hoi_labels,
+                                                                         all_classes=list(range(self.full_dataset.num_interactions)),
+                                                                         sort=sort,
+                                                                         keep_inds=interactions_to_keep)
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs')
 
         for k, v in pos_metrics.items():
@@ -247,5 +247,3 @@ class Evaluator(BaseEvaluator):
         max_p = np.maximum.accumulate(prec[::-1])[::-1]
         ap = np.sum(max_p[rec_thresholds[rec_thresholds >= 0]] / rec_thresholds.size)
         return rec, prec, ap
-
-

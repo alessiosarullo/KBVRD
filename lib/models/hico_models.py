@@ -126,16 +126,20 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         all_interactions = np.concatenate([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
         inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_predicates))
         inter_mat[all_interactions[:, 0], all_interactions[:, 2], all_interactions[:, 1]] = 1
+        # TODO inter_mat[:, :, 0] = 0
         inter_mat = torch.from_numpy(inter_mat).to(hois)
         return inter_mat
 
     def get_soft_labels(self, labels):
-        actions = self.interactions_to_actions(labels)
-        objects = self.interactions_to_objects(labels)
-        inter_mat = self.interactions_to_mat(labels.clamp(min=0))
+        # actions = self.interactions_to_actions(labels)
+        # objects = self.interactions_to_objects(labels)
+        inter_mat = self.interactions_to_mat(labels.clamp(min=0))  # N x I -> N x O x P
 
-        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0).expand(inter_mat.shape[0], -1, -1))
+        act_sim_per_obj = torch.bmm(inter_mat, self.pred_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(inter_mat.shape[0], -1, -1))
         act_sim_per_obj = act_sim_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+
+        if cfg.lis:
+            act_sim_per_obj = LIS(act_sim_per_obj, w=18, k=7)
 
         interactions = self.dataset.full_dataset.interactions
         unseen_labels = act_sim_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
