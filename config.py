@@ -69,6 +69,8 @@ class Configs:
 
         # HICO specific
         self.hico_lhard = False
+        self.hico_zso1 = False
+        self.hico_zso2 = False
 
         # BG specific
         self.filter = False

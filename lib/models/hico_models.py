@@ -136,16 +136,23 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 
         inter_mat = self.interactions_to_mat(labels.clamp(min=0))  # N x I -> N x O x P
 
-        objects = self.interactions_to_objects(labels)
-        similar_objs = objects @ self.obj_emb_sim
+        similar_objs = None
+        if cfg.hico_zso1:
+            objects = self.interactions_to_objects(labels)
+            similar_objs = objects @ self.obj_emb_sim
 
-        actions = self.interactions_to_actions(labels)
-        similar_objs_by_act = actions @ self.act_obj_emb_sim / actions.sum(dim=1, keepdim=True).clamp(min=1)
+        if cfg.hico_zso2:
+            actions = self.interactions_to_actions(labels)
+            similar_objs_by_act = actions @ self.act_obj_emb_sim.clamp(min=0) / actions.sum(dim=1, keepdim=True).clamp(min=1)
+            if cfg.hico_zso1:
+                similar_objs = (similar_objs + similar_objs_by_act) / 2
+            else:
+                similar_objs = similar_objs_by_act
 
-        similar_objs = (similar_objs + similar_objs_by_act) / 2
-        similar_objs = similar_objs.unsqueeze(dim=2).expand(-1, -1, self.obj_act_feasibility.shape[1])
-        possible_interactions_by_obj = similar_objs * self.obj_act_feasibility.unsqueeze(dim=0).expand_as(similar_objs)
-        inter_mat = inter_mat + (1 - inter_mat) * possible_interactions_by_obj
+        if similar_objs is not None:
+            similar_objs = similar_objs.unsqueeze(dim=2).expand(-1, -1, self.obj_act_feasibility.shape[1])
+            possible_interactions_by_obj = similar_objs * self.obj_act_feasibility.unsqueeze(dim=0).expand_as(similar_objs)
+            inter_mat = inter_mat + (1 - inter_mat) * possible_interactions_by_obj
 
         similar_acts_per_obj = torch.bmm(inter_mat, self.act_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(batch_size, -1, -1))
         similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
@@ -236,7 +243,10 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
         hico = self.dataset.full_dataset
         obj_class_embs, act_class_embs = self.gcn()  # P x E
         hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
-        hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
+        if not cfg.puregc:
+            hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
+        else:
+            hoi_predictors = hoi_class_embs
         logits = vrepr @ hoi_predictors.t()
 
         if labels is not None and self.zs_enabled:
