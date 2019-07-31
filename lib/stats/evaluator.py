@@ -101,7 +101,7 @@ class Evaluator(BaseEvaluator):
         mf.format_metric_and_gt_lines(gt_hoi_class_hist, metrics, hoi_class_inds, gt_str='GT HOIs')
 
         # Same, but with null interaction filtered
-        actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_predicates)) - {0})
+        actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_actions)) - {0})
         pos_gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(pos_gt_hoi_labels >= 0)
         pos_metrics = {f'p{k}': v for k, v in self.metrics.items()}
@@ -121,7 +121,7 @@ class Evaluator(BaseEvaluator):
 
     def filter_actions(self, gt_hoi_labels, actions_to_keep):
         if actions_to_keep is not None:
-            act_mask = np.zeros(self.full_dataset.num_predicates, dtype=bool)
+            act_mask = np.zeros(self.full_dataset.num_actions, dtype=bool)
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
             interaction_mask = act_mask[self.full_dataset.interactions[:, 0]]
             gt_hoi_labels = gt_hoi_labels[interaction_mask[gt_hoi_labels]]
@@ -162,8 +162,8 @@ class Evaluator(BaseEvaluator):
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_scores is not None
 
-                    if len(self.dataset_split.active_predicates) < self.full_dataset.num_predicates:
-                        predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.full_dataset.num_predicates))
+                    if len(self.dataset_split.active_predicates) < self.full_dataset.num_actions:
+                        predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.full_dataset.num_actions))
                         predict_action_scores[:, self.dataset_split.active_predicates] = prediction.action_scores
                     else:
                         predict_action_scores = prediction.action_scores

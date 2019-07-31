@@ -45,15 +45,15 @@ class HicoEvaluator(BaseEvaluator):
         mf = MetricFormatter()
 
         if interactions_to_keep is None and actions_to_keep is not None:
-            act_mask = np.zeros(self.full_dataset.num_predicates, dtype=bool)
+            act_mask = np.zeros(self.full_dataset.num_actions, dtype=bool)
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
             interaction_mask = act_mask[self.full_dataset.interactions[:, 0]]
             interactions_to_keep = sorted(np.flatnonzero(interaction_mask).tolist())
         metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
 
         # Same, but with null interaction filtered
-        actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_predicates)) - {0})
-        act_mask = np.zeros(self.full_dataset.num_predicates, dtype=bool)
+        actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_actions)) - {0})
+        act_mask = np.zeros(self.full_dataset.num_actions, dtype=bool)
         act_mask[np.array(actions_to_keep).astype(np.int)] = True
         no_null_interaction_mask = act_mask[self.full_dataset.interactions[:, 0]]
         if interactions_to_keep is None:

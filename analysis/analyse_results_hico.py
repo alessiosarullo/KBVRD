@@ -46,14 +46,14 @@ class Analyser:
         self.dataset_split = dataset
         self.full_dataset = dataset.full_dataset
 
-        self.act_conf_mat = np.zeros((self.dataset_split.num_predicates, self.dataset_split.num_predicates))
+        self.act_conf_mat = np.zeros((self.dataset_split.num_actions, self.dataset_split.num_actions))
 
         self.ph_num_bins = 20
         self.ph_bins = np.arange(self.ph_num_bins + 1) / self.ph_num_bins
-        self.prediction_act_hist = np.zeros((self.ph_bins.size, self.dataset_split.num_predicates), dtype=np.int)
+        self.prediction_act_hist = np.zeros((self.ph_bins.size, self.dataset_split.num_actions), dtype=np.int)
 
-        self.num_gt = np.zeros((self.dataset_split.num_object_classes, self.dataset_split.num_predicates))
-        self.num_pred = np.zeros((self.dataset_split.num_object_classes, self.dataset_split.num_predicates))
+        self.num_gt = np.zeros((self.dataset_split.num_object_classes, self.dataset_split.num_actions))
+        self.num_pred = np.zeros((self.dataset_split.num_object_classes, self.dataset_split.num_actions))
 
     def compute_stats(self, predictions: List[Dict]):
         assert len(predictions) == self.dataset_split.num_images, (len(predictions), self.dataset_split.num_images)
@@ -75,7 +75,7 @@ class Analyser:
         self.pred_best_match_act_hist = self.pred_best_match_act_hist[:-1, :]
 
 def compute_cooccs(dataset: HicoDetSplit, gt_iou_thresh=0.5):
-    act_cooccs = np.zeros((dataset.full_dataset.num_predicates, dataset.full_dataset.num_predicates))
+    act_cooccs = np.zeros((dataset.full_dataset.num_actions, dataset.full_dataset.num_actions))
     for gt_idx in range(len(dataset)):
         gt_entry = dataset.get_img_entry(gt_idx, read_img=False)
         gt_hoi_triplets = gt_entry.gt_hois[:, [0, 2, 1]]  # (h, o, i)
@@ -130,7 +130,7 @@ def _print_confidence_scores(analyser: Analyser, marked_preds=None):
           ' '.join([f'{x:6.2f}{"":7s}' for x in analyser.ph_bins[1:]]),
           '|', '{:>25s}'.format(f'>{analyser.ph_bins[1]}'),
           '|', f'{"#GT":>6s}')
-    for j in range(hicodet.num_predicates):
+    for j in range(hicodet.num_actions):
         pred_hist = analyser.prediction_act_hist[:, j]
         pred_match_hist = analyser.pred_best_match_act_hist[:, j]
         sum_p = np.sum(pred_hist[1:])
@@ -316,7 +316,7 @@ def zs_stats():
 
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
     hicodet = hdtrain.full_dataset
-    seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
+    seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
     # hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
@@ -328,7 +328,7 @@ def zs_stats():
     # print('Val only actions:', sorted(set(hdval.predicates) - set(hdtrain.predicates)))
 
     hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_predicates), dtype=bool)
+    unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
     unseen_interactions[hdtest.interactions[:, 1], hdtest.interactions[:, 0]] = 1
     unseen_interactions[seen_interactions] = 0
     # print('Unseen interactions:')
@@ -362,7 +362,7 @@ def zs_stats():
     pred_inds = (np.argsort(num_gt.sum(axis=0)[1:])[::-1] + 1).tolist() + [0]  # no_interaction at the end
     s_predicates = [hdtest.predicates[i] for i in pred_inds]
 
-    _print_confidence_scores(analyser, marked_preds=set(range(hicodet.num_predicates)) - set(seen_act_inds))
+    _print_confidence_scores(analyser, marked_preds=set(range(hicodet.num_actions)) - set(seen_act_inds))
 
     zero_shot_preds = np.full_like(num_pred, fill_value=np.inf)
     zero_shot_preds[seen_interactions] = -1

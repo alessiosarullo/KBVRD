@@ -71,6 +71,7 @@ class Configs:
         self.hico_lhard = False
         self.hico_zso1 = False
         self.hico_zso2 = False
+        self.hico_zsa = False
 
         # BG specific
         self.filter = False

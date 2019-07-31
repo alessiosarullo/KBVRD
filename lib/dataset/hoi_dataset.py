@@ -12,7 +12,7 @@ class HoiDatasetSplit(Dataset):
         raise NotImplementedError
 
     @property
-    def num_predicates(self):
+    def num_actions(self):
         raise NotImplementedError
 
     @property

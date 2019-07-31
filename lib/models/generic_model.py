@@ -23,9 +23,9 @@ class GenericModel(AbstractModel):
 
         # if cfg.csloss:
         #     prcls_hist = Counter(dataset.hoi_triplets[:, 1])
-        #     prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_predicates)])
+        #     prcls_hist = np.array([prcls_hist[i] for i in range(dataset.num_actions)])
         #     num_predicate_classes = prcls_hist.size
-        #     assert num_predicate_classes == dataset.num_predicates
+        #     assert num_predicate_classes == dataset.num_actions
         #     cost_matrix = np.maximum(1, np.log2(prcls_hist[None, :] / prcls_hist[:, None]))
         #     assert not np.any(np.isnan(cost_matrix))
         #     cost_matrix[np.arange(num_predicate_classes), np.arange(num_predicate_classes)] = 0
@@ -44,7 +44,7 @@ class GenericModel(AbstractModel):
     #
     # def weighted_binary_cross_entropy_with_logits(self, logits, labels, num_rels=None):
     #     if num_rels is None:
-    #         num_rels = self.dataset.num_predicates
+    #         num_rels = self.dataset.num_actions
     #     if not (labels.size() == logits.size()):
     #         raise ValueError("Target size ({}) must be the same as input size ({})".format(labels.size(), logits.size()))
     #
@@ -125,10 +125,10 @@ class GenericModel(AbstractModel):
             hoi_obj_scores = ho_obj_scores[:, self.dataset.full_dataset.interactions[:, 1]]  # This helps
             prediction.hoi_scores = torch.sigmoid(output).cpu().numpy() * hoi_obj_scores
         else:
-            if output.shape[1] < self.dataset.full_dataset.num_predicates:
-                assert output.shape[1] == self.dataset.num_predicates
+            if output.shape[1] < self.dataset.full_dataset.num_actions:
+                assert output.shape[1] == self.dataset.num_actions
                 restricted_action_output = output
-                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_predicates))
+                output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_actions))
                 output[:, self.dataset.active_predicates] = restricted_action_output
             prediction.action_scores = torch.sigmoid(output).cpu().numpy()
 

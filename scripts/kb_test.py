@@ -96,12 +96,12 @@ def main():
                 elif mode == possible_modes[4]:
                     action_scores = prior_mul[hoi_obj_labels, :].astype(np.float)
                 elif mode == possible_modes[-2]:
-                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
+                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_actions))
                     hoi_labels_onehot[
-                        np.arange(hoi_labels_onehot.shape[0]), np.random.randint(hd.num_predicates, size=hoi_labels_onehot.shape[0])] = 1
+                        np.arange(hoi_labels_onehot.shape[0]), np.random.randint(hd.num_actions, size=hoi_labels_onehot.shape[0])] = 1
                     action_scores = hoi_labels_onehot
                 elif mode == possible_modes[-1]:
-                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_predicates))
+                    hoi_labels_onehot = np.zeros((ex.gt_hois.shape[0], hd.num_actions))
                     hoi_labels_onehot[np.arange(hoi_labels_onehot.shape[0]), ex.gt_hois[:, 1]] = 1
                     action_scores = hoi_labels_onehot
                 else:

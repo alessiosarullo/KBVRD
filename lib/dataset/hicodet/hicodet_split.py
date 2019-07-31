@@ -108,11 +108,11 @@ class HicoDetSplit(HoiDatasetSplit):
         self.predicates = [hicodet.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
         reduced_predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
-        if len(predicate_inds) < self.full_dataset.num_predicates:
+        if len(predicate_inds) < self.full_dataset.num_actions:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
         if inter_inds is not None:
-            assert len(object_inds) == self.full_dataset.num_object_classes and len(predicate_inds) == self.full_dataset.num_predicates
+            assert len(object_inds) == self.full_dataset.num_object_classes and len(predicate_inds) == self.full_dataset.num_actions
             inter_inds = sorted(inter_inds)
             self.active_interactions = np.array(inter_inds, dtype=np.int)
             self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
@@ -159,7 +159,7 @@ class HicoDetSplit(HoiDatasetSplit):
         return len(self.objects)
 
     @property
-    def num_predicates(self):
+    def num_actions(self):
         return len(self.predicates)
 
     @property
@@ -308,13 +308,13 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter
     # Filter out unwanted predicates/object classes
     if obj_inds is None and pred_inds is None:
         final_objects_inds = list(range(hicodet.num_object_classes))
-        final_pred_inds = list(range(hicodet.num_predicates))
+        final_pred_inds = list(range(hicodet.num_actions))
     else:
         obj_inds = set(obj_inds or range(hicodet.num_object_classes))
-        pred_inds = pred_inds or list(range(hicodet.num_predicates))
+        pred_inds = pred_inds or list(range(hicodet.num_actions))
         inter_inds = inter_inds or list(range(hicodet.num_interactions))
         assert 0 in pred_inds
-        pred_filtering_map = np.full(hicodet.num_predicates, fill_value=-1, dtype=np.int)
+        pred_filtering_map = np.full(hicodet.num_actions, fill_value=-1, dtype=np.int)
         pred_filtering_map[pred_inds] = pred_inds
         inter_filtering_map = np.full(hicodet.num_interactions, fill_value=-1, dtype=np.int)
         inter_filtering_map[inter_inds] = inter_inds

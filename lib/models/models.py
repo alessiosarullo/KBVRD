@@ -45,7 +45,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        num_classes = dataset.full_dataset.num_interactions if cfg.phoi else dataset.num_predicates
+        num_classes = dataset.full_dataset.num_interactions if cfg.phoi else dataset.num_actions
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -117,7 +117,7 @@ class NonParamBaseModel(GenericModel):
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        predictors = torch.empty((self.final_repr_dim, dataset.num_predicates))
+        predictors = torch.empty((self.final_repr_dim, dataset.num_actions))
         torch.nn.init.xavier_normal_(predictors, gain=1.0)
         self.predictors = nn.Parameter(predictors, requires_grad=True)
 
@@ -191,7 +191,7 @@ class MultiModel(GenericModel):
                                             nn.Linear(hidden_dim, self.final_repr_dim),
                                             ])
 
-        self.act_output_mlp = nn.Linear(self.final_repr_dim, dataset.num_predicates, bias=False)
+        self.act_output_mlp = nn.Linear(self.final_repr_dim, dataset.num_actions, bias=False)
         torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
         self.hoi_output_mlp = nn.Linear(self.final_repr_dim, dataset.full_dataset.num_interactions, bias=False)
         torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
@@ -205,10 +205,10 @@ class MultiModel(GenericModel):
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         act_output, hoi_output = outputs
 
-        if act_output.shape[1] < self.dataset.full_dataset.num_predicates:
-            assert act_output.shape[1] == self.dataset.num_predicates
+        if act_output.shape[1] < self.dataset.full_dataset.num_actions:
+            assert act_output.shape[1] == self.dataset.num_actions
             restricted_action_output = act_output
-            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.full_dataset.num_predicates))
+            act_output = restricted_action_output.new_zeros((act_output.shape[0], self.dataset.full_dataset.num_actions))
             act_output[:, self.dataset.active_predicates] = restricted_action_output
         prediction.action_scores = torch.sigmoid(act_output).cpu().numpy()
 
@@ -274,7 +274,7 @@ class ExtKnowledgeGenericModel(GenericModel):
         if self.zs_enabled:
             print('Zero-shot enabled.')
             seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-            unseen_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_predicates)) - set(seen_pred_inds.tolist())))
+            unseen_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_pred_inds.tolist())))
             self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
             self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
@@ -336,7 +336,7 @@ class ExtKnowledgeGenericModel(GenericModel):
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         action_output = outputs[0]
         assert not cfg.phoi
-        assert action_output.shape[1] == self.dataset.full_dataset.num_predicates
+        assert action_output.shape[1] == self.dataset.full_dataset.num_actions
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
 
@@ -350,7 +350,7 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
         self.base_model = BaseModel(dataset, **kwargs)
         assert self.zs_enabled and cfg.softl > 0
 
-        num_classes = dataset.full_dataset.num_predicates  # ALL predicates
+        num_classes = dataset.full_dataset.num_actions  # ALL predicates
         self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -454,7 +454,7 @@ class ZSSimModel(ZSBaseModel):
         seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
         seen_transfer_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred_transfer']
         seen_train_pred_inds = np.array([p for p in seen_pred_inds if p not in seen_transfer_pred_inds])
-        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_predicates)) - set(seen_train_pred_inds.tolist())))
+        all_transfer_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_train_pred_inds.tolist())))
         self.seen_train_inds = nn.Parameter(torch.from_numpy(seen_train_pred_inds), requires_grad=False)
         self.seen_transfer_inds = nn.Parameter(torch.from_numpy(seen_transfer_pred_inds), requires_grad=False)
         self.all_transfer_inds = nn.Parameter(torch.from_numpy(all_transfer_pred_inds), requires_grad=False)

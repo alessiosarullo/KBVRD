@@ -24,7 +24,7 @@ class HicoSplit(HoiDatasetSplit):
         self.objects = [hico.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
 
-        predicate_inds = sorted(predicate_inds) if predicate_inds is not None else range(self.full_dataset.num_predicates)
+        predicate_inds = sorted(predicate_inds) if predicate_inds is not None else range(self.full_dataset.num_actions)
         self.predicates = [hico.predicates[i] for i in predicate_inds]
         self.active_predicates = np.array(predicate_inds, dtype=np.int)
 
@@ -60,7 +60,7 @@ class HicoSplit(HoiDatasetSplit):
         return len(self.objects)
 
     @property
-    def num_predicates(self):
+    def num_actions(self):
         return len(self.predicates)
 
     @property

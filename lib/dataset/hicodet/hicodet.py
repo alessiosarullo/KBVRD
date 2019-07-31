@@ -34,7 +34,7 @@ class HicoDet:
         # Interactions
         self.interactions = np.array([[self.predicate_index[inter['pred']], self.object_index[inter['obj']]]
                                       for inter in self.driver.interaction_list])  # 600 x [p, o]
-        self.op_pair_to_interaction = np.full([self.num_object_classes, self.num_predicates], fill_value=-1, dtype=np.int)
+        self.op_pair_to_interaction = np.full([self.num_object_classes, self.num_actions], fill_value=-1, dtype=np.int)
         self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
         # Data
@@ -51,7 +51,7 @@ class HicoDet:
         return len(self.objects)
 
     @property
-    def num_predicates(self):
+    def num_actions(self):
         return len(self.predicates)
 
     @property

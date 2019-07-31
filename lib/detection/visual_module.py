@@ -210,7 +210,7 @@ class VisualModule(nn.Module):
             iou_predict_to_gt_i = compute_ious(predict_boxes_i, gt_boxes_i)
             predict_gt_match_i = (predict_box_labels_i[:, None] == gt_box_classes_i[None, :]) & (iou_predict_to_gt_i >= self.gt_iou_thr)
 
-            action_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_predicates))
+            action_labels_i = np.zeros((num_predict_boxes_i, num_predict_boxes_i, self.dataset.num_actions))
             for head_gt_ind, rel_id, tail_gt_ind in gt_rels_i:
                 for head_predict_ind in np.flatnonzero(predict_gt_match_i[:, head_gt_ind]):
                     for tail_predict_ind in np.flatnonzero(predict_gt_match_i[:, tail_gt_ind]):

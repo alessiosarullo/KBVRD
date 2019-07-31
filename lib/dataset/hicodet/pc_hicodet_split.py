@@ -194,11 +194,11 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
         # Filter HOIs. Object class filtering is currently not supported.
         if self.active_object_classes.size < self.full_dataset.num_object_classes:
             raise NotImplementedError('Object class filtering is not supported.')
-        if len(self.active_predicates) < self.full_dataset.num_predicates and self.split != Splits.TEST:
+        if len(self.active_predicates) < self.full_dataset.num_actions and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_predicates]
             # Note: boxes with no interactions are NOT filtered
         elif len(self.active_interactions) < self.full_dataset.num_interactions and self.split != Splits.TEST:
-            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_predicates])
+            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_actions])
             assert op_pair_is_valid.size == self.full_dataset.op_pair_to_interaction.size
             op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
             num_hois = self.pc_action_labels.sum()
@@ -314,7 +314,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                         precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
 
                     # Filter out HOIs
-                    if False and (self.active_predicates.size < self.num_predicates or box_inds is not None):  # FIXME
+                    if False and (self.active_predicates.size < self.num_actions or box_inds is not None):  # FIXME
                         feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
                         assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, im_data.filename)
                         precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]

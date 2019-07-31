@@ -14,11 +14,11 @@ class CheatGCNBranch(AbstractHOIBranch):
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
         self.num_objects = dataset.full_dataset.num_object_classes
-        self.num_predicates = dataset.full_dataset.num_predicates
+        self.num_actions = dataset.full_dataset.num_actions
 
         # Normalised adjacency matrix
         self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
-        adj = torch.eye(self.num_objects + self.num_predicates).float()
+        adj = torch.eye(self.num_objects + self.num_actions).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
@@ -65,7 +65,7 @@ class ExtCheatGCNBranch(AbstractHOIBranch):
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
         self.num_objects = dataset.full_dataset.num_object_classes
-        self.num_predicates = dataset.full_dataset.num_predicates
+        self.num_actions = dataset.full_dataset.num_actions
 
         self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         pred_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
@@ -74,7 +74,7 @@ class ExtCheatGCNBranch(AbstractHOIBranch):
 
         # Normalised adjacency matrix
         self.noun_verb_links = nn.Parameter(torch.from_numpy((dataset.full_dataset.op_pair_to_interaction >= 0).astype(np.float32)), requires_grad=False)
-        adj = torch.eye(self.num_objects + self.num_predicates).float()
+        adj = torch.eye(self.num_objects + self.num_actions).float()
         adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
         adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
         adj[self.num_objects:, self.num_objects:] = torch.from_numpy(pred_emb_sim)  # bottom right
@@ -124,14 +124,14 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
         self.num_objects = dataset.full_dataset.num_object_classes
-        self.num_predicates = dataset.full_dataset.num_predicates
+        self.num_actions = dataset.full_dataset.num_actions
         self.num_interactions = dataset.full_dataset.num_interactions
 
         interactions = dataset.full_dataset.interactions  # each is [p, o]
         assert self.num_interactions == interactions.shape[0] == 600
         interactions_to_obj = np.zeros((self.num_interactions, self.num_objects))
         interactions_to_obj[np.arange(self.num_interactions), interactions[:, 1]] = 1
-        interactions_to_preds = np.zeros((self.num_interactions, self.num_predicates))
+        interactions_to_preds = np.zeros((self.num_interactions, self.num_actions))
         interactions_to_preds[np.arange(self.num_interactions), interactions[:, 0]] = 1
 
         adj_an = torch.from_numpy(interactions_to_obj).float()
@@ -144,7 +144,7 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
                                    requires_grad=False)
 
         self.z_n = nn.Parameter(torch.empty(self.num_objects, input_repr_dim).normal_(), requires_grad=True)
-        self.z_v = nn.Parameter(torch.empty(self.num_predicates, input_repr_dim).normal_(), requires_grad=True)
+        self.z_v = nn.Parameter(torch.empty(self.num_actions, input_repr_dim).normal_(), requires_grad=True)
         self.z_a = nn.Parameter(torch.empty(self.num_interactions, input_repr_dim).normal_(), requires_grad=True)
 
         gc_layers = []
@@ -181,13 +181,13 @@ class KatoGCNBranch(AbstractHOIBranch):
         assert num_interactions == 600
         interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
         interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-        interactions_to_preds = np.zeros((num_interactions, dataset.num_predicates))
+        interactions_to_preds = np.zeros((num_interactions, dataset.num_actions))
         interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
 
         adj_av = torch.from_numpy(interactions_to_preds).float()
         adj_an = torch.from_numpy(interactions_to_obj).float()
         adj_nn = torch.eye(dataset.num_object_classes).float()
-        adj_vv = torch.eye(dataset.num_predicates).float()
+        adj_vv = torch.eye(dataset.num_actions).float()
 
         # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
         # this, but the paper is not clear at all.

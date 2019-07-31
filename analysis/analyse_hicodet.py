@@ -29,7 +29,7 @@ def stats():
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)  # type: HicoDetSplit
     hd = hds.full_dataset
 
-    op_mat = np.zeros([hds.num_object_classes, hds.num_predicates])
+    op_mat = np.zeros([hds.num_object_classes, hds.num_actions])
     for _, p, o in hds.hoi_triplets:
         op_mat[o, p] += 1
     pred_labels = hd.predicates
@@ -93,7 +93,7 @@ def find():
         if misses:
             continue
         ho_pairs = hois[:, [0, 2]]
-        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_predicates))
+        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_actions))
         action_class_scores[np.arange(action_class_scores.shape[0]), example.gt_hois[:, 1]] = 1
 
         im = cv2.imread(os.path.join(hds.img_dir, im_fn))
@@ -128,7 +128,7 @@ def vis_gt():
         boxes = example.gt_boxes
         box_classes = example.gt_obj_classes
         ho_pairs = example.gt_hois[:, [0, 2]]
-        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_predicates))
+        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_actions))
         action_class_scores[np.arange(action_class_scores.shape[0]), example.gt_hois[:, 1]] = 1
 
         im = cv2.imread(os.path.join(hds.img_dir, im_fn))
