@@ -91,7 +91,7 @@ class HicoMultiModel(AbstractModel):
         nn.init.xavier_normal_(self.obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
         self.obj_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
-        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+        torch.nn.init.xavier_normal_(self.obj_output_mlp.weight, gain=1.0)
 
         self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
@@ -101,7 +101,7 @@ class HicoMultiModel(AbstractModel):
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
         self.act_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_predicates, bias=False)
-        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+        torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
 
         self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
