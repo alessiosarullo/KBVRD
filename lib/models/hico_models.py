@@ -123,9 +123,9 @@ class HicoMultiModel(AbstractModel):
                 hoi_labels = labels.clamp(min=0)
                 obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
                 act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
-                losses = {'obj_loss': bce_loss(obj_logits, obj_labels, reduce=False),
-                          'act_loss': bce_loss(act_logits, act_labels, reduce=False),
-                          'hoi_loss': bce_loss(hoi_logits, hoi_labels, reduce=False)
+                losses = {'obj_loss': bce_loss(obj_logits, obj_labels),
+                          'act_loss': bce_loss(act_logits, act_labels),
+                          'hoi_loss': bce_loss(hoi_logits, hoi_labels)
                           }
                 return losses
             else:
