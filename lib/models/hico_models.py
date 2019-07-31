@@ -225,13 +225,11 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
 
             if not inference:
                 labels.clamp_(min=0)
+                losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
                 if cfg.softl > 0:
                     # if cfg.nullzs:
                     #     unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
-                    losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds]),
-                              'hoi_loss_unseen': cfg.softl * bce_loss(logits[:, self.unseen_hoi_inds], labels[:, self.unseen_hoi_inds])}
-                else:
-                    losses = {'hoi_loss': bce_loss(logits, labels)}
+                    losses['hoi_loss_unseen'] = cfg.softl * bce_loss(logits[:, self.unseen_hoi_inds], labels[:, self.unseen_hoi_inds])
                 if reg_loss is not None:
                     losses['reg_loss'] = reg_loss
                 return losses
