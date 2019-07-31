@@ -11,7 +11,7 @@ from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.utils import Splits
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch
+from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch
 from lib.models.containers import Prediction
 from lib.models.misc import bce_loss, LIS, interactions_to_actions, interactions_to_objects, interactions_to_mat
 
@@ -389,7 +389,7 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
 
         gcemb_dim = 1024
         if cfg.puregc:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+            gc_dims = (gcemb_dim, self.predictor_dim)
         else:
             latent_dim = 200
             input_dim = self.predictor_dim
@@ -401,7 +401,12 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
                                                   nn.Dropout(p=cfg.dropout),
                                                   nn.Linear(800, input_dim),
                                                   )
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+            gc_dims = (gcemb_dim // 2, latent_dim)
+
+        if cfg.hoigcn:
+            self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
+        else:
+            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
 
         if cfg.greg > 0:
             raise NotImplementedError
@@ -412,8 +417,12 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
         vrepr = self.base_model._forward(feats, labels, return_repr=True)
 
         hico = self.dataset.full_dataset
-        obj_class_embs, act_class_embs = self.gcn()  # P x E
-        hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
+        if cfg.hoigcn:
+            hoi_class_embs, _, _ = self.gcn()
+        else:
+            obj_class_embs, act_class_embs = self.gcn()  # P x E
+            hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
+
         if not cfg.puregc:
             hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
         else:

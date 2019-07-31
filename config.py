@@ -92,6 +92,7 @@ class Configs:
         self.puregc = False
         self.iso_null = False
         self.aggp = False
+        self.hoigcn = False
 
         ##########################################
         # Optimiser options                      #
