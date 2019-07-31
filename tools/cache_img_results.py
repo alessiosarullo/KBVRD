@@ -60,9 +60,9 @@ def save_feats():
         num_imgs = len(hds)
         for img_id in range(num_imgs):
             img = hds.get_img(img_id)
-            img_feats, cl_unbounded_scores = forward(vm, img.unsqueeze(dim=0)).detach().cpu().numpy()
-            all_img_feats.append(img_feats)
-            all_cl_unbounded_scores.append(cl_unbounded_scores)
+            img_feats, cl_unbounded_scores = forward(vm, img.unsqueeze(dim=0))
+            all_img_feats.append(img_feats.detach().cpu().numpy())
+            all_cl_unbounded_scores.append(cl_unbounded_scores.detach().cpu().numpy())
             if img_id % 10 == 0 or img_id == num_imgs - 1:
                 print('Image %6d/%d' % (img_id, num_imgs))
             torch.cuda.empty_cache()
