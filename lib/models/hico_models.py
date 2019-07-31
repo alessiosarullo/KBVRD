@@ -140,7 +140,7 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
         similar_objs = objects @ self.obj_emb_sim
 
         actions = self.interactions_to_actions(labels)
-        similar_objs_by_act = actions @ self.self.act_obj_emb_sim / actions.sum(dim=1, keepdim=True).clamp(min=1)
+        similar_objs_by_act = actions @ self.act_obj_emb_sim / actions.sum(dim=1, keepdim=True).clamp(min=1)
 
         similar_objs = (similar_objs + similar_objs_by_act) / 2
         similar_objs = similar_objs.unsqueeze(dim=2).expand(-1, -1, self.obj_act_feasibility.shape[1])
