@@ -65,7 +65,7 @@ class HicoEvaluator(BaseEvaluator):
         pos_metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
 
         for k, v in pos_metrics.items():
-            assert k not in metrics.keys()
+            assert k in metrics.keys()
             metrics[f'p{k}'] = v
         return metrics
 
