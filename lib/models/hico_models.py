@@ -294,7 +294,7 @@ class HicoExtKnowledgeMultiGenericModel(AbstractModel):
 
         if cfg.hico_zsa:
             similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-            unseen_labels = similar_acts_per_obj.max(dim=1)[0][:, self.unseen_hoi_inds]
+            unseen_labels = similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
         else:
             interactions = self.dataset.full_dataset.interactions
             unseen_labels = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
