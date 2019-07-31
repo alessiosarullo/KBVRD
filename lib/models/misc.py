@@ -45,3 +45,30 @@ def get_noun_verb_adj_mat(dataset: HicoDetSplit, iso_null=None):
     if iso_null:
         noun_verb_links[:, 0] = 0
     return noun_verb_links
+
+
+def interactions_to_actions(hois, hico):
+    i_to_a_mat = np.zeros((hico.num_interactions, hico.num_predicates))
+    i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
+    i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
+    actions = (hois @ i_to_a_mat).clamp(max=1)
+    return actions
+
+
+def interactions_to_objects(hois, hico):
+    i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
+    i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
+    i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
+    objects = (hois @ i_to_o_mat).clamp(max=1)
+    return objects
+
+
+def interactions_to_mat(hois, hico):
+    hois_np = hois.detach().cpu().numpy()
+    all_hois = np.stack(np.where(hois_np > 0), axis=1)
+    all_interactions = np.concatenate([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
+    inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_predicates))
+    inter_mat[all_interactions[:, 0], all_interactions[:, 2], all_interactions[:, 1]] = 1
+    # TODO inter_mat[:, :, 0] = 0
+    inter_mat = torch.from_numpy(inter_mat).to(hois)
+    return inter_mat

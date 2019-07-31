@@ -13,7 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch
 from lib.models.containers import Prediction
-from lib.models.misc import bce_loss, LIS
+from lib.models.misc import bce_loss, LIS, interactions_to_actions, interactions_to_objects, interactions_to_mat
 
 
 class HicoBaseModel(AbstractModel):
@@ -83,11 +83,26 @@ class HicoMultiModel(AbstractModel):
         hidden_dim = 1024
         self.repr_dim = 1024
 
-        self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+        self.obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.repr_dim),
                                             ])
+        nn.init.xavier_normal_(self.obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.obj_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.dropout),
+                                            nn.Linear(hidden_dim, self.repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.act_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_predicates, bias=False)
+        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+
         self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.dropout),
@@ -95,36 +110,44 @@ class HicoMultiModel(AbstractModel):
                                             ])
         nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.hoi_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        self.output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
-        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
+        self.hoi_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
+        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
             feats, labels = x
-            output = self._forward(feats, labels)
+            obj_logits, act_logits, hoi_logits = self._forward(feats, labels)
 
             if not inference:
-                zero_labels = (labels == 0)
-                labels.clamp_(min=0)
-                loss_mat = bce_loss(output, labels, reduce=False)
-                if cfg.hico_lhard:
-                    loss_mat[zero_labels] = 0
-                losses = {'hoi_loss': loss_mat.sum(dim=1).mean()}
+                hoi_labels = labels.clamp(min=0)
+                obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
+                act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
+                losses = {'obj_loss': bce_loss(obj_logits, obj_labels, reduce=False),
+                          'act_loss': bce_loss(act_logits, act_labels, reduce=False),
+                          'hoi_loss': bce_loss(hoi_logits, hoi_labels, reduce=False)
+                          }
                 return losses
             else:
                 prediction = Prediction()
-                prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
+                interactions = self.dataset.full_dataset.interactions
+                obj_scores = torch.sigmoid(obj_logits).cpu().numpy()
+                act_scores = torch.sigmoid(act_logits).cpu().numpy()
+                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy()
+                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
     def _forward(self, feats, labels, return_repr=False):
+        obj_repr = self.obj_repr_mlp(feats)
+        obj_logits = self.obj_output_mlp(obj_repr)
+
+        act_repr = self.act_repr_mlp(feats)
+        act_logits = self.act_output_mlp(act_repr)
+
         hoi_repr = self.hoi_repr_mlp(feats)
-        if return_repr:
-            return hoi_repr
-        else:
-            output_logits = self.output_mlp(hoi_repr)
-            return output_logits
+        hoi_logits = self.hoi_output_mlp(hoi_repr)
+        return obj_logits, act_logits, hoi_logits
+
 
 class HicoExtKnowledgeGenericModel(AbstractModel):
     def __init__(self, dataset: HicoSplit, **kwargs):
@@ -161,45 +184,18 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
             if cfg.softl:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
-    def interactions_to_actions(self, hois):
-        hico = self.dataset.full_dataset
-        i_to_a_mat = np.zeros((hico.num_interactions, hico.num_predicates))
-        i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
-        i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
-        actions = (hois @ i_to_a_mat).clamp(max=1)
-        return actions
-
-    def interactions_to_objects(self, hois):
-        hico = self.dataset.full_dataset
-        i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
-        i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
-        i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
-        objects = (hois @ i_to_o_mat).clamp(max=1)
-        return objects
-
-    def interactions_to_mat(self, hois):
-        hico = self.dataset.full_dataset
-        hois_np = hois.detach().cpu().numpy()
-        all_hois = np.stack(np.where(hois_np > 0), axis=1)
-        all_interactions = np.concatenate([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
-        inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_predicates))
-        inter_mat[all_interactions[:, 0], all_interactions[:, 2], all_interactions[:, 1]] = 1
-        # TODO inter_mat[:, :, 0] = 0
-        inter_mat = torch.from_numpy(inter_mat).to(hois)
-        return inter_mat
-
     def get_soft_labels(self, labels):
         batch_size = labels.shape[0]
 
-        inter_mat = self.interactions_to_mat(labels.clamp(min=0))  # N x I -> N x O x P
+        inter_mat = interactions_to_mat(labels.clamp(min=0), hico=self.dataset.full_dataset)  # N x I -> N x O x P
 
         similar_objs = None
         if cfg.hico_zso1:
-            objects = self.interactions_to_objects(labels)
+            objects = interactions_to_objects(labels, hico=self.dataset.full_dataset)
             similar_objs = objects @ self.obj_emb_sim
 
         if cfg.hico_zso2:
-            actions = self.interactions_to_actions(labels)
+            actions = interactions_to_actions(labels, hico=self.dataset.full_dataset)
             similar_objs_by_act = actions @ self.act_obj_emb_sim.clamp(min=0) / actions.sum(dim=1, keepdim=True).clamp(min=1)
             if cfg.hico_zso1:
                 similar_objs = (similar_objs + similar_objs_by_act) / 2
