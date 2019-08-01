@@ -392,7 +392,11 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
         self.base_model = HicoBaseModel(dataset, **kwargs)
         self.predictor_dim = self.base_model.repr_dim
 
-        gcemb_dim = 1024
+        if cfg.small:
+            gcemb_dim = 600
+        else:
+            gcemb_dim = 1024
+
         if cfg.puregc:
             gc_dims = (gcemb_dim, self.predictor_dim)
         else:
