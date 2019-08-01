@@ -85,7 +85,7 @@ class HicoSplit(HoiDatasetSplit):
                     labels[:, self.active_interactions] = all_labels[:, self.active_interactions]
                 if cfg.mlneg:
                     label_mask = (labels > 0)
-                    for i in idxs:
+                    for i in range(labels.shape[0]):
                         negs = np.flatnonzero(label_mask[i, self.active_interactions] == 0)
                         num_negs = negs.size
                         num_pos = np.sum(label_mask[i, :])
