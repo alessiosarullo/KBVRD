@@ -57,7 +57,7 @@ class HicoBaseModel(AbstractModel):
             if not inference:
                 if cfg.singlel:
                     output = output[torch.arange(labels.shape[0]), labels]
-                    losses = {'s_hoi_loss': bce_loss(output, label_mask)}
+                    losses = {'s_hoi_loss': F.binary_cross_entropy_with_logits(output, label_mask)}
                     return losses
                 else:
                     zero_labels = (labels == 0)
