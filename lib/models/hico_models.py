@@ -411,14 +411,24 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
         else:
             latent_dim = 200
             input_dim = self.predictor_dim
-            self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                  nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.dropout),
-                                                  nn.Linear(600, 800),
-                                                  nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.dropout),
-                                                  nn.Linear(800, input_dim),
-                                                  )
+            if cfg.small:
+                self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 300),
+                                                      nn.ReLU(inplace=True),
+                                                      nn.Dropout(p=cfg.dropout),
+                                                      nn.Linear(300, 400),
+                                                      nn.ReLU(inplace=True),
+                                                      nn.Dropout(p=cfg.dropout),
+                                                      nn.Linear(400, input_dim),
+                                                      )
+            else:
+                self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
+                                                      nn.ReLU(inplace=True),
+                                                      nn.Dropout(p=cfg.dropout),
+                                                      nn.Linear(600, 800),
+                                                      nn.ReLU(inplace=True),
+                                                      nn.Dropout(p=cfg.dropout),
+                                                      nn.Linear(800, input_dim),
+                                                      )
             gc_dims = (gcemb_dim // 2, latent_dim)
 
         if cfg.hoigcn:
