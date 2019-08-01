@@ -183,8 +183,8 @@ class HicoHoiSplit(HicoSplit):
             img_idxs = self.examples[idxs, 0]
             feats = torch.tensor(self.pc_img_feats[img_idxs, :], dtype=torch.float32, device=device)
             if self.split != Splits.TEST:
-                labels = torch.tensor(self.examples[idxs, 1], dtype=torch.float32, device=device)
-                label_mask = torch.tensor(self.example_mask[idxs], dtype=torch.float32, device=device)
+                labels = torch.tensor(self.examples[idxs, 1], device=device)
+                label_mask = torch.tensor(self.example_mask[idxs].astype(np.uint8), dtype=torch.float32, device=device)
             else:
                 labels = label_mask = None
             Timer.get('GetBatch').toc()
