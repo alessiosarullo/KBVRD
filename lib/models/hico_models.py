@@ -47,7 +47,7 @@ class HicoBaseModel(AbstractModel):
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
-            if cfg.singlel and not inference:
+            if cfg.mlneg:
                 feats, labels, label_mask = x
             else:
                 feats, labels = x
@@ -55,21 +55,19 @@ class HicoBaseModel(AbstractModel):
             output = self._forward(feats, labels)
 
             if not inference:
-                if cfg.singlel:
-                    output = output[torch.arange(labels.shape[0]), labels]
-                    losses = {'s_hoi_loss': F.binary_cross_entropy_with_logits(output, label_mask)}
-                    return losses
+                zero_labels = (labels == 0)
+                labels.clamp_(min=0)
+                loss_mat = bce_loss(output, labels, reduce=False)
+                if cfg.hico_lhard:
+                    loss_mat[zero_labels] = 0
+                # if cfg.iso_null:
+                #     null_interactions = np.flatnonzero(self.dataset.full_dataset.interactions[:, 0] == 0)
+                #     loss_mat[:, null_interactions] = 0
+                if cfg.mlneg:
+                    losses = {'hoi_loss': loss_mat[label_mask].sum() / loss_mat.shape[0]}
                 else:
-                    zero_labels = (labels == 0)
-                    labels.clamp_(min=0)
-                    loss_mat = bce_loss(output, labels, reduce=False)
-                    if cfg.hico_lhard:
-                        loss_mat[zero_labels] = 0
-                    if cfg.iso_null:
-                        null_interactions = np.flatnonzero(self.dataset.full_dataset.interactions[:, 0] == 0)
-                        loss_mat[:, null_interactions] = 0
                     losses = {'hoi_loss': loss_mat.sum(dim=1).mean()}
-                    return losses
+                return losses
             else:
                 prediction = Prediction()
                 prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
