@@ -53,6 +53,9 @@ class HicoBaseModel(AbstractModel):
                 loss_mat = bce_loss(output, labels, reduce=False)
                 if cfg.hico_lhard:
                     loss_mat[zero_labels] = 0
+                if cfg.iso_null:
+                    null_interactions = (self.dataset.full_dataset.interactions[:, 0] == 0)
+                    loss_mat[:, null_interactions] = 0
                 losses = {'hoi_loss': loss_mat.sum(dim=1).mean()}
                 return losses
             else:
