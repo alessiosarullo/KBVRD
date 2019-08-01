@@ -514,60 +514,74 @@ class ZSSimModel(ZSBaseModel):
         action_logits = self.output_mlp(vrepr)
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
-
-class KatoModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'kato'
-
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
-        self._hoi_repr_dim = 600
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
-                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                                nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                                ])
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
-
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
-                                               nn.LeakyReLU(negative_slope=0.2, inplace=True),
-                                               nn.Dropout(p=cfg.dropout),
-                                               nn.Linear(self.final_repr_dim, self.final_repr_dim),
-                                               ])
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
-
-        self.gcn_branch = KatoGCNBranch(dataset, self._hoi_repr_dim, gc_dims=(512, 200))
-
-    @property
-    def final_repr_dim(self):
-        return self._hoi_repr_dim
-
-    def _get_losses(self, vis_output: VisualOutput, outputs):
-        hoi_output = outputs
-        hoi_labels = vis_output.hoi_labels
-        losses = {'hoi_loss': bce_loss(hoi_output, hoi_labels)}
-        return losses
-
-    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
-        hoi_output = outputs
-        prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy()
-
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        hoi_infos = vis_output.ho_infos
-
-        box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
-
-        ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
-        ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
-        hoi_repr = ho_subj_repr + ho_obj_repr
-
-        hoi_logits = self.gcn_branch(hoi_repr)
-        return hoi_logits
+#
+# class KatoModel(GenericModel):
+#     @classmethod
+#     def get_cline_name(cls):
+#         return 'kato'
+#
+#     def __init__(self, dataset: HicoDetSplit, **kwargs):
+#         super().__init__(dataset, **kwargs)
+#         vis_feat_dim = self.visual_module.vis_feat_dim
+#         self.hoi_repr_dim = 600
+#
+#         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+#                                                 nn.LeakyReLU(negative_slope=0.2, inplace=True),
+#                                                 nn.Dropout(p=cfg.dropout),
+#                                                 nn.Linear(self.final_repr_dim, self.final_repr_dim),
+#                                                 ])
+#         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
+#
+#         self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, self.final_repr_dim),
+#                                                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+#                                                nn.Dropout(p=cfg.dropout),
+#                                                nn.Linear(self.final_repr_dim, self.final_repr_dim),
+#                                                ])
+#         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('leaky_relu'))
+#
+#         gc_dims = (512, 200)
+#         self.gcn_branch = KatoGCNBranch(dataset, gc_dims=(512, 200))
+#         self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + self.hoi_repr_dim, 512),
+#                                        nn.ReLU(inplace=True),
+#                                        nn.Dropout(p=0.5),
+#                                        nn.Linear(512, 200),
+#                                        nn.ReLU(inplace=True),
+#                                        nn.Dropout(p=0.5),
+#                                        nn.Linear(200, 1)
+#                                        )
+#
+#     @property
+#     def final_repr_dim(self):
+#         return self.hoi_repr_dim
+#
+#     def _get_losses(self, vis_output: VisualOutput, outputs):
+#         hoi_output = outputs
+#         hoi_labels = vis_output.hoi_labels
+#         losses = {'hoi_loss': bce_loss(hoi_output, hoi_labels)}
+#         return losses
+#
+#     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+#         hoi_output = outputs
+#         prediction.hoi_scores = torch.sigmoid(hoi_output).cpu().numpy()
+#
+#     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+#         boxes_ext = vis_output.boxes_ext
+#         box_feats = vis_output.box_feats
+#         hoi_infos = vis_output.ho_infos
+#
+#         box_feats_ext = torch.cat([box_feats, boxes_ext[:, 5:]], dim=1)
+#
+#         ho_subj_repr = self.ho_subj_repr_mlp(box_feats_ext[hoi_infos[:, 1], :])
+#         ho_obj_repr = self.ho_obj_repr_mlp(box_feats_ext[hoi_infos[:, 2], :])
+#         hoi_repr = ho_subj_repr + ho_obj_repr
+#
+#         z_a, z_v, z_n = self.gcn_branch()
+#         hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
+#                                                z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
+#                                               dim=2))
+#         assert hoi_logits.shape[2] == 1
+#         hoi_logits = hoi_logits.squeeze(dim=2)
+#         return hoi_logits
 
 
 class PeyreModel(GenericModel):

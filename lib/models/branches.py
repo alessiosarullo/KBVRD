@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.misc import get_noun_verb_adj_mat
@@ -172,9 +173,9 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: HicoDetSplit, input_repr_dim, gc_dims=(512, 200), **kwargs):
-        self.word_emb_dim = 200
+    def __init__(self, dataset: HicoSplit, gc_dims=(512, 200), **kwargs):
         super().__init__(**kwargs)
+        self.word_emb_dim = 200
 
         interactions = dataset.full_dataset.interactions  # each is [p, o]
         num_interactions = interactions.shape[0]
@@ -210,16 +211,7 @@ class KatoGCNBranch(AbstractHOIBranch):
                                                       nn.Dropout(p=0.5))
                                         for i in range(len(gc_dims))])
 
-        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + input_repr_dim, 512),
-                                       nn.ReLU(inplace=True),
-                                       nn.Dropout(p=0.5),
-                                       nn.Linear(512, 200),
-                                       nn.ReLU(inplace=True),
-                                       nn.Dropout(p=0.5),
-                                       nn.Linear(200, 1)
-                                       )
-
-    def _forward(self, input_repr):
+    def _forward(self):
         prev_z_n = self.z_n
         prev_z_v = self.z_v
         # z_a is 0
@@ -236,10 +228,4 @@ class KatoGCNBranch(AbstractHOIBranch):
             z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
 
-        output_logits = self.score_mlp(torch.cat([input_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
-                                                  z_a.unsqueeze(dim=0).expand(input_repr.shape[0], -1, -1)],
-                                                 dim=2))
-        assert output_logits.shape[2] == 1
-        output_logits = output_logits.squeeze(dim=2)
-
-        return output_logits
+        return z_a, z_v, z_n

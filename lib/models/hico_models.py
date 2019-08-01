@@ -11,7 +11,7 @@ from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.utils import Splits
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch
+from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
 from lib.models.containers import Prediction
 from lib.models.misc import bce_loss, LIS, interactions_to_actions, interactions_to_objects, interactions_to_mat
 
@@ -459,3 +459,37 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
             reg_loss = cfg.greg * reg_loss.mean()
 
         return logits, labels, reg_loss
+
+
+class KatoModel(HicoExtKnowledgeGenericModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'kato'
+
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.hoi_repr_dim = 600
+        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
+
+        self.img_repr_mlp = nn.Linear(vis_feat_dim, 512)
+
+        gc_dims = (512, 200)
+        self.gcn_branch = KatoGCNBranch(dataset, gc_dims=(512, 200))
+        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + self.hoi_repr_dim, 512),
+                                       nn.ReLU(inplace=True),
+                                       nn.Dropout(p=0.5),
+                                       nn.Linear(512, 200),
+                                       nn.ReLU(inplace=True),
+                                       nn.Dropout(p=0.5),
+                                       nn.Linear(200, 1)
+                                       )
+
+    def _forward(self, feats, labels):
+        hoi_repr = self.img_repr_mlp(feats)
+        z_a, z_v, z_n = self.gcn_branch()
+        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
+                                               z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
+                                              dim=2))
+        assert hoi_logits.shape[2] == 1
+        hoi_logits = hoi_logits.squeeze(dim=2)
+        return hoi_logits, labels, None
