@@ -47,6 +47,19 @@ class HicoSplit(HoiDatasetSplit):
         except OSError:
             self.pc_img_feats = None
 
+        self.labels = self.full_dataset.split_annotations[self.split]
+        if self.active_interactions.size < self.full_dataset.num_interactions:
+            all_labels = self.labels
+            self.labels = np.zeros_like(all_labels)
+            self.labels[:, self.active_interactions] = all_labels[:, self.active_interactions]
+
+        if self.image_inds is None:
+            self.non_empty_imgs = np.flatnonzero(np.any(self.labels, axis=1))
+        else:
+            image_mask = np.zeros(self.full_dataset.split_annotations[self.split].shape[0], dtype=np.bool)
+            image_mask[self.image_inds] = True
+            self.non_empty_imgs = np.flatnonzero(np.any(self.labels, axis=1) & image_mask)
+
     @property
     def precomputed_visual_feat_dim(self):
         return self.pc_img_feats.shape[1]
@@ -77,12 +90,7 @@ class HicoSplit(HoiDatasetSplit):
             idxs = np.array(idx_list)
             feats = torch.tensor(self.pc_img_feats[idxs, :], dtype=torch.float32, device=device)
             if self.split != Splits.TEST:
-                labels = self.full_dataset.split_annotations[self.split][idxs, :]
-                if self.active_interactions.size < self.full_dataset.num_interactions:
-                    all_labels = labels
-                    labels = np.zeros_like(all_labels)
-                    labels[:, self.active_interactions] = all_labels[:, self.active_interactions]
-                labels = torch.tensor(labels, dtype=torch.float32, device=device)
+                labels = torch.tensor(self.labels[idxs, :], dtype=torch.float32, device=device)
             else:
                 labels = None
             Timer.get('GetBatch').toc()
@@ -97,8 +105,12 @@ class HicoSplit(HoiDatasetSplit):
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+        if cfg.filter_bg_only:
+            ds = self if self.non_empty_imgs is None else Subset(self, self.non_empty_imgs)
+        else:
+            ds = self if self.image_inds is None else Subset(self, self.image_inds)
         data_loader = torch.utils.data.DataLoader(
-            dataset=self if self.image_inds is None else Subset(self, self.image_inds),
+            dataset=ds,
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=num_workers,
