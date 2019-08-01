@@ -180,9 +180,9 @@ class KatoGCNBranch(AbstractHOIBranch):
         interactions = dataset.full_dataset.interactions  # each is [p, o]
         num_interactions = interactions.shape[0]
         assert num_interactions == 600
-        interactions_to_obj = np.zeros((num_interactions, dataset.num_object_classes))
+        interactions_to_obj = np.zeros((num_interactions, dataset.full_dataset.num_object_classes))
         interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-        interactions_to_preds = np.zeros((num_interactions, dataset.num_actions))
+        interactions_to_preds = np.zeros((num_interactions, dataset.full_dataset.num_actions))
         interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
 
         adj_av = torch.from_numpy(interactions_to_preds).float()
