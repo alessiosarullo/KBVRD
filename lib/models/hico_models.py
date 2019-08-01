@@ -56,7 +56,7 @@ class HicoBaseModel(AbstractModel):
 
             if not inference:
                 if cfg.singlel:
-                    output = output[:, labels]
+                    output = output[torch.arange(labels.shape[0]), labels]
                     losses = {'s_hoi_loss': bce_loss(output, label_mask)}
                     return losses
                 else:
