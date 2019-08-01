@@ -63,22 +63,27 @@ class Configs:
         self.dropout = 0.5
         self.repr_dim = 1024
         self.small = False
-        self.osc = 1.0
-        self.asc = 1.0
-        self.hsc = 1.0
 
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss
         self.meanc = False  # mean or sum over classes for BCE loss?
-        self.olc = 1.0
-        self.alc = 1.0
-        self.hlc = 1.0
 
         # HICO specific
         self.hico_lhard = False
-        self.hico_zso1 = False
-        self.hico_zso2 = False
-        self.hico_zsa = False
+        self.zso = False
+        self.zsa = False
+        self.zsh = False
+        self.gc = False
+        self.osc = 1.0
+        self.asc = 1.0
+        self.hsc = 1.0
+        self.olc = 1.0
+        self.alc = 1.0
+        self.hlc = 1.0
+        self.slnoavg = False
+        self.hardlis = False
+        self.puregc = False
+        self.hoigcn = False
 
         # BG specific
         self.filter = False
@@ -89,19 +94,15 @@ class Configs:
         self.oscore = False
         self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
         self.softl = 0.0
-        self.slnoavg = False
         self.nullzs = False
         self.lis = False
-        self.hardlis = False
 
         # ZS GCN specific
         self.greg = 0.0
         self.greg_margin = 0.3
         self.vv = False
-        self.puregc = False
         self.iso_null = False
         self.aggp = False
-        self.hoigcn = False
 
         ##########################################
         # Optimiser options                      #
