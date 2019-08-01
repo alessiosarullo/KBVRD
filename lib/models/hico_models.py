@@ -586,6 +586,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 assert (self.inter_adj.diag()[1:] == 1).all()
 
     def get_soft_labels(self, labels):
+        assert cfg.zso or cfg.zsa or cfg.zsh
         batch_size = labels.shape[0]
         labels = labels.clamp(min=0)
 
