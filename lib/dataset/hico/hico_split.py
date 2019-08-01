@@ -156,8 +156,8 @@ class HicoHoiSplit(HicoSplit):
     def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, predicate_inds=None):
         super().__init__(split, hico, image_inds, object_inds, predicate_inds)
         labels = self.full_dataset.split_annotations[self.split]
-        pos_examples = np.stack([np.where(labels)], axis=1)
-        neg_examples = np.stack([np.where(labels <= 0)], axis=1)  # no hard negative mining
+        pos_examples = np.stack(np.where(labels), axis=1)
+        neg_examples = np.stack(np.where(labels <= 0), axis=1)  # no hard negative mining
 
         if image_inds is not None:
             image_mask = np.zeros(self.full_dataset.split_annotations[self.split].shape[0], dtype=np.bool)
