@@ -69,6 +69,88 @@ class HicoBaseModel(AbstractModel):
             return output_logits
 
 
+class HicoMultiModel(AbstractModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'hicomulti'
+
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        assert cfg.hico
+        self.dataset = dataset
+
+        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
+        hidden_dim = 1024
+        self.repr_dim = 1024
+
+        self.obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.dropout),
+                                            nn.Linear(hidden_dim, self.repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.obj_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.obj_output_mlp.weight, gain=1.0)
+
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.dropout),
+                                            nn.Linear(hidden_dim, self.repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.act_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_actions, bias=False)
+        torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
+
+        self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.dropout),
+                                            nn.Linear(hidden_dim, self.repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.hoi_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.hoi_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
+        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
+
+    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+
+            feats, labels = x
+            obj_logits, act_logits, hoi_logits = self._forward(feats, labels)
+
+            if not inference:
+                hoi_labels = labels.clamp(min=0)
+                obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
+                act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
+                losses = {'obj_loss': bce_loss(obj_logits, obj_labels),
+                          'act_loss': bce_loss(act_logits, act_labels),
+                          'hoi_loss': bce_loss(hoi_logits, hoi_labels)
+                          }
+                return losses
+            else:
+                prediction = Prediction()
+                interactions = self.dataset.full_dataset.interactions
+                obj_scores = torch.sigmoid(obj_logits).cpu().numpy()
+                act_scores = torch.sigmoid(act_logits).cpu().numpy()
+                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy()
+                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
+                return prediction
+
+    def _forward(self, feats, labels, return_repr=False):
+        obj_repr = self.obj_repr_mlp(feats)
+        obj_logits = self.obj_output_mlp(obj_repr)
+
+        act_repr = self.act_repr_mlp(feats)
+        act_logits = self.act_output_mlp(act_repr)
+
+        hoi_repr = self.hoi_repr_mlp(feats)
+        hoi_logits = self.hoi_output_mlp(hoi_repr)
+        if return_repr:
+            return obj_repr, act_repr, hoi_repr
+        return obj_logits, act_logits, hoi_logits
+
+
 class HicoExtKnowledgeGenericModel(AbstractModel):
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
