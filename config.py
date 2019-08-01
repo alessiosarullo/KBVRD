@@ -123,7 +123,6 @@ class Configs:
         self.img_batch_size = 8  # only used when grouping
         self.batch_size = 64
         self.hoi_bg_ratio = 3
-        self.mlneg = False
 
     @property
     def output_root(self):
