@@ -490,7 +490,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
             similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
-            similar_hois = similar_obj_per_act * similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+            similar_hois = (similar_obj_per_act + similar_acts_per_obj) * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
 
             interactions = self.dataset.full_dataset.interactions  # FIXME should do based on graph instead of oracle
             hoi_labels[:, self.unseen_hoi_inds] = similar_hois[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
