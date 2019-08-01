@@ -63,6 +63,9 @@ class Configs:
         self.dropout = 0.5
         self.repr_dim = 1024
         self.small = False
+        self.osc = 1.0
+        self.asc = 1.0
+        self.hsc = 1.0
 
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss

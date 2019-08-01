@@ -590,20 +590,23 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
 
-        act_emb_sims = self.act_emb_sim.clamp(min=0)
-        if cfg.lis:
-            act_emb_sims = LIS(act_emb_sims, w=18, k=7)
+        obj_labels = interactions_to_objects(labels, hico=self.dataset.full_dataset)
+        obj_emb_sim = self.obj_emb_sim.clamp(min=0)
+        similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
+        similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
+        similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.t().unsqueeze(dim=0).expand(batch_size, -1, -1)
+        obj_labels[:, self.unseen_obj_inds] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_obj_inds]
+        obj_labels = obj_labels.detach()
 
+        act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
+        act_emb_sims = self.act_emb_sim.clamp(min=0)
         similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
         similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+        similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+        act_labels[:, self.unseen_act_inds] = similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
+        act_labels = act_labels.detach()
 
-        if cfg.hico_zsa:
-            similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-            unseen_labels = similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
-        else:
-            interactions = self.dataset.full_dataset.interactions
-            unseen_labels = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
-        return unseen_labels.detach()
+        return obj_labels, act_labels, labels
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -644,9 +647,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             else:
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
-                obj_scores = torch.sigmoid(obj_logits).cpu().numpy()
-                act_scores = torch.sigmoid(act_logits).cpu().numpy()
-                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy()
+                obj_scores = torch.sigmoid(obj_logits).cpu().numpy() ** cfg.osc
+                act_scores = torch.sigmoid(act_logits).cpu().numpy() ** cfg.asc
+                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy() ** cfg.hsc
                 prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
@@ -677,10 +680,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
             act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
             if cfg.softl > 0:
-                if cfg.hico_zsa:
-                    act_labels[:, self.unseen_act_inds] = self.get_soft_labels(labels)
-                else:
-                    hoi_labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
+                obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
         else:
             obj_labels = act_labels = hoi_labels = None
 
@@ -718,74 +718,6 @@ class HicoM(HicoExtZSGCMultiModel):
     @classmethod
     def get_cline_name(cls):
         return 'hicom'
-
-    def _forward(self, feats, labels):
-        obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels)
-
-        if labels is not None:
-            hoi_labels = labels.clamp(min=0)
-            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
-            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
-            if cfg.softl > 0:
-                if cfg.hico_zsa:
-                    act_labels[:, self.unseen_act_inds] = self.get_soft_labels(labels)
-                else:
-                    hoi_labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
-        else:
-            obj_labels = act_labels = hoi_labels = None
-
-        reg_loss = None
-        return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
-
-
-class HicoComp(HicoExtZSGCMultiModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicocomp'
-
-    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-
-            feats, labels = x
-            obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss = self._forward(feats, labels)
-
-            if not inference:
-                obj_labels.clamp_(min=0), act_labels.clamp_(min=0), hoi_labels.clamp_(min=0)
-                if self.zs_enabled:
-                    if cfg.softl > 0:
-                        if cfg.hico_zsa:
-                            losses = {'act_loss': bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
-                                      'act_loss_unseen': cfg.softl * bce_loss(act_logits[:, self.unseen_act_inds],
-                                                                              act_labels[:, self.unseen_act_inds]),
-                                      'hoi_loss': bce_loss(hoi_logits, hoi_labels),
-                                      }
-                        else:
-                            losses = {'act_loss': bce_loss(act_logits, act_labels),
-                                      'hoi_loss': bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
-                                      'hoi_loss_unseen': cfg.softl * bce_loss(hoi_logits[:, self.unseen_hoi_inds],
-                                                                              hoi_labels[:, self.unseen_hoi_inds])
-                                      }
-                        losses['obj_loss'] = bce_loss(obj_logits, obj_labels)
-                    else:
-                        losses = {'obj_loss': cfg.olc * bce_loss(obj_logits[:, self.seen_obj_inds], obj_labels[:, self.seen_obj_inds]),
-                                  'act_loss': cfg.alc * bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
-                                  'hoi_loss': cfg.hlc * bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
-                                  }
-                else:
-                    losses = {'obj_loss': bce_loss(obj_logits, obj_labels),
-                              'act_loss': bce_loss(act_logits, act_labels),
-                              'hoi_loss': bce_loss(hoi_logits, hoi_labels),
-                              }
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-                interactions = self.dataset.full_dataset.interactions
-                obj_scores = torch.sigmoid(obj_logits).cpu().numpy()
-                act_scores = torch.sigmoid(act_logits).cpu().numpy()
-                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]]
-                return prediction
 
     def _forward(self, feats, labels):
         obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels)
