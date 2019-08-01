@@ -468,10 +468,10 @@ class KatoModel(HicoExtKnowledgeGenericModel):
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_repr_dim = 600
+        self.hoi_repr_dim = 512
         vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
-        self.img_repr_mlp = nn.Linear(vis_feat_dim, 512)
+        self.img_repr_mlp = nn.Linear(vis_feat_dim, self.hoi_repr_dim)
 
         gc_dims = (512, 200)
         self.gcn_branch = KatoGCNBranch(dataset, gc_dims=(512, 200))
