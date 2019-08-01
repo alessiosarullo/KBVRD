@@ -105,10 +105,13 @@ class HicoSplit(HoiDatasetSplit):
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        if cfg.filter_bg_only:
-            ds = self if self.non_empty_imgs is None else Subset(self, self.non_empty_imgs)
+        if self.split == Splits.TEST:
+            ds = self
         else:
-            ds = self if self.image_inds is None else Subset(self, self.image_inds)
+            if cfg.filter_bg_only:
+                ds = self if self.non_empty_imgs is None else Subset(self, self.non_empty_imgs)
+            else:
+                ds = self if self.image_inds is None else Subset(self, self.image_inds)
         data_loader = torch.utils.data.DataLoader(
             dataset=ds,
             batch_size=batch_size,
