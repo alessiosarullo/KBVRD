@@ -47,7 +47,7 @@ class HicoBaseModel(AbstractModel):
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
-            if cfg.singlel:
+            if cfg.singlel and not inference:
                 feats, labels, label_mask = x
             else:
                 feats, labels = x
