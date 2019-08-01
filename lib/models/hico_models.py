@@ -379,7 +379,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
             ext_inter_mat += similar_obj_per_act
 
-            similar_obj = (obj_labels @ obj_emb_sim).clamp(max=1)
+            similar_obj = (obj_labels @ obj_emb_sim).clamp(max=1) * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
             ext_inter_mat = torch.max(ext_inter_mat, similar_obj.unsqueeze(dim=2))
 
             obj_labels[:, self.unseen_obj_inds] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_obj_inds]
