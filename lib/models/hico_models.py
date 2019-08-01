@@ -28,7 +28,10 @@ class HicoBaseModel(AbstractModel):
 
         vis_feat_dim = self.dataset.precomputed_visual_feat_dim
         hidden_dim = 1024
-        self.repr_dim = 1024
+        if cfg.small:
+            self.repr_dim = 512
+        else:
+            self.repr_dim = 1024
 
         self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
@@ -389,7 +392,7 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = HicoBaseModel(dataset, **kwargs)
-        self.predictor_dim = 1024
+        self.predictor_dim = self.base_model.repr_dim
 
         gcemb_dim = 1024
         if cfg.puregc:
