@@ -25,7 +25,7 @@ def bce_loss(logits, labels, reduce=True):
             loss[labels == 0] = 0
             if reduce:
                 if not cfg.meanc:
-                    loss /= labels.sum(dim=1, keepdims=True)
+                    loss /= labels.sum(dim=1, keepdim=True)
                 loss = loss.mean()
         else:
             loss = functional.binary_cross_entropy_with_logits(logits, labels, reduction='elementwise_mean' if reduce else 'none')
