@@ -207,7 +207,7 @@ class KatoGCNBranch(AbstractHOIBranch):
         train = True
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=train)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=train)
-        self.z_a = nn.Parameter(torch.zeros(self.num_interactions, self.word_emb_dim), requires_grad=train)
+        self.z_a = nn.Parameter(torch.zeros(num_interactions, self.word_emb_dim), requires_grad=train)
 
         self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i - 1], gc_dims[i]),
                                                       nn.ReLU(inplace=True),
