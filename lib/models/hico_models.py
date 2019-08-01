@@ -472,18 +472,28 @@ class HicoExtZSGCMultiModel(AbstractModel):
         obj_labels = obj_labels.detach()
 
         act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
-        hoi_labels = labels
-        if cfg.zsa or cfg.zsh:
+        if cfg.zsa:
             act_emb_sims = self.act_emb_sim.clamp(min=0)
             similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
             similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
-            if cfg.zsa:
-                feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-                act_labels[:, self.unseen_act_inds] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
-            if cfg.zsh:
-                interactions = self.dataset.full_dataset.interactions
-                hoi_labels[:, self.unseen_hoi_inds] = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
+            feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+            act_labels[:, self.unseen_act_inds] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
         act_labels = act_labels.detach()
+
+        hoi_labels = labels
+        if cfg.zsh:
+            obj_emb_sim = self.obj_emb_sim.clamp(min=0)
+            similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
+            similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
+
+            act_emb_sims = self.act_emb_sim.clamp(min=0)
+            similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
+            similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+
+            similar_hois = similar_obj_per_act * similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+
+            interactions = self.dataset.full_dataset.interactions  # FIXME should do based on graph instead of oracle
+            hoi_labels[:, self.unseen_hoi_inds] = similar_hois[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
         hoi_labels = hoi_labels.detach()
 
         return obj_labels, act_labels, hoi_labels
