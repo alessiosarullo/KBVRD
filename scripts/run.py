@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico.hico_split import HicoSplit, HicoHoiSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
 from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHicoDetSingleHOIsOnehotSplit
@@ -88,8 +88,12 @@ class Launcher:
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.hico:
-            splits = HicoSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
-            self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
+            if cfg.singlel:
+                splits = HicoHoiSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
+                self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
+            else:
+                splits = HicoSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
+                self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
         else:
             if cfg.group:
                 assert not cfg.ohtrain
