@@ -84,6 +84,7 @@ class Configs:
         self.hardlis = False
         self.puregc = False
         self.hoigcn = False
+        self.pos_only = False
 
         # BG specific
         self.filter = False
