@@ -374,7 +374,6 @@ class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = HicoBaseModel(dataset, **kwargs)
-        assert self.zs_enabled and cfg.softl > 0
 
     def _forward(self, feats, labels):
         logits = self.base_model._forward(feats, labels)
@@ -618,19 +617,21 @@ class HicoExtZSGCMultiModel(AbstractModel):
                     if cfg.softl > 0:
                         if cfg.hico_zsa:
                             losses = {'act_loss': bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
-                                      'act_loss_unseen': cfg.softl * bce_loss(act_logits[:, self.unseen_act_inds], act_labels[:, self.unseen_act_inds]),
+                                      'act_loss_unseen': cfg.softl * bce_loss(act_logits[:, self.unseen_act_inds],
+                                                                              act_labels[:, self.unseen_act_inds]),
                                       'hoi_loss': bce_loss(hoi_logits, hoi_labels),
                                       }
                         else:
                             losses = {'act_loss': bce_loss(act_logits, act_labels),
                                       'hoi_loss': bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
-                                      'hoi_loss_unseen': cfg.softl * bce_loss(hoi_logits[:, self.unseen_hoi_inds], hoi_labels[:, self.unseen_hoi_inds])
+                                      'hoi_loss_unseen': cfg.softl * bce_loss(hoi_logits[:, self.unseen_hoi_inds],
+                                                                              hoi_labels[:, self.unseen_hoi_inds])
                                       }
                         losses['obj_loss'] = bce_loss(obj_logits, obj_labels)
                     else:
-                        losses = {'obj_loss': bce_loss(obj_logits[:, self.seen_obj_inds], obj_labels[:, self.seen_obj_inds]),
-                                  'act_loss': bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
-                                  'hoi_loss': bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
+                        losses = {'obj_loss': cfg.olc * bce_loss(obj_logits[:, self.seen_obj_inds], obj_labels[:, self.seen_obj_inds]),
+                                  'act_loss': cfg.alc * bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
+                                  'hoi_loss': cfg.hlc * bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
                                   }
                 else:
                     losses = {'obj_loss': bce_loss(obj_logits, obj_labels),

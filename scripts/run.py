@@ -329,7 +329,7 @@ class Launcher:
 
                 unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
                 print('Zero-shot:')
-                zs_metrics = evaluator.output_metrics(interactions_to_keep= sorted(unseen_interactions))
+                zs_metrics = evaluator.output_metrics(interactions_to_keep=sorted(unseen_interactions))
                 zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
             else:
                 print('Trained on:')

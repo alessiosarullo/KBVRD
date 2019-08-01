@@ -67,6 +67,9 @@ class Configs:
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss
         self.meanc = False  # mean or sum over classes for BCE loss?
+        self.olc = 1.0
+        self.alc = 1.0
+        self.hlc = 1.0
 
         # HICO specific
         self.hico_lhard = False
