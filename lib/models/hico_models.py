@@ -369,6 +369,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         labels = labels.clamp(min=0)
 
         inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
+        ext_inter_mat = inter_mat
 
         obj_labels = interactions_to_objects(labels, hico=self.dataset.full_dataset)
         if cfg.zso:
@@ -376,14 +377,15 @@ class HicoExtZSGCMultiModel(AbstractModel):
             similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
             similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
             similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+            ext_inter_mat += similar_obj_per_act
             obj_labels[:, self.unseen_obj_inds] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_obj_inds]
         obj_labels = obj_labels.detach()
 
         act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
         if cfg.zsa:
             act_emb_sims = self.act_emb_sim.clamp(min=0)
-            similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
-            similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+            similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
+            similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
             feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
             act_labels[:, self.unseen_act_inds] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
         act_labels = act_labels.detach()
@@ -391,12 +393,12 @@ class HicoExtZSGCMultiModel(AbstractModel):
         hoi_labels = labels
         if cfg.zsh:
             obj_emb_sim = self.obj_emb_sim.clamp(min=0)
-            similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
-            similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
+            similar_obj_per_act = torch.bmm(ext_inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
+            similar_obj_per_act = similar_obj_per_act / ext_inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
 
             act_emb_sims = self.act_emb_sim.clamp(min=0)
-            similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
-            similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+            similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
+            similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
             similar_hois = (similar_obj_per_act + similar_acts_per_obj) * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
 
