@@ -340,32 +340,6 @@ class HicoExtKnowledgeMultiGenericModel(AbstractModel):
                 return prediction
 
 
-class HicoZSMultiModel(HicoExtKnowledgeMultiGenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicozsm'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.base_model = HicoMultiModel(dataset, **kwargs)
-        assert self.zs_enabled and cfg.softl > 0
-
-    def _forward(self, feats, labels):
-        obj_logits, act_logits, hoi_logits = self.base_model._forward(feats, labels)
-        if labels is not None:
-            hoi_labels = labels.clamp(min=0)
-            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
-            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
-            if cfg.hico_zsa:
-                act_labels[:, self.unseen_act_inds] = self.get_soft_labels(labels)
-            else:
-                hoi_labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
-        else:
-            obj_labels = act_labels = hoi_labels = None
-        reg_loss = None
-        return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
-
-
 class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
@@ -380,110 +354,6 @@ class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
         if labels is not None:
             labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
         reg_loss = None
-        return logits, labels, reg_loss
-
-
-class HicoZSGCModel(HicoExtKnowledgeGenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicozsgc'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.base_model = HicoBaseModel(dataset, **kwargs)
-        self.predictor_dim = self.base_model.repr_dim
-
-        if cfg.small:
-            gcemb_dim = 600
-        else:
-            gcemb_dim = 1024
-
-        if cfg.puregc:
-            gc_dims = (gcemb_dim, self.predictor_dim)
-        else:
-            latent_dim = 200
-            input_dim = self.predictor_dim
-            if cfg.small:
-                self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 300),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(300, 400),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(400, input_dim),
-                                                      )
-            else:
-                self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(600, 800),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(800, input_dim),
-                                                      )
-            gc_dims = (gcemb_dim // 2, latent_dim)
-
-        if cfg.hoigcn:
-            self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
-        else:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
-
-        if cfg.greg > 0:
-            inter_nv_adj = np.zeros((self.dataset.full_dataset.num_interactions,
-                                     self.dataset.full_dataset.num_object_classes + self.dataset.full_dataset.num_actions))
-            interactions = self.dataset.full_dataset.interactions
-            inter_nv_adj[np.arange(interactions.shape[0]), interactions[:, 0]] = 1
-            inter_nv_adj[np.arange(interactions.shape[0]), interactions[:, 1]] = 1
-            self.inter_adj = nn.Parameter(torch.from_numpy(inter_nv_adj @ inter_nv_adj.T).clamp(max=1).byte(), requires_grad=False)
-            assert (self.inter_adj.diag()[1:] == 1).all()
-
-    def _forward(self, feats, labels):
-        vrepr = self.base_model._forward(feats, labels, return_repr=True)
-
-        hico = self.dataset.full_dataset
-        if cfg.hoigcn:
-            hoi_class_embs, _, _ = self.gcn()
-        else:
-            obj_class_embs, act_class_embs = self.gcn()  # P x E
-            hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
-
-        if not cfg.puregc:
-            hoi_predictors = self.emb_to_predictor(hoi_class_embs)  # P x D
-        else:
-            hoi_predictors = hoi_class_embs
-        logits = vrepr @ hoi_predictors.t()
-
-        if labels is not None and self.zs_enabled:
-            if cfg.softl > 0:
-                labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
-
-        reg_loss = None
-        if cfg.greg > 0:
-            hoi_predictors_norm = F.normalize(hoi_predictors, dim=1)
-            hoi_predictors_sim = hoi_predictors_norm @ hoi_predictors_norm.t()
-            arange = torch.arange(hoi_predictors_sim.shape[0])
-
-            # Done with argmin/argmax because using min/max directly resulted in NaNs.
-            neigh_mask = torch.full_like(hoi_predictors_sim, np.inf)
-            neigh_mask[self.inter_adj] = 1
-            argmin_neigh_sim = (hoi_predictors_sim * neigh_mask.detach()).argmin(dim=1)
-            min_neigh_sim = hoi_predictors_sim[arange, argmin_neigh_sim]
-
-            non_neigh_mask = torch.full_like(hoi_predictors_sim, -np.inf)
-            non_neigh_mask[~self.inter_adj] = 1
-            argmax_non_neigh_sim = (hoi_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-            max_non_neigh_sim = hoi_predictors_sim[arange, argmax_non_neigh_sim]
-
-            # Exclude null interaction
-            min_neigh_sim = min_neigh_sim[1:]
-            max_non_neigh_sim = max_non_neigh_sim[1:]
-
-            assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-            assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
-
-            reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
-            reg_loss = cfg.greg * reg_loss.mean()
-
         return logits, labels, reg_loss
 
 
@@ -597,23 +467,26 @@ class HicoExtZSGCMultiModel(AbstractModel):
             obj_emb_sim = self.obj_emb_sim.clamp(min=0)
             similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
             similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
-            similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.t().unsqueeze(dim=0).expand(batch_size, -1, -1)
+            similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
             obj_labels[:, self.unseen_obj_inds] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_obj_inds]
         obj_labels = obj_labels.detach()
 
         act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
-        if cfg.zsa:
+        hoi_labels = labels
+        if cfg.zsa or cfg.zsh:
             act_emb_sims = self.act_emb_sim.clamp(min=0)
             similar_acts_per_obj = torch.bmm(inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
             similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
-            similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-            act_labels[:, self.unseen_act_inds] = similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
+            if cfg.zsa:
+                feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
+                act_labels[:, self.unseen_act_inds] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
+            if cfg.zsh:
+                interactions = self.dataset.full_dataset.interactions
+                hoi_labels[:, self.unseen_hoi_inds] = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
         act_labels = act_labels.detach()
+        hoi_labels = hoi_labels.detach()
 
-        if cfg.zsh:
-            raise NotImplementedError
-
-        return obj_labels, act_labels, labels
+        return obj_labels, act_labels, hoi_labels
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
