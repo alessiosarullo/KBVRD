@@ -714,6 +714,30 @@ class HicoExtZSGCMultiModel(AbstractModel):
         return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
 
 
+class HicoM(HicoExtZSGCMultiModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'hicom'
+
+    def _forward(self, feats, labels):
+        obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels)
+
+        if labels is not None:
+            hoi_labels = labels.clamp(min=0)
+            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
+            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
+            if cfg.softl > 0:
+                if cfg.hico_zsa:
+                    act_labels[:, self.unseen_act_inds] = self.get_soft_labels(labels)
+                else:
+                    hoi_labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
+        else:
+            obj_labels = act_labels = hoi_labels = None
+
+        reg_loss = None
+        return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
+
+
 class KatoModel(HicoExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
