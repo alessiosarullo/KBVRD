@@ -211,7 +211,10 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
             inter_mat = inter_mat + (1 - inter_mat) * possible_interactions_by_obj
 
         similar_acts_per_obj = torch.bmm(inter_mat, self.act_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(batch_size, -1, -1))
-        similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
+        if cfg.slnoavg:
+            similar_acts_per_obj = similar_acts_per_obj.clamp(max=1)
+        else:
+            similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
         if cfg.lis:
             similar_acts_per_obj = LIS(similar_acts_per_obj, w=18, k=7)
