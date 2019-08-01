@@ -204,8 +204,10 @@ class KatoGCNBranch(AbstractHOIBranch):
         obj_word_embs = self.word_embs.get_embeddings(full_dataset.objects, retry='avg')
         pred_word_embs = self.word_embs.get_embeddings(full_dataset.predicates, retry='avg')
 
-        self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=False)
-        self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
+        train = True
+        self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=train)
+        self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=train)
+        self.z_a = nn.Parameter(torch.zeros(self.num_interactions, self.word_emb_dim), requires_grad=train)
 
         self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i - 1], gc_dims[i]),
                                                       nn.ReLU(inplace=True),
@@ -213,20 +215,12 @@ class KatoGCNBranch(AbstractHOIBranch):
                                         for i in range(len(gc_dims))])
 
     def _forward(self):
-        prev_z_n = self.z_n
-        prev_z_v = self.z_v
-        # z_a is 0
-
-        # First layer is different for computational efficiency (z_a is 0)
-        z_n = self.gc_layers[0](self.adj_nn @ prev_z_n)
-        z_v = self.gc_layers[0](self.adj_vv @ prev_z_v)
-        z_a = self.gc_layers[0](self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
-        prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
-        for i in range(1, len(self.gc_layers)):
-            if i < len(self.gc_layers) - 1:
-                z_n = self.gc_layers[i](self.adj_nn @ prev_z_n + self.adj_an.t() @ prev_z_a)
-                z_v = self.gc_layers[i](self.adj_vv @ prev_z_v + self.adj_av.t() @ prev_z_a)
-            z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
+        z_n = self.z_n
+        z_v = self.z_v
+        z_a = self.z_a
+        for i in range(len(self.gc_layers)):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
-
+            z_n = self.gc_layers[i](prev_z_n + self.adj_an.t() @ prev_z_a)
+            z_v = self.gc_layers[i](prev_z_v + self.adj_av.t() @ prev_z_a)
+            z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
         return z_a, z_v, z_n
