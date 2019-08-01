@@ -86,6 +86,7 @@ class Configs:
         self.slnoavg = False
         self.nullzs = False
         self.lis = False
+        self.hardlis = False
 
         # ZS GCN specific
         self.greg = 0.0

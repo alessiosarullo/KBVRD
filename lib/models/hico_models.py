@@ -220,7 +220,11 @@ class HicoExtKnowledgeGenericModel(AbstractModel):
             similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
 
         if cfg.lis:
-            similar_acts_per_obj = LIS(similar_acts_per_obj, w=18, k=7)
+            if cfg.hardlis:
+                w, k = 30, 18
+            else:
+                w, k = 18, 7
+            similar_acts_per_obj = LIS(similar_acts_per_obj, w=w, k=k)
 
         interactions = self.dataset.full_dataset.interactions
         unseen_labels = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
