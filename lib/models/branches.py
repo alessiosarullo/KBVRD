@@ -177,18 +177,19 @@ class KatoGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         self.word_emb_dim = 200
 
-        interactions = dataset.full_dataset.interactions  # each is [p, o]
+        full_dataset = dataset.full_dataset
+        interactions = full_dataset.interactions  # each is [p, o]
         num_interactions = interactions.shape[0]
         assert num_interactions == 600
-        interactions_to_obj = np.zeros((num_interactions, dataset.full_dataset.num_object_classes))
+        interactions_to_obj = np.zeros((num_interactions, full_dataset.num_object_classes))
         interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-        interactions_to_preds = np.zeros((num_interactions, dataset.full_dataset.num_actions))
+        interactions_to_preds = np.zeros((num_interactions, full_dataset.num_actions))
         interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
 
         adj_av = torch.from_numpy(interactions_to_preds).float()
         adj_an = torch.from_numpy(interactions_to_obj).float()
-        adj_nn = torch.eye(dataset.num_object_classes).float()
-        adj_vv = torch.eye(dataset.num_actions).float()
+        adj_nn = torch.eye(full_dataset.num_object_classes).float()
+        adj_vv = torch.eye(full_dataset.num_actions).float()
 
         # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
         # this, but the paper is not clear at all.
@@ -200,8 +201,8 @@ class KatoGCNBranch(AbstractHOIBranch):
                                    requires_grad=False)
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=True)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.objects, retry='avg')
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates, retry='avg')
+        obj_word_embs = self.word_embs.get_embeddings(full_dataset.objects, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(full_dataset.predicates, retry='avg')
 
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=False)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=False)
