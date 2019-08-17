@@ -81,7 +81,7 @@ class Configs:
         self.alc = 1.0
         self.hlc = 1.0
         self.slnoavg = False
-        self.hardlis = False
+        self.sloo = False  # use object-only bias as well
         self.puregc = False
         self.hoigcn = False
 
