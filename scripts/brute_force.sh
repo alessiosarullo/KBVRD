@@ -26,5 +26,5 @@ do
   mkdir -p ${EXP_DIR}
   echo Logging ${EXP_DIR} to "$LOG"
 
-  python -u scripts/run.py --model ${NET} --save_dir ${EXP_FULL_NAME} "${@:6}" > ${LOG} 2>&1
+  python -u scripts/run.py --model ${NET} --save_dir ${EXP_FULL_NAME} --seenf ${IDX} "${@:6}" > ${LOG} 2>&1
 done
