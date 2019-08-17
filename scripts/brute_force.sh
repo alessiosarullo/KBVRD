@@ -14,7 +14,7 @@ END=$5
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 OUTPUT_DIR="output/${NET}"
 
-for IDX in ${START} .. ${END}
+for IDX in `seq ${START} ${END}`
 do
   python -u tools/create_hico_zs_split.py ${IDX}
 
