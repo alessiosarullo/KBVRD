@@ -10,7 +10,7 @@ from lib.dataset.hico.hico import Hico
 def main():
     print(sys.argv)
     parser = argparse.ArgumentParser()
-    parser.add_argument('idx')
+    parser.add_argument('idx', type=int)
     args = parser.parse_args()
     idx = args.idx
 
