@@ -163,7 +163,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         nn.init.xavier_normal_(self.repr_mlps['obj'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['obj'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
         self.output_mlps['obj'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_object_classes))
-        torch.nn.init.xavier_normal_(self.output_mlps['obj'].weight, gain=1.0)
+        torch.nn.init.xavier_normal_(self.output_mlps['obj'], gain=1.0)
 
         self.repr_mlps['act'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
@@ -173,7 +173,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         nn.init.xavier_normal_(self.repr_mlps['act'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['act'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
         self.output_mlps['act'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_actions))
-        torch.nn.init.xavier_normal_(self.output_mlps['act'].weight, gain=1.0)
+        torch.nn.init.xavier_normal_(self.output_mlps['act'], gain=1.0)
 
         self.repr_mlps['hoi'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
@@ -183,7 +183,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         nn.init.xavier_normal_(self.repr_mlps['hoi'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['hoi'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
         self.output_mlps['hoi'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_interactions))
-        torch.nn.init.xavier_normal_(self.output_mlps['hoi'].weight, gain=1.0)
+        torch.nn.init.xavier_normal_(self.output_mlps['hoi'], gain=1.0)
 
         if cfg.gc:
             gcemb_dim = 1024
@@ -371,9 +371,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.greg > 0:
                 reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         else:
-            obj_predictor = self.output_mlps['obj'].weight
-            act_predictor = self.output_mlps['act'].weight
-            hoi_predictor = self.output_mlps['hoi'].weight
+            obj_predictor = self.output_mlps['obj']
+            act_predictor = self.output_mlps['act']
+            hoi_predictor = self.output_mlps['hoi']
             obj_logits = obj_repr @ obj_predictor.t()
             act_logits = act_repr @ act_predictor.t()
             hoi_logits = hoi_repr @ hoi_predictor.t()
