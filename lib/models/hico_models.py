@@ -107,6 +107,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         super().__init__(dataset, **kwargs)
         assert cfg.hico
         self.dataset = dataset
+        self.repr_dim = 1024
 
         # Object-action (or noun-verb) adjacency matrix
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
@@ -149,58 +150,29 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
         # Base model
-        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
-        hidden_dim = 1024
-        self.repr_dim = 1024
-
         self.repr_mlps = nn.ModuleDict()
-        self.output_mlps = nn.ParameterDict()
-        self.repr_mlps['obj'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+        for k in ['obj', 'act', 'hoi']:
+            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(hidden_dim, self.repr_dim),
+                                                nn.Linear(1024, self.repr_dim),
                                                 ])
-        nn.init.xavier_normal_(self.repr_mlps['obj'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.repr_mlps['obj'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['obj'] = nn.Parameter(torch.empty(dataset.full_dataset.num_object_classes, self.repr_dim))
-        torch.nn.init.xavier_normal_(self.output_mlps['obj'], gain=1.0)
+            nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.repr_mlps['act'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(hidden_dim, self.repr_dim),
-                                                ])
-        nn.init.xavier_normal_(self.repr_mlps['act'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.repr_mlps['act'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['act'] = nn.Parameter(torch.empty(dataset.full_dataset.num_actions, self.repr_dim))
-        torch.nn.init.xavier_normal_(self.output_mlps['act'], gain=1.0)
-
-        self.repr_mlps['hoi'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(hidden_dim, self.repr_dim),
-                                                ])
-        nn.init.xavier_normal_(self.repr_mlps['hoi'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.repr_mlps['hoi'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['hoi'] = nn.Parameter(torch.empty(dataset.full_dataset.num_interactions, self.repr_dim))
-        torch.nn.init.xavier_normal_(self.output_mlps['hoi'], gain=1.0)
-
+        # Predictors
         if cfg.gc:
             gcemb_dim = 1024
-
-            if cfg.puregc:
-                gc_dims = (gcemb_dim, self.repr_dim)
-            else:
-                latent_dim = 200
-                self.predictor_mlps = {k: nn.Sequential(nn.Linear(latent_dim, 600),
-                                                        nn.ReLU(inplace=True),
-                                                        nn.Dropout(p=cfg.dropout),
-                                                        nn.Linear(600, 800),
-                                                        nn.ReLU(inplace=True),
-                                                        nn.Dropout(p=cfg.dropout),
-                                                        nn.Linear(800, self.repr_dim),
-                                                        ) for k in ['obj', 'act', 'hoi']}
-                gc_dims = (gcemb_dim // 2, latent_dim)
+            latent_dim = 200
+            self.predictor_mlps = {k: nn.Sequential(nn.Linear(latent_dim, 600),
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Dropout(p=cfg.dropout),
+                                                    nn.Linear(600, 800),
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Dropout(p=cfg.dropout),
+                                                    nn.Linear(800, self.repr_dim),
+                                                    ) for k in ['obj', 'act', 'hoi']}
+            gc_dims = (gcemb_dim // 2, latent_dim)
 
             if cfg.hoigcn:
                 self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
@@ -215,6 +187,14 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 inter_nv_adj[np.arange(interactions.shape[0]), interactions[:, 1]] = 1
                 self.inter_adj = nn.Parameter(torch.from_numpy(inter_nv_adj @ inter_nv_adj.T).clamp(max=1).byte(), requires_grad=False)
                 assert (self.inter_adj.diag()[1:] == 1).all()
+        else:
+            # Linear predictors (AKA, single FC layer)
+            self.output_mlps = nn.ParameterDict()
+            for k, d in [('obj', dataset.full_dataset.num_object_classes),
+                         ('act', dataset.full_dataset.num_actions),
+                         ('hoi', dataset.full_dataset.num_interactions)]:
+                self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim))
+                torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
 
     def get_soft_labels(self, labels):
         assert cfg.zso or cfg.zsa or cfg.zsh
@@ -297,8 +277,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
-            feats, labels = x
-            obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss = self._forward(feats, labels)
+            feats, orig_labels = x
+            logits, labels, reg_loss = self._forward(feats, orig_labels)
+            obj_logits, act_logits, hoi_logits = logits['obj'], logits['act'], logits['hoi']
+            obj_labels, act_labels, hoi_labels = labels['obj'], labels['act'], labels['hoi']
 
             if not inference:
                 obj_labels.clamp_(min=0), act_labels.clamp_(min=0), hoi_labels.clamp_(min=0)
@@ -344,11 +326,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
         else:
             obj_labels = act_labels = hoi_labels = None
-
-        # Representations
-        obj_repr = self.repr_mlps['obj'](feats)
-        act_repr = self.repr_mlps['act'](feats)
-        hoi_repr = self.repr_mlps['hoi'](feats)
+        labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
 
         # Predictors
         if cfg.gc:
@@ -358,31 +336,20 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 hico = self.dataset.full_dataset
                 obj_class_embs, act_class_embs = self.gcn()  # P x E
                 hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
-
-            if not cfg.puregc:
-                obj_predictors = self.predictor_mlps['obj'](obj_class_embs)  # P x D
-                act_predictors = self.predictor_mlps['act'](act_class_embs)  # P x D
-                hoi_predictors = self.predictor_mlps['hoi'](hoi_class_embs)  # P x D
-            else:
-                obj_predictors = obj_class_embs
-                act_predictors = act_class_embs
-                hoi_predictors = hoi_class_embs
+            class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
+            predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
         else:
-            obj_predictors = self.output_mlps['obj']
-            act_predictors = self.output_mlps['act']
-            hoi_predictors = self.output_mlps['hoi']
+            predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
 
         # Final output
-        obj_logits = obj_repr @ obj_predictors.t()
-        act_logits = act_repr @ act_predictors.t()
-        hoi_logits = hoi_repr @ hoi_predictors.t()
+        logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
 
         # Regularisation
         reg_loss = None
         if cfg.greg > 0:
             assert cfg.gc
-            reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
-        return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
+            reg_loss = cfg.greg * self.get_reg_loss(predictors['hoi'], self.inter_adj)
+        return logits, labels, reg_loss
 
 
 class KatoModel(AbstractModel):
