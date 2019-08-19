@@ -153,8 +153,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
         hidden_dim = 1024
         self.repr_dim = 1024
 
-        self.repr_mlps = {}
-        self.output_mlps = {}
+        self.repr_mlps = nn.ModuleDict()
+        self.output_mlps = nn.ModuleDict()
         self.repr_mlps['obj'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
