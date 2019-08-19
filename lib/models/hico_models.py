@@ -162,7 +162,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['obj'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['obj'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['obj'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_object_classes))
+        self.output_mlps['obj'] = nn.Parameter(torch.empty(dataset.full_dataset.num_object_classes, self.repr_dim))
         torch.nn.init.xavier_normal_(self.output_mlps['obj'], gain=1.0)
 
         self.repr_mlps['act'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
@@ -172,7 +172,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['act'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['act'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['act'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_actions))
+        self.output_mlps['act'] = nn.Parameter(torch.empty(dataset.full_dataset.num_actions, self.repr_dim))
         torch.nn.init.xavier_normal_(self.output_mlps['act'], gain=1.0)
 
         self.repr_mlps['hoi'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
@@ -182,7 +182,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['hoi'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['hoi'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['hoi'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_interactions))
+        self.output_mlps['hoi'] = nn.Parameter(torch.empty(dataset.full_dataset.num_interactions, self.repr_dim))
         torch.nn.init.xavier_normal_(self.output_mlps['hoi'], gain=1.0)
 
         if cfg.gc:
@@ -335,6 +335,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 return prediction
 
     def _forward(self, feats, labels):
+        # Labels
         if labels is not None:
             hoi_labels = labels.clamp(min=0)
             obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
@@ -344,10 +345,12 @@ class HicoExtZSGCMultiModel(AbstractModel):
         else:
             obj_labels = act_labels = hoi_labels = None
 
-        reg_loss = None
+        # Representations
         obj_repr = self.repr_mlps['obj'](feats)
         act_repr = self.repr_mlps['act'](feats)
         hoi_repr = self.repr_mlps['hoi'](feats)
+
+        # Predictors
         if cfg.gc:
             if cfg.hoigcn:
                 hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
@@ -364,19 +367,21 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 obj_predictors = obj_class_embs
                 act_predictors = act_class_embs
                 hoi_predictors = hoi_class_embs
-            obj_logits = obj_repr @ obj_predictors.t()
-            act_logits = act_repr @ act_predictors.t()
-            hoi_logits = hoi_repr @ hoi_predictors.t()
-
-            if cfg.greg > 0:
-                reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         else:
-            obj_predictor = self.output_mlps['obj'].t()
-            act_predictor = self.output_mlps['act'].t()
-            hoi_predictor = self.output_mlps['hoi'].t()
-            obj_logits = obj_repr @ obj_predictor.t()
-            act_logits = act_repr @ act_predictor.t()
-            hoi_logits = hoi_repr @ hoi_predictor.t()
+            obj_predictors = self.output_mlps['obj']
+            act_predictors = self.output_mlps['act']
+            hoi_predictors = self.output_mlps['hoi']
+
+        # Final output
+        obj_logits = obj_repr @ obj_predictors.t()
+        act_logits = act_repr @ act_predictors.t()
+        hoi_logits = hoi_repr @ hoi_predictors.t()
+
+        # Regularisation
+        reg_loss = None
+        if cfg.greg > 0:
+            assert cfg.gc
+            reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
 
 
