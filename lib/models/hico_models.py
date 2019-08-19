@@ -371,9 +371,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.greg > 0:
                 reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         else:
-            obj_predictor = self.output_mlps['obj']
-            act_predictor = self.output_mlps['act']
-            hoi_predictor = self.output_mlps['hoi']
+            obj_predictor = self.output_mlps['obj'].t()
+            act_predictor = self.output_mlps['act'].t()
+            hoi_predictor = self.output_mlps['hoi'].t()
             obj_logits = obj_repr @ obj_predictor.t()
             act_logits = act_repr @ act_predictor.t()
             hoi_logits = hoi_repr @ hoi_predictor.t()
