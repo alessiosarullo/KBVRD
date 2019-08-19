@@ -262,7 +262,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_losses = {}
         for k in ['obj', 'act', 'hoi']:
             if self.reg_coeffs[k] > 0:
-                reg_losses = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj_pos[k], self.adj_neg[k])
+                reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj_pos[k], self.adj_neg[k])
         return logits, labels, reg_losses
 
 
