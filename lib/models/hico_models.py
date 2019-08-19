@@ -521,9 +521,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             obj_predictor = self.multi_model.obj_output_mlp.weight
             act_predictor = self.multi_model.act_output_mlp.weight
             hoi_predictor = self.multi_model.hoi_output_mlp.weight
-            obj_logits = obj_repr @ obj_predictor
-            act_logits = act_repr @ act_predictor
-            hoi_logits = hoi_repr @ hoi_predictor
+            obj_logits = obj_repr @ obj_predictor.t()
+            act_logits = act_repr @ act_predictor.t()
+            hoi_logits = hoi_repr @ hoi_predictor.t()
         return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
 
 
