@@ -41,7 +41,7 @@ class HicoEvaluator(BaseEvaluator):
 
         Timer.get('Eval epoch').toc()
 
-    def output_metrics(self, sort=False, interactions_to_keep=None, actions_to_keep=None):
+    def output_metrics(self, sort=False, interactions_to_keep=None, actions_to_keep=None, no_print=False):
         mf = MetricFormatter()
 
         if interactions_to_keep is None and actions_to_keep is not None:
@@ -49,7 +49,7 @@ class HicoEvaluator(BaseEvaluator):
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
             interaction_mask = act_mask[self.full_dataset.interactions[:, 0]]
             interactions_to_keep = sorted(np.flatnonzero(interaction_mask).tolist())
-        metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
+        metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep, no_print=no_print)
 
         # Same, but with null interaction filtered
         actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_actions)) - {0})
@@ -62,19 +62,20 @@ class HicoEvaluator(BaseEvaluator):
             interaction_mask = np.zeros(self.full_dataset.num_interactions, dtype=bool)
             interaction_mask[np.array(interactions_to_keep).astype(np.int)] = True
             interactions_to_keep = sorted(np.flatnonzero(no_null_interaction_mask & interaction_mask).tolist())
-        pos_metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
+        pos_metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep, no_print=no_print)
 
         for k, v in pos_metrics.items():
             assert k in metrics.keys()
             metrics[f'p{k}'] = v
         return metrics
 
-    def _output_metrics(self, mf: MetricFormatter, sort=False, interactions_to_keep=None):
+    def _output_metrics(self, mf: MetricFormatter, sort, interactions_to_keep, no_print):
         gt_labels_vec = np.where(self.gt_scores)[1]
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = sort_and_filter(metrics=self.metrics,
                                                                          gt_labels=gt_labels_vec,
                                                                          all_classes=list(range(self.full_dataset.num_interactions)),
                                                                          sort=sort,
                                                                          keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+        if not no_print:
+            mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
         return hoi_metrics

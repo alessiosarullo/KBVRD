@@ -281,25 +281,29 @@ class Configs:
             pickle.dump(vars(self), f)
 
     def load(self, file_path=None):
-        file_path = file_path or self.config_file
-        with open(file_path, 'rb') as f:
+        cfg_file_path = file_path or self.config_file
+        with open(cfg_file_path, 'rb') as f:
             d = pickle.load(f)
 
-        # Save options that should not be loaded
-        output_path = self.output_path
-        save_dir = self.save_dir
-        resume = self.resume
-        num_epochs = self.num_epochs
+        if file_path is None:
+            # Save options that should not be loaded
+            output_path = self.output_path
+            save_dir = self.save_dir
+            resume = self.resume
+            num_epochs = self.num_epochs
 
-        # Load
-        self.__dict__.update(d)
+            # Load
+            self.__dict__.update(d)
 
-        # Restore
-        self.save_dir = save_dir
-        self.resume = resume
-        assert self.output_path.rstrip('/') == output_path.rstrip('/'), (self.output_path, output_path)
-        if resume:
-            self.num_epochs += num_epochs
+            # Restore
+            self.save_dir = save_dir
+            self.resume = resume
+            assert self.output_path.rstrip('/') == output_path.rstrip('/'), (self.output_path, output_path)
+            if resume:
+                self.num_epochs += num_epochs
+        else:
+            self.__dict__.update(d)
+            self.resume = False
 
     def print(self):
         print(str(self), '\n')
