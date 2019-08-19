@@ -414,6 +414,33 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         return obj_labels, act_labels, hoi_labels
 
+    def get_reg_loss(self, predictors, adj_mat):
+        predictors_norm = F.normalize(predictors, dim=1)
+        predictors_sim = predictors_norm @ predictors_norm.t()
+        arange = torch.arange(predictors_sim.shape[0])
+
+        # Done with argmin/argmax because using min/max directly resulted in NaNs.
+        neigh_mask = torch.full_like(predictors_sim, np.inf)
+        neigh_mask[adj_mat] = 1
+        argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
+        min_neigh_sim = predictors_sim[arange, argmin_neigh_sim]
+
+        non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
+        non_neigh_mask[~adj_mat] = 1
+        argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
+        max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim]
+
+        # Exclude null interaction
+        min_neigh_sim = min_neigh_sim[1:]
+        max_non_neigh_sim = max_non_neigh_sim[1:]
+
+        assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
+        assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
+
+        reg_loss_mat = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
+        reg_loss = reg_loss_mat.mean()
+        return reg_loss
+
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
@@ -487,32 +514,16 @@ class HicoExtZSGCMultiModel(AbstractModel):
             hoi_logits = hoi_repr @ hoi_predictors.t()
 
             if cfg.greg > 0:
-                hoi_predictors_norm = F.normalize(hoi_predictors, dim=1)
-                hoi_predictors_sim = hoi_predictors_norm @ hoi_predictors_norm.t()
-                arange = torch.arange(hoi_predictors_sim.shape[0])
-
-                # Done with argmin/argmax because using min/max directly resulted in NaNs.
-                neigh_mask = torch.full_like(hoi_predictors_sim, np.inf)
-                neigh_mask[self.inter_adj] = 1
-                argmin_neigh_sim = (hoi_predictors_sim * neigh_mask.detach()).argmin(dim=1)
-                min_neigh_sim = hoi_predictors_sim[arange, argmin_neigh_sim]
-
-                non_neigh_mask = torch.full_like(hoi_predictors_sim, -np.inf)
-                non_neigh_mask[~self.inter_adj] = 1
-                argmax_non_neigh_sim = (hoi_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-                max_non_neigh_sim = hoi_predictors_sim[arange, argmax_non_neigh_sim]
-
-                # Exclude null interaction
-                min_neigh_sim = min_neigh_sim[1:]
-                max_non_neigh_sim = max_non_neigh_sim[1:]
-
-                assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-                assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
-
-                reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
-                reg_loss = cfg.greg * reg_loss.mean()
+                reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         else:
-            obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels, return_repr=False)
+            # obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels, return_repr=False)
+            obj_repr, act_repr, hoi_repr = self.multi_model._forward(feats, labels, return_repr=True)
+            obj_predictor = self.multi_model.obj_output_mlp.weight
+            act_predictor = self.multi_model.act_output_mlp.weight
+            hoi_predictor = self.multi_model.hoi_output_mlp.weight
+            obj_logits = obj_repr @ obj_predictor
+            act_logits = act_repr @ act_predictor
+            hoi_logits = hoi_repr @ hoi_predictor
         return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
 
 

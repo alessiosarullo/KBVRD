@@ -70,10 +70,10 @@ class Configs:
 
         # HICO specific
         self.hico_lhard = False
+        self.gc = False
         self.zso = False
         self.zsa = False
         self.zsh = False
-        self.gc = False
         self.osc = 1.0
         self.asc = 1.0
         self.hsc = 1.0
