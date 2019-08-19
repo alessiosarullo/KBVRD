@@ -112,6 +112,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
 
         # Regularisation
+        self.adj_pos = nn.ParameterDict()
+        self.adj_neg = nn.ParameterDict()
         if self.reg_coeffs['obj'] > 0:
             self.adj_pos['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
             self.adj_neg['obj'] = nn.Parameter(~self.adj_pos['obj'], requires_grad=False)
