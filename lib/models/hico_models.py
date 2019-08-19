@@ -154,7 +154,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         self.repr_dim = 1024
 
         self.repr_mlps = nn.ModuleDict()
-        self.output_mlps = nn.ModuleDict()
+        self.output_mlps = nn.ParameterDict()
         self.repr_mlps['obj'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
@@ -162,7 +162,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['obj'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['obj'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['obj'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
+        self.output_mlps['obj'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_object_classes))
         torch.nn.init.xavier_normal_(self.output_mlps['obj'].weight, gain=1.0)
 
         self.repr_mlps['act'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
@@ -172,7 +172,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['act'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['act'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['act'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_actions, bias=False)
+        self.output_mlps['act'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_actions))
         torch.nn.init.xavier_normal_(self.output_mlps['act'].weight, gain=1.0)
 
         self.repr_mlps['hoi'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
@@ -182,7 +182,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 ])
         nn.init.xavier_normal_(self.repr_mlps['hoi'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.repr_mlps['hoi'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.output_mlps['hoi'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
+        self.output_mlps['hoi'] = nn.Parameter(torch.empty(self.repr_dim, dataset.full_dataset.num_interactions))
         torch.nn.init.xavier_normal_(self.output_mlps['hoi'].weight, gain=1.0)
 
         if cfg.gc:
