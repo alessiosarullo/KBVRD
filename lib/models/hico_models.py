@@ -108,8 +108,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
         assert cfg.hico
         self.dataset = dataset
 
+        # Object-action (or noun-verb) adjacency matrix
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
 
+        # Word embeddings + similarity matrices
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
         act_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
@@ -119,6 +121,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
         self.act_obj_emb_sim = nn.Parameter(self.act_word_embs @ self.obj_word_embs.t(), requires_grad=False)
 
+        # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)
         self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
@@ -145,41 +148,58 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.softl:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
-        self.multi_model = HicoMultiModel(dataset, **kwargs)
-        self.predictor_dim = self.multi_model.repr_dim
+        # Base model
+        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
+        hidden_dim = 1024
+        self.repr_dim = 1024
+
+        self.repr_mlps = {}
+        self.output_mlps = {}
+        self.repr_mlps['obj'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(hidden_dim, self.repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.repr_mlps['obj'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.repr_mlps['obj'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.output_mlps['obj'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlps['obj'].weight, gain=1.0)
+
+        self.repr_mlps['act'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(hidden_dim, self.repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.repr_mlps['act'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.repr_mlps['act'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.output_mlps['act'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_actions, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlps['act'].weight, gain=1.0)
+
+        self.repr_mlps['hoi'] = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(hidden_dim, self.repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.repr_mlps['hoi'][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.repr_mlps['hoi'][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+        self.output_mlps['hoi'] = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlps['hoi'].weight, gain=1.0)
 
         if cfg.gc:
             gcemb_dim = 1024
 
             if cfg.puregc:
-                gc_dims = (gcemb_dim, self.predictor_dim)
+                gc_dims = (gcemb_dim, self.repr_dim)
             else:
                 latent_dim = 200
-                input_dim = self.predictor_dim
-                self.obj_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(600, 800),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(800, input_dim),
-                                                      )
-                self.act_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(600, 800),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(800, input_dim),
-                                                      )
-                self.hoi_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(600, 800),
-                                                      nn.ReLU(inplace=True),
-                                                      nn.Dropout(p=cfg.dropout),
-                                                      nn.Linear(800, input_dim),
-                                                      )
+                self.predictor_mlps = {k: nn.Sequential(nn.Linear(latent_dim, 600),
+                                                        nn.ReLU(inplace=True),
+                                                        nn.Dropout(p=cfg.dropout),
+                                                        nn.Linear(600, 800),
+                                                        nn.ReLU(inplace=True),
+                                                        nn.Dropout(p=cfg.dropout),
+                                                        nn.Linear(800, self.repr_dim),
+                                                        ) for k in ['obj', 'act', 'hoi']}
                 gc_dims = (gcemb_dim // 2, latent_dim)
 
             if cfg.hoigcn:
@@ -325,8 +345,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
             obj_labels = act_labels = hoi_labels = None
 
         reg_loss = None
+        obj_repr = self.repr_mlps['obj'](feats)
+        act_repr = self.repr_mlps['act'](feats)
+        hoi_repr = self.repr_mlps['hoi'](feats)
         if cfg.gc:
-            obj_repr, act_repr, hoi_repr = self.multi_model._forward(feats, labels, return_repr=True)
             if cfg.hoigcn:
                 hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
             else:
@@ -335,9 +357,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
 
             if not cfg.puregc:
-                obj_predictors = self.obj_to_predictor(obj_class_embs)  # P x D
-                act_predictors = self.act_to_predictor(act_class_embs)  # P x D
-                hoi_predictors = self.hoi_to_predictor(hoi_class_embs)  # P x D
+                obj_predictors = self.predictor_mlps['obj'](obj_class_embs)  # P x D
+                act_predictors = self.predictor_mlps['act'](act_class_embs)  # P x D
+                hoi_predictors = self.predictor_mlps['hoi'](hoi_class_embs)  # P x D
             else:
                 obj_predictors = obj_class_embs
                 act_predictors = act_class_embs
@@ -349,11 +371,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.greg > 0:
                 reg_loss = cfg.greg * self.get_reg_loss(hoi_predictors, self.inter_adj)
         else:
-            # obj_logits, act_logits, hoi_logits = self.multi_model._forward(feats, labels, return_repr=False)
-            obj_repr, act_repr, hoi_repr = self.multi_model._forward(feats, labels, return_repr=True)
-            obj_predictor = self.multi_model.obj_output_mlp.weight
-            act_predictor = self.multi_model.act_output_mlp.weight
-            hoi_predictor = self.multi_model.hoi_output_mlp.weight
+            obj_predictor = self.output_mlps['obj'].weight
+            act_predictor = self.output_mlps['act'].weight
+            hoi_predictor = self.output_mlps['hoi'].weight
             obj_logits = obj_repr @ obj_predictor.t()
             act_logits = act_repr @ act_predictor.t()
             hoi_logits = hoi_repr @ hoi_predictor.t()
