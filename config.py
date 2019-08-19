@@ -69,7 +69,6 @@ class Configs:
         self.meanc = False  # mean or sum over classes for BCE loss?
 
         # HICO specific
-        self.hico_lhard = False
         self.gc = False
         self.zso = False
         self.zsa = False
@@ -80,10 +79,12 @@ class Configs:
         self.olc = 1.0
         self.alc = 1.0
         self.hlc = 1.0
-        self.slnoavg = False
         self.sloo = False  # use object-only bias as well
-        self.puregc = False
         self.hoigcn = False
+        self.pro = 0.0
+        self.pra = 0.0
+        self.prh = 0.0
+        # Margin is always the same for now (borrowed from greg_margin)
 
         # BG specific
         self.filter = False
@@ -98,6 +99,7 @@ class Configs:
         self.lis = False
 
         # ZS GCN specific
+        self.puregc = False
         self.greg = 0.0
         self.greg_margin = 0.3
         self.vv = False

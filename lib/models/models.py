@@ -152,7 +152,7 @@ class ExtKnowledgeGenericModel(GenericModel):
     def __init__(self, dataset: HicoDetSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
-        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
+        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')

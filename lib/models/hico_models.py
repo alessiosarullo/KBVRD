@@ -13,89 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
 from lib.models.containers import Prediction
-from lib.models.misc import bce_loss, interactions_to_actions, interactions_to_objects, interactions_to_mat
-
-
-class HicoMultiModel(AbstractModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicomulti'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        assert cfg.hico
-        self.dataset = dataset
-
-        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
-        hidden_dim = 1024
-        self.repr_dim = 1024
-
-        self.obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.dropout),
-                                            nn.Linear(hidden_dim, self.repr_dim),
-                                            ])
-        nn.init.xavier_normal_(self.obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.obj_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_object_classes, bias=False)
-        torch.nn.init.xavier_normal_(self.obj_output_mlp.weight, gain=1.0)
-
-        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.dropout),
-                                            nn.Linear(hidden_dim, self.repr_dim),
-                                            ])
-        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.act_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_actions, bias=False)
-        torch.nn.init.xavier_normal_(self.act_output_mlp.weight, gain=1.0)
-
-        self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.dropout),
-                                            nn.Linear(hidden_dim, self.repr_dim),
-                                            ])
-        nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.hoi_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-        self.hoi_output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
-        torch.nn.init.xavier_normal_(self.hoi_output_mlp.weight, gain=1.0)
-
-    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-
-            feats, labels = x
-            obj_logits, act_logits, hoi_logits = self._forward(feats, labels)
-
-            if not inference:
-                hoi_labels = labels.clamp(min=0)
-                obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
-                act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
-                losses = {'obj_loss': bce_loss(obj_logits, obj_labels),
-                          'act_loss': bce_loss(act_logits, act_labels),
-                          'hoi_loss': bce_loss(hoi_logits, hoi_labels)
-                          }
-                return losses
-            else:
-                prediction = Prediction()
-                interactions = self.dataset.full_dataset.interactions
-                obj_scores = torch.sigmoid(obj_logits).cpu().numpy()
-                act_scores = torch.sigmoid(act_logits).cpu().numpy()
-                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy()
-                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
-                return prediction
-
-    def _forward(self, feats, labels, return_repr=False):
-        obj_repr = self.obj_repr_mlp(feats)
-        obj_logits = self.obj_output_mlp(obj_repr)
-
-        act_repr = self.act_repr_mlp(feats)
-        act_logits = self.act_output_mlp(act_repr)
-
-        hoi_repr = self.hoi_repr_mlp(feats)
-        hoi_logits = self.hoi_output_mlp(hoi_repr)
-        if return_repr:
-            return obj_repr, act_repr, hoi_repr
-        return obj_logits, act_logits, hoi_logits
+from lib.models.misc import bce_loss, interactions_to_actions, interactions_to_objects, interactions_to_mat, get_hoi_adjacency_matrix
 
 
 class HicoExtZSGCMultiModel(AbstractModel):
@@ -108,9 +26,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
         assert cfg.hico
         self.dataset = dataset
         self.repr_dim = 1024
+        self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
+        self.reg_coeffs = {'obj': cfg.pro, 'act': cfg.pra, 'hoi': cfg.prh}
 
         # Object-action (or noun-verb) adjacency matrix
-        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
+        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         # Word embeddings + similarity matrices
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
@@ -127,26 +47,30 @@ class HicoExtZSGCMultiModel(AbstractModel):
         self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
+            self.seen_inds = {}
+            self.unseen_inds = {}
+
             seen_obj_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['obj']
             unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_object_classes)) - set(seen_obj_inds.tolist())))
-            self.seen_obj_inds = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
-            self.unseen_obj_inds = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
+            self.seen_inds['obj'] = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
+            self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
 
             seen_act_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
             unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
-            self.seen_act_inds = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
-            self.unseen_act_inds = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
+            self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
+            self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
             seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_act_inds]
             seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
             unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
-            self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
-            self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
+            self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
+            self.unseen_inds['hoi'] = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
 
             if self.load_backbone:
                 raise NotImplementedError('Not currently supported.')
 
-            if cfg.softl:
+            if cfg.softl > 0:
+                self.softl_enabled = {'obj': cfg.zso, 'act': cfg.zsa, 'hoi': cfg.zsh}
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
         # Base model
@@ -178,15 +102,6 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
             else:
                 self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
-
-            if cfg.greg > 0:
-                inter_nv_adj = np.zeros((self.dataset.full_dataset.num_interactions,
-                                         self.dataset.full_dataset.num_object_classes + self.dataset.full_dataset.num_actions))
-                interactions = self.dataset.full_dataset.interactions
-                inter_nv_adj[np.arange(interactions.shape[0]), interactions[:, 0]] = 1
-                inter_nv_adj[np.arange(interactions.shape[0]), interactions[:, 1]] = 1
-                self.inter_adj = nn.Parameter(torch.from_numpy(inter_nv_adj @ inter_nv_adj.T).clamp(max=1).byte(), requires_grad=False)
-                assert (self.inter_adj.diag()[1:] == 1).all()
         else:
             # Linear predictors (AKA, single FC layer)
             self.output_mlps = nn.ParameterDict()
@@ -195,6 +110,20 @@ class HicoExtZSGCMultiModel(AbstractModel):
                          ('hoi', dataset.full_dataset.num_interactions)]:
                 self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim))
                 torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
+
+        # Regularisation
+        if self.reg_coeffs['obj'] > 0:
+            self.adj_pos['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
+            self.adj_neg['obj'] = nn.Parameter(~self.adj_pos['obj'], requires_grad=False)
+        if self.reg_coeffs['act'] > 0:
+            self.adj_pos['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
+            self.adj_neg['act'] = nn.Parameter(~self.adj_pos['act'], requires_grad=False)
+            self.adj_neg['act'][0, :] = 0
+            self.adj_neg['act'][:, 0] = 0
+        if self.reg_coeffs['hoi'] > 0:
+            adj_pos, adj_neg = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
+            self.adj_pos['hoi'] = nn.Parameter(adj_pos, requires_grad=False)
+            self.adj_neg['hoi'] = nn.Parameter(adj_neg, requires_grad=False)
 
     def get_soft_labels(self, labels):
         assert cfg.zso or cfg.zsa or cfg.zsh
@@ -217,7 +146,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 ext_inter_mat = torch.max(ext_inter_mat, similar_obj.unsqueeze(dim=2)) * \
                                 self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
 
-            obj_labels[:, self.unseen_obj_inds] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_obj_inds]
+            obj_labels[:, self.unseen_inds['obj']] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_inds['obj']]
         obj_labels = obj_labels.detach()
 
         act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
@@ -226,7 +155,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
             similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
             feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-            act_labels[:, self.unseen_act_inds] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_act_inds]
+            act_labels[:, self.unseen_inds['act']] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_inds['act']]
         act_labels = act_labels.detach()
 
         hoi_labels = labels
@@ -242,30 +171,26 @@ class HicoExtZSGCMultiModel(AbstractModel):
             similar_hois = (similar_obj_per_act + similar_acts_per_obj) * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
 
             interactions = self.dataset.full_dataset.interactions  # FIXME should do based on graph instead of oracle
-            hoi_labels[:, self.unseen_hoi_inds] = similar_hois[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
+            hoi_labels[:, self.unseen_inds['hoi']] = similar_hois[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_inds['hoi']]
         hoi_labels = hoi_labels.detach()
 
         return obj_labels, act_labels, hoi_labels
 
-    def get_reg_loss(self, predictors, adj_mat):
+    def get_reg_loss(self, predictors, pos_mat, neg_mat):
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
         arange = torch.arange(predictors_sim.shape[0])
 
         # Done with argmin/argmax because using min/max directly resulted in NaNs.
         neigh_mask = torch.full_like(predictors_sim, np.inf)
-        neigh_mask[adj_mat] = 1
+        neigh_mask[pos_mat] = 1
         argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
         min_neigh_sim = predictors_sim[arange, argmin_neigh_sim]
 
         non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
-        non_neigh_mask[~adj_mat] = 1
+        non_neigh_mask[neg_mat] = 1
         argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
         max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim]
-
-        # Exclude null interaction
-        min_neigh_sim = min_neigh_sim[1:]
-        max_non_neigh_sim = max_non_neigh_sim[1:]
 
         assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
         assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
@@ -278,41 +203,28 @@ class HicoExtZSGCMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels = x
-            logits, labels, reg_loss = self._forward(feats, orig_labels)
-            obj_logits, act_logits, hoi_logits = logits['obj'], logits['act'], logits['hoi']
-            obj_labels, act_labels, hoi_labels = labels['obj'], labels['act'], labels['hoi']
+            logits, labels, reg_losses = self._forward(feats, orig_labels)
 
             if not inference:
-                obj_labels.clamp_(min=0), act_labels.clamp_(min=0), hoi_labels.clamp_(min=0)
-                if self.zs_enabled:
-                    losses = {'obj_loss': cfg.olc * bce_loss(obj_logits[:, self.seen_obj_inds], obj_labels[:, self.seen_obj_inds]),
-                              'act_loss': cfg.alc * bce_loss(act_logits[:, self.seen_act_inds], act_labels[:, self.seen_act_inds]),
-                              'hoi_loss': cfg.hlc * bce_loss(hoi_logits[:, self.seen_hoi_inds], hoi_labels[:, self.seen_hoi_inds]),
-                              }
-                    if cfg.softl > 0:
-                        if cfg.zso:
-                            losses['obj_loss_unseen'] = cfg.olc * cfg.softl * bce_loss(obj_logits[:, self.unseen_obj_inds],
-                                                                                       obj_labels[:, self.unseen_obj_inds])
-                        if cfg.zsa:
-                            losses['act_loss_unseen'] = cfg.alc * cfg.softl * bce_loss(act_logits[:, self.unseen_act_inds],
-                                                                                       act_labels[:, self.unseen_act_inds])
-                        if cfg.zsh:
-                            losses['hoi_loss_unseen'] = cfg.hlc * cfg.softl * bce_loss(hoi_logits[:, self.unseen_hoi_inds],
-                                                                                       hoi_labels[:, self.unseen_hoi_inds])
-                else:
-                    losses = {'obj_loss': cfg.olc * bce_loss(obj_logits, obj_labels),
-                              'act_loss': cfg.alc * bce_loss(act_logits, act_labels),
-                              'hoi_loss': cfg.hlc * bce_loss(hoi_logits, hoi_labels),
-                              }
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
+                labels = {k: v.clamp(min=0) for k, v in labels.items()}
+                losses = {}
+                for k in ['obj', 'act', 'hoi']:
+                    if self.zs_enabled:
+                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k][:, self.seen_inds[k]], labels[k][:, self.seen_inds[k]])
+                        if cfg.softl > 0 and self.softl_enabled[k]:
+                            losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[k][:, self.unseen_inds[k]],
+                                                                                                    labels[k][:, self.unseen_inds[k]])
+                    else:
+                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k], labels[k])
+                for k, v in reg_losses.items():
+                    losses[f'{k}_reg_loss'] = v
                 return losses
             else:
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
-                obj_scores = torch.sigmoid(obj_logits).cpu().numpy() ** cfg.osc
-                act_scores = torch.sigmoid(act_logits).cpu().numpy() ** cfg.asc
-                hoi_scores = torch.sigmoid(hoi_logits).cpu().numpy() ** cfg.hsc
+                obj_scores = torch.sigmoid(logits['obj']).cpu().numpy() ** cfg.osc
+                act_scores = torch.sigmoid(logits['act']).cpu().numpy() ** cfg.asc
+                hoi_scores = torch.sigmoid(logits['hoi']).cpu().numpy() ** cfg.hsc
                 prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
@@ -345,11 +257,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
         logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
 
         # Regularisation
-        reg_loss = None
-        if cfg.greg > 0:
-            assert cfg.gc
-            reg_loss = cfg.greg * self.get_reg_loss(predictors['hoi'], self.inter_adj)
-        return logits, labels, reg_loss
+        reg_losses = {}
+        for k in ['obj', 'act', 'hoi']:
+            if self.reg_coeffs[k] > 0:
+                reg_losses = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj_pos[k], self.adj_neg[k])
+        return logits, labels, reg_losses
 
 
 class KatoModel(AbstractModel):
