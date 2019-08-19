@@ -1,0 +1,13 @@
+F1=$1
+F2=$2
+echo "######### Config diff"
+CFGDIFF=80 && diff <(sed 1,4d ${F1} | head -n ${CFGDIFF}) <(sed 1,4d ${F2} | head -n ${CFGDIFF})
+
+echo
+echo "######### Predicate filtering diff"
+FILTDIFF=10 && diff <(sed 1,77d ${F1} | head -n ${FILTDIFF}) <(sed 1,77d ${F2} | head -n ${FILTDIFF})
+
+echo
+echo "######### Model diff"
+MODELDIFF=9 && diff <(sed 1,94d ${F1} | head -n ${MODELDIFF}) <(sed 1,94d ${F2} | head -n ${MODELDIFF})
+
