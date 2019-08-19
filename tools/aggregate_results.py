@@ -18,7 +18,7 @@ def main():
     model = args.model
     exp = args.exp
 
-    runs, results = [], []
+    runs, tr_results, zs_results = [], [], []
     for run in os.listdir(os.path.join('output', model)):
         if run.endswith(exp):
             print()
@@ -38,9 +38,9 @@ def main():
             evaluator = HicoEvaluator(test_split)
             evaluator.load(cfg.eval_res_file)
 
-            # # Trained on:
-            # tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(train_split.active_interactions), no_print=True)
-            # tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
+            # Trained on:
+            tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(train_split.active_interactions), no_print=True)
+            tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
             # Zero-shot
             unseen_interactions = set(range(train_split.full_dataset.num_interactions)) - set(train_split.active_interactions)
@@ -48,12 +48,16 @@ def main():
             zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
 
             runs.append(run)
-            results.append(np.mean(zs_metrics['zs_pM-mAP']) * 100)
+            tr_results.append(np.mean(tr_metrics['tr_pM-mAP']) * 100)
+            zs_results.append(np.mean(zs_metrics['zs_pM-mAP']) * 100)
+
+    with open('aggr.pkl', 'wb') as f:
+        pickle.dump([runs, tr_results, zs_results], f)
 
     print('\n' + '=' * 50, '\n')
-    inds = np.argsort(np.array(results))
+    inds = np.argsort(np.array(zs_results))
     for i in inds:
-        print(f'{runs[i]:40s}: {results[i]:.2f}%')
+        print(f'{runs[i]:40s}: {zs_results[i]:.2f}%')
 
 
 if __name__ == '__main__':
