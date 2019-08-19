@@ -13,60 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
 from lib.models.containers import Prediction
-from lib.models.misc import bce_loss, LIS, interactions_to_actions, interactions_to_objects, interactions_to_mat
-
-
-class HicoBaseModel(AbstractModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicobase'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        assert cfg.hico
-        self.dataset = dataset
-
-        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
-        hidden_dim = 1024
-        if cfg.small:
-            self.repr_dim = 512
-        else:
-            self.repr_dim = 1024
-
-        self.hoi_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.dropout),
-                                            nn.Linear(hidden_dim, self.repr_dim),
-                                            ])
-        nn.init.xavier_normal_(self.hoi_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.hoi_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        self.output_mlp = nn.Linear(self.repr_dim, dataset.full_dataset.num_interactions, bias=False)
-        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
-
-    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-
-            feats, labels = x
-            output = self._forward(feats, labels)
-
-            if not inference:
-                labels.clamp_(min=0)
-                loss_mat = bce_loss(output, labels, reduce=False)
-                losses = {'hoi_loss': loss_mat.sum(dim=1).mean()}
-                return losses
-            else:
-                prediction = Prediction()
-                prediction.hoi_scores = torch.sigmoid(output).cpu().numpy()
-                return prediction
-
-    def _forward(self, feats, labels, return_repr=False):
-        hoi_repr = self.hoi_repr_mlp(feats)
-        if return_repr:
-            return hoi_repr
-        else:
-            output_logits = self.output_mlp(hoi_repr)
-            return output_logits
+from lib.models.misc import bce_loss, interactions_to_actions, interactions_to_objects, interactions_to_mat
 
 
 class HicoMultiModel(AbstractModel):
@@ -149,120 +96,6 @@ class HicoMultiModel(AbstractModel):
         if return_repr:
             return obj_repr, act_repr, hoi_repr
         return obj_logits, act_logits, hoi_logits
-
-
-class HicoExtKnowledgeGenericModel(AbstractModel):
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        assert cfg.hico
-        self.dataset = dataset
-
-        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, iso_null=True)
-
-        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        act_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
-        self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
-        self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
-        self.act_obj_emb_sim = nn.Parameter(self.act_word_embs @ self.obj_word_embs.t(), requires_grad=False)
-
-        self.zs_enabled = (cfg.seenf >= 0)
-        self.load_backbone = len(cfg.hoi_backbone) > 0
-        if self.zs_enabled:
-            print('Zero-shot enabled.')
-            seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-
-            seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_pred_inds]
-            seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
-            unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
-            self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
-            self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
-
-            if self.load_backbone:
-                raise NotImplementedError('Not currently supported.')
-
-            if cfg.softl:
-                self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
-
-    def get_soft_labels(self, labels):
-        batch_size = labels.shape[0]
-
-        inter_mat = interactions_to_mat(labels.clamp(min=0), hico=self.dataset.full_dataset)  # N x I -> N x O x P
-
-        similar_objs = None
-        if cfg.hico_zso1:
-            objects = interactions_to_objects(labels, hico=self.dataset.full_dataset)
-            similar_objs = objects @ self.obj_emb_sim
-
-        if cfg.hico_zso2:
-            actions = interactions_to_actions(labels, hico=self.dataset.full_dataset)
-            similar_objs_by_act = actions @ self.act_obj_emb_sim.clamp(min=0) / actions.sum(dim=1, keepdim=True).clamp(min=1)
-            if cfg.hico_zso1:
-                similar_objs = (similar_objs + similar_objs_by_act) / 2
-            else:
-                similar_objs = similar_objs_by_act
-
-        if similar_objs is not None:
-            similar_objs = similar_objs.unsqueeze(dim=2).expand(-1, -1, self.obj_act_feasibility.shape[1])
-            possible_interactions_by_obj = similar_objs * self.obj_act_feasibility.unsqueeze(dim=0).expand_as(similar_objs)
-            inter_mat = inter_mat + (1 - inter_mat) * possible_interactions_by_obj
-
-        similar_acts_per_obj = torch.bmm(inter_mat, self.act_emb_sim.unsqueeze(dim=0).clamp(min=0).expand(batch_size, -1, -1))
-        if cfg.slnoavg:
-            similar_acts_per_obj = similar_acts_per_obj.clamp(max=1)
-        else:
-            similar_acts_per_obj = similar_acts_per_obj / inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
-
-        if cfg.lis:
-            if cfg.hardlis:
-                w, k = 30, 18
-            else:
-                w, k = 18, 7
-            similar_acts_per_obj = LIS(similar_acts_per_obj, w=w, k=k)
-
-        interactions = self.dataset.full_dataset.interactions
-        unseen_labels = similar_acts_per_obj[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_hoi_inds]
-        return unseen_labels.detach()
-
-    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-
-            feats, labels = x
-            logits, labels, reg_loss = self._forward(feats, labels)
-
-            if not inference:
-                labels.clamp_(min=0)
-                losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
-                if cfg.softl > 0:
-                    # if cfg.nullzs:
-                    #     unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
-                    losses['hoi_loss_unseen'] = cfg.softl * bce_loss(logits[:, self.unseen_hoi_inds], labels[:, self.unseen_hoi_inds])
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-                prediction.hoi_scores = torch.sigmoid(logits).cpu().numpy()
-                return prediction
-
-
-class HicoZSBaseModel(HicoExtKnowledgeGenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'hicozsb'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        self.base_model = HicoBaseModel(dataset, **kwargs)
-
-    def _forward(self, feats, labels):
-        logits = self.base_model._forward(feats, labels)
-        if labels is not None:
-            labels[:, self.unseen_hoi_inds] = self.get_soft_labels(labels)
-        reg_loss = None
-        return logits, labels, reg_loss
 
 
 class HicoExtZSGCMultiModel(AbstractModel):
@@ -527,13 +360,25 @@ class HicoExtZSGCMultiModel(AbstractModel):
         return obj_logits, act_logits, hoi_logits, obj_labels, act_labels, hoi_labels, reg_loss
 
 
-class KatoModel(HicoExtKnowledgeGenericModel):
+class KatoModel(AbstractModel):
     @classmethod
     def get_cline_name(cls):
         return 'kato'
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        super().__init__(dataset, **kwargs)
+        assert cfg.hico
+        self.dataset = dataset
+
+        assert cfg.seenf >= 0  # ZS enabled
+        seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
+        seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_pred_inds]
+        seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
+        unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
+        self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
+        self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
+
         self.hoi_repr_dim = 512
         vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
@@ -550,6 +395,21 @@ class KatoModel(HicoExtKnowledgeGenericModel):
                                        nn.Linear(200, 1)
                                        )
 
+    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+
+            feats, labels = x
+            logits, labels = self._forward(feats, labels)
+
+            if not inference:
+                labels.clamp_(min=0)
+                losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
+                return losses
+            else:
+                prediction = Prediction()
+                prediction.hoi_scores = torch.sigmoid(logits).cpu().numpy()
+                return prediction
+
     def _forward(self, feats, labels):
         hoi_repr = self.img_repr_mlp(feats)
         z_a, z_v, z_n = self.gcn_branch()
@@ -558,4 +418,4 @@ class KatoModel(HicoExtKnowledgeGenericModel):
                                               dim=2))
         assert hoi_logits.shape[2] == 1
         hoi_logits = hoi_logits.squeeze(dim=2)
-        return hoi_logits, labels, None
+        return hoi_logits, labels
