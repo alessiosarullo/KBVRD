@@ -199,12 +199,10 @@ class ExtKnowledgeGenericModel(GenericModel):
         # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
 
         action_labels = vis_output.action_labels
-        pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds]
+        pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds].clamp(min=0)
         if cfg.lis:
-            act_sim = action_labels @ LIS(pred_sims.clamp(min=0), w=18, k=7) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
-        else:
-            # act_sim = torch.sigmoid(action_labels @ pred_sims)
-            act_sim = action_labels @ pred_sims.clamp(min=0) / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+            pred_sims = LIS(pred_sims, w=18, k=7)
+        act_sim = action_labels @ pred_sims / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         obj_labels = vis_output.box_labels[vis_output.ho_infos_np[:, 2]]
         fg_ho_pair = (obj_labels >= 0)
         unseen_action_labels = act_sim.new_zeros(act_sim.shape)

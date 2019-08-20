@@ -265,6 +265,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
             act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
             if cfg.softl > 0:
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
+            if cfg.no_null:
+                act_labels = act_labels[:, 1:]
+                logits['act'] = logits['act'][:, 1:]
+                if cfg.hlc == 0:
+                    raise NotImplementedError
 
             for k in ['obj', 'act', 'hoi']:
                 if self.reg_coeffs[k] > 0:
