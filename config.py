@@ -84,7 +84,8 @@ class Configs:
         self.pro = 0.0
         self.pra = 0.0
         self.prh = 0.0
-        # Margin is always the same for now (borrowed from greg_margin)
+        # Margin is borrowed from greg_margin for now
+        self.no_norm = False
 
         # BG specific
         self.filter = False

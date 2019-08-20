@@ -173,8 +173,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
         return obj_labels, act_labels, hoi_labels
 
     def get_reg_loss(self, predictors, adj):
-        predictors_norm = F.normalize(predictors, dim=1)
-        predictors_sim = predictors_norm @ predictors_norm.t()
+        if cfg.no_norm:
+            predictors_sim = predictors @ predictors.t()
+        else:
+            predictors_norm = F.normalize(predictors, dim=1)
+            predictors_sim = predictors_norm @ predictors_norm.t()
         null = ~adj.any(dim=1)
         arange = torch.arange(predictors_sim.shape[0])
 
@@ -212,7 +215,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels = x
-            logits, labels, reg_losses = self._forward(feats, orig_labels, inference)
+            logits, labels, reg_losses = self._forward(feats, orig_labels)
 
             if not inference:
                 labels = {k: v.clamp(min=0) for k, v in labels.items()}
@@ -237,18 +240,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
-    def _forward(self, feats, labels, inference):
-        # Labels
-        if labels is not None:
-            hoi_labels = labels.clamp(min=0)
-            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
-            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
-            if cfg.softl > 0:
-                obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
-        else:
-            obj_labels = act_labels = hoi_labels = None
-        labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
-
+    def _forward(self, feats, labels):
         # Predictors
         if cfg.gc:
             if cfg.hoigcn:
@@ -265,12 +257,21 @@ class HicoExtZSGCMultiModel(AbstractModel):
         # Final output
         logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
 
-        # Regularisation
+        # Labels and regularisation
         reg_losses = {}
-        if not inference:
+        if labels is not None:
+            hoi_labels = labels.clamp(min=0)
+            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
+            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
+            if cfg.softl > 0:
+                obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
+
             for k in ['obj', 'act', 'hoi']:
                 if self.reg_coeffs[k] > 0:
                     reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj[k])
+        else:
+            obj_labels = act_labels = hoi_labels = None
+        labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
         return logits, labels, reg_losses
 
 
