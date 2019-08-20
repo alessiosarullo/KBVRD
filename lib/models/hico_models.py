@@ -58,6 +58,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
             seen_act_inds = dataset.active_actions
             # Note: null is never unseen, regardless of whether it's seen or not
             unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist()) - {0}))
+            if not cfg.train_null:
+                seen_act_inds = sorted(set(seen_act_inds) - {0})
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
