@@ -76,18 +76,13 @@ def get_hoi_adjacency_matrix(dataset, isolate_null=None):
     inter_act_adj[np.arange(interactions.shape[0]), interactions[:, 1]] = 1
 
     adj = inter_obj_adj @ inter_obj_adj.T + inter_act_adj @ inter_act_adj.T
-    adj = torch.from_numpy(adj).clamp(max=1).byte()
+    adj = torch.from_numpy(adj).clamp(max=1).float()
 
     if isolate_null:
         null_hois = np.flatnonzero(np.any(inter_act_adj[:, 1:], axis=1))
-        adj_pos = adj
-        adj_neg = ~adj  # Note: don't move down! I'm not sure it would still work.
-
-        adj_pos[null_hois, :] = 0
-        adj_pos[:, null_hois] = 0
-        adj_neg[null_hois, :] = 0
-        adj_neg[:, null_hois] = 0
-        return adj_pos, adj_neg
+        adj[null_hois, :] = 0
+        adj[:, null_hois] = 0
+        return adj
     else:
         return adj
 

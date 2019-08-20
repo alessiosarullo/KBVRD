@@ -112,20 +112,14 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
 
         # Regularisation
-        self.adj_pos = nn.ParameterDict()
-        self.adj_neg = nn.ParameterDict()
+        self.adj = nn.ParameterDict()
         if self.reg_coeffs['obj'] > 0:
-            self.adj_pos['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
-            self.adj_neg['obj'] = nn.Parameter(~self.adj_pos['obj'], requires_grad=False)
+            self.adj['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
         if self.reg_coeffs['act'] > 0:
-            self.adj_pos['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
-            self.adj_neg['act'] = nn.Parameter(~self.adj_pos['act'], requires_grad=False)
-            self.adj_neg['act'][0, :] = 0
-            self.adj_neg['act'][:, 0] = 0
+            self.adj['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
         if self.reg_coeffs['hoi'] > 0:
-            adj_pos, adj_neg = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
-            self.adj_pos['hoi'] = nn.Parameter(adj_pos, requires_grad=False)
-            self.adj_neg['hoi'] = nn.Parameter(adj_neg, requires_grad=False)
+            adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
+            self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
 
     def get_soft_labels(self, labels):
         assert cfg.zso or cfg.zsa or cfg.zsh
@@ -178,21 +172,22 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         return obj_labels, act_labels, hoi_labels
 
-    def get_reg_loss(self, predictors, pos_mat, neg_mat):
+    def get_reg_loss(self, predictors, adj):
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
-        arange = torch.arange(predictors_sim.shape[0])
+        non_null = adj.any(dim=1)
+        arange = torch.arange(predictors_sim.shape[0])[non_null]
 
         # Done with argmin/argmax because using min/max directly resulted in NaNs.
         neigh_mask = torch.full_like(predictors_sim, np.inf)
-        neigh_mask[pos_mat] = 1
+        neigh_mask[adj] = 1
         argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
-        min_neigh_sim = predictors_sim[arange, argmin_neigh_sim]
+        min_neigh_sim = predictors_sim[arange, argmin_neigh_sim[non_null]]
 
         non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
-        non_neigh_mask[neg_mat] = 1
+        non_neigh_mask[~adj] = 1
         argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-        max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim]
+        max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim[non_null]]
 
         assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
         assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
@@ -262,7 +257,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_losses = {}
         for k in ['obj', 'act', 'hoi']:
             if self.reg_coeffs[k] > 0:
-                reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj_pos[k], self.adj_neg[k])
+                reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj[k])
         return logits, labels, reg_losses
 
 
