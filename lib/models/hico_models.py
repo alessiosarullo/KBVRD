@@ -57,6 +57,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
             seen_act_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
             unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
+            if cfg.no_null:
+                seen_act_inds = np.array(sorted(set(seen_act_inds) - {0}))
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
@@ -221,12 +223,20 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 labels = {k: v.clamp(min=0) for k, v in labels.items()}
                 losses = {}
                 for k in ['obj', 'act', 'hoi']:
+                    if self.loss_coeffs[k] == 0:
+                        continue
                     if self.zs_enabled:
                         losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k][:, self.seen_inds[k]], labels[k][:, self.seen_inds[k]])
                         if cfg.softl > 0 and self.softl_enabled[k]:
                             losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[k][:, self.unseen_inds[k]],
                                                                                                     labels[k][:, self.unseen_inds[k]])
                     else:
+                        if cfg.no_null:
+                            if k == 'hoi':
+                                raise NotImplementedError()
+                            elif k == 'act':
+                                labels[k] = labels[k][:, 1:]
+                                logits[k] = logits[k][:, 1:]
                         losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k], labels[k])
                 for k, v in reg_losses.items():
                     losses[f'{k}_reg_loss'] = v
@@ -265,11 +275,6 @@ class HicoExtZSGCMultiModel(AbstractModel):
             act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
             if cfg.softl > 0:
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
-            if cfg.no_null:
-                act_labels = act_labels[:, 1:]
-                logits['act'] = logits['act'][:, 1:]
-                if cfg.hlc > 0:
-                    raise NotImplementedError()
 
             for k in ['obj', 'act', 'hoi']:
                 if self.reg_coeffs[k] > 0:
