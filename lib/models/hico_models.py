@@ -196,8 +196,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
         reg_loss_mat = cfg.greg_margin - predictors_sim_diff
-        reg_loss_mat[~adj.unsqueeze(dim=2)] = 0
-        reg_loss_mat[adj.unsqueeze(dim=1)] = 0
+        reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
+        reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[null, :, :] = 0
         reg_loss_mat[:, null, :] = 0
         reg_loss_mat[:, :, null] = 0
