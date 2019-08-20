@@ -77,7 +77,7 @@ class Configs:
         self.asl = True
         self.asc = 1.0
         self.alc = 1.0
-        self.apr = 1.0
+        self.apr = 0.0
         self.hsl = False
         self.hlc = 0.0
         self.hsc = 0.0
