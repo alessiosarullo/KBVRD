@@ -191,6 +191,8 @@ class KatoGCNBranch(AbstractHOIBranch):
         adj_nn = torch.eye(full_dataset.num_object_classes).float()
         adj_vv = torch.eye(full_dataset.num_actions).float()
 
+        # FIXME null is not taken out
+
         # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
         # this, but the paper is not clear at all.
         self.adj_vv = nn.Parameter(adj_vv, requires_grad=False)

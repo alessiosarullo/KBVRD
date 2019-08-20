@@ -50,20 +50,18 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.seen_inds = {}
             self.unseen_inds = {}
 
-            seen_obj_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['obj']
+            seen_obj_inds = dataset.active_object_classes
             unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_object_classes)) - set(seen_obj_inds.tolist())))
             self.seen_inds['obj'] = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
             self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
 
-            seen_act_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-            unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
-            if not cfg.train_null:
-                seen_act_inds = np.array(sorted(set(seen_act_inds) - {0}))
+            seen_act_inds = dataset.active_actions
+            # Note: null is never unseen, regardless of whether it's seen or not
+            unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist()) - {0}))
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
-            seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_act_inds]
-            seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
+            seen_hoi_inds = dataset.active_interactions
             unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
             self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
             self.unseen_inds['hoi'] = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
