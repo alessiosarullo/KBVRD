@@ -198,7 +198,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         # reg_loss_mat = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
 
         predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
-        reg_loss_mat = cfg.greg_margin - predictors_sim_diff
+        reg_loss_mat = F.relu(cfg.greg_margin - predictors_sim_diff)
         reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[arange, arange, :] = 0
@@ -208,7 +208,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_loss_mat[:, null, :] = 0
         reg_loss_mat[:, :, null] = 0
 
-        reg_loss = reg_loss_mat.mean()
+        reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum()
         return reg_loss
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
