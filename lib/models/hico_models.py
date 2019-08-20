@@ -175,24 +175,33 @@ class HicoExtZSGCMultiModel(AbstractModel):
     def get_reg_loss(self, predictors, adj):
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
-        non_null = adj.any(dim=1)
-        arange = torch.arange(predictors_sim.shape[0])[non_null]
+        null = ~adj.any(dim=1)
+        # arange = torch.arange(predictors_sim.shape[0])[non_null]
+        #
+        # # Done with argmin/argmax because using min/max directly resulted in NaNs.
+        # neigh_mask = torch.full_like(predictors_sim, np.inf)
+        # neigh_mask[adj] = 1
+        # argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
+        # min_neigh_sim = predictors_sim[arange, argmin_neigh_sim[non_null]]
+        #
+        # non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
+        # non_neigh_mask[~adj] = 1
+        # argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
+        # max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim[non_null]]
+        #
+        # assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
+        # assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
+        #
+        # reg_loss_mat = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
 
-        # Done with argmin/argmax because using min/max directly resulted in NaNs.
-        neigh_mask = torch.full_like(predictors_sim, np.inf)
-        neigh_mask[adj] = 1
-        argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
-        min_neigh_sim = predictors_sim[arange, argmin_neigh_sim[non_null]]
+        predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
+        reg_loss_mat = cfg.greg_margin - predictors_sim_diff
+        reg_loss_mat[~adj.unsqueeze(dim=2)] = 0
+        reg_loss_mat[adj.unsqueeze(dim=1)] = 0
+        reg_loss_mat[null, :, :] = 0
+        reg_loss_mat[:, null, :] = 0
+        reg_loss_mat[:, :, null] = 0
 
-        non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
-        non_neigh_mask[~adj] = 1
-        argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-        max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim[non_null]]
-
-        assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-        assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
-
-        reg_loss_mat = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
         reg_loss = reg_loss_mat.mean()
         return reg_loss
 
