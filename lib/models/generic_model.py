@@ -129,7 +129,7 @@ class GenericModel(AbstractModel):
                 assert output.shape[1] == self.dataset.num_actions
                 restricted_action_output = output
                 output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_actions))
-                output[:, self.dataset.active_predicates] = restricted_action_output
+                output[:, self.dataset.active_actions] = restricted_action_output
             prediction.action_scores = torch.sigmoid(output).cpu().numpy()
 
     def get_geo_feats(self, vis_output: VisualOutput, batch: PrecomputedMinibatch):

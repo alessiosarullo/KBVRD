@@ -174,8 +174,8 @@ class Launcher:
 
         try:
             cfg.save()
-            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_predicates},
-                         Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_predicates},
+            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_actions},
+                         Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_actions},
                          }, open(cfg.ds_inds_file, 'wb'))
             if cfg.num_epochs == 0:
                 torch.save({'epoch': -1,
@@ -333,10 +333,10 @@ class Launcher:
                 zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
             else:
                 print('Trained on:')
-                tr_metrics = evaluator.output_metrics(actions_to_keep=sorted(self.train_split.active_predicates))
+                tr_metrics = evaluator.output_metrics(actions_to_keep=sorted(self.train_split.active_actions))
                 tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
-                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_predicates))
+                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions))
                 print('Zero-shot:')
                 zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
                 zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}

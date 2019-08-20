@@ -522,7 +522,7 @@ def zs_stats():
     with open(os.path.join(res_save_path, 'zero_shot.txt'), 'w') as f:
         f.write(zero_shot_str)
 
-    unseen_pred_inds = np.array(sorted(set(hdtest.active_predicates.tolist()) - set(hdtrain.active_predicates.tolist())))
+    unseen_pred_inds = np.array(sorted(set(hdtest.active_actions.tolist()) - set(hdtrain.active_actions.tolist())))
     pred_inds_zs = unseen_pred_inds.tolist() + [p for p in pred_inds if p not in unseen_pred_inds]
     s_predicates_zs = [hdtest.predicates[i] for i in pred_inds_zs]
     zs_predicates = [hdtest.predicates[i] for i in unseen_pred_inds]

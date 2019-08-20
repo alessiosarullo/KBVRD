@@ -106,7 +106,7 @@ class HicoDetSplit(HoiDatasetSplit):
 
         predicate_inds = sorted(predicate_inds)
         self.predicates = [hicodet.predicates[i] for i in predicate_inds]
-        self.active_predicates = np.array(predicate_inds, dtype=np.int)
+        self.active_actions = np.array(predicate_inds, dtype=np.int)
         reduced_predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
         if len(predicate_inds) < self.full_dataset.num_actions:
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
@@ -123,7 +123,7 @@ class HicoDetSplit(HoiDatasetSplit):
                                               reduced_object_index.get(self.full_dataset.objects[o], -1)]
                                              for p, o in self.full_dataset.interactions])
             self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
-            active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_predicates]).tolist()) - {-1}
+            active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_actions]).tolist()) - {-1}
             self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
             self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
 

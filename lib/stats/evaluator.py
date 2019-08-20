@@ -162,9 +162,9 @@ class Evaluator(BaseEvaluator):
                     assert prediction.obj_im_inds.shape[0] == prediction.obj_scores.shape[0]
                     assert prediction.action_scores is not None
 
-                    if len(self.dataset_split.active_predicates) < self.full_dataset.num_actions:
+                    if len(self.dataset_split.active_actions) < self.full_dataset.num_actions:
                         predict_action_scores = np.zeros((prediction.action_scores.shape[0], self.full_dataset.num_actions))
-                        predict_action_scores[:, self.dataset_split.active_predicates] = prediction.action_scores
+                        predict_action_scores[:, self.dataset_split.active_actions] = prediction.action_scores
                     else:
                         predict_action_scores = prediction.action_scores
                     predict_obj_scores_per_ho_pair = prediction.obj_scores[predict_ho_pairs[:, 1], :]
