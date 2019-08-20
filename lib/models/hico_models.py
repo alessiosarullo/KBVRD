@@ -208,7 +208,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_loss_mat[:, null, :] = 0
         reg_loss_mat[:, :, null] = 0
 
-        reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum()
+        reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum().item()
         return reg_loss
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
