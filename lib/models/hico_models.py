@@ -212,7 +212,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels = x
-            logits, labels, reg_losses = self._forward(feats, orig_labels)
+            logits, labels, reg_losses = self._forward(feats, orig_labels, inference)
 
             if not inference:
                 labels = {k: v.clamp(min=0) for k, v in labels.items()}
@@ -237,7 +237,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
-    def _forward(self, feats, labels):
+    def _forward(self, feats, labels, inference):
         # Labels
         if labels is not None:
             hoi_labels = labels.clamp(min=0)
@@ -267,9 +267,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         # Regularisation
         reg_losses = {}
-        for k in ['obj', 'act', 'hoi']:
-            if self.reg_coeffs[k] > 0:
-                reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj[k])
+        if not inference:
+            for k in ['obj', 'act', 'hoi']:
+                if self.reg_coeffs[k] > 0:
+                    reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj[k])
         return logits, labels, reg_losses
 
 
