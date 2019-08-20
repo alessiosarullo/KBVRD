@@ -268,7 +268,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.no_null:
                 act_labels = act_labels[:, 1:]
                 logits['act'] = logits['act'][:, 1:]
-                if cfg.hlc == 0:
+                if cfg.hlc > 0:
                     raise NotImplementedError
 
             for k in ['obj', 'act', 'hoi']:
