@@ -176,18 +176,18 @@ class HicoExtZSGCMultiModel(AbstractModel):
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
         null = ~adj.any(dim=1)
-        # arange = torch.arange(predictors_sim.shape[0])[non_null]
-        #
+        arange = torch.arange(predictors_sim.shape[0])
+
         # # Done with argmin/argmax because using min/max directly resulted in NaNs.
         # neigh_mask = torch.full_like(predictors_sim, np.inf)
         # neigh_mask[adj] = 1
         # argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
-        # min_neigh_sim = predictors_sim[arange, argmin_neigh_sim[non_null]]
+        # min_neigh_sim = predictors_sim[arange[non_null], argmin_neigh_sim[non_null]]
         #
         # non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
         # non_neigh_mask[~adj] = 1
         # argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-        # max_non_neigh_sim = predictors_sim[arange, argmax_non_neigh_sim[non_null]]
+        # max_non_neigh_sim = predictors_sim[arange[non_null], argmax_non_neigh_sim[non_null]]
         #
         # assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
         # assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
@@ -198,6 +198,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_loss_mat = cfg.greg_margin - predictors_sim_diff
         reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
+        reg_loss_mat[arange, arange, :] = 0
+        reg_loss_mat[arange, :, arange] = 0
+        reg_loss_mat[:, arange, arange] = 0
         reg_loss_mat[null, :, :] = 0
         reg_loss_mat[:, null, :] = 0
         reg_loss_mat[:, :, null] = 0
