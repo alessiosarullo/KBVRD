@@ -69,24 +69,23 @@ class Configs:
         self.meanc = False  # mean or sum over classes for BCE loss?
 
         # HICO specific
-        self.gc = False
-        self.zso = False
-        self.zsa = False
-        self.zsh = False
+        self.train_null = False
+        self.osl = True
         self.osc = 1.0
-        self.asc = 1.0
-        self.hsc = 1.0
         self.olc = 1.0
+        self.opr = 0.0
+        self.asl = True
+        self.asc = 1.0
         self.alc = 1.0
-        self.hlc = 1.0
+        self.apr = 1.0
+        self.hsl = False
+        self.hlc = 0.0
+        self.hsc = 0.0
+        self.hpr = 0.0
         self.sloo = False  # use object-only bias as well
+        self.sl_no_norm = False
+        self.gc = False
         self.hoigcn = False
-        self.pro = 0.0
-        self.pra = 0.0
-        self.prh = 0.0
-        # Margin is borrowed from greg_margin for now
-        self.no_norm = False
-        self.no_null = False
 
         # BG specific
         self.filter = False
@@ -99,11 +98,11 @@ class Configs:
         self.lis = False
 
         # ZS GCN specific
+        self.link_null = False
         self.puregc = False
         self.greg = 0.0
         self.greg_margin = 0.3
         self.vv = False
-        self.iso_null = False
         self.aggp = False
 
         ##########################################

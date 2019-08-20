@@ -27,7 +27,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         self.dataset = dataset
         self.repr_dim = 1024
         self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
-        self.reg_coeffs = {'obj': cfg.pro, 'act': cfg.pra, 'hoi': cfg.prh}
+        self.reg_coeffs = {'obj': cfg.opr, 'act': cfg.apr, 'hoi': cfg.hpr}
 
         # Object-action (or noun-verb) adjacency matrix
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
@@ -57,7 +57,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
             seen_act_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
             unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
-            if cfg.no_null:
+            if not cfg.train_null:
                 seen_act_inds = np.array(sorted(set(seen_act_inds) - {0}))
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
@@ -72,7 +72,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 raise NotImplementedError('Not currently supported.')
 
             if cfg.softl > 0:
-                self.softl_enabled = {'obj': cfg.zso, 'act': cfg.zsa, 'hoi': cfg.zsh}
+                self.softl_enabled = {'obj': cfg.osl, 'act': cfg.asl, 'hoi': cfg.hsl}
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
         # Base model
@@ -124,7 +124,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
 
     def get_soft_labels(self, labels):
-        assert cfg.zso or cfg.zsa or cfg.zsh
+        assert cfg.osl or cfg.asl or cfg.hsl
         batch_size = labels.shape[0]
         labels = labels.clamp(min=0)
 
@@ -132,7 +132,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         ext_inter_mat = inter_mat
 
         obj_labels = interactions_to_objects(labels, hico=self.dataset.full_dataset)
-        if cfg.zso:
+        if cfg.osl:
             obj_emb_sim = self.obj_emb_sim.clamp(min=0)
             similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
             similar_obj_per_act = similar_obj_per_act / inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
@@ -148,7 +148,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         obj_labels = obj_labels.detach()
 
         act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
-        if cfg.zsa:
+        if cfg.asl:
             act_emb_sims = self.act_emb_sim.clamp(min=0)
             similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
             similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
@@ -157,7 +157,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         act_labels = act_labels.detach()
 
         hoi_labels = labels
-        if cfg.zsh:
+        if cfg.hsl:
             obj_emb_sim = self.obj_emb_sim.clamp(min=0)
             similar_obj_per_act = torch.bmm(ext_inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
             similar_obj_per_act = similar_obj_per_act / ext_inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
@@ -175,7 +175,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         return obj_labels, act_labels, hoi_labels
 
     def get_reg_loss(self, predictors, adj):
-        if cfg.no_norm:
+        if cfg.sl_no_norm:
             predictors_sim = predictors @ predictors.t()
         else:
             predictors_norm = F.normalize(predictors, dim=1)
@@ -231,7 +231,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                             losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[k][:, self.unseen_inds[k]],
                                                                                                     labels[k][:, self.unseen_inds[k]])
                     else:
-                        if cfg.no_null:
+                        if not cfg.train_null:
                             if k == 'hoi':
                                 raise NotImplementedError()
                             elif k == 'act':

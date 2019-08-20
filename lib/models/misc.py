@@ -67,7 +67,7 @@ def interactions_to_mat(hois, hico):
 
 def get_hoi_adjacency_matrix(dataset, isolate_null=None):
     if isolate_null is None:
-        isolate_null = cfg.iso_null
+        isolate_null = not cfg.link_null
     interactions = dataset.full_dataset.interactions
     inter_obj_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_object_classes))
     inter_obj_adj[np.arange(interactions.shape[0]), interactions[:, 0]] = 1
@@ -89,7 +89,7 @@ def get_hoi_adjacency_matrix(dataset, isolate_null=None):
 
 def get_noun_verb_adj_mat(dataset: HicoDetSplit, isolate_null=None):
     if isolate_null is None:
-        isolate_null = cfg.iso_null
+        isolate_null = not cfg.link_null
     noun_verb_links = torch.from_numpy((dataset.full_dataset.op_pair_to_interaction >= 0).astype(np.float32))
     if isolate_null:
         noun_verb_links[:, 0] = 0
