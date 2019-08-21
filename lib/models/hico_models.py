@@ -63,6 +63,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
+            # FIXME null is not removed from these
             seen_hoi_inds = dataset.active_interactions
             unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
             self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
@@ -299,6 +300,8 @@ class KatoModel(AbstractModel):
         assert cfg.seenf >= 0  # ZS enabled
         seen_hoi_inds = dataset.active_interactions
         unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
+        if not cfg.train_null:
+            raise NotImplementedError  # TODO
         self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
         self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
 

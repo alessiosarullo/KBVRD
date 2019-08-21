@@ -79,8 +79,9 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
     def _build_adj_matrix(self):
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
-        if not cfg.link_null:
-            interactions_to_actions[:, 0] = 0
+        # # This option makes this graph too sparse, isolating too much.
+        # if not cfg.link_null:
+        #     interactions_to_actions[:, 0] = 0
 
         # The adjacency matrix is:
         # | NN  NV  NA |
@@ -153,9 +154,6 @@ class KatoGCNBranch(CheatHoiGCNBranch):
 
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
-        # This option makes this graph too sparse, isolating too much.
-        # if not cfg.link_null:
-        #     interactions_to_actions[:, 0] = 0
 
         adj_nn = normalise(torch.eye(self.num_objects).float())
         adj_vv = normalise(torch.eye(self.num_actions).float())
