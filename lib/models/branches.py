@@ -142,7 +142,6 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         self.use_paper_adj = use_paper_adj
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
 
-    @property
     def _build_adj_matrix(self):
         if not self.use_paper_adj:
             return super(KatoGCNBranch, self)._build_adj_matrix()
