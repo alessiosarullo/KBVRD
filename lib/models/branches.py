@@ -195,12 +195,14 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         z_n = self.z[:self.num_objects]
         z_v = self.z[self.num_objects:(self.num_objects + self.num_actions)]
         z_a = self.z[(self.num_objects + self.num_actions):]
+        adj_nn = self.adj[:self.num_objects, :self.num_objects]
+        adj_vv = self.adj[self.num_objects:(self.num_objects + self.num_actions), self.num_objects:(self.num_objects + self.num_actions)]
         adj_an = self.adj[(self.num_objects + self.num_actions):, :self.num_objects]
         adj_av = self.adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)]
         for i in range(len(self.gc_layers)):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
             # FIXME add self?
-            z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
-            z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
-            z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
+            z_n = self.gc_layers[i](adj_nn @ prev_z_n)
+            z_v = self.gc_layers[i](adj_vv @ prev_z_v)
+            z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
         return z_n, z_v, z_a
