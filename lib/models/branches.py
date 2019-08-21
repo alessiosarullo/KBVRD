@@ -249,7 +249,7 @@ class KatoGCNBranch(AbstractHOIBranch):
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(full_dataset.objects, retry='avg')
-        pred_word_embs = self.word_embs.get_embeddings(full_dataset.predicates, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(full_dataset.actions, retry='avg')
 
         train = True
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=train)
