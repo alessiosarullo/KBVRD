@@ -13,7 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
 from lib.models.containers import Prediction
-from lib.models.misc import bce_loss, interactions_to_actions, interactions_to_objects, interactions_to_mat, get_hoi_adjacency_matrix
+from lib.models.misc import bce_loss, interactions_to_mat, get_hoi_adjacency_matrix
 
 
 class HicoExtZSGCMultiModel(AbstractModel):
@@ -35,7 +35,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         # Word embeddings + similarity matrices
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        act_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
+        act_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
         self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
         self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
@@ -131,7 +131,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
         ext_inter_mat = inter_mat
 
-        obj_labels = interactions_to_objects(labels, hico=self.dataset.full_dataset)
+        obj_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(labels)).clamp(max=1)
         if cfg.osl:
             obj_emb_sim = self.obj_emb_sim.clamp(min=0)
             similar_obj_per_act = torch.bmm(inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
@@ -147,7 +147,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             obj_labels[:, self.unseen_inds['obj']] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_inds['obj']]
         obj_labels = obj_labels.detach()
 
-        act_labels = interactions_to_actions(labels, hico=self.dataset.full_dataset)
+        act_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(labels)).clamp(max=1)
         if cfg.asl:
             act_emb_sims = self.act_emb_sim.clamp(min=0)
             similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
@@ -271,8 +271,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_losses = {}
         if labels is not None:
             hoi_labels = labels.clamp(min=0)
-            obj_labels = interactions_to_objects(hoi_labels, self.dataset.full_dataset).detach()
-            act_labels = interactions_to_actions(hoi_labels, self.dataset.full_dataset).detach()
+            obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
+            act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
             if cfg.softl > 0:
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
 
@@ -297,21 +297,18 @@ class KatoModel(AbstractModel):
         self.dataset = dataset
 
         assert cfg.seenf >= 0  # ZS enabled
-        seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-        seen_op_mat = dataset.full_dataset.op_pair_to_interaction[:, seen_pred_inds]
-        seen_hoi_inds = np.sort(seen_op_mat[seen_op_mat >= 0])
+        seen_hoi_inds = dataset.active_interactions
         unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
         self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
         self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
 
-        self.hoi_repr_dim = 512
-        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
-
-        self.img_repr_mlp = nn.Linear(vis_feat_dim, self.hoi_repr_dim)
-
+        img_feats_reduced_dim = 512
+        img_feats_dim = self.dataset.precomputed_visual_feat_dim
         gc_dims = (512, 200)
-        self.gcn_branch = KatoGCNBranch(dataset, gc_dims=(512, 200))
-        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + self.hoi_repr_dim, 512),
+
+        self.img_repr_mlp = nn.Linear(img_feats_dim, img_feats_reduced_dim)
+        self.gcn_branch = KatoGCNBranch(dataset, word_emb_dim=200, gc_dims=(512, 200), train_z=True)
+        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + img_feats_reduced_dim, 512),
                                        nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),
                                        nn.Linear(512, 200),
@@ -337,7 +334,7 @@ class KatoModel(AbstractModel):
 
     def _forward(self, feats, labels):
         hoi_repr = self.img_repr_mlp(feats)
-        z_a, z_v, z_n = self.gcn_branch()
+        z_n, z_v, z_a = self.gcn_branch()
         hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
                                                z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
                                               dim=2))

@@ -38,22 +38,6 @@ def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
     return T * torch.sigmoid(w * x - k)
 
 
-def interactions_to_actions(hois, hico):
-    i_to_a_mat = np.zeros((hico.num_interactions, hico.num_actions))
-    i_to_a_mat[np.arange(hico.num_interactions), hico.interactions[:, 0]] = 1
-    i_to_a_mat = torch.from_numpy(i_to_a_mat).to(hois)
-    actions = (hois @ i_to_a_mat).clamp(max=1)
-    return actions
-
-
-def interactions_to_objects(hois, hico):
-    i_to_o_mat = np.zeros((hico.num_interactions, hico.num_object_classes))
-    i_to_o_mat[np.arange(hico.num_interactions), hico.interactions[:, 1]] = 1
-    i_to_o_mat = torch.from_numpy(i_to_o_mat).to(hois)
-    objects = (hois @ i_to_o_mat).clamp(max=1)
-    return objects
-
-
 def interactions_to_mat(hois, hico):
     hois_np = hois.detach().cpu().numpy()
     all_hois = np.stack(np.where(hois_np > 0), axis=1)

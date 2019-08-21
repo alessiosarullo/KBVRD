@@ -336,7 +336,7 @@ class Launcher:
                 tr_metrics = evaluator.output_metrics(actions_to_keep=sorted(self.train_split.active_actions))
                 tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
-                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions))
+                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_predicates))
                 print('Zero-shot:')
                 zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
                 zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}

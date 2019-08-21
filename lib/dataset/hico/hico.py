@@ -17,12 +17,12 @@ class Hico:
         self.object_index = {obj: i for i, obj in enumerate(self.objects)}
 
         # Predicates
-        self.predicates = list(self.driver.predicate_dict.keys())
-        self.predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
-        assert self.predicate_index[self.null_interaction] == 0
+        self.actions = list(self.driver.predicate_dict.keys())
+        self.action_index = {pred: i for i, pred in enumerate(self.actions)}
+        assert self.action_index[self.null_interaction] == 0
 
         # Interactions
-        self.interactions = np.array([[self.predicate_index[inter['pred']], self.object_index[inter['obj']]]
+        self.interactions = np.array([[self.action_index[inter['pred']], self.object_index[inter['obj']]]
                                       for inter in self.driver.interaction_list])  # 600 x [p, o]
         self.op_pair_to_interaction = np.full([self.num_object_classes, self.num_actions], fill_value=-1, dtype=np.int)
         self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
@@ -45,11 +45,23 @@ class Hico:
 
     @property
     def num_actions(self):
-        return len(self.predicates)
+        return len(self.actions)
 
     @property
     def num_interactions(self):
         return self.interactions.shape[0]
+
+    @property
+    def interaction_to_object_mat(self):
+        interactions_to_obj = np.zeros((self.num_interactions, self.num_object_classes))
+        interactions_to_obj[np.arange(self.num_interactions), self.interactions[:, 1]] = 1
+        return interactions_to_obj
+
+    @property
+    def interaction_to_action_mat(self):
+        interactions_to_act = np.zeros((self.num_interactions, self.num_actions))
+        interactions_to_act[np.arange(self.num_interactions), self.interactions[:, 0]] = 1
+        return interactions_to_act
 
     def get_img_dir(self, split):
         return self.driver.split_img_dir[split]
