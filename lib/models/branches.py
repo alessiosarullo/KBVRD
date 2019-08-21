@@ -159,7 +159,7 @@ class KatoGCNBranch(CheatHoiGCNBranch):
 
         adj_nn = normalise(torch.eye(self.num_objects).float())
         adj_vv = normalise(torch.eye(self.num_actions).float())
-        adj_aa = normalise(torch.eye(self.num_actions).float())
+        adj_aa = normalise(torch.eye(self.num_interactions).float())
         adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
         adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
         zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
