@@ -101,7 +101,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             gc_dims = (gcemb_dim // 2, latent_dim)
 
             if cfg.hoigcn:
-                self.gcn = CheatHoiGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
+                self.gcn = CheatHoiGCNBranch(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
                 self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
         else:

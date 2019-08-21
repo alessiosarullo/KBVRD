@@ -62,14 +62,22 @@ class CheatGCNBranch(AbstractHOIBranch):
 
 
 class CheatHoiGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True, **kwargs):
         super().__init__(**kwargs)
+        self.input_dim = input_dim
         self.num_objects = dataset.full_dataset.num_object_classes
         self.num_actions = dataset.full_dataset.num_actions
         self.num_interactions = dataset.full_dataset.num_interactions
 
-        interactions_to_obj = dataset.full_dataset.interaction_to_object_mat
-        interactions_to_actions = dataset.full_dataset.interaction_to_action_mat
+        self.adj = nn.Parameter(self._build_adj_matrix(), requires_grad=False)
+        self.z = nn.Parameter(self._get_initial_z(), requires_grad=train_z)
+
+        self.gc_dims = gc_dims
+        self.gc_layers = nn.ModuleList(self._build_gcn())
+
+    def _build_adj_matrix(self):
+        interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
+        interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
         if not cfg.link_null:
             interactions_to_actions[:, 0] = 0
 
@@ -89,22 +97,24 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         adj[(self.num_objects + self.num_actions):, 0:self.num_objects] = adj_an
         adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)] = adj_av
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
-        self.adj = nn.Parameter(adj, requires_grad=False)
+        return adj
 
-        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(), requires_grad=True)
+    def _get_initial_z(self):
+        return torch.empty(self.adj.shape[0], self.input_dim).normal_()
 
-        self.gc_dims = gc_dims
+    def _build_gcn(self):
+        gc_layers = []
         num_gc_layers = len(self.gc_dims)
-        self.gc_layers = nn.ModuleList()
         for i in range(num_gc_layers):
-            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
-            out_dim = gc_dims[i]
+            in_dim = self.gc_dims[i - 1] if i > 0 else self.input_dim
+            out_dim = self.gc_dims[i]
             if i < num_gc_layers - 1:
-                self.gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
-                                                    nn.ReLU(inplace=True),
-                                                    nn.Dropout(p=0.5)))
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
             else:
-                self.gc_layers.append(nn.Linear(in_dim, out_dim))
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+        return gc_layers
 
     @property
     def output_dim(self):
@@ -124,25 +134,26 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim=200, gc_dims=(512, 200), train_z=True, **kwargs):
-        super().__init__(dataset=dataset, input_repr_dim=word_emb_dim, gc_dims=gc_dims, **kwargs)
-
+    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, **kwargs):
+        super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
         # Note that the adjacency matrix used in the convolution will have a different form than the one written in the paper, because that one
         # doesn't make any sense.
 
-        self.word_embs = WordEmbeddings(source='glove', dim=word_emb_dim, normalize=True)
-        obj_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        pred_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
+    def _get_initial_z(self):
+        self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
+        obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
+        return torch.cat([torch.from_numpy(obj_word_embs).float(),
+                          torch.from_numpy(pred_word_embs).float(),
+                          torch.zeros(self.dataset.full_dataset.num_interactions, self.input_dim)
+                          ], dim=0)
 
-        self.z = nn.Parameter(torch.cat([torch.from_numpy(obj_word_embs).float(),
-                                         torch.from_numpy(pred_word_embs).float(),
-                                         torch.zeros(dataset.full_dataset.num_interactions, word_emb_dim)
-                                         ], dim=0),
-                              requires_grad=train_z)
-
-        self.gc_layers = []
+    def _build_gcn(self):
+        gc_layers = []
         for i in range(len(self.gc_dims)):
-            in_dim = gc_dims[i - 1] if i > 0 else word_emb_dim
-            out_dim = gc_dims[i]
-            self.gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
-                                                nn.ReLU(inplace=True)))
+            in_dim = self.gc_dims[i - 1] if i > 0 else self.input_dim
+            out_dim = self.gc_dims[i]
+            # FIXME W is not shared
+            gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                           nn.ReLU(inplace=True)))
+        return gc_layers
