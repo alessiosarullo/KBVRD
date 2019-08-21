@@ -220,6 +220,7 @@ class KatoGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoSplit, gc_dims=(512, 200), **kwargs):
         super().__init__(**kwargs)
         self.word_emb_dim = 200
+        import numpy as np
 
         full_dataset = dataset.full_dataset
         interactions = full_dataset.interactions  # each is [p, o]
