@@ -203,79 +203,14 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         for i in range(len(self.gc_layers)):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
 
-            # # This is what they do. It doesn't make sense.
-            # z_n = self.gc_layers[i](adj_nn @ prev_z_n)
-            # z_v = self.gc_layers[i](adj_vv @ prev_z_v)
-            # z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
+            # This is what they do. It doesn't make sense.
+            z_n = self.gc_layers[i](adj_nn @ prev_z_n)
+            z_v = self.gc_layers[i](adj_vv @ prev_z_v)
+            z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
 
-            # This follows their "decomposition" policy. Although is theoretically incorrect, it makes more sense than above.
-            # FIXME this assumes the blocks on the diagonal are identities.
-            z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
-            z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
-            z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
+            # # This follows their "decomposition" policy. Although it is theoretically incorrect, it makes more sense than above.
+            # # FIXME this assumes the blocks on the diagonal are identities.
+            # z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
+            # z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
+            # z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
         return z_n, z_v, z_a
-
-
-
-# class KatoGCNBranch(AbstractHOIBranch):
-#     def __init__(self, dataset: HicoSplit, gc_dims=(512, 200), **kwargs):
-#         super().__init__(**kwargs)
-#         self.word_emb_dim = 200
-#         self.dataset = dataset
-#         self.num_objects = dataset.full_dataset.num_object_classes
-#         self.num_actions = dataset.full_dataset.num_actions
-#         self.num_interactions = dataset.full_dataset.num_interactions
-#
-#         def normalise(x):
-#             return nn.Parameter((1 / x.sum(dim=1, keepdim=True).sqrt()) * x * (1 / x.sum(dim=0, keepdim=True).sqrt()), requires_grad=False)
-#
-#         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
-#         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
-#         if not cfg.link_null:
-#             interactions_to_actions[:, 0] = 0
-#
-#         self.adj_nn = normalise(torch.eye(self.num_objects).float())
-#         self.adj_vv = normalise(torch.eye(self.num_actions).float())
-#         self.adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
-#         self.adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
-#
-#         # full_dataset = dataset.full_dataset
-#         # interactions = full_dataset.interactions  # each is [p, o]
-#         # num_interactions = interactions.shape[0]
-#         # assert num_interactions == 600
-#         # interactions_to_obj = np.zeros((num_interactions, full_dataset.num_object_classes))
-#         # interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-#         # interactions_to_preds = np.zeros((num_interactions, full_dataset.num_actions))
-#         # interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
-#         #
-#         # adj_av = torch.from_numpy(interactions_to_preds).float()
-#         # adj_an = torch.from_numpy(interactions_to_obj).float()
-#         # adj_nn = torch.eye(full_dataset.num_object_classes).float()
-#         # adj_vv = torch.eye(full_dataset.num_actions).float()
-#         #
-#         # # FIXME null is not taken out
-#
-#         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=True)
-#         obj_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-#         pred_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
-#
-#         train = True
-#         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=train)
-#         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=train)
-#         self.z_a = nn.Parameter(torch.zeros(dataset.full_dataset.num_interactions, self.word_emb_dim), requires_grad=train)
-#
-#         self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i - 1], gc_dims[i]),
-#                                                       nn.ReLU(inplace=True),
-#                                                       nn.Dropout(p=0.5))
-#                                         for i in range(len(gc_dims))])
-#
-#     def _forward(self):
-#         z_n = self.z_n
-#         z_v = self.z_v
-#         z_a = self.z_a
-#         for i in range(len(self.gc_layers)):
-#             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
-#             z_n = self.gc_layers[i](prev_z_n + self.adj_an.t() @ prev_z_a)
-#             z_v = self.gc_layers[i](prev_z_v + self.adj_av.t() @ prev_z_a)
-#             z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
-#         return z_n, z_v, z_a
