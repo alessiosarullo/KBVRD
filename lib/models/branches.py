@@ -221,6 +221,9 @@ class KatoGCNBranch(AbstractHOIBranch):
         super().__init__(**kwargs)
         self.word_emb_dim = 200
         self.dataset = dataset
+        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_actions = dataset.full_dataset.num_actions
+        self.num_interactions = dataset.full_dataset.num_interactions
 
         def normalise(x):
             return nn.Parameter((1 / x.sum(dim=1, keepdim=True).sqrt()) * x * (1 / x.sum(dim=0, keepdim=True).sqrt()), requires_grad=False)
