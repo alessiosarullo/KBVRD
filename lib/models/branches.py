@@ -220,41 +220,28 @@ class KatoGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: HicoSplit, gc_dims=(512, 200), **kwargs):
         super().__init__(**kwargs)
         self.word_emb_dim = 200
-        import numpy as np
 
-        full_dataset = dataset.full_dataset
-        interactions = full_dataset.interactions  # each is [p, o]
-        num_interactions = interactions.shape[0]
-        assert num_interactions == 600
-        interactions_to_obj = np.zeros((num_interactions, full_dataset.num_object_classes))
-        interactions_to_obj[np.arange(num_interactions), interactions[:, 1]] = 1
-        interactions_to_preds = np.zeros((num_interactions, full_dataset.num_actions))
-        interactions_to_preds[np.arange(num_interactions), interactions[:, 0]] = 1
+        def normalise(x):
+            return nn.Parameter((1 / x.sum(dim=1, keepdim=True).sqrt()) * x * (1 / x.sum(dim=0, keepdim=True).sqrt()), requires_grad=False)
 
-        adj_av = torch.from_numpy(interactions_to_preds).float()
-        adj_an = torch.from_numpy(interactions_to_obj).float()
-        adj_nn = torch.eye(full_dataset.num_object_classes).float()
-        adj_vv = torch.eye(full_dataset.num_actions).float()
+        interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
+        interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
+        if not cfg.link_null:
+            interactions_to_actions[:, 0] = 0
 
-        # FIXME null is not taken out
-
-        # Normalise. The vv and nn matrices don't need it since they are identities. I think the other ones are supposed to be normalised like
-        # this, but the paper is not clear at all.
-        self.adj_vv = nn.Parameter(adj_vv, requires_grad=False)
-        self.adj_nn = nn.Parameter(adj_nn, requires_grad=False)
-        self.adj_an = nn.Parameter(torch.diag(1 / adj_an.sum(dim=1).sqrt()) @ adj_an @ torch.diag(1 / adj_an.sum(dim=0).sqrt()),
-                                   requires_grad=False)
-        self.adj_av = nn.Parameter(torch.diag(1 / adj_av.sum(dim=1).sqrt()) @ adj_av @ torch.diag(1 / adj_av.sum(dim=0).sqrt()),
-                                   requires_grad=False)
+        self.adj_nn = normalise(torch.eye(self.num_objects).float())
+        self.adj_vv = normalise(torch.eye(self.num_actions).float())
+        self.adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
+        self.adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
 
         self.word_embs = WordEmbeddings(source='glove', dim=self.word_emb_dim, normalize=True)
-        obj_word_embs = self.word_embs.get_embeddings(full_dataset.objects, retry='avg')
-        pred_word_embs = self.word_embs.get_embeddings(full_dataset.actions, retry='avg')
+        obj_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
+        pred_word_embs = self.word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
 
         train = True
         self.z_n = nn.Parameter(torch.from_numpy(obj_word_embs).float(), requires_grad=train)
         self.z_v = nn.Parameter(torch.from_numpy(pred_word_embs).float(), requires_grad=train)
-        self.z_a = nn.Parameter(torch.zeros(num_interactions, self.word_emb_dim), requires_grad=train)
+        self.z_a = nn.Parameter(torch.zeros(dataset.full_dataset.num_interactions, self.word_emb_dim), requires_grad=train)
 
         self.gc_layers = nn.ModuleList([nn.Sequential(nn.Linear(self.word_emb_dim if i == 0 else gc_dims[i - 1], gc_dims[i]),
                                                       nn.ReLU(inplace=True),
