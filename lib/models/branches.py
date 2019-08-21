@@ -138,7 +138,7 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, follow_paper=False, **kwargs):
+    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, follow_paper, **kwargs):
         self.follow_paper = follow_paper
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
 
@@ -211,5 +211,5 @@ class KatoGCNBranch(CheatHoiGCNBranch):
             # FIXME this assumes the blocks on the diagonal are identities.
             z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
             z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
-            z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + self.adj_av @ prev_z_v)
+            z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
         return z_n, z_v, z_a
