@@ -65,6 +65,7 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True, **kwargs):
         super().__init__(**kwargs)
         self.input_dim = input_dim
+        self.dataset = dataset
         self.num_objects = dataset.full_dataset.num_object_classes
         self.num_actions = dataset.full_dataset.num_actions
         self.num_interactions = dataset.full_dataset.num_interactions
@@ -134,10 +135,40 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, **kwargs):
+    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, use_paper_adj=False, **kwargs):
+        self.use_paper_adj = use_paper_adj
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
-        # Note that the adjacency matrix used in the convolution will have a different form than the one written in the paper, because that one
-        # doesn't make any sense.
+
+    def _build_adj_matrix(self):
+        if not self.use_paper_adj:
+            return super(KatoGCNBranch, self)._build_adj_matrix()
+
+        # # # This one it's not normalised properly, but it's what they use in the paper.
+
+        raise NotImplementedError()
+
+        interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
+        interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
+        if not cfg.link_null:
+            interactions_to_actions[:, 0] = 0
+
+        # The adjacency matrix is:
+        # | NN  NV  NA |
+        # | VN  VV  VA |
+        # | AN  AV  AA |
+        # where N=nouns (objects), V=verbs (actions), A=actions (interactions). Since it is symmetric, NV=VN', NA=AN' and VA=AV'. Also,
+        # NN=VV=AA=0 and NV=0 (connections are only present between interactions and the rest). Thus, only AN and AV need to be defined.
+        # Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is implicitly included by initialising
+        # the adjacency matrix to an identity instead of zeros.
+        adj_an = torch.from_numpy(interactions_to_obj).float()
+        adj_av = torch.from_numpy(interactions_to_actions).float()
+        adj = torch.eye(self.num_objects + self.num_actions + self.num_interactions).float()
+        adj[0:self.num_objects, (self.num_objects + self.num_actions):] = adj_an.t()
+        adj[self.num_objects:(self.num_objects + self.num_actions), (self.num_objects + self.num_actions):] = adj_av.t()
+        adj[(self.num_objects + self.num_actions):, 0:self.num_objects] = adj_an
+        adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)] = adj_av
+        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+        return adj
 
     def _get_initial_z(self):
         self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
