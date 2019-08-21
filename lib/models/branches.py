@@ -270,4 +270,4 @@ class KatoGCNBranch(AbstractHOIBranch):
             z_n = self.gc_layers[i](prev_z_n + self.adj_an.t() @ prev_z_a)
             z_v = self.gc_layers[i](prev_z_v + self.adj_av.t() @ prev_z_a)
             z_a = self.gc_layers[i](prev_z_a + self.adj_an @ prev_z_n + self.adj_av @ prev_z_v)
-        return z_a, z_v, z_n
+        return z_n, z_v, z_a
