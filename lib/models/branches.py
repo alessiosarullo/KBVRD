@@ -92,11 +92,14 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         # the adjacency matrix to an identity instead of zeros.
         adj_an = torch.from_numpy(interactions_to_obj).float()
         adj_av = torch.from_numpy(interactions_to_actions).float()
-        adj = torch.eye(self.num_objects + self.num_actions + self.num_interactions).float()
-        adj[0:self.num_objects, (self.num_objects + self.num_actions):] = adj_an.t()
-        adj[self.num_objects:(self.num_objects + self.num_actions), (self.num_objects + self.num_actions):] = adj_av.t()
-        adj[(self.num_objects + self.num_actions):, 0:self.num_objects] = adj_an
-        adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)] = adj_av
+        adj_nn = torch.eye(self.num_objects).float()
+        adj_vv = torch.eye(self.num_actions).float()
+        adj_aa = torch.eye(self.num_interactions).float()
+        zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
+        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
+                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+                         ], dim=0)
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         return adj
 
@@ -139,35 +142,31 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         self.use_paper_adj = use_paper_adj
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
 
+    @property
     def _build_adj_matrix(self):
         if not self.use_paper_adj:
             return super(KatoGCNBranch, self)._build_adj_matrix()
 
-        # # # This one it's not normalised properly, but it's what they use in the paper.
+        # # # This one is not normalised properly, but it's what they use in the paper.
 
-        raise NotImplementedError()
+        def normalise(x):
+            return (1 / x.sum(dim=1, keepdim=True).sqrt()) * x * (1 / x.sum(dim=0, keepdim=True).sqrt())
 
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
         if not cfg.link_null:
             interactions_to_actions[:, 0] = 0
 
-        # The adjacency matrix is:
-        # | NN  NV  NA |
-        # | VN  VV  VA |
-        # | AN  AV  AA |
-        # where N=nouns (objects), V=verbs (actions), A=actions (interactions). Since it is symmetric, NV=VN', NA=AN' and VA=AV'. Also,
-        # NN=VV=AA=0 and NV=0 (connections are only present between interactions and the rest). Thus, only AN and AV need to be defined.
-        # Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is implicitly included by initialising
-        # the adjacency matrix to an identity instead of zeros.
-        adj_an = torch.from_numpy(interactions_to_obj).float()
-        adj_av = torch.from_numpy(interactions_to_actions).float()
-        adj = torch.eye(self.num_objects + self.num_actions + self.num_interactions).float()
-        adj[0:self.num_objects, (self.num_objects + self.num_actions):] = adj_an.t()
-        adj[self.num_objects:(self.num_objects + self.num_actions), (self.num_objects + self.num_actions):] = adj_av.t()
-        adj[(self.num_objects + self.num_actions):, 0:self.num_objects] = adj_an
-        adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)] = adj_av
-        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+        adj_nn = normalise(torch.eye(self.num_objects).float())
+        adj_vv = normalise(torch.eye(self.num_actions).float())
+        adj_aa = normalise(torch.eye(self.num_actions).float())
+        adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
+        adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
+        zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
+        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
+                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+                         ], dim=0)
         return adj
 
     def _get_initial_z(self):
@@ -184,7 +183,6 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         for i in range(len(self.gc_dims)):
             in_dim = self.gc_dims[i - 1] if i > 0 else self.input_dim
             out_dim = self.gc_dims[i]
-            # FIXME W is not shared
             gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
                                            nn.ReLU(inplace=True)))
         return gc_layers
