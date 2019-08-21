@@ -138,12 +138,12 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, use_paper_adj=False, **kwargs):
-        self.use_paper_adj = use_paper_adj
+    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, follow_paper=False, **kwargs):
+        self.follow_paper = follow_paper
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
 
     def _build_adj_matrix(self):
-        if not self.use_paper_adj:
+        if not self.follow_paper:
             return super(KatoGCNBranch, self)._build_adj_matrix()
 
         # # # This one is not normalised properly, but it's what they use in the paper.
@@ -169,6 +169,7 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         return adj
 
     def _get_initial_z(self):
+        # The paper does not specify whether the embeddings are normalised or what they do for compound words.
         self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
         pred_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
@@ -185,3 +186,21 @@ class KatoGCNBranch(CheatHoiGCNBranch):
             gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
                                            nn.ReLU(inplace=True)))
         return gc_layers
+
+    def _forward(self, input_repr=None):
+        assert input_repr is None
+        if not self.follow_paper:
+            return super(KatoGCNBranch, self)._forward(input_repr=input_repr)
+
+        z_n = self.z[:self.num_objects]
+        z_v = self.z[self.num_objects:(self.num_objects + self.num_actions)]
+        z_a = self.z[(self.num_objects + self.num_actions):]
+        adj_an = self.adj[(self.num_objects + self.num_actions):, :self.num_objects]
+        adj_av = self.adj[(self.num_objects + self.num_actions):, self.num_objects:(self.num_objects + self.num_actions)]
+        for i in range(len(self.gc_layers)):
+            prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
+            # FIXME add self?
+            z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
+            z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
+            z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
+        return z_n, z_v, z_a
