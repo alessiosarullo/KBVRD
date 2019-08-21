@@ -207,10 +207,4 @@ class KatoGCNBranch(CheatHoiGCNBranch):
             z_n = self.gc_layers[i](adj_nn @ prev_z_n)
             z_v = self.gc_layers[i](adj_vv @ prev_z_v)
             z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
-
-            # # This follows their "decomposition" policy. Although it is theoretically incorrect, it makes more sense than above.
-            # # FIXME this assumes the blocks on the diagonal are identities.
-            # z_n = self.gc_layers[i](prev_z_n + adj_an.t() @ prev_z_a)
-            # z_v = self.gc_layers[i](prev_z_v + adj_av.t() @ prev_z_a)
-            # z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
         return z_n, z_v, z_a
