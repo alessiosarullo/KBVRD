@@ -185,7 +185,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         predictors_seen = predictors[seen, :].detach()
         predictors_unseen = predictors[unseen, :]
         predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
-        assert (all_trainable_predictors == predictors).all()
+        assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
 
         if cfg.rl_no_norm:
             predictors_sim = predictors @ predictors.t()
