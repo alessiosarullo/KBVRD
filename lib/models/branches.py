@@ -125,9 +125,9 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         adj_vv = torch.eye(self.num_actions).float()
         adj_aa = torch.eye(self.num_interactions).float()
         zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
-        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
-                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
-                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+        adj = torch.cat([torch.cat([adj_nn, zero_nv, adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(), adj_vv, adj_av.t()], dim=1),
+                         torch.cat([adj_an, adj_av, adj_aa], dim=1)
                          ], dim=0)
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         return adj
@@ -190,9 +190,9 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
         adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
         zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
-        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
-                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
-                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+        adj = torch.cat([torch.cat([adj_nn, zero_nv, adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(), adj_vv, adj_av.t()], dim=1),
+                         torch.cat([adj_an, adj_av, adj_aa], dim=1)
                          ], dim=0)
         return adj
 
