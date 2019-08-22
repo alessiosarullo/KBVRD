@@ -108,6 +108,8 @@ class Configs:
         self.greg_margin = 0.3
         self.vv = False
         self.aggp = False
+        self.gcldim = 200
+        self.gcrdim = 1024
 
         ##########################################
         # Optimiser options                      #

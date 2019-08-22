@@ -86,8 +86,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         # Predictors
         if cfg.gc:
-            gcemb_dim = 1024
-            latent_dim = 200
+            gcemb_dim = cfg.gcrdim
+            latent_dim = cfg.gcldim
             self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, 600),
                                                                   nn.ReLU(inplace=True),
                                                                   nn.Dropout(p=cfg.dropout),
@@ -96,7 +96,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                                   nn.Dropout(p=cfg.dropout),
                                                                   nn.Linear(800, self.repr_dim),
                                                                   ) for k in ['obj', 'act', 'hoi']})
-            gc_dims = (gcemb_dim // 2, latent_dim)
+            gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
             if cfg.hoigcn:
                 self.gcn = CheatHoiGCNBranch(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
