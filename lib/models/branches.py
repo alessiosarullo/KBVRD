@@ -11,7 +11,7 @@ from lib.models.misc import get_noun_verb_adj_mat
 
 
 class CheatGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_repr_dim=512, gc_dims=(256, 128), **kwargs):
+    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_repr_dim=512, gc_dims=(256, 128), block_norm=False, **kwargs):
         super().__init__(**kwargs)
         num_gc_layers = len(gc_dims)
         self.gc_dims = gc_dims
@@ -22,10 +22,16 @@ class CheatGCNBranch(AbstractHOIBranch):
         # implicitly included by initialising the adjacency matrix to an identity instead of zeros.
         self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
         adj = torch.eye(self.num_objects + self.num_actions).float()
-        adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
-        adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
-        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
-
+        if block_norm:
+            # Normalised like (Kato, 2018).
+            nv = self.noun_verb_links
+            norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).sqrt())
+            adj[:self.num_objects, self.num_objects:] = norm_nv  # top right
+            adj[self.num_objects:, :self.num_objects] = norm_nv.t()  # bottom left
+        else:
+            adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
+            adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
+            adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         self.adj = nn.Parameter(adj, requires_grad=False)
 
         # Starting representation
@@ -66,6 +72,7 @@ class DetachingGCNBranch(CheatGCNBranch):
         self.inds_to_detach = to_detach
 
     def _forward(self, input_repr=None):
+        # TODO
         if input_repr is not None:
             z = input_repr
         else:

@@ -101,7 +101,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.hoigcn:
                 self.gcn = CheatHoiGCNBranch(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
-                self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims)
+                self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
         else:
             # Linear predictors (AKA, single FC layer)
             self.output_mlps = nn.ParameterDict()
@@ -110,7 +110,6 @@ class HicoExtZSGCMultiModel(AbstractModel):
                          ('hoi', dataset.full_dataset.num_interactions)]:
                 self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
                 torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
-            self.REMOVE = self.output_mlps['act'].detach().cpu().numpy()
 
         # Regularisation
         self.adj = nn.ParameterDict()
@@ -282,7 +281,6 @@ class HicoExtZSGCMultiModel(AbstractModel):
         else:
             predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
 
-        REMOVE = predictors['act'].detach().cpu().numpy()
         # Final output
         logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
 
