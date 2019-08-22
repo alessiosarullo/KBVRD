@@ -91,10 +91,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, 600),
                                                                   nn.ReLU(inplace=True),
                                                                   nn.Dropout(p=cfg.dropout),
-                                                                  nn.Linear(600, 800),
-                                                                  nn.ReLU(inplace=True),
-                                                                  nn.Dropout(p=cfg.dropout),
-                                                                  nn.Linear(800, self.repr_dim),
+                                                                  # nn.Linear(600, 800),
+                                                                  # nn.ReLU(inplace=True),
+                                                                  # nn.Dropout(p=cfg.dropout),
+                                                                  nn.Linear(600, self.repr_dim),
                                                                   ) for k in ['obj', 'act', 'hoi']})
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
