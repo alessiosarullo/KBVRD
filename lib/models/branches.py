@@ -25,7 +25,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         if block_norm:
             # Normalised like (Kato, 2018).
             nv = self.noun_verb_links
-            norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).sqrt())
+            norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).clamp(min=1).sqrt())
             adj[:self.num_objects, self.num_objects:] = norm_nv  # top right
             adj[self.num_objects:, :self.num_objects] = norm_nv.t()  # bottom left
         else:
