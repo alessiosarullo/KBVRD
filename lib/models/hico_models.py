@@ -88,13 +88,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
         if cfg.gc:
             gcemb_dim = cfg.gcrdim
             latent_dim = cfg.gcldim
-            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, 600),
+            hidden_dim = (latent_dim + self.repr_dim) // 2
+            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
                                                                   nn.ReLU(inplace=True),
                                                                   nn.Dropout(p=cfg.dropout),
-                                                                  # nn.Linear(600, 800),
-                                                                  # nn.ReLU(inplace=True),
-                                                                  # nn.Dropout(p=cfg.dropout),
-                                                                  nn.Linear(600, self.repr_dim),
+                                                                  nn.Linear(hidden_dim, self.repr_dim),
                                                                   ) for k in ['obj', 'act', 'hoi']})
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
