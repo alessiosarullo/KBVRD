@@ -56,10 +56,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
 
             seen_act_inds = dataset.active_actions
-            # Note: null is never unseen, regardless of whether it's seen or not
-            unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist()) - {0}))
-            if not cfg.train_null:
-                seen_act_inds = np.array(sorted(set(seen_act_inds.tolist()) - {0}))
+            unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
@@ -229,36 +226,43 @@ class HicoExtZSGCMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels = x
-            logits, labels, reg_losses = self._forward(feats, orig_labels)
+            all_logits, all_labels, reg_losses = self._forward(feats, orig_labels)
 
             if not inference:
-                labels = {k: v.clamp(min=0) for k, v in labels.items()}
+                all_labels = {k: v.clamp(min=0) for k, v in all_labels.items()}
                 losses = {}
                 for k in ['obj', 'act', 'hoi']:
                     if self.loss_coeffs[k] == 0:
                         continue
+                    logits = all_logits[k]
+                    labels = all_labels[k]
                     if self.zs_enabled:
-                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k][:, self.seen_inds[k]], labels[k][:, self.seen_inds[k]])
+                        seen, unseen = self.seen_inds[k], self.unseen_inds[k]
+                        if not cfg.train_null:
+                            if k == 'hoi':
+                                raise NotImplementedError()
+                            elif k == 'act':
+                                seen = seen[1:]
+                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[:, seen], labels[:, seen])
                         if cfg.softl > 0 and self.softl_enabled[k]:
-                            losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[k][:, self.unseen_inds[k]],
-                                                                                                    labels[k][:, self.unseen_inds[k]])
+                            losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[:, unseen], labels[:, unseen])
                     else:
                         if not cfg.train_null:
                             if k == 'hoi':
                                 raise NotImplementedError()
                             elif k == 'act':
-                                labels[k] = labels[k][:, 1:]
-                                logits[k] = logits[k][:, 1:]
-                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[k], labels[k])
+                                labels = labels[:, 1:]
+                                logits = logits[:, 1:]
+                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits, labels)
                 for k, v in reg_losses.items():
                     losses[f'{k}_reg_loss'] = v
                 return losses
             else:
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
-                obj_scores = torch.sigmoid(logits['obj']).cpu().numpy() ** cfg.osc
-                act_scores = torch.sigmoid(logits['act']).cpu().numpy() ** cfg.asc
-                hoi_scores = torch.sigmoid(logits['hoi']).cpu().numpy() ** cfg.hsc
+                obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
+                act_scores = torch.sigmoid(all_logits['act']).cpu().numpy() ** cfg.asc
+                hoi_scores = torch.sigmoid(all_logits['hoi']).cpu().numpy() ** cfg.hsc
                 prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
                 return prediction
 
