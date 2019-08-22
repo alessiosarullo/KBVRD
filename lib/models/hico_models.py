@@ -310,7 +310,8 @@ class KatoModel(AbstractModel):
         gc_dims = (512, 200)
 
         self.img_repr_mlp = nn.Linear(img_feats_dim, img_feats_reduced_dim)
-        self.gcn_branch = KatoGCNBranch(dataset, word_emb_dim=200, gc_dims=(512, 200), train_z=False, follow_paper=True)
+        self.gcn_branch = KatoGCNBranch(dataset, word_emb_dim=200, gc_dims=(512, 200),
+                                        train_z=not cfg.katoconstz, paper_adj=cfg.katopadj, paper_gc=cfg.katopgc)
         self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + img_feats_reduced_dim, 512),
                                        nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),

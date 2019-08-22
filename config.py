@@ -86,6 +86,10 @@ class Configs:
         self.sl_no_norm = False
         self.gc = False
         self.hoigcn = False
+        # Kato specific
+        self.katopadj = False
+        self.katopgc = False
+        self.katoconstz = False
 
         # BG specific
         self.filter = False

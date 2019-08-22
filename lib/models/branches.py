@@ -3,7 +3,6 @@ from typing import Union
 import torch
 import torch.nn as nn
 
-from config import cfg
 from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.word_embeddings import WordEmbeddings
@@ -139,12 +138,13 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
 
 
 class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, follow_paper, **kwargs):
-        self.follow_paper = follow_paper
+    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, paper_adj, paper_gc, **kwargs):
+        self.paper_adj = paper_adj
+        self.paper_gc = paper_gc
         super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
 
     def _build_adj_matrix(self):
-        if not self.follow_paper:
+        if not self.paper_adj:
             return super(KatoGCNBranch, self)._build_adj_matrix()
 
         # # # This one is not normalised properly, but it's what they use in the paper.
@@ -188,8 +188,6 @@ class KatoGCNBranch(CheatHoiGCNBranch):
 
     def _forward(self, input_repr=None):
         assert input_repr is None
-        if not self.follow_paper:
-            return super(KatoGCNBranch, self)._forward(input_repr=input_repr)
 
         z_n = self.z[:self.num_objects]
         z_v = self.z[self.num_objects:(self.num_objects + self.num_actions)]
@@ -201,8 +199,14 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         for i in range(len(self.gc_layers)):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
 
-            # This is what they do. It doesn't make sense.
-            z_n = self.gc_layers[i](adj_nn @ prev_z_n)
-            z_v = self.gc_layers[i](adj_vv @ prev_z_v)
-            z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
+            if self.paper_gc:
+                # This is what they do. It doesn't make sense.
+                z_n = self.gc_layers[i](adj_nn @ prev_z_n)
+                z_v = self.gc_layers[i](adj_vv @ prev_z_v)
+                z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
+            else:
+                # This is the correct way of doing it, still following their "decomposition" policy.
+                z_n = self.gc_layers[i](adj_nn @ prev_z_n + adj_an.t() @ prev_z_a)
+                z_v = self.gc_layers[i](adj_vv @ prev_z_v + adj_av.t() @ prev_z_a)
+                z_a = self.gc_layers[i](prev_z_a + adj_an @ prev_z_n + adj_av @ prev_z_v)
         return z_n, z_v, z_a
