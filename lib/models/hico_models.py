@@ -219,6 +219,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         reg_loss_mat[:, null, :] = 0
         reg_loss_mat[:, :, null] = 0
 
+        reg_loss_mat = reg_loss_mat[unseen, :, :]
         reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum().item()
         return reg_loss
 
