@@ -60,6 +60,24 @@ class CheatGCNBranch(AbstractHOIBranch):
         return obj_embs, pred_embs
 
 
+class DetachingGCNBranch(CheatGCNBranch):
+    def __init__(self, to_detach, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.inds_to_detach = to_detach
+
+    def _forward(self, input_repr=None):
+        if input_repr is not None:
+            z = input_repr
+        else:
+            z = self.z
+        for gcl in self.gc_layers:
+            aggr_z = self.adj @ z
+            z = gcl(aggr_z)
+        obj_embs = z[:self.num_objects]
+        pred_embs = z[self.num_objects:]
+        return obj_embs, pred_embs
+
+
 class CheatHoiGCNBranch(AbstractHOIBranch):
     def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True, **kwargs):
         super().__init__(**kwargs)
@@ -78,6 +96,10 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
     def _build_adj_matrix(self):
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
+
+        # FIXME seems that normalising the whole matrix (which affects the diagonal, i.e., the contribution of the added identity) leads to poor
+        #  results.
+
         # # This option makes this graph too sparse, isolating too much.
         # if not cfg.link_null:
         #     interactions_to_actions[:, 0] = 0

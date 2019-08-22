@@ -22,9 +22,6 @@ EXP_DIR=${OUTPUT_DIR}/${EXP_FULL_NAME}
 LOG="$EXP_DIR/log.txt"
 
 mkdir -p ${EXP_DIR}
-#LAST_EXP_SYMLINK="output/last_exp"
-#rm -f -- ${LAST_EXP_SYMLINK}
-#ln -rs ${EXP_DIR} ${LAST_EXP_SYMLINK}
 exec &> >(tee -a "$LOG")
 echo Logging ${EXP_DIR} to "$LOG"
 

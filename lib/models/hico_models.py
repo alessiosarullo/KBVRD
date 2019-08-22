@@ -108,8 +108,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             for k, d in [('obj', dataset.full_dataset.num_object_classes),
                          ('act', dataset.full_dataset.num_actions),
                          ('hoi', dataset.full_dataset.num_interactions)]:
-                self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim))
+                self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
                 torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
+            self.REMOVE = self.output_mlps['act'].detach().cpu().numpy()
 
         # Regularisation
         self.adj = nn.ParameterDict()
@@ -281,6 +282,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
         else:
             predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
 
+        REMOVE = predictors['act'].detach().cpu().numpy()
         # Final output
         logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
 
