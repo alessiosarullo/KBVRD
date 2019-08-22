@@ -83,7 +83,7 @@ class Configs:
         self.hsc = 0.0
         self.hpr = 0.0
         self.sloo = False  # use object-only bias as well
-        self.sl_no_norm = False
+        self.rl_no_norm = False
         self.gc = False
         self.hoigcn = False
         # Kato specific

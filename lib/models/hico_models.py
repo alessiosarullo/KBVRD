@@ -175,8 +175,19 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         return obj_labels, act_labels, hoi_labels
 
-    def get_reg_loss(self, predictors, adj):
-        if cfg.sl_no_norm:
+    def get_reg_loss(self, predictors, branch):
+        adj = self.adj[branch]
+        seen = self.seen_inds[branch]
+        unseen = self.unseen_inds[branch]
+
+        # Detach seen classes predictors
+        all_trainable_predictors = predictors
+        predictors_seen = predictors[seen, :].detach()
+        predictors_unseen = predictors[unseen, :]
+        predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
+        assert (all_trainable_predictors == predictors).all()
+
+        if cfg.rl_no_norm:
             predictors_sim = predictors @ predictors.t()
         else:
             predictors_norm = F.normalize(predictors, dim=1)
@@ -279,7 +290,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
             for k in ['obj', 'act', 'hoi']:
                 if self.reg_coeffs[k] > 0:
-                    reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], self.adj[k])
+                    reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], branch=k)
         else:
             obj_labels = act_labels = hoi_labels = None
         labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}

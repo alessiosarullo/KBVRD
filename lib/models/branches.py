@@ -200,7 +200,7 @@ class KatoGCNBranch(CheatHoiGCNBranch):
             prev_z_n, prev_z_v, prev_z_a = z_n, z_v, z_a
 
             if self.paper_gc:
-                # This is what they do. It doesn't make sense.
+                # This is what they say they do. It doesn't make sense.
                 z_n = self.gc_layers[i](adj_nn @ prev_z_n)
                 z_v = self.gc_layers[i](adj_vv @ prev_z_v)
                 z_a = self.gc_layers[i](adj_an @ prev_z_n + adj_av @ prev_z_v)
