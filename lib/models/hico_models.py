@@ -228,7 +228,12 @@ class HicoExtZSGCMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels = x
-            all_logits, all_labels, reg_losses = self._forward(feats, orig_labels)
+            all_instance_reprs, all_linear_predictors, all_gc_predictors, all_labels = self._forward(feats, orig_labels)
+            all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act', 'hoi']}
+            if cfg.gc:
+                all_gc_logits = {k: all_instance_reprs[k] @ all_gc_predictors[k].t() for k in ['obj', 'act', 'hoi']}
+            else:
+                all_gc_logits = {}
 
             if not inference:
                 all_labels = {k: v.clamp(min=0) for k, v in all_labels.items()}
@@ -240,6 +245,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                     if loss_c == 0:
                         continue
 
+                    # Loss
                     if self.zs_enabled:
                         seen, unseen = self.seen_inds[k], self.unseen_inds[k]
                         soft_label_loss_c = self.soft_label_loss_coeffs[k]
@@ -249,6 +255,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
                             elif k == 'act':
                                 seen = seen[1:]
                         losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
+                        if cfg.gc:
+                            losses[f'{k}_loss'] += loss_c * bce_loss(all_gc_logits[:, seen], labels[:, seen])
                         if soft_label_loss_c > 0:
                             losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(logits[:, unseen], labels[:, unseen])
                     else:
@@ -259,10 +267,16 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                 labels = labels[:, 1:]
                                 logits = logits[:, 1:]
                         losses[f'{k}_loss'] = loss_c * bce_loss(logits, labels)
-                for k, v in reg_losses.items():
-                    losses[f'{k}_reg_loss'] = v
+
+                    # Regularisation loss
+                    if self.reg_coeffs[k] > 0:
+                        losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * self.get_reg_loss(all_gc_predictors[k], branch=k)
                 return losses
             else:
+                if self.zs_enabled and cfg.gc:
+                    for k in all_logits.keys():
+                        unseen = self.unseen_inds[k]
+                        all_logits[k][:, unseen] = all_gc_logits[[k]:, unseen]
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
                 obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
@@ -273,6 +287,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
     def _forward(self, feats, labels):
         # Predictors
+        linear_predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
         if cfg.gc:
             if cfg.hoigcn:
                 hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
@@ -283,27 +298,22 @@ class HicoExtZSGCMultiModel(AbstractModel):
             class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
             predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
         else:
-            predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
+            predictors = linear_predictors
 
-        # Final output
-        logits = {k: self.repr_mlps[k](feats) @ predictors[k].t() for k in ['obj', 'act', 'hoi']}
+        # Instance representation
+        instance_repr = {k: self.repr_mlps[k](feats) for k in ['obj', 'act', 'hoi']}
 
-        # Labels and regularisation
-        reg_losses = {}
+        # Labels
         if labels is not None:
             hoi_labels = labels.clamp(min=0)
             obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
             act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
             if self.soft_labels_enabled:
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
-
-            for k in ['obj', 'act', 'hoi']:
-                if self.reg_coeffs[k] > 0:
-                    reg_losses[k] = self.reg_coeffs[k] * self.get_reg_loss(predictors[k], branch=k)
         else:
             obj_labels = act_labels = hoi_labels = None
         labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
-        return logits, labels, reg_losses
+        return instance_repr, linear_predictors, predictors, labels
 
 
 class KatoModel(AbstractModel):
