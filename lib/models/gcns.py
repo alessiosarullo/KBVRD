@@ -1,28 +1,72 @@
-from typing import Union
+from typing import Union, Dict
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.word_embeddings import WordEmbeddings
-from lib.models.abstract_model import AbstractHOIBranch
 from lib.models.misc import get_noun_verb_adj_mat
 
 
-class CheatGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_repr_dim=512, gc_dims=(256, 128), block_norm=False, **kwargs):
-        super().__init__(**kwargs)
-        num_gc_layers = len(gc_dims)
-        self.gc_dims = gc_dims
+class AbstractGCN(nn.Module):
+    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True):
+        super().__init__()
+        self.input_dim = input_dim
+        self.dataset = dataset
         self.num_objects = dataset.full_dataset.num_object_classes
         self.num_actions = dataset.full_dataset.num_actions
+        self.num_interactions = dataset.full_dataset.num_interactions
 
+        self.adj = nn.Parameter(self._build_adj_matrix(), requires_grad=False)
+        self.z = nn.Parameter(self._get_initial_z(), requires_grad=train_z)
+
+        self.gc_dims = gc_dims
+        self.gc_layers = nn.ModuleList(self._build_gcn())
+
+    @property
+    def output_dim(self):
+        return self.gc_dims[-1]
+
+    def forward(self, *args, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            return self._forward(*args, **kwargs)
+
+    def _build_adj_matrix(self):
+        raise NotImplementedError
+
+    def _get_initial_z(self):
+        return torch.empty(self.adj.shape[0], self.input_dim).normal_()
+
+    def _build_gcn(self):
+        gc_layers = []
+        num_gc_layers = len(self.gc_dims)
+        for i in range(num_gc_layers):
+            in_dim = self.gc_dims[i - 1] if i > 0 else self.input_dim
+            out_dim = self.gc_dims[i]
+            if i < num_gc_layers - 1:
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
+            else:
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+        return gc_layers
+
+    def _forward(self, input_repr=None):
+        raise NotImplementedError
+
+
+class HicoGCN(AbstractGCN):
+    def __init__(self, dataset, block_norm=False, **kwargs):
+        self.block_norm = block_norm
+        self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=self.dataset), requires_grad=False)
+        super().__init__(dataset=dataset, **kwargs)
+
+    def _build_adj_matrix(self):
         # Normalised adjacency matrix. Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is
         # implicitly included by initialising the adjacency matrix to an identity instead of zeros.
-        self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
         adj = torch.eye(self.num_objects + self.num_actions).float()
-        if block_norm:
+        if self.block_norm:
             # Normalised like (Kato, 2018).
             nv = self.noun_verb_links
             norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).clamp(min=1).sqrt())
@@ -32,27 +76,7 @@ class CheatGCNBranch(AbstractHOIBranch):
             adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
             adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
             adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
-        self.adj = nn.Parameter(adj, requires_grad=False)
-
-        # Starting representation
-        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(), requires_grad=True)
-
-        gc_layers = []
-        for i in range(num_gc_layers):
-            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
-            out_dim = gc_dims[i]
-            if i < num_gc_layers - 1:
-                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(p=0.5)))
-            else:
-                gc_layers.append(nn.Linear(in_dim, out_dim))
-
-        self.gc_layers = nn.ModuleList(gc_layers)
-
-    @property
-    def output_dim(self):
-        return self.gc_dims[-1]
+        return adj
 
     def _forward(self, input_repr=None):
         if input_repr is not None:
@@ -66,7 +90,7 @@ class CheatGCNBranch(AbstractHOIBranch):
         return obj_embs, pred_embs
 
 
-class DetachingGCNBranch(CheatGCNBranch):
+class DetachingGCNBranch(HicoGCN):
     def __init__(self, to_detach, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inds_to_detach = to_detach
@@ -85,20 +109,9 @@ class DetachingGCNBranch(CheatGCNBranch):
         return obj_embs, pred_embs
 
 
-class CheatHoiGCNBranch(AbstractHOIBranch):
-    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True, **kwargs):
-        super().__init__(**kwargs)
-        self.input_dim = input_dim
-        self.dataset = dataset
-        self.num_objects = dataset.full_dataset.num_object_classes
-        self.num_actions = dataset.full_dataset.num_actions
-        self.num_interactions = dataset.full_dataset.num_interactions
-
-        self.adj = nn.Parameter(self._build_adj_matrix(), requires_grad=False)
-        self.z = nn.Parameter(self._get_initial_z(), requires_grad=train_z)
-
-        self.gc_dims = gc_dims
-        self.gc_layers = nn.ModuleList(self._build_gcn())
+class HicoHoiGCN(AbstractGCN):
+    def __init__(self, dataset, **kwargs):
+        super().__init__(dataset=dataset, **kwargs)
 
     def _build_adj_matrix(self):
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
@@ -125,33 +138,12 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         adj_vv = torch.eye(self.num_actions).float()
         adj_aa = torch.eye(self.num_interactions).float()
         zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
-        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
-                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
-                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+        adj = torch.cat([torch.cat([adj_nn, zero_nv, adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(), adj_vv, adj_av.t()], dim=1),
+                         torch.cat([adj_an, adj_av, adj_aa], dim=1)
                          ], dim=0)
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         return adj
-
-    def _get_initial_z(self):
-        return torch.empty(self.adj.shape[0], self.input_dim).normal_()
-
-    def _build_gcn(self):
-        gc_layers = []
-        num_gc_layers = len(self.gc_dims)
-        for i in range(num_gc_layers):
-            in_dim = self.gc_dims[i - 1] if i > 0 else self.input_dim
-            out_dim = self.gc_dims[i]
-            if i < num_gc_layers - 1:
-                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(p=0.5)))
-            else:
-                gc_layers.append(nn.Linear(in_dim, out_dim))
-        return gc_layers
-
-    @property
-    def output_dim(self):
-        return self.gc_dims[-1]
 
     def _forward(self, input_repr=None):
         if input_repr is not None:
@@ -166,15 +158,15 @@ class CheatHoiGCNBranch(AbstractHOIBranch):
         return obj_embs, act_embs, hoi_embs
 
 
-class KatoGCNBranch(CheatHoiGCNBranch):
-    def __init__(self, dataset: HicoSplit, word_emb_dim, gc_dims, train_z, paper_adj, paper_gc, **kwargs):
+class KatoGCN(HicoHoiGCN):
+    def __init__(self, dataset: HicoSplit, paper_adj, paper_gc, **kwargs):
         self.paper_adj = paper_adj
         self.paper_gc = paper_gc
-        super().__init__(dataset=dataset, input_dim=word_emb_dim, gc_dims=gc_dims, train_z=train_z, **kwargs)
+        super().__init__(dataset=dataset, **kwargs)
 
     def _build_adj_matrix(self):
         if not self.paper_adj:
-            return super(KatoGCNBranch, self)._build_adj_matrix()
+            return super(KatoGCN, self)._build_adj_matrix()
 
         # # # This one is not normalised properly, but it's what they use in the paper.
 
@@ -190,9 +182,9 @@ class KatoGCNBranch(CheatHoiGCNBranch):
         adj_an = normalise(torch.from_numpy(interactions_to_obj).float())
         adj_av = normalise(torch.from_numpy(interactions_to_actions).float())
         zero_nv = torch.zeros((self.num_objects, self.num_actions)).float()
-        adj = torch.cat([torch.cat([adj_nn,         zero_nv,        adj_an.t()], dim=1),
-                         torch.cat([zero_nv.t(),    adj_vv,         adj_av.t()], dim=1),
-                         torch.cat([adj_an,         adj_av,         adj_aa], dim=1)
+        adj = torch.cat([torch.cat([adj_nn, zero_nv, adj_an.t()], dim=1),
+                         torch.cat([zero_nv.t(), adj_vv, adj_av.t()], dim=1),
+                         torch.cat([adj_an, adj_av, adj_aa], dim=1)
                          ], dim=0)
         return adj
 

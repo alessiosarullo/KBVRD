@@ -4,7 +4,7 @@ from torch.nn import functional as F
 
 from config import cfg
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
-from lib.models.branches import *
+from lib.models.gcns import *
 from lib.models.containers import VisualOutput
 from lib.models.generic_model import GenericModel, Prediction
 from lib.models.misc import bce_loss, LIS, get_noun_verb_adj_mat
@@ -281,7 +281,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
 
         gcemb_dim = 1024
         if cfg.puregc:
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
+            self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
         else:
             latent_dim = 200
             input_dim = self.predictor_dim
@@ -293,7 +293,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
                                                   nn.Dropout(p=cfg.dropout),
                                                   nn.Linear(800, input_dim),
                                                   )
-            self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+            self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
         if cfg.greg > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)

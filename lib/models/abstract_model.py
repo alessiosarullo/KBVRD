@@ -19,21 +19,3 @@ class AbstractModel(nn.Module):
 
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs)
-
-
-class AbstractHOIBranch(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        self.__dict__.update({k: v for k, v in kwargs.items() if k in self.__dict__.keys() and v is not None})
-        self.values_to_monitor = {}  # type: Dict[str, torch.Tensor]
-
-    def forward(self, *args, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            return self._forward(*args, **kwargs)
-
-    def _forward(self, *args, **kwargs):
-        raise NotImplementedError()
-
-    @property
-    def output_dim(self):
-        raise NotImplementedError()

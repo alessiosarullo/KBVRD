@@ -11,7 +11,7 @@ from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.utils import Splits
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
+from lib.models.gcns import get_noun_verb_adj_mat, HicoGCN, HicoHoiGCN, KatoGCN
 from lib.models.containers import Prediction
 from lib.models.misc import bce_loss, interactions_to_mat, get_hoi_adjacency_matrix
 
@@ -97,9 +97,9 @@ class HicoExtZSGCMultiModel(AbstractModel):
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
             if cfg.hoigcn:
-                self.gcn = CheatHoiGCNBranch(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+                self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
-                self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
         else:
             # Linear predictors (AKA, single FC layer)
             self.output_mlps = nn.ParameterDict()
@@ -324,8 +324,8 @@ class KatoModel(AbstractModel):
         gc_dims = (512, 200)
 
         self.img_repr_mlp = nn.Linear(img_feats_dim, img_feats_reduced_dim)
-        self.gcn_branch = KatoGCNBranch(dataset, word_emb_dim=200, gc_dims=(512, 200),
-                                        train_z=not cfg.katoconstz, paper_adj=cfg.katopadj, paper_gc=cfg.katopgc)
+        self.gcn_branch = KatoGCN(dataset, input_dim=200, gc_dims=(512, 200),
+                                  train_z=not cfg.katoconstz, paper_adj=cfg.katopadj, paper_gc=cfg.katopgc)
         self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + img_feats_reduced_dim, 512),
                                        nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),
