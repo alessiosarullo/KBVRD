@@ -31,7 +31,7 @@ do
   exec &> >(tee -a "$LOG")
   echo Logging "${EXP_DIR}" to "$LOG"
 
-  python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}" > "${LOG}" 2>&1
+  python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}"
 done
 if [ "${NUM_RUNS}" -gt 1 ]; then
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
