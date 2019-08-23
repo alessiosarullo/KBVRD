@@ -25,9 +25,11 @@ class HicoExtZSGCMultiModel(AbstractModel):
         super().__init__(dataset, **kwargs)
         assert cfg.hico
         self.dataset = dataset
-        self.repr_dim = 1024
+        self.repr_dim = cfg.repr_dim
         self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
+        self.soft_label_loss_coeffs = {'obj': cfg.osl, 'act': cfg.asl, 'hoi': cfg.hsl}
         self.reg_coeffs = {'obj': cfg.opr, 'act': cfg.apr, 'hoi': cfg.hpr}
+        self.soft_labels_enabled = any([v > 0 for v in self.soft_label_loss_coeffs.values()])
 
         # Object-action (or noun-verb) adjacency matrix
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
@@ -69,8 +71,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if self.load_backbone:
                 raise NotImplementedError('Not currently supported.')
 
-            if cfg.softl > 0:
-                self.softl_enabled = {'obj': cfg.osl, 'act': cfg.asl, 'hoi': cfg.hsl}
+            if self.soft_labels_enabled:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
         # Base model
@@ -89,12 +90,10 @@ class HicoExtZSGCMultiModel(AbstractModel):
             gcemb_dim = cfg.gcrdim
             latent_dim = cfg.gcldim
             hidden_dim = (latent_dim + self.repr_dim) // 2
-            # self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
-            #                                                       nn.ReLU(inplace=True),
-            #                                                       nn.Dropout(p=cfg.dropout),
-            #                                                       nn.Linear(hidden_dim, self.repr_dim),
-            #                                                       ) for k in ['obj', 'act', 'hoi']})
-            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, self.repr_dim),
+            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
+                                                                  nn.ReLU(inplace=True),
+                                                                  nn.Dropout(p=cfg.dropout),
+                                                                  nn.Linear(hidden_dim, self.repr_dim),
                                                                   ) for k in ['obj', 'act', 'hoi']})
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
@@ -233,20 +232,23 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 all_labels = {k: v.clamp(min=0) for k, v in all_labels.items()}
                 losses = {}
                 for k in ['obj', 'act', 'hoi']:
-                    if self.loss_coeffs[k] == 0:
-                        continue
                     logits = all_logits[k]
                     labels = all_labels[k]
+                    loss_c = self.loss_coeffs[k]
+                    if loss_c == 0:
+                        continue
+
                     if self.zs_enabled:
                         seen, unseen = self.seen_inds[k], self.unseen_inds[k]
+                        soft_label_loss_c = self.soft_label_loss_coeffs[k]
                         if not cfg.train_null:
                             if k == 'hoi':
                                 raise NotImplementedError()
                             elif k == 'act':
                                 seen = seen[1:]
-                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits[:, seen], labels[:, seen])
-                        if cfg.softl > 0 and self.softl_enabled[k]:
-                            losses[f'{k}_loss_unseen'] = self.loss_coeffs[k] * cfg.softl * bce_loss(logits[:, unseen], labels[:, unseen])
+                        losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
+                        if soft_label_loss_c > 0:
+                            losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(logits[:, unseen], labels[:, unseen])
                     else:
                         if not cfg.train_null:
                             if k == 'hoi':
@@ -254,7 +256,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                             elif k == 'act':
                                 labels = labels[:, 1:]
                                 logits = logits[:, 1:]
-                        losses[f'{k}_loss'] = self.loss_coeffs[k] * bce_loss(logits, labels)
+                        losses[f'{k}_loss'] = loss_c * bce_loss(logits, labels)
                 for k, v in reg_losses.items():
                     losses[f'{k}_reg_loss'] = v
                 return losses
@@ -290,7 +292,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             hoi_labels = labels.clamp(min=0)
             obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
             act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
-            if cfg.softl > 0:
+            if self.soft_labels_enabled:
                 obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
 
             for k in ['obj', 'act', 'hoi']:
