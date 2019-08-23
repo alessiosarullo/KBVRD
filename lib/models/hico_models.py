@@ -1,4 +1,3 @@
-import pickle
 from typing import List
 
 import numpy as np
@@ -8,11 +7,10 @@ import torch.nn.functional as F
 
 from config import cfg
 from lib.dataset.hico.hico_split import HicoSplit
-from lib.dataset.utils import Splits
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.gcns import get_noun_verb_adj_mat, HicoGCN, HicoHoiGCN, KatoGCN
 from lib.models.containers import Prediction
+from lib.models.gcns import get_noun_verb_adj_mat, HicoGCN, HicoHoiGCN, KatoGCN, CheatGCNBranch
 from lib.models.misc import bce_loss, interactions_to_mat, get_hoi_adjacency_matrix
 
 
@@ -100,7 +98,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
             if cfg.hoigcn:
                 self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
-                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                # self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                self.gcn = CheatGCNBranch(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
         else:
             # Linear predictors (AKA, single FC layer)
             self.output_mlps = nn.ParameterDict()

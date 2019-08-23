@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union
 
 import torch
 from torch import nn
@@ -7,7 +7,60 @@ from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.misc import get_noun_verb_adj_mat
+import numpy as np
 
+
+class CheatGCNBranch(nn.Module):
+    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_repr_dim=512, gc_dims=(256, 128), block_norm=False, **kwargs):
+        super().__init__()
+        num_gc_layers = len(gc_dims)
+        self.gc_dims = gc_dims
+        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_actions = dataset.full_dataset.num_actions
+
+        # Normalised adjacency matrix. Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is
+        # implicitly included by initialising the adjacency matrix to an identity instead of zeros.
+        self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
+        adj = torch.eye(self.num_objects + self.num_actions).float()
+        if block_norm:
+            # Normalised like (Kato, 2018).
+            nv = self.noun_verb_links
+            norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).clamp(min=1).sqrt())
+            adj[:self.num_objects, self.num_objects:] = norm_nv  # top right
+            adj[self.num_objects:, :self.num_objects] = norm_nv.t()  # bottom left
+        else:
+            adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
+            adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
+            adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+        self.adj = nn.Parameter(adj, requires_grad=False)
+
+        # Starting representation
+        self.z = nn.Parameter(torch.empty(self.adj.shape[0], input_repr_dim).normal_(), requires_grad=True)
+
+        gc_layers = []
+        for i in range(num_gc_layers):
+            in_dim = gc_dims[i - 1] if i > 0 else input_repr_dim
+            out_dim = gc_dims[i]
+            if i < num_gc_layers - 1:
+                gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=0.5)))
+            else:
+                gc_layers.append(nn.Linear(in_dim, out_dim))
+
+        self.gc_layers = nn.ModuleList(gc_layers)
+
+    def forward(self, input_repr=None):
+        with torch.set_grad_enabled(self.training):
+            if input_repr is not None:
+                z = input_repr
+            else:
+                z = self.z
+            for gcl in self.gc_layers:
+                z = gcl(self.adj @ z)
+            obj_embs = z[:self.num_objects]
+            pred_embs = z[self.num_objects:]
+            return obj_embs, pred_embs
 
 class AbstractGCN(nn.Module):
     def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True):
@@ -90,24 +143,33 @@ class HicoGCN(AbstractGCN):
 
 
 class DetachingHicoGCN(HicoGCN):
-    def __init__(self, dataset, seen, unseen, **kwargs):
+    def __init__(self, dataset, seen_act, unseen_act, **kwargs):
         super().__init__(dataset=dataset, **kwargs)
-        self.seen = seen
-        self.unseen = unseen
+        self.seen_act = seen_act
+        self.unseen_act = unseen_act
 
     def _forward(self, input_repr=None):
         if input_repr is not None:
             z = input_repr
         else:
             z = self.z
+        i_obj = np.arange(self.num_objects)
+        i_act_seen = self.num_objects + self.seen_act
+        i_act_unseen = self.num_objects + self.unseen_act
 
-        obj_z = z[:self.num_objects]
-        seen_z = z[self.num_objects + self.seen, :]
-        unseen_z = z[self.num_objects + self.unseen, :]
+        adj = self.adj
+        obj_z = z[i_obj, :]
+        act_seen_z = z[i_act_seen, :]
+        act_unseen_z = z[i_act_unseen, :]
         for gcl in self.gc_layers:
-            seen_z = gcl(self.adj[self.seen, :] @ z)
-            unseen_z = gcl(self.adj[self.unseen, :] @ z)
-        act_z = torch.cat([seen_z, unseen_z], dim=0)[torch.sort(torch.cat([self.seen, self.unseen]))[1]]
+            po, pas, pau = obj_z, act_seen_z, act_unseen_z
+            new_z_os = adj[:, i_obj] @ po + adj[:, i_act_seen] @ pas
+            new_z_u = adj[:, i_act_unseen] @ pau
+            new_z = new_z_os + new_z_u
+            obj_z = gcl(new_z[i_obj, :])
+            act_seen_z = gcl(new_z[i_act_seen, :])
+            act_unseen_z = gcl((new_z_os.detach() + new_z_u)[i_act_unseen, :])
+        act_z = torch.cat([act_seen_z, act_unseen_z], dim=0)[torch.sort(torch.cat([self.seen_act, self.unseen_act]))[1]]
         return obj_z, act_z
 
 
