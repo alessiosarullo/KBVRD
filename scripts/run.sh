@@ -35,7 +35,11 @@ do
   exec &> >(tee -a "$LOG")
   echo Logging "${EXP_DIR}" to "$LOG"
 
-  python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}"
+  if [ "${NUM_RUNS}" -gt 1 ]; then
+    python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}"  --randomize "${@:6}"
+  else
+    python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}"
+  fi
 done
 if [ "${NUM_RUNS}" -gt 1 ]; then
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
