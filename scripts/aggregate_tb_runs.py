@@ -16,6 +16,7 @@ def main():
 
     print(fname)
     print(runs)
+    os.makedirs(fname, exist_ok=True)
 
     summary_iterators = [EventAccumulator(os.path.join(p, 'tboard/Test')).Reload() for p in runs]
     tags = summary_iterators[0].Tags()['scalars']
