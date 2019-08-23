@@ -113,6 +113,7 @@ class Configs:
         self.aggp = False
         self.gcldim = 200
         self.gcrdim = 1024
+        self.gcdetach = False
 
         ##########################################
         # Optimiser options                      #
