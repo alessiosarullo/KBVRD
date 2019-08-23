@@ -85,27 +85,30 @@ class HicoGCN(AbstractGCN):
         for gcl in self.gc_layers:
             z = gcl(self.adj @ z)
         obj_embs = z[:self.num_objects]
-        pred_embs = z[self.num_objects:]
-        return obj_embs, pred_embs
+        act_embs = z[self.num_objects:]
+        return obj_embs, act_embs
 
 
-class DetachingGCNBranch(HicoGCN):
-    def __init__(self, to_detach, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.inds_to_detach = to_detach
+class DetachingHicoGCN(HicoGCN):
+    def __init__(self, dataset, seen, unseen, **kwargs):
+        super().__init__(dataset=dataset, **kwargs)
+        self.seen = seen
+        self.unseen = unseen
 
     def _forward(self, input_repr=None):
-        # TODO
         if input_repr is not None:
             z = input_repr
         else:
             z = self.z
+
+        obj_z = z[:self.num_objects]
+        seen_z = z[self.num_objects + self.seen, :]
+        unseen_z = z[self.num_objects + self.unseen, :]
         for gcl in self.gc_layers:
-            aggr_z = self.adj @ z
-            z = gcl(aggr_z)
-        obj_embs = z[:self.num_objects]
-        pred_embs = z[self.num_objects:]
-        return obj_embs, pred_embs
+            seen_z = gcl(self.adj[self.seen, :] @ z)
+            unseen_z = gcl(self.adj[self.unseen, :] @ z)
+        act_z = torch.cat([seen_z, unseen_z], dim=0)[torch.sort(torch.cat([self.seen, self.unseen]))[1]]
+        return obj_z, act_z
 
 
 class HicoHoiGCN(AbstractGCN):
@@ -127,8 +130,9 @@ class HicoHoiGCN(AbstractGCN):
         # | NN  NV  NA |
         # | VN  VV  VA |
         # | AN  AV  AA |
-        # where N=nouns (objects), V=verbs (actions), A=actions (interactions). Since it is symmetric, NV=VN', NA=AN' and VA=AV'. Also,
-        # NN=VV=AA=0 and NV=0 (connections are only present between interactions and the rest). Thus, only AN and AV need to be defined.
+        # where N=nouns (objects), V=verbs (actions), A=actions (interactions) [I'm, using Kato notation here, although clashes with the one I
+        # normally use for the different semantic of `action`]. Since it is symmetric, NV=VN', NA=AN' and VA=AV'. Also, NN=VV=AA=0 and NV=0
+        # (connections are only present between interactions and the rest). Thus, only AN and AV need to be defined.
         # Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is implicitly included by initialising
         # the adjacency matrix to an identity instead of zeros.
         adj_an = torch.from_numpy(interactions_to_obj).float()
@@ -191,9 +195,9 @@ class KatoGCN(HicoHoiGCN):
         # The paper does not specify whether the embeddings are normalised or what they do for compound words.
         self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
-        pred_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
+        act_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
         return torch.cat([torch.from_numpy(obj_word_embs).float(),
-                          torch.from_numpy(pred_word_embs).float(),
+                          torch.from_numpy(act_word_embs).float(),
                           torch.zeros(self.dataset.full_dataset.num_interactions, self.input_dim)
                           ], dim=0)
 
