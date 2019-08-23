@@ -59,22 +59,21 @@ class AbstractGCN(nn.Module):
 class HicoGCN(AbstractGCN):
     def __init__(self, dataset, block_norm=False, **kwargs):
         self.block_norm = block_norm
-        self.noun_verb_links = nn.Parameter(get_noun_verb_adj_mat(dataset=self.dataset), requires_grad=False)
         super().__init__(dataset=dataset, **kwargs)
 
     def _build_adj_matrix(self):
         # Normalised adjacency matrix. Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is
         # implicitly included by initialising the adjacency matrix to an identity instead of zeros.
         adj = torch.eye(self.num_objects + self.num_actions).float()
+        nv = get_noun_verb_adj_mat(dataset=self.dataset)
         if self.block_norm:
             # Normalised like (Kato, 2018).
-            nv = self.noun_verb_links
             norm_nv = torch.diag(1 / nv.sum(dim=1).sqrt()) @ nv @ torch.diag(1 / nv.sum(dim=0).clamp(min=1).sqrt())
             adj[:self.num_objects, self.num_objects:] = norm_nv  # top right
             adj[self.num_objects:, :self.num_objects] = norm_nv.t()  # bottom left
         else:
-            adj[:self.num_objects, self.num_objects:] = self.noun_verb_links  # top right
-            adj[self.num_objects:, :self.num_objects] = self.noun_verb_links.t()  # bottom left
+            adj[:self.num_objects, self.num_objects:] = nv  # top right
+            adj[self.num_objects:, :self.num_objects] = nv.t()  # bottom left
             adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         return adj
 
