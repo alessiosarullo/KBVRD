@@ -111,7 +111,7 @@ class Configs:
         self.greg_margin = 0.3
         self.vv = False
         self.aggp = False
-        self.gcldim = 200
+        self.gcldim = 512
         self.gcrdim = 1024
         self.gcdetach = False
 
