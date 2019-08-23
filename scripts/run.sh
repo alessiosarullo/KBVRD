@@ -22,7 +22,8 @@ EXPS=()
 for IDX in $(seq 1 "${NUM_RUNS}")
 do
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
-  EXP_DIR="${OUTPUT_DIR}/${EXP_FULL_NAME}/${DATETIME}_RUN${IDX}"
+  RUN_NAME="${EXP_FULL_NAME}/${DATETIME}_RUN${IDX}"
+  EXP_DIR="${OUTPUT_DIR}/${RUN_NAME}"
   LOG="$EXP_DIR/log.txt"
 
   EXPS+=("${EXP_DIR}")
@@ -30,7 +31,7 @@ do
   exec &> >(tee -a "$LOG")
   echo Logging "${EXP_DIR}" to "$LOG"
 
-  python -u scripts/run.py --model "${NET}" --save_dir "${EXP_FULL_NAME}" "${@:6}" > "${LOG}" 2>&1
+  python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}" > "${LOG}" 2>&1
 done
 if [ "${NUM_RUNS}" -gt 1 ]; then
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
