@@ -254,10 +254,13 @@ class Configs:
     def _postprocess_args(self, fail_if_missing):
         self.save_dir = self.save_dir.rstrip('/')
         if '/' in self.save_dir:
-            old_save_dir = self.save_dir
-            self.save_dir = old_save_dir.split('/')[-1]
-            self.model = self.model or old_save_dir.split('/')[-2]
-            assert old_save_dir == self.output_path
+            save_dir_parts = self.save_dir.split('/')
+            if save_dir_parts[0] == self.output_root:
+                assert len(save_dir_parts) >= 3
+                old_save_dir = self.save_dir
+                self.save_dir = os.path.join(*save_dir_parts[2:])
+                self.model = self.model or save_dir_parts[1]
+                assert old_save_dir == self.output_path
         if fail_if_missing and self.model is None:
             raise ValueError('A model is required.')
 
@@ -330,10 +333,14 @@ def test():
     # print('Default configs')
     # Configs.print()
 
-    sys.argv += ['--sync', '--model', 'hicobase', '--save_dir', 'blabla']
+    # sys.argv += ['--sync', '--model', 'hicoall', '--save_dir', 'blabla/2019-24-12_param1/RUN1']
+    # sys.argv += ['--save_dir', 'output/hicoall/blabla/2019-24-12_param1/RUN1']
+    # sys.argv += ['--save_dir', 'hicoall/blabla/2019-24-12_param1/RUN1']  # this should fail
+    sys.argv += ['--save_dir', 'output/hicoall/']  # this too
     cfg.parse_args()
     # print('Updated with args:', sys.argv)
     cfg.print()
+    print(cfg.output_path)
 
 
 if __name__ == '__main__':

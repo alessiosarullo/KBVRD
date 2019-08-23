@@ -8,21 +8,33 @@ export PYTHONUNBUFFERED="True"
 
 NET=$1
 EXP_NAME=$2
-GPU_ID=$3
+VARIANT_NAME=$3
+NUM_RUNS=$4
+GPU_ID=$5
 # The following parameters are optional: a default value is provided and it is only substituted if the relative argument is unset or has a null value
 # (e.g., the empty string ''). Remove the colon to only substitute if unset.
 
 export CUDA_VISIBLE_DEVICES=$GPU_ID
-
-# log
 OUTPUT_DIR="output/${NET}"
-DATETIME=`date +'%Y-%m-%d_%H-%M-%S'`
-EXP_FULL_NAME="${DATETIME}_${EXP_NAME}"
-EXP_DIR=${OUTPUT_DIR}/${EXP_FULL_NAME}
-LOG="$EXP_DIR/log.txt"
+EXP_FULL_NAME="${EXP_NAME}/${VARIANT_NAME}"
 
-mkdir -p ${EXP_DIR}
-exec &> >(tee -a "$LOG")
-echo Logging ${EXP_DIR} to "$LOG"
+EXPS=()
+for IDX in $(seq 1 "${NUM_RUNS}")
+do
+  DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
+  EXP_DIR="${OUTPUT_DIR}/${EXP_FULL_NAME}/${DATETIME}_RUN${IDX}"
+  LOG="$EXP_DIR/log.txt"
 
-python -u scripts/run.py --model ${NET} --save_dir ${EXP_FULL_NAME} "${@:4}"
+  EXPS+=("${EXP_DIR}")
+  mkdir -p "${EXP_DIR}"
+  exec &> >(tee -a "$LOG")
+  echo Logging "${EXP_DIR}" to "$LOG"
+
+  python -u scripts/run.py --model "${NET}" --save_dir "${EXP_FULL_NAME}" "${@:6}" > "${LOG}" 2>&1
+done
+if [ "${NUM_RUNS}" -gt 1 ]; then
+  DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
+  EXP_DIR="${OUTPUT_DIR}/${EXP_FULL_NAME}/${DATETIME}_AGGR${NUM_RUNS}"
+  mkdir -p "${EXP_DIR}"
+  python -u scripts/aggregate_tb_runs.py "${EXP_DIR}" "${EXPS[@]}"
+fi
