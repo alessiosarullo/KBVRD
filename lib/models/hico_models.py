@@ -84,6 +84,12 @@ class HicoExtZSGCMultiModel(AbstractModel):
             nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         # Predictors
+        self.linear_predictors = nn.ParameterDict()
+        for k, d in [('obj', dataset.full_dataset.num_object_classes),
+                     ('act', dataset.full_dataset.num_actions),
+                     ('hoi', dataset.full_dataset.num_interactions)]:
+            self.linear_predictors[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
+            torch.nn.init.xavier_normal_(self.linear_predictors[k], gain=1.0)
         if cfg.gc:
             gcemb_dim = cfg.gcrdim
             latent_dim = cfg.gcldim
@@ -103,14 +109,6 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                                 input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
                 else:
                     self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-        else:
-            # Linear predictors (AKA, single FC layer)
-            self.output_mlps = nn.ParameterDict()
-            for k, d in [('obj', dataset.full_dataset.num_object_classes),
-                         ('act', dataset.full_dataset.num_actions),
-                         ('hoi', dataset.full_dataset.num_interactions)]:
-                self.output_mlps[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
-                torch.nn.init.xavier_normal_(self.output_mlps[k], gain=1.0)
 
         # Regularisation
         self.adj = nn.ParameterDict()
@@ -287,7 +285,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
     def _forward(self, feats, labels):
         # Predictors
-        linear_predictors = {k: self.output_mlps[k] for k in ['obj', 'act', 'hoi']}  # P x D
+        linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act', 'hoi']}  # P x D
         if cfg.gc:
             if cfg.hoigcn:
                 hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
