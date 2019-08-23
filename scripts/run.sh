@@ -22,7 +22,11 @@ EXPS=()
 for IDX in $(seq 1 "${NUM_RUNS}")
 do
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
-  RUN_NAME="${EXP_FULL_NAME}/${DATETIME}_RUN${IDX}"
+  if [ "${NUM_RUNS}" -gt 1 ]; then
+    RUN_NAME="${EXP_FULL_NAME}/${DATETIME}_RUN${IDX}"
+  else
+    RUN_NAME="${EXP_FULL_NAME}/${DATETIME}_SINGLE"
+  fi
   EXP_DIR="${OUTPUT_DIR}/${RUN_NAME}"
   LOG="$EXP_DIR/log.txt"
 
