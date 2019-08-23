@@ -274,7 +274,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                 if self.zs_enabled and cfg.gc:
                     for k in all_logits.keys():
                         unseen = self.unseen_inds[k]
-                        all_logits[k][:, unseen] = all_gc_logits[[k]:, unseen]
+                        all_logits[k][:, unseen] = all_gc_logits[k][:, unseen]
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
                 obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
