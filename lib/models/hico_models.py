@@ -256,7 +256,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
                             losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen]) + \
                                                   loss_c * bce_loss(all_gc_logits[k][:, seen], labels[:, seen])
                             if soft_label_loss_c > 0:
-                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_gc_logits[:, unseen], labels[:, unseen])
+                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_gc_logits[k][:, unseen], labels[:, unseen])
                         else:
                             losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
                             if soft_label_loss_c > 0:
