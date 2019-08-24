@@ -252,11 +252,15 @@ class HicoExtZSGCMultiModel(AbstractModel):
                                 raise NotImplementedError()
                             elif k == 'act':
                                 seen = seen[1:]
-                        losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
                         if cfg.gc:
-                            losses[f'{k}_loss'] += loss_c * bce_loss(all_gc_logits[k][:, seen], labels[:, seen])
-                        if soft_label_loss_c > 0:
-                            losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(logits[:, unseen], labels[:, unseen])
+                            losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen]) + \
+                                                  loss_c * bce_loss(all_gc_logits[k][:, seen], labels[:, seen])
+                            if soft_label_loss_c > 0:
+                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_gc_logits[:, unseen], labels[:, unseen])
+                        else:
+                            losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
+                            if soft_label_loss_c > 0:
+                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(logits[:, unseen], labels[:, unseen])
                     else:
                         if not cfg.train_null:
                             if k == 'hoi':
