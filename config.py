@@ -103,6 +103,7 @@ class Configs:
         self.softl = 0.0
         self.nullzs = False
         self.lis = False
+        self.slboost=False
 
         # ZS GCN specific
         self.link_null = False
