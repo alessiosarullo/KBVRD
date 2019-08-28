@@ -148,8 +148,8 @@ class HicoExtZSGCMultiModel(AbstractModel):
         act_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(labels)).clamp(max=1)
         if cfg.asl:
             if cfg.slpure:
-                feasible_acts_per_obj = torch.bmm(ext_inter_mat, self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1))
-                act_labels[:, self.unseen_inds['act']] = feasible_acts_per_obj.max(dim=1)[0][:, self.unseen_inds['act']]  # group across objects
+                feasible_acts_per_obj = ext_inter_mat.max(dim=2)[0] @ self.obj_act_feasibility
+                act_labels[:, self.unseen_inds['act']] = feasible_acts_per_obj.clamp(max=1)  # group across objects
             else:
                 act_emb_sims = self.act_emb_sim.clamp(min=0)
                 if cfg.slboost:
