@@ -104,6 +104,7 @@ class Configs:
         self.nullzs = False
         self.lis = False
         self.slboost=False
+        self.slpure=False
 
         # ZS GCN specific
         self.link_null = False
