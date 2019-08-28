@@ -28,7 +28,6 @@ from scripts.utils import print_params, get_all_models_by_name
 
 
 class Launcher:
-    # FIXME general: rename "object" in SPO triplets as "target" or something else to avoid ambiguity. Also "verb" might be better than "predicate"
     def __init__(self):
         Timer.gpu_sync = cfg.sync
         cfg.parse_args()
@@ -92,7 +91,7 @@ class Launcher:
             # if cfg.singlel:
             #     splits = HicoHoiSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
             # else:
-            splits = HicoSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
+            splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
             self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
         else:
             if cfg.group:

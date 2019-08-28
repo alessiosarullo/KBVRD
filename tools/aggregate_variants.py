@@ -32,7 +32,7 @@ def main():
             pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
             obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
-            splits = HicoSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
+            splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
             train_split, val_split, test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
             evaluator = HicoEvaluator(test_split)

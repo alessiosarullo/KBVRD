@@ -15,7 +15,7 @@ from lib.stats.utils import Timer
 
 
 class HicoSplit(HoiDatasetSplit):
-    def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, predicate_inds=None):
+    def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, action_inds=None):
         self.full_dataset = hico  # type: Hico
         self.split = split
         self.image_inds = image_inds
@@ -24,14 +24,14 @@ class HicoSplit(HoiDatasetSplit):
         self.objects = [hico.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
 
-        predicate_inds = sorted(predicate_inds) if predicate_inds is not None else range(self.full_dataset.num_actions)
-        self.predicates = [hico.actions[i] for i in predicate_inds]
-        self.active_actions = np.array(predicate_inds, dtype=np.int)
+        action_inds = sorted(action_inds) if action_inds is not None else range(self.full_dataset.num_actions)
+        self.actions = [hico.actions[i] for i in action_inds]
+        self.active_actions = np.array(action_inds, dtype=np.int)
 
         active_op_mat = self.full_dataset.op_pair_to_interaction[self.active_object_classes, :][:, self.active_actions]
         active_interactions = set(np.unique(active_op_mat).tolist()) - {-1}
         self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
-        self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
+        self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original action and object inds
 
         self.img_transform = transforms.Compose([
             transforms.Resize(256),
@@ -74,7 +74,7 @@ class HicoSplit(HoiDatasetSplit):
 
     @property
     def num_actions(self):
-        return len(self.predicates)
+        return len(self.actions)
 
     @property
     def num_interactions(self):
@@ -126,7 +126,8 @@ class HicoSplit(HoiDatasetSplit):
 
     def get_img(self, img_id):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        img = Image.open(os.path.join(self.full_dataset.get_img_dir(self.split), self.full_dataset.split_filenames[self.split][img_id])).convert('RGB')
+        img_fn = os.path.join(self.full_dataset.get_img_dir(self.split), self.full_dataset.split_filenames[self.split][img_id])
+        img = Image.open(img_fn).convert('RGB')
         img = self.img_transform(img).to(device=device)
         return img
 
@@ -137,7 +138,7 @@ class HicoSplit(HoiDatasetSplit):
         return self.num_images
 
     @classmethod
-    def get_splits(cls, pred_inds=None, obj_inds=None):
+    def get_splits(cls, act_inds=None, obj_inds=None):
         splits = {}
         hico = Hico()
 
@@ -146,20 +147,20 @@ class HicoSplit(HoiDatasetSplit):
             num_imgs = len(hico.split_filenames[Splits.TRAIN])
             num_val_imgs = int(num_imgs * cfg.val_ratio)
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, image_inds=list(range(0, num_imgs - num_val_imgs)),
-                                       object_inds=obj_inds, predicate_inds=pred_inds)
+                                       object_inds=obj_inds, action_inds=act_inds)
             splits[Splits.VAL] = cls(split=Splits.TRAIN, hico=hico, image_inds=list(range(num_imgs - num_val_imgs, num_imgs)),
-                                     object_inds=obj_inds, predicate_inds=pred_inds)
+                                     object_inds=obj_inds, action_inds=act_inds)
         else:
-            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, object_inds=obj_inds, predicate_inds=pred_inds)
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, hico=hico, object_inds=obj_inds, action_inds=act_inds)
         splits[Splits.TEST] = cls(split=Splits.TEST, hico=hico)
 
         tr = splits[Splits.TRAIN]
         if obj_inds is not None:
             print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_object_classes.size}):', tr.active_object_classes.tolist())
             assert hico.human_class in obj_inds
-        if pred_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} predicates ({tr.active_actions.size}):', tr.active_actions.tolist())
-        if obj_inds is not None or pred_inds is not None:
+        if act_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} actions ({tr.active_actions.size}):', tr.active_actions.tolist())
+        if obj_inds is not None or act_inds is not None:
             print(f'{Splits.TRAIN.value.capitalize()} interactions ({tr.active_interactions.size}):', tr.active_interactions.tolist())
 
         return splits

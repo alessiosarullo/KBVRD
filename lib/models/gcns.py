@@ -6,7 +6,7 @@ from torch import nn
 from lib.dataset.hico.hico_split import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.word_embeddings import WordEmbeddings
-from lib.models.misc import get_noun_verb_adj_mat
+from lib.dataset.utils import get_noun_verb_adj_mat
 import numpy as np
 
 

@@ -118,7 +118,7 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "whit
     return texts
 
 
-def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
+def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, alternate_labels=True,
              axes=None, vrange=None, cbar=True, bin_colours=False, grid=False, plot=True, title=None, log=False,
              neg_color=None, zero_color=None, cmap='jet'):
     lfsize = 8
@@ -171,10 +171,13 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
     ax.tick_params(axis='y', which='major', left=True, labelleft=True, right=True, labelright=False, labelsize=lfsize)
 
     min_ticks = y_ticks[1::2]
-    min_tick_labels = ['%d %s' % (i, lbl) for i, lbl in zip(y_inds, y_tick_labels)][1::2]
     ax.set_yticks(min_ticks, minor=True)
+    if alternate_labels:
+        min_tick_labels = ['%d %s' % (i, lbl) for i, lbl in zip(y_inds, y_tick_labels)][1::2]
+    else:
+        min_tick_labels = ['%s %d' % (lbl, i) for i, lbl in zip(y_inds, y_tick_labels)][1::2]
     ax.set_yticklabels(min_tick_labels, minor=True)
-    ax.tick_params(axis='y', which='minor', left=True, labelleft=False, right=True, labelright=True, labelsize=lfsize)
+    ax.tick_params(axis='y', which='minor', left=True, labelleft=not alternate_labels, right=True, labelright=alternate_labels, labelsize=lfsize)
 
     x_tick_labels = [l.replace('_', ' ').strip() for l in xticklabels]
     x_ticks = np.arange(len(x_tick_labels))
@@ -187,10 +190,14 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None,
     ax.tick_params(axis='x', which='major', top=True, labeltop=True, bottom=True, labelbottom=False, labelsize=lfsize)
 
     min_ticks = x_ticks[1::2]
-    min_tick_labels = ['%s %d' % (lbl, i) for i, lbl in zip(x_inds, x_tick_labels)][1::2]
     ax.set_xticks(min_ticks, minor=True)
-    ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='right', rotation_mode='anchor')
-    ax.tick_params(axis='x', which='minor', top=True, labeltop=False, bottom=True, labelbottom=True, labelsize=lfsize)
+    if alternate_labels:
+        min_tick_labels = ['%s %d' % (lbl, i) for i, lbl in zip(x_inds, x_tick_labels)][1::2]
+        ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='right', rotation_mode='anchor')
+    else:
+        min_tick_labels = ['%d %s' % (i, lbl) for i, lbl in zip(x_inds, x_tick_labels)][1::2]
+        ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='left', rotation_mode='anchor')
+    ax.tick_params(axis='x', which='minor', top=True, labeltop=not alternate_labels, bottom=True, labelbottom=alternate_labels, labelsize=lfsize)
 
     if title is not None:
         ax.set_title(title)
