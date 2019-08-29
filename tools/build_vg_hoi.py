@@ -22,7 +22,7 @@ def main():
             img_rs.append([subj, pred, obj])
         relationships.append(img_rs)
 
-    with open('vg_hoi.pkl') as f:
+    with open('vg_hoi.pkl', 'wb') as f:
         pickle.dump({'image_ids': image_ids,
                      'relationships': relationships},
                     f)
