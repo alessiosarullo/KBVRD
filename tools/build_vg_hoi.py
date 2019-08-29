@@ -4,7 +4,7 @@ import os
 
 
 def main():
-    relationships_data = json.load(open(os.path.join('VG', 'relationships.json'), 'r'))
+    relationships_data = json.load(open(os.path.join('data', 'VG', 'relationships.json'), 'r'))
 
     image_ids = [img_rdata['image_id'] for img_rdata in relationships_data]
     relationships = []
