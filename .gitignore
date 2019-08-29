@@ -8,7 +8,7 @@ cache
 pydetectron/
 detectron_outputs/
 ./output/
-./output
+./*output*
 output
 Weights/
 
