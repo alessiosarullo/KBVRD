@@ -322,7 +322,7 @@ class Launcher:
         else:
             evaluator = HicoEvaluator(data_loader.dataset)
             if cfg.vghoi:
-                test_interactions = data_loader.dataset.full_dataset.common_interactions
+                test_interactions = sorted(data_loader.dataset.full_dataset.common_interactions)
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.eval_res_file)
         metric_dict = evaluator.output_metrics(interactions_to_keep=test_interactions)
@@ -330,13 +330,13 @@ class Launcher:
             print('Trained on:')
             seen_interactions = self.train_split.active_interactions
             if test_interactions is not None:
-                seen_interactions = set(seen_interactions) & set(test_interactions.tolist())
+                seen_interactions = set(seen_interactions) & set(test_interactions)
             tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(seen_interactions))
             tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
             unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
             if test_interactions is not None:
-                unseen_interactions &= set(test_interactions.tolist())
+                unseen_interactions &= set(test_interactions)
             print('Zero-shot:')
             zs_metrics = evaluator.output_metrics(interactions_to_keep=sorted(unseen_interactions))
             zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
