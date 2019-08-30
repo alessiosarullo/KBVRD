@@ -44,7 +44,7 @@ class VGHoi(HoiDataset):
             data_str = [[os.path.splitext(l[0])[0], l[1]] for l in data_str]
             filenames = sorted({l[0] for l in data_str})
             fn_inv_index = {fn: i for i, fn in enumerate(filenames)}
-            labels = np.zeros([len(filenames), self.num_interactions])
+            labels = np.zeros([len(filenames), len(interactions_str)])
             for l in data_str:
                 anns = np.array([int(x) for x in l[1].split(';')])
                 labels[fn_inv_index[l[0]], anns] = 1
