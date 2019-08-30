@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 
 from lib.dataset.hico.hico import Hico
+from lib.dataset.hico.hico_split import HicoSplit, Splits
 
 
 def main(dataset='hico'):
@@ -51,10 +52,38 @@ def main(dataset='hico'):
         assert len(act_2) == 117 // 2 or len(act_2) == 117 // 2 + 1
         print(sum([len(data[split]['i']) for split in ['1A', '1B', '2A', '2B']]))
 
+        # Write zero-shot file
+        seen_obj = data['1A']['o']
+        seen_act = np.array(sorted(set(data['1A']['a'].tolist()) | {0}))
         with open('zero-shot_inds/seen_inds_2.pkl.push', 'wb') as f:
-            seen_obj = data['1A']['o']
-            seen_act = np.array(sorted(set(data['1A']['a'].tolist()) | {0}))
             pickle.dump({'train': {'obj': seen_obj, 'pred': seen_act}}, f)
+
+        # Check image data
+        def load_kato_ann(fn, img_inv_ind):
+            with open(os.path.join(kato_dir, fn), 'r') as f:
+                kato_ann_str = [l.strip().split(',') for l in f.readlines() if l.strip()]
+                kato_ann = np.zeros_like(hico.split_annotations[split])
+                for l in kato_ann_str:
+                    fn = l[0]
+                    img_interactions = [int(i) for i in l[1].split(';')]
+                    # print(fn, img_interactions)
+                    kato_ann[img_inv_ind[fn], np.array(img_interactions)] = 1
+            return kato_ann
+
+        split = Splits.TRAIN
+        img_inv_ind = {fn: i for i, fn in enumerate(hico.split_filenames[split])}
+        kato_ann = load_kato_ann('hico_train_1A.csv', img_inv_ind)
+        hs = HicoSplit(split, hico, object_inds=seen_obj, action_inds=seen_act[1:])  # exclude null fom comparison
+        labels = (hs.labels > 0)  # -1s are converted to 0s
+        assert np.all(labels == kato_ann)
+
+        split = Splits.TEST
+        img_inv_ind = {fn: i for i, fn in enumerate(hico.split_filenames[split])}
+        kato_ann = load_kato_ann('hico_test.csv', img_inv_ind)
+        hs = HicoSplit(split, hico)
+        labels = (hs.labels > 0)  # -1s are converted to 0s
+        assert np.all(labels == kato_ann)
+
     elif dataset == 'VG':
         ds_dir = 'Visual_Genome_HOI'
     else:
