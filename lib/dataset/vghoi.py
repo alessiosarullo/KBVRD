@@ -26,9 +26,9 @@ class VGHoi(HoiDataset):
         kato_dir = os.path.join(ds_dir, 'Kato')
 
         with open(os.path.join(kato_dir, 'VG_list_hoi.csv'), 'r') as f:
-            interactions_str = [l.strip().split(',') for l in f.readlines() if l.strip()]
+            interactions_file_str = [l.strip().split(',') for l in f.readlines() if l.strip()]
         idxs, inter_objects, inter_actions = [], [], []
-        for idx, obj, act in interactions_str:
+        for idx, obj, act in interactions_file_str:
             idxs.append(int(idx))
             inter_objects.append(obj)
             inter_actions.append(act)
@@ -44,7 +44,7 @@ class VGHoi(HoiDataset):
             data_str = [[os.path.splitext(l[0])[0], l[1]] for l in data_str]
             filenames = sorted({l[0] for l in data_str})
             fn_inv_index = {fn: i for i, fn in enumerate(filenames)}
-            labels = np.zeros([len(filenames), len(interactions_str)])
+            labels = np.zeros([len(filenames), len(interactions_file_str)])
             for l in data_str:
                 anns = np.array([int(x) for x in l[1].split(';')])
                 labels[fn_inv_index[l[0]], anns] = 1
