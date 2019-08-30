@@ -6,6 +6,7 @@ import torch
 import torch.utils.data
 from config import cfg
 from lib.dataset.hico import HicoSplit
+from lib.dataset.vghoi import VGHoiSplit
 from lib.dataset.utils import Splits
 from torchvision.models import resnet152
 
@@ -42,7 +43,10 @@ def save_feats():
             print('Remote debugging failed.')
             raise
 
-    splits = HicoSplit.get_splits()
+    if cfg.vghoi:
+        splits = VGHoiSplit.get_splits()
+    else:
+        splits = HicoSplit.get_splits()
     assert Splits.VAL not in splits
 
     vm = resnet152(pretrained=True)
