@@ -4,11 +4,12 @@ import h5py
 import numpy as np
 import torch
 import torch.utils.data
+from torchvision.models import resnet152
+
 from config import cfg
 from lib.dataset.hico import HicoSplit
-from lib.dataset.vghoi import VGHoiSplit
 from lib.dataset.utils import Splits
-from torchvision.models import resnet152
+from lib.dataset.vghoi import VGHoiSplit
 
 
 def forward(model, x):
@@ -52,15 +53,13 @@ def save_feats():
     vm = resnet152(pretrained=True)
     if torch.cuda.is_available():
         vm.cuda()
-        device = torch.device('cuda')
     else:
         print('!!!!!!!!!!!!!!!!! Running on CPU!')
-        device = torch.device('cpu')
     vm.eval()
     for split in [Splits.TRAIN, Splits.TEST]:
         hds = splits[split]
 
-        precomputed_feats_fn = cfg.precomputed_feats_format % ('new_hico', cfg.rcnn_arch, split.value)
+        precomputed_feats_fn = cfg.precomputed_feats_format % ('new_cached_file', cfg.rcnn_arch, split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
 
             all_img_feats, all_cl_unbounded_scores = [], []
@@ -79,6 +78,8 @@ def save_feats():
 
             feat_file.create_dataset('img_feats', data=all_img_feats)
             feat_file.create_dataset('scores', data=all_cl_unbounded_scores)
+
+    print(f'Done. Remember to rename the output file! Current name is {precomputed_feats_fn}.')
 
 
 if __name__ == '__main__':
