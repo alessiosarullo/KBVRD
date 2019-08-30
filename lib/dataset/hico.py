@@ -6,7 +6,20 @@ from scipy.io import loadmat
 
 from config import cfg
 from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.hoi_dataset_split import HoiDatasetSplit
 from lib.dataset.utils import Splits
+
+
+class HicoSplit(HoiDatasetSplit):
+    def __init__(self, split, full_dataset, image_inds=None, object_inds=None, action_inds=None):
+        super(HicoSplit, self).__init__(split, full_dataset, image_inds, object_inds, action_inds)
+
+    def _get__precomputed_feats_fn(self, split):
+        return cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
+
+    @classmethod
+    def get_full_dataset(cls) -> HoiDataset:
+        return Hico()
 
 
 class Hico(HoiDataset):

@@ -4,7 +4,7 @@ from typing import List, Dict
 import numpy as np
 from sklearn.metrics import average_precision_score
 
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico import HicoSplit
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 

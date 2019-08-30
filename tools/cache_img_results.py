@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.utils.data
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import Splits
 from torchvision.models import resnet152
 

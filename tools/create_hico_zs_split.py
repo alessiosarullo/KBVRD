@@ -4,7 +4,7 @@ import argparse
 
 import numpy as np
 
-from lib.dataset.hico.hico import Hico
+from lib.dataset.hico import Hico
 
 
 def main():

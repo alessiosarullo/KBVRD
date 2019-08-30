@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import Splits
 from lib.stats.evaluator_hico import HicoEvaluator
 

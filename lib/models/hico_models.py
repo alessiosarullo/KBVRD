@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico import HicoSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction

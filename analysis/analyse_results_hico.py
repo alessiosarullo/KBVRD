@@ -7,14 +7,13 @@ from typing import List, Dict
 import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
+from sklearn.metrics import multilabel_confusion_matrix
 
 from analysis.utils import plot_mat
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit, Splits
-from lib.dataset.utils import interactions_to_mat
+from lib.dataset.hico import HicoSplit
+from lib.dataset.utils import Splits, interactions_to_mat
 from lib.models.containers import Prediction
-
-from sklearn.metrics import multilabel_confusion_matrix
 
 try:
     matplotlib.use('Qt5Agg')

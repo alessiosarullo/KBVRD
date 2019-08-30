@@ -12,6 +12,8 @@ from config import cfg
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
+from lib.dataset.hoi_dataset import HoiDataset
+
 
 class AbstractHoiDatasetSplit(Dataset):
     @property
@@ -40,9 +42,9 @@ class AbstractHoiDatasetSplit(Dataset):
         raise NotImplementedError
 
 
-class HOIDatasetSplit(AbstractHoiDatasetSplit):
-    def __init__(self, split, full_dataset, image_inds=None, object_inds=None, action_inds=None):
-        self.full_dataset = full_dataset
+class HoiDatasetSplit(AbstractHoiDatasetSplit):
+    def __init__(self, split, full_dataset: HoiDataset, image_inds=None, object_inds=None, action_inds=None):
+        self.full_dataset = full_dataset  # type: HoiDataset
         self.split = split
         self.image_inds = image_inds
 
@@ -67,7 +69,7 @@ class HOIDatasetSplit(AbstractHoiDatasetSplit):
         ])
 
         try:
-            pc_feats_file = h5py.File(self._precomputed_feats_fn, 'r')
+            pc_feats_file = h5py.File(self._get__precomputed_feats_fn(split), 'r')
             self.pc_img_feats = pc_feats_file['img_feats'][:]
         except OSError:
             self.pc_img_feats = None
@@ -84,10 +86,6 @@ class HOIDatasetSplit(AbstractHoiDatasetSplit):
             image_mask = np.zeros(self.full_dataset.split_annotations[self.split].shape[0], dtype=np.bool)
             image_mask[self.image_inds] = True
             self.non_empty_imgs = np.flatnonzero(np.any(self.labels, axis=1) & image_mask)
-
-    @property
-    def _precomputed_feats_fn(self):
-        raise NotImplementedError  #cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
 
     @property
     def precomputed_visual_feat_dim(self):
@@ -163,9 +161,17 @@ class HOIDatasetSplit(AbstractHoiDatasetSplit):
     def __len__(self):
         return self.num_images
 
+    def _get__precomputed_feats_fn(self, split):
+        raise NotImplementedError
+
     @classmethod
-    def get_splits(cls, full_dataset, act_inds=None, obj_inds=None):
+    def get_full_dataset(cls) -> HoiDataset:
+        raise NotImplementedError
+
+    @classmethod
+    def get_splits(cls, act_inds=None, obj_inds=None):
         splits = {}
+        full_dataset = cls.get_full_dataset()
 
         # Split train/val if needed
         if cfg.val_ratio > 0:

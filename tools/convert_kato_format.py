@@ -3,10 +3,9 @@ import pickle
 
 import numpy as np
 
-from lib.dataset.hico.hico import Hico
-from lib.dataset.hico.hico_split import HicoSplit, Splits
-
 from config import cfg
+from lib.dataset.hico import Hico, HicoSplit
+from lib.dataset.utils import Splits
 
 
 def main(dataset='HICO'):
@@ -23,7 +22,7 @@ def main(dataset='HICO'):
             # print(f'{idx:3d} {act:20s} {obj:15s}')
             hico_act_idx, hico_obj_idx = hico.interactions[idx, :]
             assert hico.objects[hico_obj_idx] == obj or (hico.objects[hico_obj_idx] == 'hair_dryer' and obj == 'hair_drier')
-            assert hico.actions[hico_act_idx] == act or (act == hico.null_interaction.strip('_'))
+            assert hico.actions[hico_act_idx] == act or (act == hico.null_action.strip('_'))
 
         # Load seen interaction indices
         data = {}

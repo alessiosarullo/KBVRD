@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
-from lib.dataset.hico.hico_split import HicoSplit
+from lib.dataset.hico import HicoSplit
 # from lib.dataset.hico.hico_split import HicoHoiSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
 from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit

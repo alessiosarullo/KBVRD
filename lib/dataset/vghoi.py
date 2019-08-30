@@ -3,11 +3,24 @@ import os
 import numpy as np
 
 from config import cfg
-from lib.dataset.utils import Splits
 from lib.dataset.hoi_dataset import HoiDataset
+from lib.dataset.hoi_dataset_split import HoiDatasetSplit
+from lib.dataset.utils import Splits
 
 
-class VGHOI(HoiDataset):
+class VGHoiSplit(HoiDatasetSplit):
+    def __init__(self, split, full_dataset, image_inds=None, object_inds=None, action_inds=None):
+        super(VGHoiSplit, self).__init__(split, full_dataset, image_inds, object_inds, action_inds)
+
+    def _get__precomputed_feats_fn(self, split):
+        return cfg.precomputed_feats_format % ('vghoi', cfg.rcnn_arch, split.value)
+
+    @classmethod
+    def get_full_dataset(cls) -> HoiDataset:
+        return VGHoi()
+
+
+class VGHoi(HoiDataset):
     def __init__(self):
         ds_dir = os.path.join(cfg.data_root, 'VG')
         kato_dir = os.path.join(ds_dir, 'Kato')
@@ -36,12 +49,13 @@ class VGHOI(HoiDataset):
                 anns = np.array([int(x) for x in l[1].split(';')])
                 labels[fn_inv_index[l[0]], anns] = 1
             return filenames, labels
+
         filenames_per_split = {}
         annotations_per_split = {}
         filenames_per_split[Splits.TRAIN], annotations_per_split[Splits.TRAIN] = load_kato_data('VG_train_1A2B.csv')
         filenames_per_split[Splits.TEST], annotations_per_split[Splits.TEST] = load_kato_data('VG_test.csv')
 
-        super(VGHOI, self).__init__(object_classes, action_classes, null_action, interactions_str, filenames_per_split, annotations_per_split)
+        super(VGHoi, self).__init__(object_classes, action_classes, null_action, interactions_str, filenames_per_split, annotations_per_split)
 
         with open(os.path.join(kato_dir, 'common_class.csv'), 'r') as f:
             self.common_interactions = np.array(sorted([int(l.strip()) for l in f.readlines() if l.strip()]))
@@ -52,4 +66,4 @@ class VGHOI(HoiDataset):
 
 
 if __name__ == '__main__':
-    VGHOI()
+    VGHoi()
