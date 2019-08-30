@@ -45,7 +45,8 @@ class Configs:
 
         # Dataset
         self.val_ratio = 0.1
-        self.hico = False  # use HICO [True] or HICO-DET [False]
+        self.hicodet = False  # if True, use HICO-DET. The next option is ignored.
+        self.vghoi = False  # use HICO [False] or VGHOI [True]
 
         ##########################################
         # Model options                          #

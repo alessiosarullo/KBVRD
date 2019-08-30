@@ -15,14 +15,13 @@ from lib.models.misc import bce_loss
 from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
 
 
-class HicoExtZSGCMultiModel(AbstractModel):
+class SKZSMultiModel(AbstractModel):
     @classmethod
     def get_cline_name(cls):
-        return 'hicoall'
+        return 'skzs'
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        assert cfg.hico
         self.dataset = dataset
         self.repr_dim = cfg.repr_dim
         self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
@@ -333,7 +332,6 @@ class KatoModel(AbstractModel):
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         super().__init__(dataset, **kwargs)
-        assert cfg.hico
         self.dataset = dataset
 
         assert cfg.seenf >= 0  # ZS enabled

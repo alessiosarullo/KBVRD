@@ -11,13 +11,13 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
-# from lib.dataset.hico.hico_split import HicoHoiSplit
+from lib.dataset.vghoi import VGHoiSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
 from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHicoDetSingleHOIsOnehotSplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
-from lib.dataset.hoi_dataset_split import AbstractHoiDatasetSplit
+from lib.dataset.hoi_dataset_split import HoiDatasetSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.generic_model import Prediction
 from lib.stats.evaluator import Evaluator
@@ -46,7 +46,7 @@ class Launcher:
             cfg.load()
         cfg.print()
         self.detector = None  # type: Union[None, AbstractModel]
-        self.train_split, self.val_split, self.test_split = None, None, None  # type: AbstractHoiDatasetSplit
+        self.train_split, self.val_split, self.test_split = None, None, None  # type: HoiDatasetSplit
         self.curr_train_iter = 0
         self.start_epoch = 0
 
@@ -87,13 +87,7 @@ class Launcher:
                 pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
-        if cfg.hico:
-            # if cfg.singlel:
-            #     splits = HicoHoiSplit.get_splits(obj_inds=obj_inds, pred_inds=pred_inds)
-            # else:
-            splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
-            self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
-        else:
+        if cfg.hicodet:
             if cfg.group:
                 assert not cfg.ohtrain
                 train_ds_class = PrecomputedHicoDetImgHOISplit
@@ -106,6 +100,12 @@ class Launcher:
             self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
                                                            obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+        else:
+            if cfg.vghoi:
+                splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
+            else:
+                splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
+            self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
         # Model
         self.detector = get_all_models_by_name()[cfg.model](self.train_split)  # type: AbstractModel
@@ -316,29 +316,30 @@ class Launcher:
                 with open(cfg.watched_values_file, 'wb') as f:
                     pickle.dump(watched_values, f)
 
-        evaluator = HicoEvaluator(data_loader.dataset) if cfg.hico else Evaluator(data_loader.dataset)
+        test_interactions = None
+        if cfg.hicodet:
+            evaluator = Evaluator(data_loader.dataset)
+        else:
+            evaluator = HicoEvaluator(data_loader.dataset)
+            if cfg.vghoi:
+                test_interactions = data_loader.dataset.full_dataset.common_interactions
         evaluator.evaluate_predictions(all_predictions)
         evaluator.save(cfg.eval_res_file)
-        metric_dict = evaluator.output_metrics()
+        metric_dict = evaluator.output_metrics(interactions_to_keep=test_interactions)
         if cfg.seenf >= 0:
-            if cfg.hico:  # FIXME this is actually "interactions" instead of "actions", not necessarily tied with Hico
-                print('Trained on:')
-                tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(self.train_split.active_interactions))
-                tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
+            print('Trained on:')
+            seen_interactions = self.train_split.active_interactions
+            if test_interactions is not None:
+                seen_interactions = set(seen_interactions) & set(test_interactions.tolist())
+            tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(seen_interactions))
+            tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
 
-                unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
-                print('Zero-shot:')
-                zs_metrics = evaluator.output_metrics(interactions_to_keep=sorted(unseen_interactions))
-                zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
-            else:
-                print('Trained on:')
-                tr_metrics = evaluator.output_metrics(actions_to_keep=sorted(self.train_split.active_actions))
-                tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
-
-                unseen_preds = sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_predicates))
-                print('Zero-shot:')
-                zs_metrics = evaluator.output_metrics(actions_to_keep=unseen_preds)
-                zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
+            unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
+            if test_interactions is not None:
+                unseen_interactions &= set(test_interactions.tolist())
+            print('Zero-shot:')
+            zs_metrics = evaluator.output_metrics(interactions_to_keep=sorted(unseen_interactions))
+            zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
 
             for d in [tr_metrics, zs_metrics]:
                 for k, v in d.items():

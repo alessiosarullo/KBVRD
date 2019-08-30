@@ -26,7 +26,7 @@ def main():
             cfg_file = os.path.join('output', model, run, 'config.pkl')
             cfg.load(file_path=cfg_file)
 
-            assert cfg.hico and cfg.seenf >= 0
+            assert not cfg.hicodet and cfg.seenf >= 0
 
             inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
             pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
