@@ -42,7 +42,7 @@ class VGHoi(HoiDataset):
         def load_kato_data(data_filename):
             with open(os.path.join(kato_dir, data_filename), 'r') as f:
                 data_str = [l.strip().split(',') for l in f.readlines() if l.strip()]
-            data_str = [[os.path.splitext(l[0])[0], l[1]] for l in data_str]
+            data_str = [[f'{os.path.splitext(l[0])[0]}.jpg', l[1]] for l in data_str]
             filenames = sorted({l[0] for l in data_str})
             fn_inv_index = {fn: i for i, fn in enumerate(filenames)}
             labels = np.zeros([len(filenames), len(interactions_file_str)])
