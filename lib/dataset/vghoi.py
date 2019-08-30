@@ -35,7 +35,7 @@ class VGHoi(HoiDataset):
         assert idxs == list(range(len(idxs)))
         object_classes = sorted(set(inter_objects))
         null_action = '__no_interaction__'
-        action_classes = [self.null_action] + sorted(set(inter_actions))
+        action_classes = [null_action] + sorted(set(inter_actions))
         interactions_str = zip(inter_actions, inter_objects)
 
         def load_kato_data(data_filename):
