@@ -4,67 +4,36 @@ import pickle
 import numpy as np
 from scipy.io import loadmat
 
+from config import cfg
+from lib.dataset.hoi_dataset import HoiDataset
 from lib.dataset.utils import Splits
 
 
-class Hico:
+class Hico(HoiDataset):
     def __init__(self):
-        self.driver = HicoDriver()  # type: HicoDriver
-        self.null_interaction = self.driver.null_interaction
+        driver = HicoDriver()  # type: HicoDriver
 
-        # Objects
-        self.objects = sorted(set([inter['obj'] for inter in self.driver.interaction_list]))
-        self.object_index = {obj: i for i, obj in enumerate(self.objects)}
+        object_classes = sorted(set([inter['obj'] for inter in driver.interaction_list]))
+        action_classes = list(driver.predicate_dict.keys())
+        null_action = driver.null_interaction
+        interactions_classes = [[inter['pred'], inter['obj']] for inter in driver.interaction_list]
 
-        # Predicates
-        self.actions = list(self.driver.predicate_dict.keys())
-        self.action_index = {pred: i for i, pred in enumerate(self.actions)}
-        assert self.action_index[self.null_interaction] == 0
-
-        # Interactions
-        self.interactions = np.array([[self.action_index[inter['pred']], self.object_index[inter['obj']]]
-                                      for inter in self.driver.interaction_list])  # 600 x [p, o]
-        self.op_pair_to_interaction = np.full([self.num_object_classes, self.num_actions], fill_value=-1, dtype=np.int)
-        self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
-
-        # Data
-        train_annotations = self.driver.split_annotations[Splits.TRAIN]
+        train_annotations = driver.split_annotations[Splits.TRAIN]
         train_annotations[np.isnan(train_annotations)] = 0
-        test_annotations = self.driver.split_annotations[Splits.TEST]
+        test_annotations = driver.split_annotations[Splits.TEST]
         test_annotations[np.isnan(test_annotations)] = 0
-        self.split_annotations = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
-        self.split_filenames = self.driver.split_filenames
+        annotations_per_split = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
+        filenames_per_split = driver.split_filenames
+
+        super(Hico, self).__init__(object_classes, action_classes, null_action, interactions_classes, filenames_per_split, annotations_per_split)
+        self.split_img_dir = driver.split_img_dir
 
     @property
     def human_class(self) -> int:
         return self.object_index['person']
 
-    @property
-    def num_object_classes(self):
-        return len(self.objects)
-
-    @property
-    def num_actions(self):
-        return len(self.actions)
-
-    @property
-    def num_interactions(self):
-        return self.interactions.shape[0]
-
-    @property
-    def interaction_to_object_mat(self):
-        interactions_to_obj = np.zeros((self.num_interactions, self.num_object_classes))
-        interactions_to_obj[np.arange(self.num_interactions), self.interactions[:, 1]] = 1
-        return interactions_to_obj
-
-    @property
-    def interaction_to_action_mat(self):
-        interactions_to_act = np.zeros((self.num_interactions, self.num_actions))
-        interactions_to_act[np.arange(self.num_interactions), self.interactions[:, 0]] = 1
-        return interactions_to_act
-
     def get_img_dir(self, split):
-        return self.driver.split_img_dir[split]
+        return self.split_img_dir[split]
 
 
 class HicoDriver:
@@ -94,7 +63,7 @@ class HicoDriver:
                 action j is a hard negative, uncertain/unknown or a hard positive in image i.
         """
 
-        self.data_dir = os.path.join('data', 'HICO')
+        self.data_dir = os.path.join(cfg.data_root, 'HICO')
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')
         self.null_interaction = '__no_interaction__'
 

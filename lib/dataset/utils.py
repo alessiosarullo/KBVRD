@@ -111,7 +111,7 @@ def interactions_to_mat(hois, hico, np2np=False):
         hois_np = hois
     all_hois = np.stack(np.where(hois_np > 0), axis=1)
     all_interactions = np.concatenate([all_hois[:, :1], hico.interactions[all_hois[:, 1], :]], axis=1)
-    inter_mat = np.zeros((hois.shape[0], hico.num_object_classes, hico.num_actions))
+    inter_mat = np.zeros((hois.shape[0], hico.num_objects, hico.num_actions))
     inter_mat[all_interactions[:, 0], all_interactions[:, 2], all_interactions[:, 1]] = 1
     if np2np:
         return inter_mat
@@ -123,7 +123,7 @@ def get_hoi_adjacency_matrix(dataset, isolate_null=None):
     if isolate_null is None:
         isolate_null = not cfg.link_null
     interactions = dataset.full_dataset.interactions
-    inter_obj_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_object_classes))
+    inter_obj_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_objects))
     inter_obj_adj[np.arange(interactions.shape[0]), interactions[:, 0]] = 1
 
     inter_act_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_actions))

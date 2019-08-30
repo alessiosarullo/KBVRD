@@ -203,7 +203,7 @@ def plot_feasible_hois():
     cfg.parse_args(fail_if_missing=False, reset=True)
     dataset = HicoDet()
 
-    hico_op_mat = np.zeros([dataset.num_object_classes, dataset.num_actions])
+    hico_op_mat = np.zeros([dataset.num_objects, dataset.num_actions])
     for p, o in dataset.interactions:
         hico_op_mat[o, p] = 1
 
@@ -231,7 +231,7 @@ def plot_feasible_hois():
     with open(os.path.join(cfg.cache_root, 'vg_predicate_objects.pkl'), 'rb') as f:
         vg_po = pickle.load(f)  # type: Dict[str, List[str]]
     vg_hd_po = {pred: [o for o in vg_objs if o in dataset.objects] for pred, vg_objs in vg_po.items()}
-    vg_op_mat = np.zeros((dataset.num_object_classes, dataset.num_actions))
+    vg_op_mat = np.zeros((dataset.num_objects, dataset.num_actions))
     for pred, objs in vg_hd_po.items():
         pi = dataset.predicate_index[pred]
         for obj in objs:

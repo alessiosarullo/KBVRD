@@ -7,7 +7,7 @@ import torch
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
-from lib.dataset.hoi_dataset import HoiDatasetSplit
+from lib.dataset.hoi_dataset_split import AbstractHoiDatasetSplit
 from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor, get_hico_to_coco_mapping
 
 
@@ -88,7 +88,7 @@ class Minibatch:
         return minibatch
 
 
-class HicoDetSplit(HoiDatasetSplit):
+class HicoDetSplit(AbstractHoiDatasetSplit):
     def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds, inter_inds):
         assert split in Splits
 
@@ -101,7 +101,7 @@ class HicoDetSplit(HoiDatasetSplit):
         self.objects = [hicodet.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
         reduced_object_index = {obj: i for i, obj in enumerate(self.objects)}
-        if len(object_inds) < self.full_dataset.num_object_classes:
+        if len(object_inds) < self.full_dataset.num_objects:
             print(f'{split.value.capitalize()} objects:', object_inds)
 
         predicate_inds = sorted(predicate_inds)
@@ -112,7 +112,7 @@ class HicoDetSplit(HoiDatasetSplit):
             print(f'{split.value.capitalize()} predicates:', predicate_inds)
 
         if inter_inds is not None:
-            assert len(object_inds) == self.full_dataset.num_object_classes and len(predicate_inds) == self.full_dataset.num_actions
+            assert len(object_inds) == self.full_dataset.num_objects and len(predicate_inds) == self.full_dataset.num_actions
             inter_inds = sorted(inter_inds)
             self.active_interactions = np.array(inter_inds, dtype=np.int)
             self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
@@ -155,7 +155,7 @@ class HicoDetSplit(HoiDatasetSplit):
         return self.full_dataset.human_class
 
     @property
-    def num_object_classes(self):
+    def num_objects(self):
         return len(self.objects)
 
     @property
@@ -307,10 +307,10 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter
 
     # Filter out unwanted predicates/object classes
     if obj_inds is None and pred_inds is None:
-        final_objects_inds = list(range(hicodet.num_object_classes))
+        final_objects_inds = list(range(hicodet.num_objects))
         final_pred_inds = list(range(hicodet.num_actions))
     else:
-        obj_inds = set(obj_inds or range(hicodet.num_object_classes))
+        obj_inds = set(obj_inds or range(hicodet.num_objects))
         pred_inds = pred_inds or list(range(hicodet.num_actions))
         inter_inds = inter_inds or list(range(hicodet.num_interactions))
         assert 0 in pred_inds

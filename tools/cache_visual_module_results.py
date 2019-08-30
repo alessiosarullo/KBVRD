@@ -52,7 +52,7 @@ def save_feats():
         precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch, split.value)
         feat_file = h5py.File(precomputed_feats_fn, 'w')
         feat_file.create_dataset('box_feats', shape=(0, vm.vis_feat_dim), maxshape=(None, vm.vis_feat_dim))
-        feat_file.create_dataset('boxes_ext', shape=(0, hds.num_object_classes + 5), maxshape=(None, hds.num_object_classes + 5))
+        feat_file.create_dataset('boxes_ext', shape=(0, hds.num_objects + 5), maxshape=(None, hds.num_objects + 5))
         feat_file.create_dataset('union_boxes_feats', shape=(0, vm.vis_feat_dim), maxshape=(None, vm.vis_feat_dim))
 
         try:

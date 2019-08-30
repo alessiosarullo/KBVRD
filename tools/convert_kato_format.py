@@ -6,18 +6,19 @@ import numpy as np
 from lib.dataset.hico.hico import Hico
 from lib.dataset.hico.hico_split import HicoSplit, Splits
 
+from config import cfg
 
-def main(dataset='hico'):
-    if dataset == 'hico':
-        ds_dir = 'HICO'
-        kato_dir = os.path.join('zero-shot_inds', 'Kato', ds_dir)
+
+def main(dataset='HICO'):
+    if dataset == 'HICO':
+        kato_dir = os.path.join(cfg.data_root, dataset, 'Kato')
 
         hico = Hico()
 
         # Check that indices are consistent
         with open(os.path.join(kato_dir, 'hico_list_hoi.csv'), 'r') as f:
-            interactions_str = [l.strip().split(',') for l in f.readlines() if l.strip()]
-        for idx, obj, act in interactions_str:
+            interactions_classes = [l.strip().split(',') for l in f.readlines() if l.strip()]
+        for idx, obj, act in interactions_classes:
             idx = int(idx)
             # print(f'{idx:3d} {act:20s} {obj:15s}')
             hico_act_idx, hico_obj_idx = hico.interactions[idx, :]
@@ -85,7 +86,7 @@ def main(dataset='hico'):
         assert np.all(labels == kato_ann)
 
     elif dataset == 'VG':
-        ds_dir = 'Visual_Genome_HOI'
+        pass  # TODO
     else:
         raise ValueError('Unknown dataset.')
 

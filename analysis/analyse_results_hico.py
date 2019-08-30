@@ -104,10 +104,10 @@ def zs_stats():
     splits = HicoSplit.get_splits(obj_inds=seen_obj_inds, act_inds=seen_act_inds)
     train_split, val_split, test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
     hicodet = train_split.full_dataset
-    seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
+    seen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     seen_interactions[train_split.interactions[:, 1], train_split.interactions[:, 0]] = 1
 
-    unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
+    unseen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     unseen_interactions[test_split.interactions[:, 1], test_split.interactions[:, 0]] = 1
     unseen_interactions[seen_interactions] = 0
 

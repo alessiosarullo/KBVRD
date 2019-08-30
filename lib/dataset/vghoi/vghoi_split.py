@@ -14,7 +14,7 @@ from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
-class HicoSplit(AbstractHoiDatasetSplit):
+class VGHOISplit(AbstractHoiDatasetSplit):
     def __init__(self, split, hico: Hico, image_inds=None, object_inds=None, action_inds=None):
         self.full_dataset = hico  # type: Hico
         self.split = split
@@ -63,6 +63,10 @@ class HicoSplit(AbstractHoiDatasetSplit):
     @property
     def precomputed_visual_feat_dim(self):
         return self.pc_img_feats.shape[1]
+
+    @property
+    def human_class(self) -> int:
+        return self.full_dataset.human_class
 
     @property
     def num_objects(self):
@@ -153,6 +157,7 @@ class HicoSplit(AbstractHoiDatasetSplit):
         tr = splits[Splits.TRAIN]
         if obj_inds is not None:
             print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_object_classes.size}):', tr.active_object_classes.tolist())
+            assert hico.human_class in obj_inds
         if act_inds is not None:
             print(f'{Splits.TRAIN.value.capitalize()} actions ({tr.active_actions.size}):', tr.active_actions.tolist())
         if obj_inds is not None or act_inds is not None:

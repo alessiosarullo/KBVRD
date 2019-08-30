@@ -29,7 +29,7 @@ def stats():
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)  # type: HicoDetSplit
     hd = hds.full_dataset
 
-    op_mat = np.zeros([hds.num_object_classes, hds.num_actions])
+    op_mat = np.zeros([hds.num_objects, hds.num_actions])
     for _, p, o in hds.hoi_triplets:
         op_mat[o, p] += 1
     pred_labels = hd.predicates

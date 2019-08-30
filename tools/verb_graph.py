@@ -100,7 +100,7 @@ def get_feasible_hois(dataset: HicoDet):
     with open(os.path.join(cfg.cache_root, 'vg_predicate_objects.pkl'), 'rb') as f:
         vg_po = pickle.load(f)  # type: Dict[str, List[str]]
     vg_hd_po = {pred: [o for o in vg_objs if o in dataset.objects] for pred, vg_objs in vg_po.items()}
-    vg_op_mat = np.zeros((dataset.num_object_classes, dataset.num_actions))
+    vg_op_mat = np.zeros((dataset.num_objects, dataset.num_actions))
     for pred, objs in vg_hd_po.items():
         pi = dataset.predicate_index[pred]
         for obj in objs:
@@ -126,7 +126,7 @@ def plot():
 
     # Object-predicate
     all_op_mat = get_feasible_hois(hd)
-    hico_op_mat = np.zeros([hd.num_object_classes, hd.num_actions])
+    hico_op_mat = np.zeros([hd.num_objects, hd.num_actions])
     for p, o in hd.interactions:
         hico_op_mat[o, p] = 1
     summary_op_mat = (all_op_mat + hico_op_mat * 2) / 3

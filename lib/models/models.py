@@ -22,7 +22,7 @@ class BaseModel(GenericModel):
         hidden_dim = 1024
         self.act_repr_dim = cfg.repr_dim
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
@@ -30,7 +30,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(p=cfg.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
@@ -94,7 +94,7 @@ class NonParamBaseModel(GenericModel):
         hidden_dim = 1024
         self.act_repr_dim = cfg.repr_dim
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
@@ -102,7 +102,7 @@ class NonParamBaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_object_classes, hidden_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(p=cfg.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
@@ -397,12 +397,12 @@ class PeyreModel(GenericModel):
         box_labels = vis_output.box_labels
 
         hoi_subj_labels = box_labels[vis_output.ho_infos_np[:, 1]]
-        subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_object_classes)).float()
+        subj_labels_1hot = hoi_subj_labels.new_zeros((hoi_subj_labels.shape[0], self.dataset.num_objects)).float()
         fg_objs = np.flatnonzero(hoi_subj_labels >= 0)
         subj_labels_1hot[fg_objs, hoi_subj_labels[fg_objs]] = 1
 
         hoi_obj_labels = box_labels[vis_output.ho_infos_np[:, 2]]
-        obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes)).float()
+        obj_labels_1hot = hoi_obj_labels.new_zeros((hoi_obj_labels.shape[0], self.dataset.num_objects)).float()
         fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
         obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
 

@@ -92,7 +92,7 @@ class VisualModule(nn.Module):
         interactions = self.dataset.reduced_interactions
         hoi_obj_labels = box_labels[ho_infos[:, 2]]
 
-        obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.num_object_classes), dtype=np.float32)
+        obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.num_objects), dtype=np.float32)
         fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
         obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
 
@@ -277,7 +277,7 @@ class VisualModule(nn.Module):
             return ho_infos
 
     def one_hot_obj_labels(self, labels: np.ndarray):
-        labels_onehot = np.zeros((labels.shape[0], self.dataset.num_object_classes))
+        labels_onehot = np.zeros((labels.shape[0], self.dataset.num_objects))
         labels_onehot[np.arange(labels_onehot.shape[0]), labels] = 1
         return labels_onehot
 

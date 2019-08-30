@@ -52,7 +52,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
             self.unseen_inds = {}
 
             seen_obj_inds = dataset.active_object_classes
-            unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_object_classes)) - set(seen_obj_inds.tolist())))
+            unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_objects)) - set(seen_obj_inds.tolist())))
             self.seen_inds['obj'] = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
             self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
 
@@ -86,7 +86,7 @@ class HicoExtZSGCMultiModel(AbstractModel):
 
         # Predictors
         self.linear_predictors = nn.ParameterDict()
-        for k, d in [('obj', dataset.full_dataset.num_object_classes),
+        for k, d in [('obj', dataset.full_dataset.num_objects),
                      ('act', dataset.full_dataset.num_actions),
                      ('hoi', dataset.full_dataset.num_interactions)]:
             self.linear_predictors[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)

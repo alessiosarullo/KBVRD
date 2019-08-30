@@ -29,7 +29,7 @@ def main():
     common_str = set(hico_objects) & inet_classes
     common = {i for i, n in enumerate(hico_objects) if n in common_str}
     print(len(common))
-    hico_only = set(range(hico.num_object_classes)) - common - {hico.human_class}
+    hico_only = set(range(hico.num_objects)) - common - {hico.human_class}
 
     seen_obj = np.random.choice(np.array(list(hico_only)), size=num_seen_obj - len(common) - 1, replace=False)
     seen_obj = np.sort(np.concatenate([seen_obj, np.array([hico.human_class]), np.array(list(common))]))

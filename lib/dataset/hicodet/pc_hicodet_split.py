@@ -192,13 +192,13 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
 
         # Filter HOIs. Object class filtering is currently not supported.
-        if self.active_object_classes.size < self.full_dataset.num_object_classes:
+        if self.active_object_classes.size < self.full_dataset.num_objects:
             raise NotImplementedError('Object class filtering is not supported.')
         if len(self.active_actions) < self.full_dataset.num_actions and self.split != Splits.TEST:
             self.pc_action_labels = self.pc_action_labels[:, self.active_actions]
             # Note: boxes with no interactions are NOT filtered
         elif len(self.active_interactions) < self.full_dataset.num_interactions and self.split != Splits.TEST:
-            op_pair_is_valid = np.zeros([self.num_object_classes, self.num_actions])
+            op_pair_is_valid = np.zeros([self.num_objects, self.num_actions])
             assert op_pair_is_valid.size == self.full_dataset.op_pair_to_interaction.size
             op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
             num_hois = self.pc_action_labels.sum()
@@ -271,7 +271,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
                 # TODO mapping of obj inds for rels
                 precomp_box_labels = self.pc_box_labels[start:end].copy()
 
-                if self.active_object_classes.size < self.num_object_classes:
+                if self.active_object_classes.size < self.num_objects:
                     precomp_boxes_ext = precomp_boxes_ext[:, np.concatenate([np.arange(5), 5 + self.active_object_classes])]
                     num_boxes = precomp_box_labels.shape[0]
                     bg_box_mask = (precomp_box_labels < 0)

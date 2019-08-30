@@ -73,19 +73,19 @@ class Analyser:
         # required, those should be considered mistakes of the null interaction.
         self.act_conf_mat = np.zeros((self.dataset.num_actions, self.dataset.num_actions))
 
-        self.gt_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))
-        self.gt_spatial_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))  # overlap
-        self.gt_candidate_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))  # overlap + object
+        self.gt_matches = np.zeros((self.dataset.num_objects, self.dataset.num_actions))
+        self.gt_spatial_matches = np.zeros((self.dataset.num_objects, self.dataset.num_actions))  # overlap
+        self.gt_candidate_matches = np.zeros((self.dataset.num_objects, self.dataset.num_actions))  # overlap + object
 
-        self.pred_matches = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))  # candidate + > pred thr + best match
+        self.pred_matches = np.zeros((self.dataset.num_objects, self.dataset.num_actions))  # candidate + > pred thr + best match
 
         self.ph_num_bins = 20
         self.ph_bins = np.arange(self.ph_num_bins + 1) / self.ph_num_bins
         self.pred_act_hist = np.zeros((self.ph_bins.size, self.dataset.num_actions), dtype=np.int)  # just predicted
         self.pred_best_match_act_hist = np.zeros((self.ph_bins.size, self.dataset.num_actions), dtype=np.int)  # candidate + best match
 
-        self.num_gt = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))
-        self.num_pred = np.zeros((self.dataset.num_object_classes, self.dataset.num_actions))
+        self.num_gt = np.zeros((self.dataset.num_objects, self.dataset.num_actions))
+        self.num_pred = np.zeros((self.dataset.num_objects, self.dataset.num_actions))
 
     def compute_stats(self, predictions: List[Dict]):
         assert len(predictions) == self.dataset.num_images, (len(predictions), self.dataset.num_images)
@@ -114,7 +114,7 @@ class Analyser:
             raise ValueError('Unknown type for GT entry: %s.' % str(type(gt_entry)))
 
         predict_action_scores = np.zeros([0, self.dataset.num_actions])
-        predict_ho_obj_scores = np.zeros([0, self.dataset.num_object_classes])
+        predict_ho_obj_scores = np.zeros([0, self.dataset.num_objects])
         predict_ho_pairs = np.zeros((0, 2), dtype=np.int)
         predict_boxes = np.zeros((0, 4))
         if prediction.obj_boxes is not None:
@@ -460,7 +460,7 @@ def zs_stats():
 
     hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
     hicodet = hdtrain.full_dataset
-    seen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
+    seen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
     # hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
@@ -472,7 +472,7 @@ def zs_stats():
     # print('Val only actions:', sorted(set(hdval.predicates) - set(hdtrain.predicates)))
 
     hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    unseen_interactions = np.zeros((hicodet.num_object_classes, hicodet.num_actions), dtype=bool)
+    unseen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     unseen_interactions[hdtest.interactions[:, 1], hdtest.interactions[:, 0]] = 1
     unseen_interactions[seen_interactions] = 0
     # print('Unseen interactions:')

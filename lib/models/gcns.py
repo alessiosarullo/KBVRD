@@ -15,7 +15,7 @@ class AbstractGCN(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         self.dataset = dataset
-        self.num_objects = dataset.full_dataset.num_object_classes
+        self.num_objects = dataset.full_dataset.num_objects
         self.num_actions = dataset.full_dataset.num_actions
         self.num_interactions = dataset.full_dataset.num_interactions
 
