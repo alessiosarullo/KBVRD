@@ -10,7 +10,6 @@ from lib.dataset.utils import Splits
 
 class VGHoiSplit(HoiDatasetSplit):
     def __init__(self, split, full_dataset, image_inds=None, object_inds=None, action_inds=None):
-        assert cfg.seenf < 0
         super(VGHoiSplit, self).__init__(split, full_dataset, image_inds, object_inds, action_inds)
 
     def _get__precomputed_feats_fn(self, split):
