@@ -176,10 +176,11 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         # Split train/val if needed
         if cfg.val_ratio > 0:
             num_imgs = len(full_dataset.split_filenames[Splits.TRAIN])
-            num_val_imgs = int(num_imgs * cfg.val_ratio)
-            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=list(range(0, num_imgs - num_val_imgs)),
+            num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
+            imgs_inds = np.random.permutation(num_imgs)
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[:num_train_imgs]),
                                        object_inds=obj_inds, action_inds=act_inds)
-            splits[Splits.VAL] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=list(range(num_imgs - num_val_imgs, num_imgs)),
+            splits[Splits.VAL] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[num_train_imgs:]),
                                      object_inds=obj_inds, action_inds=act_inds)
         else:
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)

@@ -15,8 +15,8 @@ from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit,
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['vis']
-    sys.argv[1:] = ['stats']
-    # sys.argv[1:] = ['find']
+    # sys.argv[1:] = ['stats']
+    sys.argv[1:] = ['find']
 except ImportError:
     pass
 
@@ -67,10 +67,11 @@ def find():
     hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)  # type: HicoDetSplit
 
     queries_str = [
-        ['fly', 'kite'],
-        ['carry', 'kite'],
+        ['cook', 'pizza'],
+        # ['eat', 'sandwich'],
     ]
-    queries = [hds.full_dataset.op_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.predicate_index[q[0]]] for q in queries_str]
+    queries = [hds.full_dataset.op_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.predicate_index[q[0]]]
+               for q in queries_str]
     if np.any(np.array(queries) < 0):
         raise ValueError('Unknown interaction(s).')
     output_dir = os.path.join('analysis', 'output', 'gt', 'find', '_'.join(['-'.join(q) for q in queries_str]))
@@ -82,7 +83,7 @@ def find():
         example = hds.get_img_entry(idx, read_img=False)  # type: Example
         im_fn = example.filename
 
-        if idx % 50 == 0:
+        if idx % 1000 == 0:
             print(idx)
 
         boxes = example.gt_boxes
