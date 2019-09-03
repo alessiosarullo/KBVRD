@@ -11,7 +11,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
     parser.add_argument('measure')
-    parser.add_argument('baseline')
+    parser.add_argument('baseline', type=float)
     args = parser.parse_args()
     dir = args.dir
     measure = args.measure
