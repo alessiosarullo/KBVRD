@@ -65,15 +65,18 @@ def group_reruns_and_ttest(names, summary_matrix, measures):
     return new_names, new_summary_matrix
 
 
-def print_best_results(runs, exp_data):
+def get_stats_on_best_results(runs, exp_data):
     # Result obtained at the lowest validation action loss.
     assert np.all(exp_data['Val']['steps'] == exp_data['Test']['steps'])
     best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
     test_data = exp_data['Test']['values']['zs_pM-mAP']
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
 
+    sp = max([len(r) for r in runs])
     for i, r in enumerate(runs):
-        print(r, f'{test_accuracy_per_run[i] * 100:6.3f}')
+        print(f'{r:{sp}s} {test_accuracy_per_run[i] * 100:6.3f}')
+    print(f'{"Mean":>{sp}s} {np.mean(test_accuracy_per_run) * 100:6.3f}')
+    print(f'{"Std":>{sp}s} {np.std(test_accuracy_per_run) * 100:6.3f}')
 
 
 def main():
@@ -90,7 +93,7 @@ def main():
     runs = sorted(runs)
 
     exp_data = get_runs_data(runs)
-    print_best_results(runs, exp_data)
+    get_stats_on_best_results(runs, exp_data)
 
 
 if __name__ == '__main__':
