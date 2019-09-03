@@ -75,23 +75,23 @@ def get_exp_data(dir):
     print('\n'.join(runs))
     exit(0)
 
-    summary_iterators = [EventAccumulator(os.path.join(p, 'tboard/Test')).Reload() for p in runs]
-    tags = summary_iterators[0].Tags()['scalars']
-    for it in summary_iterators:
-        assert it.Tags()['scalars'] == tags
+    data = {'Train': {}, 'Val': {}, 'Test': {}}
+    for split in data.keys():
+        summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
+        tags = summary_iterators[0].Tags()['scalars']
+        for it in summary_iterators:
+            assert it.Tags()['scalars'] == tags
 
-    values_per_tag = {}
-    for tag in tags:
-        for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
-            values_per_tag.setdefault(tag, []).append([e.value for e in events])
-            assert len({e.step for e in events}) == 1
-    values_per_tag = {tag: np.array(values) for tag, values in values_per_tag.items()}
+        values_per_tag = {}
+        for tag in tags:
+            for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
+                values_per_tag.setdefault(tag, []).append([e.value for e in events])
+                assert len({e.step for e in events}) == 1
+        values_per_tag = {tag: np.array(values) for tag, values in values_per_tag.items()}
 
-    aggr_ops = {'mean': np.mean,
-                'std': np.std}
-    for aggr_op_name, aggr_op in aggr_ops.items():
-        for tag, values in values_per_tag.items():
-            aggr_value_per_timestep = aggr_op(np.array(values), axis=1)
+        data[split] = values_per_tag
+
+    pass
 
 
 def main():
