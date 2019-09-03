@@ -93,7 +93,7 @@ def get_exp_data(dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('dir', nargs=argparse.REMAINDER)
+    parser.add_argument('dir')
     args = parser.parse_args()
     dir = args.dir
 
