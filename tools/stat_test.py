@@ -69,7 +69,10 @@ def group_reruns_and_ttest(names, summary_matrix, measures):
 def get_exp_data(dir):
     runs = []
     for run_dir in os.listdir(dir):
-        print(run_dir)
+        if 'RUN' in run_dir:
+            runs.append(os.path.join(dir, run_dir))
+    runs = sorted(runs)
+    print('\n'.join(runs))
     exit(0)
 
     summary_iterators = [EventAccumulator(os.path.join(p, 'tboard/Test')).Reload() for p in runs]
