@@ -1,3 +1,4 @@
+import os
 import pickle
 import time
 from collections import Counter
@@ -5,6 +6,7 @@ from typing import Dict, List
 
 import numpy as np
 import torch
+from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 
 class Timer:
@@ -173,3 +175,31 @@ class BaseEvaluator:
 
     def output_metrics(self, sort=False, actions_to_keep=None):
         raise NotImplementedError()
+
+
+def get_runs_data(runs):
+    """
+    :param runs: list of directories, each representing a run
+    :return: data: dict with one entry per split. Each entry is `split`: {'values': dict, 'steps': list}. Values is another dict in the form
+        `metric`: NumPy array [num_runs, num_steps]. Example: data['Train']['values']['Act_loss'][0, :].
+    """
+    data = {'Train': {}, 'Val': {}, 'Test': {}}
+    for split in data.keys():
+        summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
+        tags = summary_iterators[0].Tags()['scalars']
+        for it in summary_iterators:
+            assert it.Tags()['scalars'] == tags
+
+        values_per_tag = {}
+        steps = []
+        for tag in tags:
+            for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
+                values_per_tag.setdefault(tag, []).append([e.value for e in events])
+                assert len({e.step for e in events}) == 1
+                if len(values_per_tag.keys()) == 1:
+                    steps.append(events[0].step)
+        steps = np.array(steps)
+        values_per_tag = {tag: np.array(values).T for tag, values in values_per_tag.items()}
+
+        data[split] = {'values': values_per_tag, 'steps': steps}
+    return data

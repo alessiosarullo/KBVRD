@@ -2,10 +2,9 @@ import argparse
 import os
 
 import numpy as np
-from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 import scipy.stats
 
-# TODO
+from lib.stats.utils import get_runs_data
 
 
 def group_reruns_and_ttest(names, summary_matrix, measures):
@@ -66,32 +65,15 @@ def group_reruns_and_ttest(names, summary_matrix, measures):
     return new_names, new_summary_matrix
 
 
-def get_exp_data(dir):
-    runs = []
-    for run_dir in os.listdir(dir):
-        if 'RUN' in run_dir:
-            runs.append(os.path.join(dir, run_dir))
-    runs = sorted(runs)
-    print('\n'.join(runs))
-    exit(0)
+def print_best_results(runs, exp_data):
+    # Result obtained at the lowest validation action loss.
+    assert np.all(exp_data['Val']['steps'] == exp_data['Test']['steps'])
+    best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
+    test_data = exp_data['Test']['values']['zs_pM-mAP']
+    test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
 
-    data = {'Train': {}, 'Val': {}, 'Test': {}}
-    for split in data.keys():
-        summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
-        tags = summary_iterators[0].Tags()['scalars']
-        for it in summary_iterators:
-            assert it.Tags()['scalars'] == tags
-
-        values_per_tag = {}
-        for tag in tags:
-            for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
-                values_per_tag.setdefault(tag, []).append([e.value for e in events])
-                assert len({e.step for e in events}) == 1
-        values_per_tag = {tag: np.array(values) for tag, values in values_per_tag.items()}
-
-        data[split] = values_per_tag
-
-    pass
+    for i, r in enumerate(runs):
+        print(r, f'{test_accuracy_per_run[i] * 100:6.3f}')
 
 
 def main():
@@ -101,7 +83,14 @@ def main():
     dir = args.dir
 
     print(dir)
-    exp_data = get_exp_data(dir)
+    runs = []
+    for run_dir in os.listdir(dir):
+        if 'RUN' in run_dir:
+            runs.append(os.path.join(dir, run_dir))
+    runs = sorted(runs)
+
+    exp_data = get_runs_data(runs)
+    print_best_results(runs, exp_data)
 
 
 if __name__ == '__main__':
