@@ -33,9 +33,9 @@ def main():
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
     sp = max([len(r) for r in runs])
     for i, r in enumerate(runs):
-        print(f'{r:{sp}s} {test_accuracy_per_run[i] * 100:6.3f}')
-    print(f'{"Mean":>{sp}s} {np.mean(test_accuracy_per_run) * 100:6.3f}')
-    print(f'{"Std":>{sp}s} {np.std(test_accuracy_per_run) * 100:6.3f}')
+        print(f'{r:{sp}s} {test_accuracy_per_run[i]:8.5f}')
+    print(f'{"Mean":>{sp}s} {np.mean(test_accuracy_per_run):8.5f}')
+    print(f'{"Std":>{sp}s} {np.std(test_accuracy_per_run):8.5f}')
 
     # Welch’s t-test
     baseline = np.atleast_1d(baseline)
@@ -44,7 +44,7 @@ def main():
         pvalue = scipy.stats.ttest_1samp(results, popmean=baseline[0])[1]
     else:
         pvalue = scipy.stats.ttest_ind(baseline, results, equal_var=False)[1]
-    print(f'{measure:10s}')
+    print(f'{measure:>10s}')
     print(f'{pvalue:10.2e}')
 
 
