@@ -10,7 +10,6 @@ from lib.dataset.utils import Splits
 
 class VGHoiSplit(HoiDatasetSplit):
     def __init__(self, split, full_dataset, image_inds=None, object_inds=None, action_inds=None):
-        assert cfg.seenf < 0
         super(VGHoiSplit, self).__init__(split, full_dataset, image_inds, object_inds, action_inds)
 
     def _get__precomputed_feats_fn(self, split):
@@ -59,7 +58,10 @@ class VGHoi(HoiDataset):
         super(VGHoi, self).__init__(object_classes, action_classes, null_action, interactions_str, filenames_per_split, annotations_per_split)
 
         with open(os.path.join(kato_dir, 'common_class.csv'), 'r') as f:
-            self.common_interactions = np.array(sorted([int(l.strip()) for l in f.readlines() if l.strip()]))
+            common_interactions = np.array(sorted([int(l.strip()) for l in f.readlines() if l.strip()]))
+            zero_test_instances_interactions = np.flatnonzero(np.sum(annotations_per_split[Splits.TEST], axis=0) == 0)
+            self.common_interactions = np.array(sorted(set(common_interactions.tolist()) - set(zero_test_instances_interactions.tolist())))
+            assert np.all(np.sum(annotations_per_split[Splits.TEST][:, self.common_interactions], axis=0) > 0)
         self.img_dir = os.path.join(ds_dir, 'all_VG_100K')
 
     def get_img_dir(self, split):

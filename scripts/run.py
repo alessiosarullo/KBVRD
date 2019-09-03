@@ -78,13 +78,13 @@ class Launcher:
 
         # Data
         # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
-        obj_inds = pred_inds = inter_inds = None
+        obj_inds = act_inds = inter_inds = None
         if cfg.seenf >= 0:
             inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
             try:
                 inter_inds = sorted(inds_dict[Splits.TRAIN.value]['inter'].tolist())
             except KeyError:
-                pred_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
+                act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.hicodet:
@@ -96,15 +96,15 @@ class Launcher:
             else:
                 train_ds_class = PrecomputedHicoDetSingleHOIsSplit
             self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
-                                                             obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
+                                                             obj_inds=obj_inds, pred_inds=act_inds, inter_inds=inter_inds)
             self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
-                                                           obj_inds=obj_inds, pred_inds=pred_inds, inter_inds=inter_inds)
+                                                           obj_inds=obj_inds, pred_inds=act_inds, inter_inds=inter_inds)
             self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
         else:
             if cfg.vghoi:
-                splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
+                splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
             else:
-                splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
+                splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
             self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
         # Model

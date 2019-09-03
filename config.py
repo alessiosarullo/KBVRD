@@ -204,7 +204,10 @@ class Configs:
     @property
     def active_classes_file(self):
         assert self.seenf >= 0
-        return os.path.join('zero-shot_inds', f'seen_inds_{self.seenf}.pkl.push')
+        if self.vghoi:
+            return os.path.join('zero-shot_inds', 'seen_inds_vghoi.pkl.push')
+        else:
+            return os.path.join('zero-shot_inds', f'seen_inds_{self.seenf}.pkl.push')
 
     @property
     def tensorboard_dir(self):
