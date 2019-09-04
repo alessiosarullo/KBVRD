@@ -10,22 +10,20 @@ from lib.stats.utils import get_runs_data
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('fname')
-    parser.add_argument('--debug', action='store_true')
     parser.add_argument('runs', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     fname = args.fname
     runs = args.runs
 
-    if args.debug:
-        try:  # PyCharm debugging
-            print('Starting remote debugging (resume from debug server)')
-            import pydevd_pycharm
-            pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
-            print('Remote debugging activated.')
-        except:
-            print('Remote debugging failed.')
-            raise
-    
+    try:  # PyCharm debugging
+        print('Starting remote debugging (resume from debug server)')
+        import pydevd_pycharm
+        pydevd_pycharm.settrace('130.88.195.105', port=16004, stdoutToServer=True, stderrToServer=True)
+        print('Remote debugging activated.')
+    except:
+        print('Remote debugging failed.')
+        raise
+
     print(fname)
     print(runs)
     os.makedirs(fname, exist_ok=True)
