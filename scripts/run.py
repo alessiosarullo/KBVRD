@@ -173,8 +173,8 @@ class Launcher:
 
         try:
             cfg.save()
-            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_object_classes, 'pred': self.train_split.active_actions},
-                         Splits.VAL.value: {'obj': self.val_split.active_object_classes, 'pred': self.val_split.active_actions},
+            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_objects, 'pred': self.train_split.active_actions},
+                         Splits.VAL.value: {'obj': self.val_split.active_objects, 'pred': self.val_split.active_actions},
                          }, open(cfg.ds_inds_file, 'wb'))
             if cfg.num_epochs == 0:
                 torch.save({'epoch': -1,
@@ -327,21 +327,34 @@ class Launcher:
         evaluator.save(cfg.eval_res_file)
         metric_dict = evaluator.output_metrics(interactions_to_keep=test_interactions)
         if cfg.seenf >= 0:
-            print('Trained on:')
+            def get_metrics(_interactions, print_out=True):
+                if test_interactions is not None:
+                    _interactions = set(_interactions) & set(test_interactions)
+                return evaluator.output_metrics(interactions_to_keep=sorted(_interactions), print_out=print_out)
+
+            detailed_metric_dicts = []
+
             seen_interactions = self.train_split.active_interactions
-            if test_interactions is not None:
-                seen_interactions = set(seen_interactions) & set(test_interactions)
-            tr_metrics = evaluator.output_metrics(interactions_to_keep=sorted(seen_interactions))
-            tr_metrics = {f'tr_{k}': v for k, v in tr_metrics.items()}
+            detailed_metric_dicts.append({f'tr_{k}': v for k, v in get_metrics(seen_interactions, print_out=False).items()})
 
-            unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
-            if test_interactions is not None:
-                unseen_interactions &= set(test_interactions)
             print('Zero-shot:')
-            zs_metrics = evaluator.output_metrics(interactions_to_keep=sorted(unseen_interactions))
-            zs_metrics = {f'zs_{k}': v for k, v in zs_metrics.items()}
+            unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
+            detailed_metric_dicts.append({f'zs_{k}': v for k, v in get_metrics(unseen_interactions).items()})
 
-            for d in [tr_metrics, zs_metrics]:
+            op_mat = self.train_split.full_dataset.op_pair_to_interaction
+            unseen_objects = np.array(sorted(set(range(self.train_split.full_dataset.num_objects)) - set(self.train_split.active_objects)))
+            unseen_actions = np.array(sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions)))
+
+            uo_sa_interactions = set(np.unique(op_mat[unseen_objects, self.train_split.active_actions]).tolist()) - {-1}
+            detailed_metric_dicts.append({f'zs_uo-sa_{k}': v for k, v in get_metrics(uo_sa_interactions, print_out=False).items()})
+
+            so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, unseen_actions]).tolist()) - {-1}
+            detailed_metric_dicts.append({f'zs_so-ua_{k}': v for k, v in get_metrics(so_ua_interactions, print_out=False).items()})
+
+            uo_ua_interactions = set(np.unique(op_mat[unseen_objects, unseen_actions]).tolist()) - {-1}
+            detailed_metric_dicts.append({f'zs_uo-ua_{k}': v for k, v in get_metrics(uo_ua_interactions, print_out=False).items()})
+
+            for d in detailed_metric_dicts:
                 for k, v in d.items():
                     assert k not in metric_dict
                     metric_dict[k] = v

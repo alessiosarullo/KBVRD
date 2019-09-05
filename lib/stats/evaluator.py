@@ -85,7 +85,7 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def output_metrics(self, sort=False, actions_to_keep=None, return_labels=False):
+    def output_metrics(self, sort=False, actions_to_keep=None, return_labels=False, print_out=True):
         mf = MetricFormatter()
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
@@ -110,7 +110,7 @@ class Evaluator(BaseEvaluator):
                                                                          all_classes=list(range(self.full_dataset.num_interactions)),
                                                                          sort=sort,
                                                                          keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs')
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs', print_out=print_out)
 
         for k, v in pos_metrics.items():
             assert k not in metrics.keys()

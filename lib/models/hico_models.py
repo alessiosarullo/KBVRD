@@ -50,7 +50,7 @@ class SKZSMultiModel(AbstractModel):
             self.seen_inds = {}
             self.unseen_inds = {}
 
-            seen_obj_inds = dataset.active_object_classes
+            seen_obj_inds = dataset.active_objects
             unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_objects)) - set(seen_obj_inds.tolist())))
             self.seen_inds['obj'] = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
             self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)

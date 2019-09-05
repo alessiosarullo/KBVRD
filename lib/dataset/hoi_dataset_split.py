@@ -50,13 +50,13 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
 
         object_inds = sorted(object_inds) if object_inds is not None else range(self.full_dataset.num_objects)
         self.objects = [full_dataset.objects[i] for i in object_inds]
-        self.active_object_classes = np.array(object_inds, dtype=np.int)
+        self.active_objects = np.array(object_inds, dtype=np.int)
 
         action_inds = sorted(action_inds) if action_inds is not None else range(self.full_dataset.num_actions)
         self.actions = [full_dataset.actions[i] for i in action_inds]
         self.active_actions = np.array(action_inds, dtype=np.int)
 
-        active_op_mat = self.full_dataset.op_pair_to_interaction[self.active_object_classes, :][:, self.active_actions]
+        active_op_mat = self.full_dataset.op_pair_to_interaction[self.active_objects, :][:, self.active_actions]
         active_interactions = set(np.unique(active_op_mat).tolist()) - {-1}
         self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
         self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original action and object inds
@@ -188,7 +188,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
 
         tr = splits[Splits.TRAIN]
         if obj_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_object_classes.size}):', tr.active_object_classes.tolist())
+            print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_objects.size}):', tr.active_objects.tolist())
         if act_inds is not None:
             print(f'{Splits.TRAIN.value.capitalize()} actions ({tr.active_actions.size}):', tr.active_actions.tolist())
         if obj_inds is not None or act_inds is not None:
