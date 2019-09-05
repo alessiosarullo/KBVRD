@@ -5,7 +5,7 @@ from torch.nn import functional
 from config import cfg
 
 
-def bce_loss(logits, labels, reduce=True):
+def bce_loss(logits, labels, pos_weights=None, reduce=True):
     if cfg.fl_gamma != 0:  # Focal loss
         gamma = cfg.fl_gamma
         s = logits
@@ -19,7 +19,7 @@ def bce_loss(logits, labels, reduce=True):
         else:
             loss = loss_mat
     else:  # standard BCE loss
-        loss = functional.binary_cross_entropy_with_logits(logits, labels, reduction='elementwise_mean' if reduce else 'none')
+        loss = functional.binary_cross_entropy_with_logits(logits, labels, pos_weight=pos_weights, reduction='elementwise_mean' if reduce else 'none')
     if reduce and not cfg.meanc:
         loss *= logits.shape[1]
     return loss

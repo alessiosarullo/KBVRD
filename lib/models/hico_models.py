@@ -60,7 +60,6 @@ class SKZSMultiModel(AbstractModel):
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
-            # FIXME null is not removed from these
             seen_hoi_inds = dataset.active_interactions
             unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
             self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
@@ -120,6 +119,27 @@ class SKZSMultiModel(AbstractModel):
             adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
             self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
 
+        if cfg.csp:
+            if not cfg.train_null:
+                null_interactions = set(np.flatnonzero(self.dataset.full_dataset.interactions[:, 0] == 0).tolist())
+                interactions = np.array(sorted(set(self.dataset.active_interactions.tolist()) - null_interactions))
+                actions = np.array(sorted(set(self.dataset.active_actions.tolist()) - {0}))
+            else:
+                interactions = self.dataset.active_interactions
+                actions = self.dataset.active_actions
+            all_interactions_hist = np.sum(self.dataset.labels, axis=0)  # Unseen interactions have a value of 0 anyway, but this preserves indices.
+
+            hist = {'obj': all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[self.dataset.active_objects],
+                    'act': all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[actions],
+                    'hoi': all_interactions_hist[interactions]}
+
+            csp_weights = {}
+            for k, h in hist.items():
+                cost_matrix = np.maximum(1, np.log2(h[None, :] / h[:, None])) * (1 - np.eye(h.size))
+                tot = h.sum()
+                csp_weights[k] = cost_matrix @ h / (tot - h)
+            pass
+
     def get_soft_labels(self, labels):
         assert cfg.osl or cfg.asl or cfg.hsl
         batch_size = labels.shape[0]
@@ -136,11 +156,6 @@ class SKZSMultiModel(AbstractModel):
             similar_obj_per_act = similar_obj_per_act * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
             ext_inter_mat += similar_obj_per_act
 
-            if cfg.sloo:
-                similar_obj = (obj_labels @ obj_emb_sim).clamp(max=1)
-                ext_inter_mat = torch.max(ext_inter_mat, similar_obj.unsqueeze(dim=2)) * \
-                                self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-
             obj_labels[:, self.unseen_inds['obj']] = similar_obj_per_act.max(dim=2)[0][:, self.unseen_inds['obj']]
         obj_labels = obj_labels.detach()
 
@@ -156,7 +171,8 @@ class SKZSMultiModel(AbstractModel):
                 similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
                 similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
                 feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-                act_labels[:, self.unseen_inds['act']] = feasible_similar_acts_per_obj.max(dim=1)[0][:, self.unseen_inds['act']]  # group across objects
+                act_labels[:, self.unseen_inds['act']] = feasible_similar_acts_per_obj.max(dim=1)[0][:,
+                                                         self.unseen_inds['act']]  # group across objects
         act_labels = act_labels.detach()
 
         hoi_labels = labels
@@ -196,22 +212,6 @@ class SKZSMultiModel(AbstractModel):
             predictors_sim = predictors_norm @ predictors_norm.t()
         null = ~adj.any(dim=1)
         arange = torch.arange(predictors_sim.shape[0])
-
-        # # Done with argmin/argmax because using min/max directly resulted in NaNs.
-        # neigh_mask = torch.full_like(predictors_sim, np.inf)
-        # neigh_mask[adj] = 1
-        # argmin_neigh_sim = (predictors_sim * neigh_mask.detach()).argmin(dim=1)
-        # min_neigh_sim = predictors_sim[arange[non_null], argmin_neigh_sim[non_null]]
-        #
-        # non_neigh_mask = torch.full_like(predictors_sim, -np.inf)
-        # non_neigh_mask[~adj] = 1
-        # argmax_non_neigh_sim = (predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-        # max_non_neigh_sim = predictors_sim[arange[non_null], argmax_non_neigh_sim[non_null]]
-        #
-        # assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-        # assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
-        #
-        # reg_loss_mat = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
 
         predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
         reg_loss_mat = (cfg.greg_margin - predictors_sim_diff).clamp(min=0)

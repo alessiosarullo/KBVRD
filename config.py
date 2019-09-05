@@ -68,6 +68,7 @@ class Configs:
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss
         self.meanc = False  # mean or sum over classes for BCE loss?
+        self.csp = False  # Use cost-sensitive coefficients for positive examples
 
         # HICO specific
         self.train_null = False
@@ -86,7 +87,6 @@ class Configs:
         self.hlc = 0.0
         self.hsc = 0.0
         self.hpr = 0.0
-        self.sloo = False  # use object-only bias as well
         self.rl_no_norm = False
         self.gc = False
         self.hoigcn = False
