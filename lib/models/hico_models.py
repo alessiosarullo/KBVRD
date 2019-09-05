@@ -232,6 +232,9 @@ class SKZSMultiModel(AbstractModel):
 
             feats, orig_labels = x
             all_instance_reprs, all_linear_predictors, all_gc_predictors, all_labels = self._forward(feats, orig_labels)
+            if cfg.gconly:
+                assert cfg.gc
+                all_linear_predictors = all_gc_predictors
             all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act', 'hoi']}
             if cfg.gc:
                 all_gc_logits = {k: all_instance_reprs[k] @ all_gc_predictors[k].t() for k in ['obj', 'act', 'hoi']}

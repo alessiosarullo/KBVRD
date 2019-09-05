@@ -99,7 +99,6 @@ class Configs:
         self.filter = False
 
         # ZS specific
-        self.attw = False
         self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
         self.softl = 0.0
         self.nullzs = False
@@ -108,6 +107,7 @@ class Configs:
         self.slpure=False
 
         # ZS GCN specific
+        self.gconly = False
         self.link_null = False
         self.puregc = False
         self.greg = 0.0
