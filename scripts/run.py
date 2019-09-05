@@ -345,13 +345,13 @@ class Launcher:
             unseen_objects = np.array(sorted(set(range(self.train_split.full_dataset.num_objects)) - set(self.train_split.active_objects)))
             unseen_actions = np.array(sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions)))
 
-            uo_sa_interactions = set(np.unique(op_mat[unseen_objects, self.train_split.active_actions]).tolist()) - {-1}
+            uo_sa_interactions = set(np.unique(op_mat[unseen_objects, :][:, self.train_split.active_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_uo-sa_{k}': v for k, v in get_metrics(uo_sa_interactions, print_out=False).items()})
 
-            so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, unseen_actions]).tolist()) - {-1}
+            so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, :][:,  unseen_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_so-ua_{k}': v for k, v in get_metrics(so_ua_interactions, print_out=False).items()})
 
-            uo_ua_interactions = set(np.unique(op_mat[unseen_objects, unseen_actions]).tolist()) - {-1}
+            uo_ua_interactions = set(np.unique(op_mat[unseen_objects, :][:,  unseen_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_uo-ua_{k}': v for k, v in get_metrics(uo_ua_interactions, print_out=False).items()})
 
             for d in detailed_metric_dicts:
