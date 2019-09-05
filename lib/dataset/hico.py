@@ -32,9 +32,9 @@ class Hico(HoiDataset):
         interactions_classes = [[inter['pred'], inter['obj']] for inter in driver.interaction_list]
 
         train_annotations = driver.split_annotations[Splits.TRAIN]
-        train_annotations[np.isnan(train_annotations)] = 0
+        train_annotations[np.isnan(train_annotations) | (train_annotations < 0)] = 0
         test_annotations = driver.split_annotations[Splits.TEST]
-        test_annotations[np.isnan(test_annotations)] = 0
+        test_annotations[np.isnan(test_annotations) | (test_annotations < 0)] = 0
         annotations_per_split = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
         filenames_per_split = driver.split_filenames
 

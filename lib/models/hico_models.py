@@ -143,7 +143,6 @@ class SKZSMultiModel(AbstractModel):
     def get_soft_labels(self, labels):
         assert cfg.osl or cfg.asl or cfg.hsl
         batch_size = labels.shape[0]
-        labels = labels.clamp(min=0)
 
         inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
         ext_inter_mat = inter_mat
@@ -240,7 +239,7 @@ class SKZSMultiModel(AbstractModel):
                 all_gc_logits = {}
 
             if not inference:
-                all_labels = {k: v.clamp(min=0) for k, v in all_labels.items()}
+                all_labels = {k: v for k, v in all_labels.items()}
                 losses = {}
                 for k in ['obj', 'act', 'hoi']:
                     logits = all_logits[k]
@@ -313,7 +312,7 @@ class SKZSMultiModel(AbstractModel):
 
         # Labels
         if labels is not None:
-            hoi_labels = labels.clamp(min=0)
+            hoi_labels = labels
             obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
             act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
             if self.soft_labels_enabled:
@@ -365,7 +364,6 @@ class KatoModel(AbstractModel):
             logits, labels = self._forward(feats, labels)
 
             if not inference:
-                labels.clamp_(min=0)
                 losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
                 return losses
             else:
