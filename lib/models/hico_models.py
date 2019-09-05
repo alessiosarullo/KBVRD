@@ -129,8 +129,8 @@ class SKZSMultiModel(AbstractModel):
                 actions = self.dataset.active_actions
             all_interactions_hist = np.sum(self.dataset.labels, axis=0)  # Unseen interactions have a value of 0 anyway, but this preserves indices.
 
-            hist = {'obj': all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[self.dataset.active_objects],
-                    'act': all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[actions],
+            hist = {'obj': all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[:, self.dataset.active_objects],
+                    'act': all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[:, actions],
                     'hoi': all_interactions_hist[interactions]}
 
             csp_weights = {}
