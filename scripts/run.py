@@ -18,7 +18,6 @@ from lib.dataset.utils import Splits
 from lib.dataset.vghoi import VGHoiSplit
 from lib.models.abstract_model import AbstractModel
 from lib.models.det_generic_model import Prediction
-from lib.stats.evaluator import Evaluator
 from lib.stats.evaluator_hico import HicoEvaluator
 from lib.stats.running_stats import RunningStats
 from lib.stats.utils import Timer
@@ -303,6 +302,7 @@ class Launcher:
 
         test_interactions = None
         if cfg.hicodet:
+            from lib.stats.evaluator import Evaluator
             evaluator = Evaluator(data_loader.dataset)
         else:
             evaluator = HicoEvaluator(data_loader.dataset)
