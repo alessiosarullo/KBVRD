@@ -11,13 +11,13 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
-from lib.dataset.vghoi import VGHoiSplit
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, Splits
+from lib.dataset.hicodet.pc_hicodet_img_split import PrecomputedHicoDetImgSplit
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.dataset.hoi_dataset_split import HoiDatasetSplit
+from lib.dataset.utils import Splits
+from lib.dataset.vghoi import VGHoiSplit
 from lib.models.abstract_model import AbstractModel
-from lib.models.generic_model import Prediction
+from lib.models.det_generic_model import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.evaluator_hico import HicoEvaluator
 from lib.stats.running_stats import RunningStats
@@ -82,22 +82,18 @@ class Launcher:
             try:
                 inter_inds = sorted(inds_dict[Splits.TRAIN.value]['inter'].tolist())
             except KeyError:
-                act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
+                act_inds = sorted(inds_dict[Splits.TRAIN.value]['act'].tolist())
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.hicodet:
-            train_ds_class = PrecomputedHicoDetSingleHOIsSplit
-            self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
-                                                             obj_inds=obj_inds, pred_inds=act_inds, inter_inds=inter_inds)
-            self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,
-                                                           obj_inds=obj_inds, pred_inds=act_inds, inter_inds=inter_inds)
-            self.test_split = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+            splits = PrecomputedHicoDetSingleHOIsSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
+            splits[Splits.TEST] = PrecomputedHicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
         else:
             if cfg.vghoi:
                 splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
             else:
                 splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
-            self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
+        self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
         # Model
         self.detector = get_all_models_by_name()[cfg.model](self.train_split)  # type: AbstractModel
@@ -165,9 +161,6 @@ class Launcher:
 
         try:
             cfg.save()
-            pickle.dump({Splits.TRAIN.value: {'obj': self.train_split.active_objects, 'pred': self.train_split.active_actions},
-                         Splits.VAL.value: {'obj': self.val_split.active_objects, 'pred': self.val_split.active_actions},
-                         }, open(cfg.ds_inds_file, 'wb'))
             if cfg.num_epochs == 0:
                 torch.save({'epoch': -1,
                             'curr_iter': -1,
@@ -340,10 +333,10 @@ class Launcher:
             uo_sa_interactions = set(np.unique(op_mat[unseen_objects, :][:, self.train_split.active_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_uo-sa_{k}': v for k, v in get_metrics(uo_sa_interactions, print_out=False).items()})
 
-            so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, :][:,  unseen_actions]).tolist()) - {-1}
+            so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, :][:, unseen_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_so-ua_{k}': v for k, v in get_metrics(so_ua_interactions, print_out=False).items()})
 
-            uo_ua_interactions = set(np.unique(op_mat[unseen_objects, :][:,  unseen_actions]).tolist()) - {-1}
+            uo_ua_interactions = set(np.unique(op_mat[unseen_objects, :][:, unseen_actions]).tolist()) - {-1}
             detailed_metric_dicts.append({f'zs_uo-ua_{k}': v for k, v in get_metrics(uo_ua_interactions, print_out=False).items()})
 
             for d in detailed_metric_dicts:

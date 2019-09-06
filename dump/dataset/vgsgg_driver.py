@@ -27,11 +27,11 @@ class VGSGG:
     def _load(self):
         vg_data_file = h5py.File(os.path.join(self.data_dir, 'VG-SGG.h5'), 'r')
         # Keys: ['active_object_mask', 'boxes_1024', 'boxes_512', 'img_to_first_box', 'img_to_first_rel', 'img_to_last_box', 'img_to_last_rel',
-        #        'labels', 'predicates', 'relationships', 'split']
+        #        'labels', 'actions', 'relationships', 'split']
 
         rel = vg_data_file['relationships'][:]
         l = vg_data_file['labels'][:].squeeze(axis=1)
-        p = vg_data_file['predicates'][:].squeeze(axis=1)
+        p = vg_data_file['actions'][:].squeeze(axis=1)
         self.triplets = np.stack([l[rel[:, 0]], p, l[rel[:, 1]]], axis=1)
 
         with open(os.path.join(self.data_dir, 'VG-SGG-dicts.json'), 'r') as f:

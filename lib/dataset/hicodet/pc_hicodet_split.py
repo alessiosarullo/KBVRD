@@ -2,13 +2,11 @@ from typing import List
 
 import h5py
 import numpy as np
-import torch
-import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit
-from lib.dataset.utils import Splits
-from lib.stats.utils import Timer
+from lib.dataset.hicodet.hicodet import HicoDet
+from lib.dataset.hoi_dataset_split import AbstractHoiDatasetSplit
+from lib.dataset.utils import Splits, get_hico_to_coco_mapping
 
 
 class PrecomputedExample:
@@ -78,6 +76,7 @@ class PrecomputedMinibatch:
 
                 self.pc_action_labels += [ex.precomp_action_labels]
 
+    # noinspection PyUnresolvedReferences
     def vectorize(self):
         for k, v in self.__dict__.items():
             if k.startswith('pc_') and ('label' not in k):
@@ -140,12 +139,20 @@ class PrecomputedFilesHandler:
         return cls.files[file_name][key]
 
 
-class PrecomputedHicoDetSplit(HicoDetHoiSplit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
+    def __init__(self, split, full_dataset: HicoDet, image_inds=None):
+        assert split in Splits
 
-        self.precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch,
-                                                                    (Splits.TEST if self.split == Splits.TEST else Splits.TRAIN).value)
+        # TODO cfg.filter_bg_only
+
+        self.split = split
+        self.full_dataset = full_dataset  # type: HicoDet
+        self._data_split = Splits.TEST if split == Splits.TEST else Splits.TRAIN  # val -> train
+
+        #############################################################################################################################
+        # Load precomputed data
+        #############################################################################################################################
+        self.precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch, self._data_split.value)
         print('Loading precomputed feats for %s split from %s.' % (self.split.value, self.precomputed_feats_fn))
 
         self.pc_image_ids = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'image_ids', load_in_memory=True)
@@ -171,6 +178,34 @@ class PrecomputedHicoDetSplit(HicoDetHoiSplit):
         self.pc_box_im_idxs = self.pc_boxes_ext[:, 0].astype(np.int)
         self.pc_ho_im_idxs = self.pc_ho_infos[:, 0]
 
+        #############################################################################################################################
+        # Define the remaining data
+        #############################################################################################################################
+
+        _data = self.full_dataset.split_data[self._data_split]
+        self.image_ids = image_inds or sorted(self.pc_image_ids)
+        self._data = _data[self.image_ids]
+
+        self.objects = full_dataset.objects
+        self.actions = full_dataset.actions
+        self.interactions = full_dataset.interactions
+
+        # Compute mappings to COCO
+        self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=full_dataset.objects)
+
+        # Compute HOI triplets. Each is [human, action, object].
+        hoi_triplets = []
+        for im_data in self._data:
+            box_classes, inters = im_data.box_classes, im_data.hois
+            im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
+            assert np.all(im_hois[:, 0] == self.human_class)
+            hoi_triplets.append(im_hois)
+        self.hoi_triplets = np.concatenate(hoi_triplets, axis=0)
+
+        #############################################################################################################################
+        # Cache variables to speed up loading
+        #############################################################################################################################
+
         # Map image IDs to indices over the precomputed image IDs
         assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
         assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
@@ -191,26 +226,29 @@ class PrecomputedHicoDetSplit(HicoDetHoiSplit):
             assert start >= 0 and end >= 0
             assert np.all(self.pc_box_im_idxs[start:end + 1] == i)
 
-        # Filter HOIs. Object class filtering is currently not supported.
-        if self.active_object_classes.size < self.full_dataset.num_objects:
-            raise NotImplementedError('Object class filtering is not supported.')
-        if len(self.active_actions) < self.full_dataset.num_actions and self.split != Splits.TEST:
-            self.pc_action_labels = self.pc_action_labels[:, self.active_actions]
-            # Note: boxes with no interactions are NOT filtered
-        elif len(self.active_interactions) < self.full_dataset.num_interactions and self.split != Splits.TEST:
-            op_pair_is_valid = np.zeros([self.num_objects, self.num_actions])
-            assert op_pair_is_valid.size == self.full_dataset.oa_pair_to_interaction.size
-            op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
-            num_hois = self.pc_action_labels.sum()
-            for i in range(self.pc_action_labels.shape[0]):
-                box_ind = self.pc_im_box_range_inds[self.pc_ho_infos[i, 0], 0] + self.pc_ho_infos[i, 2]
-                box_class = self.pc_box_labels[box_ind]
-                if box_class >= 0:
-                    self.pc_action_labels[i, :] *= op_pair_is_valid[box_class, :]
-                else:
-                    assert not np.any(self.pc_action_labels[i, :])
-            diff_num_hois = num_hois - self.pc_action_labels.sum()
-            print(f'Number of filtered HOIs: {diff_num_hois:.0f}.')
+    @property
+    def human_class(self) -> int:
+        return self.full_dataset.human_class
+
+    @property
+    def num_objects(self):
+        return len(self.objects)
+
+    @property
+    def num_actions(self):
+        return len(self.actions)
+
+    @property
+    def num_interactions(self):
+        return self.interactions.shape[0]
+
+    @property
+    def num_images(self):
+        return len(self.image_ids)
+
+    @property
+    def img_dir(self):
+        return self.full_dataset.get_img_dir(self._data_split)
 
     @property
     def precomputed_visual_feat_dim(self):
@@ -220,132 +258,11 @@ class PrecomputedHicoDetSplit(HicoDetHoiSplit):
     def num_precomputed_hois(self):
         return self.pc_ho_infos.shape[0]
 
-    def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
-        if shuffle is None:
-            shuffle = True if self.split == Splits.TRAIN else False
-        batch_size = batch_size * num_gpus
-        if self.split == Splits.TEST and batch_size > 1:
-            print('! Only single-image batches are supported during prediction. Batch size changed from %d to 1.' % batch_size)
-            batch_size = 1
-
-        data_loader = torch.utils.data.DataLoader(
-            dataset=self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            collate_fn=lambda x: PrecomputedMinibatch.collate(x),
-            drop_last=drop_last,
-            # pin_memory=True,  # disable this in case of freezes
-            **kwargs,
-        )
-        return data_loader
+    def get_loader(self, batch_size, **kwargs):
+        raise NotImplementedError
 
     def __len__(self):
-        return self.num_images
+        raise NotImplementedError
 
-    def __getitem__(self, idx) -> PrecomputedExample:
-        Timer.get('GetBatch').tic()
-        im_data = self._data[idx]
-        img_id = self.image_ids[idx]
-        pc_im_idx = self.im_id_to_pc_im_idx[img_id]
-        assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
-
-        entry = PrecomputedExample(idx_in_split=idx, img_id=img_id, filename=im_data.filename, split=self.split)
-
-        # Image data
-        img_infos = self.pc_image_infos[pc_im_idx].copy()
-        assert img_infos.shape == (3,)
-        entry.img_size = img_infos[:2]
-        entry.scale = img_infos[2]
-
-        # Object data
-        img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)
-        if img_box_inds.size > 0:
-            start, end = img_box_inds[0], img_box_inds[-1] + 1
-            assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-
-            precomp_boxes_ext = self.pc_boxes_ext[start:end, :]
-            precomp_box_feats = self.pc_boxes_feats[start:end, :]
-            box_inds = None
-            if self.pc_box_labels is not None:
-                # TODO mapping of obj inds for rels
-                precomp_box_labels = self.pc_box_labels[start:end].copy()
-
-                if self.active_object_classes.size < self.num_objects:
-                    precomp_boxes_ext = precomp_boxes_ext[:, np.concatenate([np.arange(5), 5 + self.active_object_classes])]
-                    num_boxes = precomp_box_labels.shape[0]
-                    bg_box_mask = (precomp_box_labels < 0)
-
-                    precomp_box_labels_one_hot = np.zeros([num_boxes, len(self.full_dataset.objects)], dtype=precomp_box_labels.dtype)
-                    precomp_box_labels_one_hot[np.arange(num_boxes), precomp_box_labels] = 1
-                    precomp_box_labels_one_hot[bg_box_mask, :] = 0
-                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[:, self.active_object_classes]
-                    feasible_box_labels_inds = np.any(precomp_box_labels_one_hot, axis=1) | bg_box_mask
-
-                    box_inds = np.full_like(precomp_box_labels, fill_value=-1)
-                    box_inds[feasible_box_labels_inds] = np.arange(np.sum(feasible_box_labels_inds))
-                    precomp_boxes_ext = precomp_boxes_ext[feasible_box_labels_inds]
-                    precomp_box_feats = precomp_box_feats[feasible_box_labels_inds]
-                    precomp_box_labels_one_hot = precomp_box_labels_one_hot[feasible_box_labels_inds]
-                    precomp_box_labels = np.argmax(precomp_box_labels_one_hot, axis=1).astype(precomp_box_labels_one_hot.dtype)
-                    precomp_box_labels[~np.any(precomp_box_labels_one_hot, axis=1)] = -1
-            else:
-                precomp_box_labels = None
-
-            # HOI data
-            img_hoi_inds = np.flatnonzero(self.pc_ho_im_idxs == pc_im_idx)
-            if img_hoi_inds.size > 0:
-                start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
-                assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
-                precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
-                precomp_hoi_union_boxes = self.pc_union_boxes[start:end, :]
-                precomp_hoi_union_feats = self.pc_union_boxes_feats[start:end, :]
-                if self.pc_action_labels is not None:
-                    precomp_action_labels = self.pc_action_labels[start:end, :]
-                else:
-                    precomp_action_labels = None
-
-                if precomp_action_labels is not None:
-                    assert precomp_box_labels is not None
-
-                    # Remap HOIs box indices
-                    if box_inds is not None:
-                        precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                        precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-
-                    # Filter out HOIs
-                    if False and (self.active_actions.size < self.num_actions or box_inds is not None):  # FIXME
-                        feasible_hoi_labels_inds = np.any(precomp_action_labels, axis=1) & np.all(precomp_hoi_infos >= 0, axis=1)
-                        assert np.any(feasible_hoi_labels_inds), (idx, pc_im_idx, img_id, im_data.filename)
-                        precomp_hoi_infos = precomp_hoi_infos[feasible_hoi_labels_inds]
-                        precomp_hoi_union_boxes = precomp_hoi_union_boxes[feasible_hoi_labels_inds]
-                        precomp_hoi_union_feats = precomp_hoi_union_feats[feasible_hoi_labels_inds]
-                        precomp_action_labels = precomp_action_labels[feasible_hoi_labels_inds, :]
-                        assert np.all(np.sum(precomp_action_labels, axis=1) >= 1), precomp_action_labels
-
-                        # Filter out boxes without interactions
-                        hoi_box_inds = np.unique(precomp_hoi_infos[:, 1:])
-                        precomp_boxes_ext = precomp_boxes_ext[hoi_box_inds]
-                        precomp_box_feats = precomp_box_feats[hoi_box_inds]
-                        precomp_box_labels = precomp_box_labels[hoi_box_inds]
-                        box_inds = np.full(np.amax(hoi_box_inds) + 1, fill_value=-1)
-                        box_inds[hoi_box_inds] = np.arange(hoi_box_inds.shape[0])
-                        precomp_hoi_infos[:, 1] = box_inds[precomp_hoi_infos[:, 1]]
-                        precomp_hoi_infos[:, 2] = box_inds[precomp_hoi_infos[:, 2]]
-                        assert np.all(precomp_hoi_infos >= 0), precomp_hoi_infos
-
-                assert np.all(precomp_hoi_infos >= 0)
-                entry.precomp_action_labels = precomp_action_labels
-                entry.precomp_hoi_infos = precomp_hoi_infos
-                entry.precomp_hoi_union_boxes = precomp_hoi_union_boxes
-                entry.precomp_hoi_union_feats = precomp_hoi_union_feats
-            else:
-                assert self.split == Splits.TEST, (idx, pc_im_idx, img_id, im_data.filename)
-
-            entry.precomp_boxes_ext = precomp_boxes_ext
-            entry.precomp_box_feats = precomp_box_feats
-            entry.precomp_box_labels = precomp_box_labels
-        assert (entry.precomp_box_labels is None and entry.precomp_action_labels is None) or \
-               (entry.precomp_box_labels is not None and entry.precomp_action_labels is not None)
-        Timer.get('GetBatch').toc()
-        return entry
+    def __getitem__(self, idx):
+        raise NotImplementedError

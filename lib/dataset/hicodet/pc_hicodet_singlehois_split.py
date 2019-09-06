@@ -6,20 +6,49 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, PrecomputedMinibatch, PrecomputedExample, PrecomputedFilesHandler
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, PrecomputedFilesHandler, PrecomputedHicoDetSplit, HicoDet
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
 
 class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, split, full_dataset: HicoDet, image_inds=None, object_inds=None, action_inds=None):
         if self.split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
+        super().__init__(split, full_dataset, image_inds=image_inds)
+
+        #############################################################################################################################
+        # Filter out zero-shot indices
+        #############################################################################################################################
+
+        object_inds = sorted(object_inds)
+        self.objects = [full_dataset.objects[i] for i in object_inds]
+        self.active_objects = np.array(object_inds, dtype=np.int)
+
+        action_inds = sorted(action_inds)
+        self.actions = [full_dataset.actions[i] for i in action_inds]
+        self.active_actions = np.array(action_inds, dtype=np.int)
+
+        active_interactions = set(np.unique(self.full_dataset.oa_pair_to_interaction[:, self.active_actions]).tolist()) - {-1}
+        self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
+        self.interactions = self.full_dataset.interactions[self.active_interactions, :]
+
+        if self.active_objects.size < self.full_dataset.num_objects:
+            inactive_objects = set(range(self.full_dataset.num_objects)) - set(self.active_objects.tolist())
+            new_bg_inds = np.array([i for i, l in enumerate(self.pc_box_labels) if l in inactive_objects])
+            self.pc_box_labels[new_bg_inds] = -1
+        if len(self.active_actions) < self.full_dataset.num_actions:
+            assert self.split != Splits.TEST
+            inactive_actions = np.array(set(range(self.full_dataset.num_actions)) - set(self.active_actions.tolist()))
+            self.pc_action_labels[:, inactive_actions] = 0
+
+        #############################################################################################################################
+        # Cache
+        #############################################################################################################################
 
         if not cfg.save_memory:
             self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=True)
-            self.pc_union_boxes_feats =  PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=True)
+            self.pc_union_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=True)
 
         self.pc_im_idx_to_im_idx = {}
         for pc_im_idx, pc_im_id in enumerate(self.pc_image_ids):
@@ -98,6 +127,33 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
                minibatch.pc_action_labels.shape[0]
 
         return minibatch
+
+    @classmethod
+    def get_splits(cls, act_inds=None, obj_inds=None):
+        splits = {}
+        full_dataset = HicoDet()
+
+        # Split train/val if needed
+        if cfg.val_ratio > 0:
+            num_imgs = len(full_dataset.split_data[Splits.TRAIN])
+            imgs_inds = np.random.permutation(num_imgs)
+            num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[:num_train_imgs]),
+                                       object_inds=obj_inds, action_inds=act_inds)
+            splits[Splits.VAL] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[num_train_imgs:]),
+                                     object_inds=obj_inds, action_inds=act_inds)
+        else:
+            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
+
+        tr = splits[Splits.TRAIN]
+        if obj_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_objects.size}):', tr.active_objects.tolist())
+        if act_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} actions ({tr.active_actions.size}):', tr.active_actions.tolist())
+        if obj_inds is not None or act_inds is not None:
+            print(f'{Splits.TRAIN.value.capitalize()} interactions ({tr.active_interactions.size}):', tr.active_interactions.tolist())
+
+        return splits
 
 
 class BalancedTripletMLSampler(torch.utils.data.Sampler):

@@ -27,15 +27,15 @@ class ImSituKnowledgeExtractor:
     def extract_freq_matrix(self, dataset: HicoDet, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
-        # print('Matched: %d predicates out of %d.' % (len(pred_verb_matches), len(dataset.predicates)))
+        # print('Matched: %d actions out of %d.' % (len(pred_verb_matches), len(dataset.actions)))
         # print('%-20s %10s  %s' % ('PREDICATE', 'VERB', 'ABSTRACT'))
-        # for pred in dataset.predicates:
+        # for pred in dataset.actions:
         #     verb = pred_verb_matches.get(pred, None)
         #     v_str = ('%10s: %s' % (verb, self.imsitu.verbs[verb]['abstract'])) if verb is not None else ''
         #     print('%-20s %s' % (pred, v_str))
         #
         # print()
-        # for i, pred in enumerate(dataset.predicates):
+        # for i, pred in enumerate(dataset.actions):
         #     try:
         #         verb = pred_verb_matches[pred]
         #         abstract = self.imsitu.verbs[verb]['abstract']
@@ -47,7 +47,7 @@ class ImSituKnowledgeExtractor:
         #     print('%3d %-20s %s' % (i, pred, v_str))
         #
         # print()
-        # for i, pred in enumerate(dataset.predicates):
+        # for i, pred in enumerate(dataset.actions):
         #     try:
         #         verb = pred_verb_matches[pred]
         #         instance_list = sorted(self.concrete_dobjs_count_per_verb[verb].keys())
@@ -58,7 +58,7 @@ class ImSituKnowledgeExtractor:
 
         matching_dobjs_count_per_verb = self.match_objects(dataset, self.concrete_dobjs_count_per_verb)
         # print()
-        # for i, pred in enumerate(dataset.predicates):
+        # for i, pred in enumerate(dataset.actions):
         #     try:
         #         verb = pred_verb_matches[pred]
         #         instance_list = matching_dobjs_count_per_verb[verb]

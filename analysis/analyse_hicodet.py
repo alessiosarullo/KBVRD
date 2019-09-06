@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, HicoDetHoiSplit, Splits, Example
+from lib.dataset.hicodet.pc_hicodet_split import HicoDetSplitBuilder, PrecomputedHicoDetSplit, Splits, Example
 
 try:
     matplotlib.use('Qt5Agg')
@@ -26,7 +26,7 @@ def stats():
     split = Splits.TRAIN
 
     os.makedirs(output_dir, exist_ok=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=split)  # type: HicoDetHoiSplit
+    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=split)  # type: PrecomputedHicoDetSplit
     hd = hds.full_dataset
 
     op_mat = np.zeros([hds.num_objects, hds.num_actions])
@@ -64,7 +64,7 @@ def stats():
 
 def find():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=Splits.TRAIN)  # type: HicoDetHoiSplit
+    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TRAIN)  # type: PrecomputedHicoDetSplit
 
     queries_str = [
         ['cook', 'pizza'],
@@ -113,7 +113,7 @@ def find():
 
 def vis_gt():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=Splits.TEST)  # type: HicoDetHoiSplit
+    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)  # type: PrecomputedHicoDetSplit
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
     os.makedirs(output_dir, exist_ok=True)

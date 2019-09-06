@@ -56,7 +56,7 @@ class HicoDriver:
         """
         Relevant class attributes:
             - null_interaction: the name of the null interaction
-            - wn_action_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
+            - wn_action_dict [dict]: The 119 WordNet entries for all actions. Keys are wordnets IDs and each element contains:
                 - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
                 - 'syn' [list]: Set of synonyms
@@ -64,7 +64,7 @@ class HicoDriver:
                 - 'add_def' [str]: An additional definition (sometimes not provided)
                 EXAMPLE: key: v00007012, entry:
                     {'wname': 'blow.v.01', 'syn': ['blow'], 'def': 'exhale hard'}
-            - predicate_dict [dict]: The 117 possible predicates, including a null one. They are fewer than the entries in the WordNet dictionary
+            - predicate_dict [dict]: The 117 possible actions, including a null one. They are fewer than the entries in the WordNet dictionary
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
                     - 'ing' [str]: -ing form of the verb (unchanged for the null one).

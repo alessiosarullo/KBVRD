@@ -12,14 +12,13 @@ from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.hcvrd_driver import HCVRD
 from lib.dataset.hicodet.hicodet import HicoDet
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, Splits
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, Splits, HicoDetHoiSplit
 from lib.dataset.imsitu import ImSituKnowledgeExtractor
 from lib.dataset.vgsgg_driver import VGSGG
 
 
 def get_hd_co_occurrences():
-    hdpc = HicoDetSplitBuilder.get_splits(PrecomputedHicoDetSplit, Splits.TRAIN)  # type: PrecomputedHicoDetSplit
+    hdpc = HicoDetSplitBuilder.get_splits(HicoDetHoiSplit, Splits.TRAIN)  # type: HicoDetHoiSplit
     co_occurrences = np.zeros([hdpc.num_actions, hdpc.num_actions])
     act_labels_bool = hdpc.pc_action_labels.astype(np.bool)
     for i in range(hdpc.num_actions):

@@ -2,10 +2,9 @@ import os
 import pickle
 import re
 
-from config import cfg
-
 import numpy as np
-import torch
+
+from config import cfg
 
 
 class WordEmbeddings:
@@ -92,22 +91,6 @@ class WordEmbeddings:
                         emb = emb / emb_norm if emb_norm > 0 else emb
                     else:
                         emb = None
-                # elif retry == 'avg_norm_first':
-                #     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
-                #     embs = [e / np.linalg.norm(e) for e in embs if e is not None]
-                #     if embs:
-                #         weights = [2 ** (-i) for i in range(len(embs))]
-                #         emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
-                #     else:
-                #         emb = None
-                # elif retry == 'avg_norm_last':
-                #     embs = [self.embedding(token, none_on_miss=True) for token in tokens]
-                #     embs = [e / np.linalg.norm(e) for e in embs if e is not None]
-                #     if embs:
-                #         weights = [2 ** (len(embs) - 1 - i) for i in range(len(embs))]
-                #         emb = sum([weights[i] * e for i, e in enumerate(embs)]) / sum(weights)
-                #     else:
-                #         emb = None
                 else:
                     raise ValueError(retry)
 

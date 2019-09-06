@@ -113,10 +113,8 @@ class Configs:
         self.greg = 0.0
         self.greg_margin = 0.3
         self.vv = False
-        self.aggp = False
         self.gcldim = 1024
         self.gcrdim = 1024
-        self.gcdetach = False
 
         ##########################################
         # Optimiser options                      #

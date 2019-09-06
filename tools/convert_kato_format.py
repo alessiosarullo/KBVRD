@@ -83,8 +83,8 @@ def main():
     # Write zero-shot file
     seen_obj = data['1A']['o']
     seen_act = np.array(sorted(set(data['1A']['a'].tolist()) | {0}))
-    # with open(zs_output_file, 'wb') as f:
-    #     pickle.dump({'train': {'obj': seen_obj, 'pred': seen_act}}, f)
+    with open(zs_output_file, 'wb') as f:
+        pickle.dump({'train': {'obj': seen_obj, 'act': seen_act}}, f)
 
     # Check label consistency
     # This doesn't work for VG because there is some overlap of both objects and actions between 1A and 2B

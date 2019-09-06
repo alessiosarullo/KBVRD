@@ -1,14 +1,16 @@
-import pickle
-
+import numpy as np
+import torch
+from torch import nn
 from torch.nn import functional as F
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, Splits
-from lib.models.gcns import *
-from lib.models.containers import VisualOutput
-from lib.models.generic_model import GenericModel, Prediction
-from lib.models.misc import bce_loss, LIS
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.dataset.utils import get_noun_verb_adj_mat
+from lib.dataset.word_embeddings import WordEmbeddings
+from lib.models.containers import VisualOutput
+from lib.models.det_generic_model import GenericModel, Prediction, PrecomputedHicoDetSingleHOIsSplit
+from lib.models.gcns import HicoGCN
+from lib.models.misc import bce_loss, LIS
 
 
 class BaseModel(GenericModel):
@@ -16,13 +18,13 @@ class BaseModel(GenericModel):
     def get_cline_name(cls):
         return 'base'
 
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         hidden_dim = 1024
         self.act_repr_dim = cfg.repr_dim
+        full_dataset = self.dataset.full_dataset
 
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim + full_dataset.num_objects, hidden_dim),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
                                                 nn.Linear(hidden_dim, self.final_repr_dim),
@@ -30,7 +32,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim + full_dataset.num_objects, hidden_dim),
                                                nn.ReLU(inplace=True),
                                                nn.Dropout(p=cfg.dropout),
                                                nn.Linear(hidden_dim, self.final_repr_dim),
@@ -38,7 +40,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim, hidden_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(p=cfg.dropout),
                                             nn.Linear(hidden_dim, self.final_repr_dim),
@@ -46,7 +48,7 @@ class BaseModel(GenericModel):
         nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
         nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
-        num_classes = dataset.full_dataset.num_interactions if cfg.phoi else dataset.num_actions
+        num_classes = full_dataset.num_interactions if cfg.phoi else full_dataset.num_actions
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
@@ -54,7 +56,7 @@ class BaseModel(GenericModel):
     def final_repr_dim(self):
         return self.act_repr_dim
 
-    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None, return_repr=False, return_obj=False):
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False, return_obj=False):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = vis_output.ho_infos
@@ -83,158 +85,62 @@ class BaseModel(GenericModel):
         return output_logits
 
 
-class NonParamBaseModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'npbase'
-
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        vis_feat_dim = self.visual_module.vis_feat_dim
-        hidden_dim = 1024
-        self.act_repr_dim = cfg.repr_dim
-
-        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(hidden_dim, self.final_repr_dim),
-                                                ])
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim + self.dataset.num_objects, hidden_dim),
-                                               nn.ReLU(inplace=True),
-                                               nn.Dropout(p=cfg.dropout),
-                                               nn.Linear(hidden_dim, self.final_repr_dim),
-                                               ])
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        self.act_repr_mlp = nn.Sequential(*[nn.Linear(vis_feat_dim, hidden_dim),
-                                            nn.ReLU(inplace=True),
-                                            nn.Dropout(p=cfg.dropout),
-                                            nn.Linear(hidden_dim, self.final_repr_dim),
-                                            ])
-        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
-        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        predictors = torch.empty((self.final_repr_dim, dataset.num_actions))
-        torch.nn.init.xavier_normal_(predictors, gain=1.0)
-        self.predictors = nn.Parameter(predictors, requires_grad=True)
-
-    @property
-    def final_repr_dim(self):
-        return self.act_repr_dim
-
-    def _forward(self, vis_output: VisualOutput, batch=None, step=None, epoch=None, return_repr=False, return_obj=False):
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        hoi_infos = vis_output.ho_infos
-        union_boxes_feats = vis_output.hoi_union_boxes_feats
-
-        subj_ho_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
-        obj_ho_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
-
-        ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
-        ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
-        act_repr = self.act_repr_mlp(union_boxes_feats)
-
-        hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
-        if return_repr:
-            if return_obj:
-                return hoi_act_repr, ho_obj_repr
-            return hoi_act_repr
-
-        output_logits = hoi_act_repr @ self.predictors
-        return output_logits
-
-
 class ExtKnowledgeGenericModel(GenericModel):
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
+    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
-        if cfg.aggp:
-            for j, pe in enumerate(pred_wembs):
-                if j == 0:
-                    continue
-                new_pred_emb = pe
-                for i, oe in enumerate(obj_wembs):
-                    if self.nv_adj[i, j]:
-                        ope = (pe + oe) / 2
-                        ope /= np.linalg.norm(ope)
-                        new_pred_emb += ope
-                new_pred_emb /= np.linalg.norm(new_pred_emb)
-                pred_wembs[j, :] = new_pred_emb
+        act_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
-        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
+        self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
+        self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
 
         self.zs_enabled = (cfg.seenf >= 0)
         self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
-            seen_pred_inds = pickle.load(open(cfg.active_classes_file, 'rb'))[Splits.TRAIN.value]['pred']
-            unseen_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_pred_inds.tolist())))
-            self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
-            self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
+            seen_act_inds = dataset.active_actions
+            unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
+            self.seen_act_inds = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
+            self.unseen_act_inds = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
             if self.load_backbone:
                 ckpt = torch.load(cfg.hoi_backbone)
                 self.pretrained_base_model = BaseModel(dataset)
                 self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
                 self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
-                assert len(seen_pred_inds) == self.pretrained_predictors.shape[0]
-                # self.torch_trained_pred_inds = nn.Parameter(torch.tensor(self.trained_pred_inds), requires_grad=False)
+                assert len(seen_act_inds) == self.pretrained_predictors.shape[0]
 
-            if cfg.softl:
+            if cfg.asl:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
 
-    def get_soft_labels(self, vis_output: VisualOutput):
-        # unseen_action_labels = self.obj_act_feasibility[:, self.unseen_pred_inds][vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :] * 0.75
-        # unseen_action_labels = vis_output.boxes_ext[vis_output.ho_infos_np[:, 2], 5:] @ self.obj_act_feasibility[:, self.unseen_pred_inds]
-        # unseen_action_labels = self.op_mat[vis_output.box_labels[vis_output.ho_infos_np[:, 2]], :]
-
+    def write_soft_labels(self, vis_output: VisualOutput):
         action_labels = vis_output.action_labels
-        pred_sims = self.pred_emb_sim[self.seen_pred_inds, :][:, self.unseen_pred_inds].clamp(min=0)
+        act_sims = self.act_emb_sim[:, self.unseen_act_inds].clamp(min=0)
         if cfg.lis:
-            pred_sims = LIS(pred_sims, w=18, k=7)
-        act_sim = action_labels @ pred_sims / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
+            act_sims = LIS(act_sims, w=18, k=7)
+        act_sim = action_labels @ act_sims / action_labels.sum(dim=1, keepdim=True).clamp(min=1)
         obj_labels = vis_output.box_labels[vis_output.ho_infos_np[:, 2]]
         fg_ho_pair = (obj_labels >= 0)
         unseen_action_labels = act_sim.new_zeros(act_sim.shape)
-        unseen_action_labels[fg_ho_pair, :] = act_sim[fg_ho_pair, :] * self.obj_act_feasibility[:, self.unseen_pred_inds][obj_labels[fg_ho_pair], :]
-        return unseen_action_labels.detach()
+        unseen_action_labels[fg_ho_pair, :] = act_sim[fg_ho_pair, :] * self.obj_act_feasibility[:, self.unseen_act_inds][obj_labels[fg_ho_pair], :]
+        action_labels[:, self.unseen_act_inds] = unseen_action_labels.detach()
+        return action_labels
 
     def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
         if inference and self.load_backbone:
             action_output, action_labels, reg_loss, unseen_action_labels = outputs
             pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
             pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
-            action_output[:, self.seen_pred_inds] = pretrained_action_output
+            action_output[:, self.seen_act_inds] = pretrained_action_output
             outputs = action_output, action_labels, reg_loss, unseen_action_labels
         return outputs
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
-        action_output, action_labels, reg_loss, unseen_action_labels = outputs
-        if cfg.softl > 0:
-            assert unseen_action_labels is not None
-            unseen_action_logits = action_output[:, self.unseen_pred_inds]
-            if cfg.nullzs:
-                unseen_action_labels *= (1 - action_labels[:, :1])  # cannot be anything else if it is a positive (i.e., from GT) null
-
-            seen_action_logits = action_output[:, self.seen_pred_inds]
-            losses = {'action_loss': bce_loss(seen_action_logits, action_labels),
-                      'action_loss_unseen': cfg.softl * bce_loss(unseen_action_logits, unseen_action_labels)}
-        else:
-            losses = {'action_loss': bce_loss(action_output, action_labels)}
-        if reg_loss is not None:
-            losses['reg_loss'] = reg_loss
-        return losses
+        raise NotImplementedError
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         action_output = outputs[0]
@@ -248,26 +154,28 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsb'
 
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
+    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
-        assert self.zs_enabled and cfg.softl > 0
+        assert self.zs_enabled and cfg.asl > 0
 
-        num_classes = dataset.full_dataset.num_actions  # ALL predicates
-        self.output_mlp = nn.Linear(self.base_model.final_repr_dim, num_classes, bias=False)
-        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        logits, labels = outputs
+
+        seen, unseen = self.seen_act_inds, self.unseen_act_inds
+        if not cfg.train_null:
+            seen = seen[1:]
+
+        losses = {'act_loss': bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights),
+                  'act_loss_unseen': cfg.asl * bce_loss(logits[:, unseen], labels[:, unseen])}
+        return losses
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
-        action_logits = self.output_mlp(vrepr)
-
+        action_logits = self.base_model._forward(vis_output)
         action_labels = vis_output.action_labels
-        unseen_action_labels = None
         if action_labels is not None:
-            unseen_action_labels = self.get_soft_labels(vis_output)
-
-        reg_loss = None
-        return action_logits, action_labels, reg_loss, unseen_action_labels
+            action_labels = self.write_soft_labels(vis_output)
+        return action_logits, action_labels
 
 
 class ZSGCModel(ExtKnowledgeGenericModel):
@@ -275,7 +183,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsgc'
 
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
+    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = 1024
@@ -300,7 +208,33 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
 
+    def _get_losses(self, vis_output: VisualOutput, outputs):
+        dir_logits, labels, gc_logits, reg_loss = outputs
+
+        losses = {}
+        if self.zs_enabled:
+            seen, unseen = self.seen_act_inds, self.unseen_act_inds
+            soft_label_loss_c = cfg.asl
+
+            if not cfg.train_null:
+                seen = seen[1:]
+
+            losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
+                                 bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            if soft_label_loss_c > 0:
+                losses['act_loss_unseen'] = soft_label_loss_c * bce_loss(gc_logits[:, unseen], labels[:, unseen])
+        else:
+            if not cfg.train_null:
+                labels = labels[:, 1:]
+                dir_logits = dir_logits[:, 1:]
+            losses['act_loss'] = bce_loss(dir_logits, labels, pos_weights=self.csp_weights)
+
+        if reg_loss is not None:
+            losses['reg_loss'] = reg_loss
+        return losses
+
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+        # TODO
         vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, act_class_embs = self.gcn()  # P x E
         # act_predictors = act_class_embs  # P x D
@@ -308,12 +242,11 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         action_logits = vrepr @ act_predictors.t()
 
         action_labels = vis_output.action_labels
-        unseen_action_labels = None
         if action_labels is not None and self.zs_enabled:
-            if cfg.softl > 0:
-                unseen_action_labels = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                action_logits = action_logits[:, self.seen_pred_inds]  # P x E
+            if cfg.asl > 0:
+                action_labels = self.write_soft_labels(vis_output)
+            else:  # restrict training to seen actions only
+                action_logits = action_logits[:, self.seen_act_inds]  # P x E
 
         reg_loss = None
         if cfg.greg > 0:
@@ -342,7 +275,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
             reg_loss = cfg.greg * reg_loss.mean()
 
-        return action_logits, action_labels, reg_loss, unseen_action_labels
+        return action_logits, action_labels, reg_loss
 
 
 class PeyreModel(GenericModel):
@@ -352,24 +285,24 @@ class PeyreModel(GenericModel):
     def get_cline_name(cls):
         return 'peyre'
 
-    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
+    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
-        pred_word_embs = self.word_embs.get_embeddings(dataset.predicates)
+        act_word_embs = self.word_embs.get_embeddings(dataset.actions)
 
         interactions = dataset.full_dataset.interactions  # each is [p, o]
         person_word_emb = np.tile(obj_word_embs[dataset.human_class], reps=[interactions.shape[0], 1])
         hoi_embs = np.concatenate([person_word_emb,
-                                   pred_word_embs[interactions[:, 0]],
+                                   act_word_embs[interactions[:, 0]],
                                    obj_word_embs[interactions[:, 1]]], axis=1)
 
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_word_embs), requires_grad=False)
+        self.act_word_embs = nn.Parameter(torch.from_numpy(act_word_embs), requires_grad=False)
         self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
 
         appearance_dim = 300
-        self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.visual_module.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
+        self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
 
         spatial_dim = 400
         self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
@@ -377,8 +310,8 @@ class PeyreModel(GenericModel):
 
         output_dim = 1024
         self.app_to_repr_mlps = nn.ModuleDict()
-        for k in ['sub', 'obj', 'pred', 'vp']:
-            input_dim = self.visual_module.vis_feat_dim if k in ['sub', 'obj'] else (appearance_dim * 2 + spatial_dim)
+        for k in ['sub', 'obj', 'act', 'vp']:
+            input_dim = self.vis_feat_dim if k in ['sub', 'obj'] else (appearance_dim * 2 + spatial_dim)
             self.app_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
                                                      nn.ReLU(),
                                                      nn.Dropout(p=0.5),
@@ -386,7 +319,7 @@ class PeyreModel(GenericModel):
                                                      )
 
         self.wemb_to_repr_mlps = nn.ModuleDict()
-        for k in ['sub', 'obj', 'pred', 'vp']:
+        for k in ['sub', 'obj', 'act', 'vp']:
             input_dim = (3 * self.word_embs.dim) if k == 'vp' else self.word_embs.dim
             self.wemb_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
                                                       nn.ReLU(),
@@ -460,8 +393,8 @@ class PeyreModel(GenericModel):
         hoi_subj_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
         hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
 
-        hoi_act_repr = self.app_to_repr_mlps['pred'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-        hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['pred'](self.pred_word_embs))
+        hoi_act_repr = self.app_to_repr_mlps['act'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['act'](self.act_word_embs))
         hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
 
         hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))

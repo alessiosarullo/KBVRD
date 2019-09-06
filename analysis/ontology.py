@@ -47,7 +47,7 @@ def read_from_gt(split, image_index=None):
     with h5py.File(os.path.join('data', 'VG-SGG', 'VG-SGG.h5'), 'r') as db:
         img_split = db['split'][:]
         entity_classes = np.squeeze(db['labels'][:])
-        preds = np.squeeze(db['predicates'][:])
+        preds = np.squeeze(db['actions'][:])
         rels = np.squeeze(db['relationships'][:])
         ifr, ilr = np.squeeze(db['img_to_first_rel'][:]), np.squeeze(db['img_to_last_rel'][:])
         ifb, ilb = np.squeeze(db['img_to_first_box'][:]), np.squeeze(db['img_to_last_box'][:])

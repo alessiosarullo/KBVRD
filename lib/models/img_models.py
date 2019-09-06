@@ -103,11 +103,7 @@ class SKZSMultiModel(AbstractModel):
             if cfg.hoigcn:
                 self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
-                if cfg.gcdetach:
-                    self.gcn = DetachingHicoGCN(dataset, seen_act=self.seen_inds['act'], unseen_act=self.unseen_inds['act'],
-                                                input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-                else:
-                    self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
 
         # Regularisation
         self.adj = nn.ParameterDict()

@@ -6,7 +6,7 @@ from matplotlib.patches import Polygon
 from matplotlib.colors import LogNorm
 
 from lib.bbox_utils import rescale_masks_to_img
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, HicoDetHoiSplit
+from lib.dataset.hicodet.pc_hicodet_split import HicoDetSplitBuilder, PrecomputedHicoDetSplit
 
 
 def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **kwargs):
@@ -211,7 +211,7 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, alternate_
     return ax
 
 
-def vis_one_image(dataset: HicoDetHoiSplit, im,
+def vis_one_image(dataset: PrecomputedHicoDetSplit, im,
                   boxes, box_classes, box_classes_scores, masks=None,
                   ho_pairs=None, action_class_scores=None,
                   output_file_path=None, ext='png',
@@ -307,7 +307,7 @@ def vis_one_image(dataset: HicoDetHoiSplit, im,
                 for cls, score in enumerate(scores):
                     if cls == 0 or score < act_thr:
                         continue
-                    text = dataset.predicates[cls] + (' {:0.2f}'.format(score) if show_scores else '')
+                    text = dataset.actions[cls] + (' {:0.2f}'.format(score) if show_scores else '')
                     ax.text(
                         x, y + action_count * (fontsize * 6),
                         text,

@@ -5,13 +5,13 @@ import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit, Example
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 
 
 class Evaluator(BaseEvaluator):
-    def __init__(self, dataset_split: HicoDetHoiSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, dataset_split: PrecomputedHicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
@@ -85,7 +85,7 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def output_metrics(self, sort=False, actions_to_keep=None, return_labels=False, print_out=True):
+    def output_metrics(self, sort=False, actions_to_keep=None, print_out=True):
         mf = MetricFormatter()
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
@@ -115,8 +115,6 @@ class Evaluator(BaseEvaluator):
         for k, v in pos_metrics.items():
             assert k not in metrics.keys()
             metrics[k] = v
-        if return_labels:
-            return metrics, self.dataset_split.obj_labels, gt_hoi_labels
         return metrics
 
     def filter_actions(self, gt_hoi_labels, actions_to_keep):

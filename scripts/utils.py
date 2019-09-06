@@ -3,8 +3,8 @@ from typing import Dict, Type, Set
 from lib.models.abstract_model import AbstractModel
 
 try:  # Importing is needed because otherwise subclasses are not registered. FIXME maybe?
-    from lib.models.models import *
-    from lib.models.hico_models import *
+    from lib.models.det_models import *
+    from lib.models.img_models import *
 except ImportError:
     pass
 

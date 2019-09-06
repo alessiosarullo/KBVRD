@@ -8,7 +8,7 @@ from config import cfg
 from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, HicoDetHoiSplit, Example
 from lib.dataset.utils import Splits
 from lib.dataset.utils import get_counts
-from lib.dataset.imsitu import ImSituKnowledgeExtractor
+from dump.dataset.imsitu import ImSituKnowledgeExtractor
 from lib.models.containers import Prediction
 from lib.stats.evaluator import Evaluator
 from lib.stats.utils import MetricFormatter
@@ -56,14 +56,14 @@ def main():
     prior_mul[:, 0] = 0
     prior_mul /= np.sum(prior_mul, axis=1, keepdims=True)
 
-    predicates = hd.predicates
+    predicates = hd.actions
     objects = hd.objects
     # pred_intersection_binmask = np.any(imsitu_prior, axis=0)
     # pred_intersection_binmask[0] = True  # do not discard __no_interaction__
     # pred_intersection = np.flatnonzero(pred_intersection_binmask)
     # assert np.all(pred_intersection_binmask), np.flatnonzero(~pred_intersection_binmask)
     # # print(','.join([str(i) for i in pred_intersection]))
-    # predicates = [predicates[i] for i in pred_intersection]
+    # actions = [actions[i] for i in pred_intersection]
     # imsitu_prior = imsitu_prior[:, pred_intersection]
     # freq_prior = freq_prior[:, pred_intersection]
 
