@@ -1,14 +1,11 @@
-import os
 from typing import Dict, List, Type
 
-import cv2
 import numpy as np
-import torch
 
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
 from lib.dataset.hoi_dataset_split import AbstractHoiDatasetSplit
-from lib.dataset.utils import Splits, preprocess_img, get_hico_to_coco_mapping
+from lib.dataset.utils import Splits, get_hico_to_coco_mapping
 
 
 class HicoDetHoiSplit(AbstractHoiDatasetSplit):
@@ -108,27 +105,8 @@ class HicoDetHoiSplit(AbstractHoiDatasetSplit):
             preds.append(p)
         return preds
 
-    def get_img_entry(self, idx, read_img=True) -> Example:
-        im_data = self._data[idx]
-
-        entry = Example(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
-        if read_img:
-            raw_image = cv2.imread(os.path.join(self.img_dir, im_data.filename))
-            img_h, img_w = raw_image.shape[:2]
-            image, img_scale_factor = preprocess_img(raw_image)
-            img_size = [img_h, img_w]
-
-            entry.image = image
-            entry.img_size = img_size
-            entry.scale = img_scale_factor
-
-        entry.gt_boxes = im_data.boxes.astype(np.float, copy=False)
-        entry.gt_obj_classes = im_data.box_classes.copy()
-        entry.gt_hois = im_data.hois.copy()
-        return entry
-
     def __getitem__(self, idx):
-        return self.get_img_entry(idx)
+        raise NotImplementedError
 
     def __len__(self):
         return self.num_images
