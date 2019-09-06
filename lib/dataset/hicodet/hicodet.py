@@ -7,6 +7,8 @@ from scipy.io import loadmat
 from lib.dataset.utils import Splits
 from typing import Dict, List
 
+from config import cfg
+
 
 class HicoDetImData:
     def __init__(self, filename, boxes, box_classes, hois, wnet_actions):
@@ -158,7 +160,7 @@ class HicoDetDriver:
         """
         # TODO what are the 'id' and 'count' field for?
 
-        self.data_dir = os.path.join('data', 'HICO-DET')
+        self.data_dir = os.path.join(cfg.data_root, 'HICO-DET')
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')
         self.null_interaction = '__no_interaction__'
 
@@ -199,13 +201,8 @@ class HicoDetDriver:
                 train_annotations = d[Splits.TRAIN.value]
                 test_annotations = d[Splits.TEST.value]
                 interaction_list = d['interaction_list']
-                try:
-                    wn_act_dict = d['wn_act_dict']
-                    act_dict = d['act_dict']
-                except KeyError:
-                    # Legacy support. TODO remove
-                    wn_act_dict = d['wn_pred_dict']
-                    act_dict = d['pred_dict']
+                wn_act_dict = d['wn_act_dict']
+                act_dict = d['act_dict']
         except FileNotFoundError:
             src_anns = loadmat(os.path.join(self.data_dir, 'anno_bbox.mat'), squeeze_me=True)
 
