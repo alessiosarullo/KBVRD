@@ -26,16 +26,16 @@ class HicoDet:
         self.objects = sorted(set([inter['obj'] for inter in self.driver.interaction_list]))
         self.object_index = {obj: i for i, obj in enumerate(self.objects)}
 
-        # Predicates
-        self.predicates = list(self.driver.predicate_dict.keys())
-        self.predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
-        assert self.predicate_index[self.null_interaction] == 0
+        # Actions
+        self.actions = list(self.driver.action_dict.keys())
+        self.action_index = {act: i for i, act in enumerate(self.actions)}
+        assert self.action_index[self.null_interaction] == 0
 
         # Interactions
-        self.interactions = np.array([[self.predicate_index[inter['pred']], self.object_index[inter['obj']]]
+        self.interactions = np.array([[self.action_index[inter['act']], self.object_index[inter['obj']]]
                                       for inter in self.driver.interaction_list])  # 600 x [p, o]
-        self.op_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
-        self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
+        self.oa_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
+        self.oa_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
         # Data
         self.split_data = {Splits.TRAIN: self.compute_annotations(Splits.TRAIN),
@@ -52,7 +52,7 @@ class HicoDet:
 
     @property
     def num_actions(self):
-        return len(self.predicates)
+        return len(self.actions)
 
     @property
     def num_interactions(self):
@@ -73,15 +73,15 @@ class HicoDet:
                     curr_num_obj_boxes = int(sum([b.shape[0] for b in im_obj_boxes]))
 
                     # Interaction
-                    pred_class = self.interactions[inter_id][0]
+                    act_class = self.interactions[inter_id][0]
                     new_inters = inter['conn']
                     num_new_inters = new_inters.shape[0]
                     new_inters = np.stack([new_inters[:, 0] + curr_num_hum_boxes,
-                                           np.full(num_new_inters, fill_value=pred_class, dtype=np.int),
+                                           np.full(num_new_inters, fill_value=act_class, dtype=np.int),
                                            new_inters[:, 1] + curr_num_obj_boxes
                                            ], axis=1)
                     im_interactions.append(new_inters)
-                    im_wn_actions += [self.driver.interaction_list[inter_id]['pred_wid'] for _ in range(num_new_inters)]
+                    im_wn_actions += [self.driver.interaction_list[inter_id]['act_wid'] for _ in range(num_new_inters)]
 
                     # Human
                     im_hum_boxes.append(inter['hum_bbox'])
@@ -123,7 +123,7 @@ class HicoDetDriver:
         """
         Relevant class attributes:
             - null_interaction: the name of the null interaction
-            - wn_predicate_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
+            - wn_action_dict [dict]: The 119 WordNet entries for all actions. Keys are wordnets IDs and each element contains:
                 - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
                 - 'id' [int]: A number I have not understood the use of.
@@ -133,20 +133,20 @@ class HicoDetDriver:
                 - 'ex' [str]: An example (sometimes not provided)
                 EXAMPLE: key: v00007012, entry:
                     {'id': 1, 'wname': 'blow.v.01', 'count': 6, 'syn': ['blow'], 'def': 'exhale hard', 'ex': 'blow on the soup to cool it down'}
-            - predicate_dict [dict]: The 117 possible predicates, including a null one. They are fewer than the entries in the WordNet dictionary
-                because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
+            - action_dict [dict]: The 117 possible actions, including a null one. They are fewer than the entries in the WordNet dictionary
+                because some action can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
                     - 'ing' [str]: -ing form of the verb (unchanged for the null one).
-                    - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_predicate_dict`) corresponding to this verb (empty for the null one).
+                    - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_action_dict`) corresponding to this verb (empty for the null one).
             - interaction_list [list(dict)]: The 600 interactions in HICO-DET. Each element consists of:
                 - 'obj' [str]: The name of the object of the action (i.e., the target).
-                - 'pred' [str]: The verb describing the action (key in `predicate_dict`).
-                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`), or None for the null interaction.
+                - 'act' [str]: The verb describing the action (key in `action_dict`).
+                - 'act_wid' [str]: The WordNet ID of the action (key in `wn_action_dict`), or None for the null interaction.
             - split_data [dict(dict)]: One entry per split, with keys in `Splits`. Each entry is a dictionary with the following items:
                 - 'img_dir' [str]: Path to the folder containing the images
                 - 'annotations' [list(dict)]: Annotations for each image, thus structured:
                     - 'file' [str]: The file name
-                    - 'img_size' [array]: Image size expressed in [width, height, depth]
+                    - 'orig_img_size' [array]: Image size expressed in [width, height, depth]
                     - 'interactions' [list(dict)]: Each entry has:
                             - 'id' [int]: The id of the interaction in `interaction_list`.
                             - 'invis' [bool]: Whether the interaction is invisible or not. It does NOT necesserily mean that it is not in the image.
@@ -162,13 +162,13 @@ class HicoDetDriver:
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')
         self.null_interaction = '__no_interaction__'
 
-        train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict = self.load_annotations()
+        train_annotations, test_annotations, interaction_list, wn_act_dict, act_dict = self.load_annotations()
         self.split_img_dir = {Splits.TRAIN: os.path.join(self.data_dir, 'images', 'train2015'),
                               Splits.TEST: os.path.join(self.data_dir, 'images', 'test2015')}
         self.split_annotations = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
         self.interaction_list = interaction_list
-        self.wn_predicate_dict = wn_pred_dict
-        self.predicate_dict = pred_dict
+        self.wn_action_dict = wn_act_dict
+        self.action_dict = act_dict
 
     def load_annotations(self):
         def _parse_split(_split):
@@ -176,7 +176,7 @@ class HicoDetDriver:
             _annotations = []
             for _src_ann in src_anns['bbox_%s' % _split.value]:
                 _ann = {'file': _src_ann[0],
-                        'img_size': np.array([int(_src_ann[1][field]) for field in ['width', 'height', 'depth']], dtype=np.int),
+                        'orig_img_size': np.array([int(_src_ann[1][field]) for field in ['width', 'height', 'depth']], dtype=np.int),
                         'interactions': []}
                 for _inter in np.atleast_1d(_src_ann[2]):
                     _new_inter = {
@@ -199,46 +199,51 @@ class HicoDetDriver:
                 train_annotations = d[Splits.TRAIN.value]
                 test_annotations = d[Splits.TEST.value]
                 interaction_list = d['interaction_list']
-                wn_pred_dict = d['wn_pred_dict']
-                pred_dict = d['pred_dict']
+                try:
+                    wn_act_dict = d['wn_act_dict']
+                    act_dict = d['act_dict']
+                except KeyError:
+                    # Legacy support. TODO remove
+                    wn_act_dict = d['wn_pred_dict']
+                    act_dict = d['pred_dict']
         except FileNotFoundError:
             src_anns = loadmat(os.path.join(self.data_dir, 'anno_bbox.mat'), squeeze_me=True)
 
             train_annotations = _parse_split(_split=Splits.TRAIN)
             test_annotations = _parse_split(_split=Splits.TEST)
 
-            interaction_list, wn_pred_dict, pred_dict = self.parse_interaction_list(src_anns['list_action'])
+            interaction_list, wn_act_dict, act_dict = self.parse_interaction_list(src_anns['list_action'])
 
             with open(self.path_pickle_annotation_file, 'wb') as f:
                 pickle.dump({Splits.TRAIN.value: train_annotations,
                              Splits.TEST.value: test_annotations,
                              'interaction_list': interaction_list,
-                             'wn_pred_dict': wn_pred_dict,
-                             'pred_dict': pred_dict,
+                             'wn_act_dict': wn_act_dict,
+                             'act_dict': act_dict,
                              }, f)
 
         # Substitute 'no_interaction' with the specified null interaction string, if needed.
-        pred_dict[self.null_interaction] = pred_dict.get('no_interaction', self.null_interaction)
-        del pred_dict['no_interaction']
-        pred_dict = {k: pred_dict[k] for k in sorted(pred_dict.keys())}
+        act_dict[self.null_interaction] = act_dict.get('no_interaction', self.null_interaction)
+        del act_dict['no_interaction']
+        act_dict = {k: act_dict[k] for k in sorted(act_dict.keys())}
         for inter in interaction_list:
-            if inter['pred'] == 'no_interaction':
-                inter['pred'] = self.null_interaction
+            if inter['act'] == 'no_interaction':
+                inter['act'] = self.null_interaction
             if inter['obj'] == 'hair_drier':
                 inter['obj'] = 'hair_dryer'
 
-        return train_annotations, test_annotations, interaction_list, wn_pred_dict, pred_dict
+        return train_annotations, test_annotations, interaction_list, wn_act_dict, act_dict
 
     @staticmethod
     def parse_interaction_list(src_interaction_list):
-        wpred_dict = {}
+        wact_dict = {}
         interaction_list = []
-        pred_dict = {}
+        act_dict = {}
 
         for i, interaction_ann in enumerate(src_interaction_list):
             fields = interaction_ann[-2].dtype.fields
-            pred_wann = {}
-            pred_wid = None
+            act_wann = {}
+            act_wid = None
             if fields is None:  # Null interaction
                 for j, s in enumerate(interaction_ann):
                     if j < 3:
@@ -256,34 +261,34 @@ class HicoDetDriver:
                         pass
 
                     if f == 'name':
-                        pred_wann['wname'] = fvalue
+                        act_wann['wname'] = fvalue
                     elif f == 'wid':
-                        pred_wid = fvalue
+                        act_wid = fvalue
                     elif f == 'syn':
-                        pred_wann[f] = list(set(fvalue.split(' ')))
+                        act_wann[f] = list(set(fvalue.split(' ')))
                     elif f == 'ex':
-                        pred_wann[f] = fvalue if fvalue != '[]' else ''
+                        act_wann[f] = fvalue if fvalue != '[]' else ''
                     else:
-                        pred_wann[f] = fvalue
+                        act_wann[f] = fvalue
 
-                # Add to the wordnet predicate dictionary
-                assert wpred_dict.setdefault(pred_wid, pred_wann) == pred_wann, '\n%s\n%s' % (wpred_dict[pred_wid], pred_wann)
+                # Add to the wordnet action dictionary
+                assert wact_dict.setdefault(act_wid, act_wann) == act_wann, '\n%s\n%s' % (wact_dict[act_wid], act_wann)
 
-            assert 'name' not in pred_wann
+            assert 'name' not in act_wann
 
-            # Add to the predicate dictionary
-            pred, pred_ing = interaction_ann[1], interaction_ann[2]
-            d_pred = pred_dict.setdefault(pred, {'ing': pred_ing, 'wn_ids': []})
-            assert d_pred['ing'] == pred_ing
-            if pred_wid is not None:
-                pred_dict[pred]['wn_ids'] = sorted(set(pred_dict[pred]['wn_ids'] + [pred_wid]))
+            # Add to the action dictionary
+            act, act_ing = interaction_ann[1], interaction_ann[2]
+            d_act = act_dict.setdefault(act, {'ing': act_ing, 'wn_ids': []})
+            assert d_act['ing'] == act_ing
+            if act_wid is not None:
+                act_dict[act]['wn_ids'] = sorted(set(act_dict[act]['wn_ids'] + [act_wid]))
 
             # Add to the interaction list
-            new_action_ann = {'obj': interaction_ann[0], 'pred': pred, 'pred_wid': pred_wid}
+            new_action_ann = {'obj': interaction_ann[0], 'act': act, 'act_wid': act_wid}
             interaction_list.append(new_action_ann)
 
         # Sort
-        wpred_dict = {k: wpred_dict[k] for k in sorted(wpred_dict.keys())}
-        pred_dict = {k: pred_dict[k] for k in sorted(pred_dict.keys())}
+        wact_dict = {k: wact_dict[k] for k in sorted(wact_dict.keys())}
+        act_dict = {k: act_dict[k] for k in sorted(act_dict.keys())}
 
-        return interaction_list, wpred_dict, pred_dict
+        return interaction_list, wact_dict, act_dict

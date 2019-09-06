@@ -16,7 +16,7 @@ class BaseModel(GenericModel):
     def get_cline_name(cls):
         return 'base'
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         hidden_dim = 1024
@@ -88,7 +88,7 @@ class NonParamBaseModel(GenericModel):
     def get_cline_name(cls):
         return 'npbase'
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         vis_feat_dim = self.visual_module.vis_feat_dim
         hidden_dim = 1024
@@ -150,14 +150,14 @@ class NonParamBaseModel(GenericModel):
 
 
 class ExtKnowledgeGenericModel(GenericModel):
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.predicates, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
         if cfg.aggp:
             for j, pe in enumerate(pred_wembs):
                 if j == 0:
@@ -248,7 +248,7 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsb'
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         assert self.zs_enabled and cfg.softl > 0
@@ -275,7 +275,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsgc'
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = 1024
@@ -352,7 +352,7 @@ class PeyreModel(GenericModel):
     def get_cline_name(cls):
         return 'peyre'
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)

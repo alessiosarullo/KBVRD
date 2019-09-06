@@ -71,7 +71,7 @@ class HCVRD:
             hcvrd_pred_index[p] = self.predicate_index[orig]
 
         hd_to_hcvrd_pred_match = {}
-        for orig in hd.predicates[1:]:
+        for orig in hd.actions[1:]:
             hd_to_hcvrd_pred_match[orig] = hcvrd_pred_index.get(orig.replace('_', ' '), None)
 
         return hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match
@@ -80,10 +80,10 @@ class HCVRD:
         hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match = self.match(hd)
 
         hcvrd_to_hd_obj = {v: hd.object_index[k] for k, v in hd_to_hcvrd_obj_match.items() if v is not None}
-        hcvrd_to_hd_pred = {v: hd.predicate_index[k] for k, v in hd_to_hcvrd_pred_match.items() if v is not None}
+        hcvrd_to_hd_pred = {v: hd.action_index[k] for k, v in hd_to_hcvrd_pred_match.items() if v is not None}
         human_classes = set(self.human_classes)
 
-        op_mat = np.zeros((len(hd.objects), len(hd.predicates)))
+        op_mat = np.zeros((len(hd.objects), len(hd.actions)))
         for s, p, o in self.triplets:
             if s in human_classes and p in hcvrd_to_hd_pred.keys() and o in hcvrd_to_hd_obj.keys():
                 op_mat[hcvrd_to_hd_obj[o], hcvrd_to_hd_pred[p]] += 1

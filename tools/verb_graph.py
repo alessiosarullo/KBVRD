@@ -12,7 +12,7 @@ from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.hcvrd_driver import HCVRD
 from lib.dataset.hicodet.hicodet import HicoDet
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, Splits
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.dataset.imsitu import ImSituKnowledgeExtractor
 from lib.dataset.vgsgg_driver import VGSGG
@@ -74,8 +74,8 @@ def get_synonyms(synsets_per_pred: List[List[Synset]]):
 
 
 def get_pp_similarity(hd: HicoDet):
-    synsets_per_pred = [[wn.synset(hd.driver.wn_predicate_dict[wid]['wname']) for wid in hd.driver.predicate_dict[pred]['wn_ids']]
-                        for pred in hd.predicates]  # type: List[List[Synset]]
+    synsets_per_pred = [[wn.synset(hd.driver.wn_action_dict[wid]['wname']) for wid in hd.driver.action_dict[pred]['wn_ids']]
+                        for pred in hd.actions]  # type: List[List[Synset]]
     sim_mat = get_verb_similarity(synsets_per_pred)
     syn_sim_mat = get_synonyms(synsets_per_pred)
     return sim_mat, syn_sim_mat
@@ -102,7 +102,7 @@ def get_feasible_hois(dataset: HicoDet):
     vg_hd_po = {pred: [o for o in vg_objs if o in dataset.objects] for pred, vg_objs in vg_po.items()}
     vg_op_mat = np.zeros((dataset.num_objects, dataset.num_actions))
     for pred, objs in vg_hd_po.items():
-        pi = dataset.predicate_index[pred]
+        pi = dataset.action_index[pred]
         for obj in objs:
             oi = dataset.object_index[obj]
             vg_op_mat[oi, pi] = 1
@@ -136,14 +136,14 @@ def plot():
     p2p_from_op = all_op_mat.T.dot(all_op_mat)
     p2p_from_op_norm = (p2p_from_op > 0).astype(np.float)
     summary_ppop_mat = (p2p_from_op_norm + co_occ * 2) / 3
-    plot_mat(summary_ppop_mat, hd.predicates, hd.predicates, plot=False)
+    plot_mat(summary_ppop_mat, hd.actions, hd.actions, plot=False)
 
     sim_mat, syn_sim_mat = get_pp_similarity(hd)  # PP
     # plot_mat(sim_mat, hd.predicates, hd.predicates, plot=False)
     # plot_mat(syn_sim_mat, hd.predicates, hd.predicates, plot=False)
     # summary_pp_mat = (((sim_mat + syn_sim_mat) > 0).astype(np.float) + co_occ * 2) / 3
     summary_pp_mat = (syn_sim_mat + co_occ * 2) / 3
-    plot_mat(summary_pp_mat, hd.predicates, hd.predicates, plot=False)
+    plot_mat(summary_pp_mat, hd.actions, hd.actions, plot=False)
 
     plt.show()
 
@@ -172,11 +172,11 @@ def main():
 
     sim_mat, syn_sim_mat = get_pp_similarity(hd)
 
-    entities = hd.predicates
+    entities = hd.actions
     relations = [f'Common_{o}' for o in hd.objects] + ['Synonym', 'Related']
     triples = []
-    for i, pi in enumerate(hd.predicates):
-        for j, pj in enumerate(hd.predicates):
+    for i, pi in enumerate(hd.actions):
+        for j, pj in enumerate(hd.actions):
             if i == j:
                 continue
 

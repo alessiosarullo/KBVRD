@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Example
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, HicoDetHoiSplit, Example
 from lib.dataset.utils import Splits
 from lib.dataset.utils import get_counts
 from lib.dataset.imsitu import ImSituKnowledgeExtractor
@@ -25,7 +25,7 @@ def main():
     # np.set_printoptions(precision=2, suppress=True, linewidth=300, edgeitems=20)
 
     imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDetSplitBuilder.get_split(HicoDetSplit, Splits.TRAIN)  # type: HicoDetSplit
+    hd = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, Splits.TRAIN)  # type: HicoDetHoiSplit
 
     imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
     imsitu_prior = imsitu_op_mat.copy()
@@ -67,7 +67,7 @@ def main():
     # imsitu_prior = imsitu_prior[:, pred_intersection]
     # freq_prior = freq_prior[:, pred_intersection]
 
-    hd = HicoDetSplitBuilder.get_split(HicoDetSplit, Splits.TEST)  # type: HicoDetSplit
+    hd = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, Splits.TEST)  # type: HicoDetHoiSplit
     if 1:
         possible_modes = ['freq', 'imsitu',
                           'sum', 'smax', 'mul',

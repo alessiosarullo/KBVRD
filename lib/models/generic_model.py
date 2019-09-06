@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.detection.visual_module import VisualModule
 from lib.models.abstract_model import AbstractModel
@@ -15,10 +15,10 @@ class GenericModel(AbstractModel):
     def get_cline_name(cls) -> str:
         raise NotImplementedError()
 
-    def __init__(self, dataset: HicoDetSplit, **kwargs):
+    def __init__(self, dataset: HicoDetHoiSplit, **kwargs):
         # Instance parameters defined before superclass' constructor's invocation will be updated according to keyword arguments.
         super().__init__(**kwargs)
-        self.dataset = dataset  # type: HicoDetSplit
+        self.dataset = dataset  # type: HicoDetHoiSplit
         self.visual_module = VisualModule(dataset)
 
         # if cfg.csloss:

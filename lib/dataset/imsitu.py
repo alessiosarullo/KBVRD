@@ -67,15 +67,15 @@ class ImSituKnowledgeExtractor:
         #         verb, instance_list, dobj = '', '', ''
         #     print('%3d %-20s %-15s %-15s > %-s' % (i, pred, verb, dobj, instance_list if instance_list or not verb else '##########'))
 
-        matching_dobjs_count_per_pred = {pred: matching_dobjs_count_per_verb.get(pred_verb_matches.get(pred), {}) for pred in dataset.predicates}
+        matching_dobjs_count_per_pred = {pred: matching_dobjs_count_per_verb.get(pred_verb_matches.get(pred), {}) for pred in dataset.actions}
 
         # Object-predicate matrix
         op_mat = np.array([[matching_dobjs_count_per_pred.get(pred, {}).get(obj, 0) for obj in dataset.objects]
-                           for pred in dataset.predicates], dtype=np.float).T
+                           for pred in dataset.actions], dtype=np.float).T
         if return_known_mask:
             imsitu_nouns = {g for noun in self.imsitu.nouns.values() for g in noun['gloss']}
             known_objects = np.array([obj in imsitu_nouns for obj in dataset.objects], dtype=bool)
-            known_predicates = np.array([pred in pred_verb_matches.keys() for pred in dataset.predicates], dtype=bool)
+            known_predicates = np.array([pred in pred_verb_matches.keys() for pred in dataset.actions], dtype=bool)
             known_mask = known_objects[:, None] & known_predicates[None, :]
             assert known_mask.shape == op_mat.shape
             assert np.all(known_mask[op_mat > 0])
@@ -162,8 +162,8 @@ class ImSituKnowledgeExtractor:
     def match_preds_with_verbs(self, dataset: HicoDet):
         verb_dict = self.imsitu.verbs
         pred_verb_matches = {}
-        for orig_pred in dataset.predicates:
-            ing = dataset.driver.predicate_dict[orig_pred]['ing']
+        for orig_pred in dataset.actions:
+            ing = dataset.driver.action_dict[orig_pred]['ing']
             pred = orig_pred
             if pred != dataset.null_interaction:
                 pred = pred.replace('_', ' ')

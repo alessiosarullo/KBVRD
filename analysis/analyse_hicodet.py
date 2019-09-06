@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, HicoDetHoiSplit, Splits, Example
 
 try:
     matplotlib.use('Qt5Agg')
@@ -26,20 +26,20 @@ def stats():
     split = Splits.TRAIN
 
     os.makedirs(output_dir, exist_ok=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=split)  # type: HicoDetSplit
+    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=split)  # type: HicoDetHoiSplit
     hd = hds.full_dataset
 
     op_mat = np.zeros([hds.num_objects, hds.num_actions])
     for _, p, o in hds.hoi_triplets:
         op_mat[o, p] += 1
-    pred_labels = hd.predicates
+    pred_labels = hd.actions
     obj_labels = hd.objects
 
     perc_op_mat = op_mat / op_mat.sum(axis=1, keepdims=True)
     pred_inds = sorted(pickle.load(open('output/base/2019-06-14_10-13-10_pfilt/ds_inds.pkl', 'rb'))[Splits.TRAIN.value]['pred'].tolist())
     for o, row in enumerate(perc_op_mat):
         print(f'{hd.objects[o]:15s}',
-              ', '.join([f'{hd.predicates[p]:>15s}={row[p]*100:4.1f}' for p in sorted(set(hd.predicate_index.values()) - set(pred_inds))]))
+              ', '.join([f'{hd.actions[p]:>15s}={row[p] * 100:4.1f}' for p in sorted(set(hd.action_index.values()) - set(pred_inds))]))
 
     # Sort by most frequent object and predicate
     num_objs_per_predicate = np.sum(op_mat, axis=0)
@@ -64,13 +64,13 @@ def stats():
 
 def find():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)  # type: HicoDetSplit
+    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=Splits.TRAIN)  # type: HicoDetHoiSplit
 
     queries_str = [
         ['cook', 'pizza'],
         # ['eat', 'sandwich'],
     ]
-    queries = [hds.full_dataset.op_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.predicate_index[q[0]]]
+    queries = [hds.full_dataset.oa_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.action_index[q[0]]]
                for q in queries_str]
     if np.any(np.array(queries) < 0):
         raise ValueError('Unknown interaction(s).')
@@ -89,7 +89,7 @@ def find():
         boxes = example.gt_boxes
         box_classes = example.gt_obj_classes
         hois = example.gt_hois
-        gt_interactions = hds.full_dataset.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+        gt_interactions = hds.full_dataset.oa_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
         misses = queries_set - set(gt_interactions.tolist())
         if misses:
             continue
@@ -113,7 +113,7 @@ def find():
 
 def vis_gt():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
+    hds = HicoDetSplitBuilder.get_split(HicoDetHoiSplit, split=Splits.TEST)  # type: HicoDetHoiSplit
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
     os.makedirs(output_dir, exist_ok=True)

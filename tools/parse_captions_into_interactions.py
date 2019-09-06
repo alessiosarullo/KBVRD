@@ -25,7 +25,7 @@ def parse_captions(captions):
                     'player', 'rider', 'skateboarder', 'skater', 'skier', 'small child', 'snowboarder', 'surfer', 'tennis player'}  # FIXME
 
     hd = HicoDet()
-    preds = hd.predicates
+    preds = hd.actions
     pred_verbs = [preds[0]] + [p.split('_')[0] for p in preds[1:]]
     predset = set(pred_verbs)
     objs_per_pred = {p: set() for p in preds}

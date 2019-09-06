@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Minibatch
+from lib.dataset.hicodet.hicodet_img_split import Example
 from lib.detection.detection import im_detect_boxes, im_detect_mask, get_rois_feats
 from lib.detection.wrappers import Generalized_RCNN, load_detectron_weight
 
@@ -34,7 +34,8 @@ class MaskRCNN(nn.Module):
     def train(self, mode=True):
         super().train(mode=self.allow_train and mode)
 
-    def forward(self, x: Minibatch, **kwargs):
+    # noinspection PyCallingNonCallable,PyUnresolvedReferences
+    def forward(self, ex: Example, **kwargs):
         """
         :return: - scores [array]
                  - boxes [array]
@@ -46,11 +47,17 @@ class MaskRCNN(nn.Module):
 
         assert self.allow_train or not self.training
         with torch.set_grad_enabled(self.training):
-            detect_inputs = {'data': x.imgs, 'im_info': torch.tensor(x.img_infos, dtype=torch.float32, device=x.imgs.device)}
-            unscaled_img_sizes = np.array([d['im_size'] for d in x.other_ex_data])
+            assert torch.cuda.is_available()
+            device = torch.device('cuda')
+
+            img_infos = np.array([ex.image.shape[1], ex.image.shape[2], ex.scale], dtype=np.float32)[None, :]
+            detect_inputs = {'data': torch.tensor(ex.image, device=device, dtype=torch.float32).unsqueeze(dim=0),
+                             'im_info': torch.tensor(img_infos, dtype=torch.float32, device=device)}
+
+            unscaled_img_sizes = np.array(ex.orig_img_size)[None, :]
             box_im_ids, boxes, scores, fmap = im_detect_boxes(self.mask_rcnn, inputs=detect_inputs, unscaled_img_sizes=unscaled_img_sizes)
 
-            im_scales = x.img_infos[:, 2]
+            im_scales = img_infos[:, 2]
             boxes = boxes * im_scales[box_im_ids, None]
             boxes_ext = np.concatenate([box_im_ids[:, None].astype(np.float32, copy=False),
                                         boxes.astype(np.float32, copy=False),
@@ -58,7 +65,7 @@ class MaskRCNN(nn.Module):
                                         ], axis=1)
 
             # Checks
-            im_sizes = np.array([d['im_size'][::-1] * d['im_scale'] for d in x.other_ex_data]).astype(np.float32)
+            im_sizes = np.array([np.array(ex.orig_img_size)[::-1] * ex.scale]).astype(np.float32)
             box_im_sizes = im_sizes[box_im_ids, :]
             norm_boxes = boxes_ext[:, 1:5] / np.tile(box_im_sizes, [1, 2])
             assert np.all(0 <= norm_boxes), (box_im_ids, boxes_ext[:, 1:5], im_sizes, norm_boxes)
@@ -94,24 +101,6 @@ class MaskRCNN(nn.Module):
             box_im_ids = rois[:, 0].astype(np.int, copy=False)
             boxes = rois[:, 1:5].astype(np.float32, copy=False)
             masks = im_detect_mask(self.mask_rcnn, box_im_ids, boxes, fmap)
+            # noinspection PyUnresolvedReferences
             masks = torch.stack([masks[i, c, :, :] for i, c in enumerate(box_classes)], dim=0)
         return masks.detach()
-
-
-class ImgMaskRCNN(MaskRCNN):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x: Minibatch, **kwargs):
-        assert self.allow_train or not self.training
-        with torch.set_grad_enabled(self.training):
-            detect_inputs = {'data': x.imgs, 'im_info': torch.tensor(x.img_infos, dtype=torch.float32, device=x.imgs.device)}
-            return_dict = self.mask_rcnn(**detect_inputs)
-            fmap = return_dict['blob_conv']
-            return fmap.detach()
-
-    def get_rois_feats(self, fmap, rois):
-        raise NotImplementedError
-
-    def get_masks(self, fmap, rois, box_classes):
-        raise NotImplementedError

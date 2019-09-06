@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit
 from lib.dataset.utils import Splits
 from lib.stats.utils import Timer
 
@@ -140,7 +140,7 @@ class PrecomputedFilesHandler:
         return cls.files[file_name][key]
 
 
-class PrecomputedHicoDetSplit(HicoDetSplit):
+class PrecomputedHicoDetSplit(HicoDetHoiSplit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -199,7 +199,7 @@ class PrecomputedHicoDetSplit(HicoDetSplit):
             # Note: boxes with no interactions are NOT filtered
         elif len(self.active_interactions) < self.full_dataset.num_interactions and self.split != Splits.TEST:
             op_pair_is_valid = np.zeros([self.num_objects, self.num_actions])
-            assert op_pair_is_valid.size == self.full_dataset.op_pair_to_interaction.size
+            assert op_pair_is_valid.size == self.full_dataset.oa_pair_to_interaction.size
             op_pair_is_valid[self.interactions[:, 1], self.interactions[:, 0]] = 1
             num_hois = self.pc_action_labels.sum()
             for i in range(self.pc_action_labels.shape[0]):

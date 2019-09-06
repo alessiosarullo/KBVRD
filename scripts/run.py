@@ -12,9 +12,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from config import cfg
 from lib.dataset.hico import HicoSplit
 from lib.dataset.vghoi import VGHoiSplit
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, Splits
-from lib.dataset.hicodet.pc_hicodet_imghois_split import PrecomputedHicoDetImgHOISplit
-from lib.dataset.hicodet.pc_hicodet_singlehois_onehot_split import PrecomputedHicoDetSingleHOIsOnehotSplit
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetSplitBuilder, Splits
 from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
 from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit
 from lib.dataset.hoi_dataset_split import HoiDatasetSplit
@@ -88,13 +86,7 @@ class Launcher:
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.hicodet:
-            if cfg.group:
-                assert not cfg.ohtrain
-                train_ds_class = PrecomputedHicoDetImgHOISplit
-            elif cfg.ohtrain:
-                train_ds_class = PrecomputedHicoDetSingleHOIsOnehotSplit
-            else:
-                train_ds_class = PrecomputedHicoDetSingleHOIsSplit
+            train_ds_class = PrecomputedHicoDetSingleHOIsSplit
             self.train_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.TRAIN,
                                                              obj_inds=obj_inds, pred_inds=act_inds, inter_inds=inter_inds)
             self.val_split = HicoDetSplitBuilder.get_split(train_ds_class, split=Splits.VAL,

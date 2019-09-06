@@ -56,7 +56,7 @@ class HicoDriver:
         """
         Relevant class attributes:
             - null_interaction: the name of the null interaction
-            - wn_predicate_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
+            - wn_action_dict [dict]: The 119 WordNet entries for all predicates. Keys are wordnets IDs and each element contains:
                 - 'wname' [str]: The name of the wordnet entry this actions refers to. It is in the form VERB.v.NUM, where VERB is the verb
                     describing the action and NUM is an index used to disambiguate between homonyms.
                 - 'syn' [list]: Set of synonyms
@@ -68,11 +68,11 @@ class HicoDriver:
                 because some predicate can have different meaning and thus two different WordNet entries. Keys are verbs in the base form and
                 entries consist of:
                     - 'ing' [str]: -ing form of the verb (unchanged for the null one).
-                    - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_predicate_dict`) corresponding to this verb (empty for the null one).
+                    - 'wn_ids' [list(str)]: The WordNet IDs (AKA keys in `wn_action_dict`) corresponding to this verb (empty for the null one).
             - interaction_list [list(dict)]: The 600 interactions in HICO-DET. Each element consists of:
                 - 'obj' [str]: The name of the object of the action (i.e., the target).
                 - 'pred' [str]: The verb describing the action (key in `predicate_dict`).
-                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_predicate_dict`), or None for the null interaction.
+                - 'pred_wid' [str]: The WordNet ID of the action (key in `wn_action_dict`), or None for the null interaction.
             - split_annotations [dict(ndarray)]: One entry per split, with keys in `Splits`.
                 Each entry is a matrix with dimensions [num_images, num_interactions] and each cell ij has a value in {-1, 0, 1} according to whether
                 action j is a hard negative, uncertain/unknown or a hard positive in image i.

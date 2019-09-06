@@ -296,7 +296,7 @@ def save_cnet_hd(radius=2, walk_length=2, path_filter=None):
     hd = HicoDet()
     cnet = Conceptnet()
 
-    hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
+    hd_preds = {p.split('_')[0] for p in set(hd.actions) - {hd.null_interaction}}
     hd_nodes = set([obj for obj in hd.objects]) | hd_preds
     print('Filtering')
     cnet.filter_nodes(hd_nodes, radius=radius)
@@ -325,7 +325,7 @@ def plot():
         cnet_rel = d['rel']
         node_inv_index = {n: i for i, n in enumerate(nodes)}
 
-    hico_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
+    hico_op_mat = np.zeros([len(dataset.objects), len(dataset.actions)])
     for i in range(len(dataset.interaction_list)):
         hico_op_mat[dataset.get_object_index(i), dataset.get_predicate_index(i)] = 1
 
@@ -333,10 +333,10 @@ def plot():
     # l = 40
     # plot_mat(cnet_rel[:l, :l], nodes[:l], nodes[:l])
 
-    cnet_op_mat = np.zeros([len(dataset.objects), len(dataset.predicates)])
+    cnet_op_mat = np.zeros([len(dataset.objects), len(dataset.actions)])
     for i, o in enumerate(dataset.objects):
         oidx = node_inv_index[o]
-        for j, p in enumerate(dataset.predicates):
+        for j, p in enumerate(dataset.actions):
             if p == dataset.null_interaction:
                 continue
             p = p.split('_')[0]
@@ -344,7 +344,7 @@ def plot():
             cnet_op_mat[i, j] = cnet_rel[oidx, pidx]
     cnet_op_mat = np.minimum(1, cnet_op_mat)
 
-    plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.predicates, dataset.objects)
+    plot_mat((cnet_op_mat + hico_op_mat * 2) / 3, dataset.actions, dataset.objects)
 
 
 def main():
@@ -356,7 +356,7 @@ def main():
 
     # cnet.export_to_deepwalk_edge_list()
 
-    hd_preds = {p.split('_')[0] for p in set(hd.predicates) - {hd.null_interaction}}
+    hd_preds = {p.split('_')[0] for p in set(hd.actions) - {hd.null_interaction}}
     hd_nodes = set([obj for obj in hd.objects]) | hd_preds
     print(hd_nodes - set(cnet.nodes))
 

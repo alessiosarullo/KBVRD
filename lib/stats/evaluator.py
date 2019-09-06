@@ -5,13 +5,13 @@ import pickle
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Example
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit, Example
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 
 
 class Evaluator(BaseEvaluator):
-    def __init__(self, dataset_split: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, dataset_split: HicoDetHoiSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__()
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
@@ -89,7 +89,7 @@ class Evaluator(BaseEvaluator):
         mf = MetricFormatter()
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
-        orig_gt_hoi_labels = self.full_dataset.op_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
+        orig_gt_hoi_labels = self.full_dataset.oa_pair_to_interaction[gt_hoi_triplets[:, 2], gt_hoi_triplets[:, 1]]
         metrics = {k: v for k, v in self.metrics.items()}
         gt_hoi_labels, interactions_to_keep = self.filter_actions(orig_gt_hoi_labels, actions_to_keep)
         assert np.all(gt_hoi_labels >= 0)
@@ -137,7 +137,7 @@ class Evaluator(BaseEvaluator):
 
             gt_boxes = gt_entry.gt_boxes.astype(np.float, copy=False)
 
-            gt_hoi_classes = self.full_dataset.op_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
+            gt_hoi_classes = self.full_dataset.oa_pair_to_interaction[gt_entry.gt_obj_classes[gt_hoi_triplets[:, 1]], gt_hoi_triplets[:, 2]]
             assert np.all(gt_hoi_classes) >= 0
 
             gt_ho_ids = self.gt_count + np.arange(num_gt_hois)

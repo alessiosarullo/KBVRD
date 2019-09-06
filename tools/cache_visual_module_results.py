@@ -6,7 +6,8 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Minibatch
+from lib.dataset.hicodet.hicodet import HicoDet
+from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit, Example
 from lib.dataset.utils import Splits
 from lib.detection.visual_module import VisualModule, VisualOutput
 
@@ -28,9 +29,9 @@ def save_feats():
             print('Remote debugging failed.')
             raise
 
-    train_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
-    test_split = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
-    assert Splits.VAL not in HicoDetSplitBuilder.splits[HicoDetSplit]
+    full_dataset = HicoDet()
+    train_split = HicoDetImgSplit(split=Splits.TRAIN, full_dataset=full_dataset)
+    test_split = HicoDetImgSplit(split=Splits.TEST, full_dataset=full_dataset)
 
     vm = VisualModule(dataset=train_split)
     if torch.cuda.is_available():
@@ -41,13 +42,6 @@ def save_feats():
     for split, hds in [(Splits.TRAIN, train_split),
                        (Splits.TEST, test_split),
                        ]:
-        hd_loader = torch.utils.data.DataLoader(dataset=hds,
-                                                batch_size=1,
-                                                shuffle=False,
-                                                num_workers=0,
-                                                collate_fn=lambda x: Minibatch.collate(x),
-                                                drop_last=False,
-                                                )
 
         precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch, split.value)
         feat_file = h5py.File(precomputed_feats_fn, 'w')
@@ -56,20 +50,17 @@ def save_feats():
         feat_file.create_dataset('union_boxes_feats', shape=(0, vm.vis_feat_dim), maxshape=(None, vm.vis_feat_dim))
 
         try:
-            all_union_boxes, all_ho_infos, all_box_labels, all_action_labels, all_img_infos = empty_lists(5, len(hd_loader))
+            all_union_boxes, all_ho_infos, all_box_labels, all_action_labels, all_img_infos = empty_lists(5, len(hds))
             obj_cache = {k: [] for k in feat_file if not k.startswith('union')}
             ho_cache = {k: [] for k in feat_file if k.startswith('union')}
             inference = (split == Splits.TEST)
-            for im_i, im_data in enumerate(hd_loader):
+            for im_i, ex in enumerate(hds):
                 # if im_i != 1951:
                 #     continue
-                im_data = im_data  # type: Minibatch
-                assert len(im_data.other_ex_data) == 1
+                ex = ex  # type: Example
+                all_img_infos[im_i] = np.array([*ex.orig_img_size, ex.scale])
 
-                im_infos = np.array([*im_data.other_ex_data[0]['im_size'], im_data.other_ex_data[0]['im_scale']])
-                all_img_infos[im_i] = im_infos
-
-                vout = vm(im_data, inference)  # type: VisualOutput
+                vout = vm(ex, inference)  # type: VisualOutput
                 boxes_ext = vout.boxes_ext
                 box_feats = vout.box_feats
                 ho_infos = vout.ho_infos_np
@@ -88,7 +79,7 @@ def save_feats():
                     action_labels = action_labels.cpu().numpy()
 
                 if boxes_ext is not None:
-                    assert np.all(boxes_ext[:, 0] == 0)  # because batch size is 1
+                    assert np.all(boxes_ext[:, 0] == 0)  # because ex size is 1
                     boxes_ext[:, 0] = im_i
                     obj_cache['box_feats'].append(box_feats)
                     obj_cache['boxes_ext'].append(boxes_ext)
@@ -106,8 +97,8 @@ def save_feats():
                 else:
                     assert inference
 
-                if im_i % 10 == 0 or im_i == len(hd_loader) - 1:
-                    print('Image %6d/%d' % (im_i, len(hd_loader)))
+                if im_i % 10 == 0 or im_i == len(hds) - 1:
+                    print('Image %6d/%d' % (im_i, len(hds)))
 
                     obj_cache = {k: np.concatenate(v, axis=0) for k, v in obj_cache.items()}
                     num_rois, feat_dim = obj_cache['box_feats'].shape
@@ -132,9 +123,9 @@ def save_feats():
             all_union_boxes = np.concatenate([x for x in all_union_boxes if x is not None], axis=0)
             all_ho_infos = np.concatenate([x for x in all_ho_infos if x is not None], axis=0)
 
-            assert len(all_img_infos) == len(hd_loader)
+            assert len(all_img_infos) == len(hds)
             all_img_infos = np.stack([x for x in all_img_infos if x is not None], axis=0)
-            assert all_img_infos.shape[0] == len(hd_loader)
+            assert all_img_infos.shape[0] == len(hds)
 
             feat_file.create_dataset('image_ids', data=np.array(hds.image_ids, dtype=np.int))
             feat_file.create_dataset('union_boxes', data=all_union_boxes)

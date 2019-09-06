@@ -8,136 +8,59 @@ import torch
 from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
 from lib.dataset.hoi_dataset_split import AbstractHoiDatasetSplit
-from lib.dataset.utils import Splits, preprocess_img, im_list_to_4d_tensor, get_hico_to_coco_mapping
+from lib.dataset.utils import Splits, preprocess_img, get_hico_to_coco_mapping
 
 
-class Example:
-    def __init__(self, idx_in_split, img_id, filename, split):
-        self.index = idx_in_split
-        self.id = img_id
-        self.filename = filename
-        self.split = split
-
-        self.img_size = None
-        self.scale = None
-
-        self.image = None
-        self.gt_boxes = None
-        self.gt_obj_classes = None
-        self.gt_hois = None
-
-
-class Minibatch:
-    # TODO refactor in list[Example], then merged when called vectorize()
-    def __init__(self):
-        self.img_infos = []
-        self.other_ex_data = []
-
-        self.imgs = []
-        self.gt_boxes = []
-        self.gt_obj_classes = []
-        self.gt_box_im_ids = []
-        self.gt_hois = []
-        self.gt_hoi_im_ids = []
-
-    def append(self, ex: Example):
-        self.img_infos += [np.array([*ex.img_size, ex.scale], dtype=np.float32)]
-
-        self.other_ex_data += [{'index': ex.index,
-                                'id': ex.id,
-                                'fn': ex.filename,
-                                'split': ex.split,
-                                'im_size': np.array(ex.img_size),  # this won't be changed
-                                'im_scale': ex.scale,
-                                }]
-
-        self.imgs += [ex.image]
-        self.gt_boxes += [ex.gt_boxes * ex.scale]
-        self.gt_obj_classes += [ex.gt_obj_classes]
-        self.gt_hois += [ex.gt_hois]
-
-        self.gt_box_im_ids += [np.full_like(ex.gt_obj_classes, fill_value=len(self.gt_box_im_ids))]
-        self.gt_hoi_im_ids += [np.full(ex.gt_hois.shape[0], fill_value=len(self.gt_hoi_im_ids), dtype=np.int)]
-
-    def vectorize(self, device):
-        assert all([len(v) > 0 for k, v in self.__dict__.items() if k.startswith('gt_')])
-
-        self.imgs = im_list_to_4d_tensor([torch.tensor(v, device=device) for v in self.imgs])  # 4D NCHW tensor
-
-        img_infos = np.stack(self.img_infos, axis=0)
-        img_infos[:, 0] = self.imgs.shape[2]
-        img_infos[:, 1] = self.imgs.shape[3]
-        self.img_infos = img_infos.astype(np.float32)
-
-        assert self.imgs.shape[0] == self.img_infos.shape[0]
-
-        self.gt_box_im_ids = np.concatenate(self.gt_box_im_ids, axis=0)
-        self.gt_boxes = np.concatenate(self.gt_boxes, axis=0)
-        self.gt_obj_classes = np.concatenate(self.gt_obj_classes, axis=0)
-        self.gt_hoi_im_ids = np.concatenate(self.gt_hoi_im_ids, axis=0)
-        self.gt_hois = np.concatenate(self.gt_hois, axis=0)
-        assert len(self.gt_boxes) == len(self.gt_obj_classes) == len(self.gt_box_im_ids)
-        assert len(self.gt_hois) == len(self.gt_hoi_im_ids)
-
-    @classmethod
-    def collate(cls, examples):
-        minibatch = cls()
-        for ex in examples:
-            minibatch.append(ex)
-        minibatch.vectorize(device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-        return minibatch
-
-
-class HicoDetSplit(AbstractHoiDatasetSplit):
-    def __init__(self, split, hicodet: HicoDet, data: List[HicoDetImData], image_ids, object_inds, predicate_inds, inter_inds):
+class HicoDetHoiSplit(AbstractHoiDatasetSplit):
+    def __init__(self, split, full_dataset: HicoDet, data: List[HicoDetImData], image_inds, object_inds, action_inds, inter_inds):
         assert split in Splits
 
         self.split = split
-        self.full_dataset = hicodet  # type: HicoDet
-        self.image_ids = image_ids
+        self.full_dataset = full_dataset  # type: HicoDet
+        self.image_ids = image_inds
         self._data = data
 
         object_inds = sorted(object_inds)
-        self.objects = [hicodet.objects[i] for i in object_inds]
+        self.objects = [full_dataset.objects[i] for i in object_inds]
         self.active_object_classes = np.array(object_inds, dtype=np.int)
         reduced_object_index = {obj: i for i, obj in enumerate(self.objects)}
         if len(object_inds) < self.full_dataset.num_objects:
             print(f'{split.value.capitalize()} objects:', object_inds)
 
-        predicate_inds = sorted(predicate_inds)
-        self.predicates = [hicodet.predicates[i] for i in predicate_inds]
-        self.active_actions = np.array(predicate_inds, dtype=np.int)
+        action_inds = sorted(action_inds)
+        self.predicates = [full_dataset.actions[i] for i in action_inds]
+        self.active_actions = np.array(action_inds, dtype=np.int)
         reduced_predicate_index = {pred: i for i, pred in enumerate(self.predicates)}
-        if len(predicate_inds) < self.full_dataset.num_actions:
-            print(f'{split.value.capitalize()} predicates:', predicate_inds)
+        if len(action_inds) < self.full_dataset.num_actions:
+            print(f'{split.value.capitalize()} predicates:', action_inds)
 
         if inter_inds is not None:
-            assert len(object_inds) == self.full_dataset.num_objects and len(predicate_inds) == self.full_dataset.num_actions
+            assert len(object_inds) == self.full_dataset.num_objects and len(action_inds) == self.full_dataset.num_actions
             inter_inds = sorted(inter_inds)
             self.active_interactions = np.array(inter_inds, dtype=np.int)
             self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
             self.reduced_interactions = self.interactions
             print(f'{split.value.capitalize()} interactions:', inter_inds)
         else:
-            reduced_interactions = np.array([[reduced_predicate_index.get(self.full_dataset.predicates[p], -1),
+            reduced_interactions = np.array([[reduced_predicate_index.get(self.full_dataset.actions[p], -1),
                                               reduced_object_index.get(self.full_dataset.objects[o], -1)]
                                              for p, o in self.full_dataset.interactions])
             self.reduced_interactions = reduced_interactions[np.all(reduced_interactions >= 0, axis=1), :]  # reduced predicate and object inds
-            active_interactions = set(np.unique(self.full_dataset.op_pair_to_interaction[:, self.active_actions]).tolist()) - {-1}
+            active_interactions = set(np.unique(self.full_dataset.oa_pair_to_interaction[:, self.active_actions]).tolist()) - {-1}
             self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
             self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original predicate and object inds
 
             # Checks
-            interactions = np.array([[p if self.full_dataset.predicates[p] in reduced_predicate_index else -1,
+            interactions = np.array([[p if self.full_dataset.actions[p] in reduced_predicate_index else -1,
                                       o if self.full_dataset.objects[o] in reduced_object_index else -1]
                                      for p, o in self.full_dataset.interactions])
             assert np.all(self.interactions == interactions[np.all(interactions >= 0, axis=1), :])
-            assert np.all([reduced_predicate_index[self.full_dataset.predicates[p]] == self.reduced_interactions[i, 0] and
+            assert np.all([reduced_predicate_index[self.full_dataset.actions[p]] == self.reduced_interactions[i, 0] and
                            reduced_object_index[self.full_dataset.objects[o]] == self.reduced_interactions[i, 1]
                            for i, (p, o) in enumerate(self.interactions)])
 
         # Compute mappings to COCO
-        self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=hicodet.objects, split_objects=self.objects)
+        self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=full_dataset.objects, split_objects=self.objects)
 
         # Compute HOI triplets. Each is [human, action, object].
         hoi_triplets = []
@@ -212,14 +135,14 @@ class HicoDetSplit(AbstractHoiDatasetSplit):
 
 
 class HicoDetSplitBuilder:
-    splits = {}  # type: Dict[Type[HicoDetSplit], Dict[Splits, HicoDetSplit]]
+    splits = {}  # type: Dict[Type[HicoDetHoiSplit], Dict[Splits, HicoDetHoiSplit]]
     hicodet = None
 
     def __init__(self):
         raise NotImplementedError('Use class methods only.')
 
     @classmethod
-    def get_split(cls, split_class: Type[HicoDetSplit], split: Splits, pred_inds=None, obj_inds=None, inter_inds=None):
+    def get_split(cls, split_class: Type[HicoDetHoiSplit], split: Splits, pred_inds=None, obj_inds=None, inter_inds=None):
         class_splits = cls.splits.setdefault(split_class, {})
         if split not in class_splits:
             if split == Splits.VAL:
@@ -335,7 +258,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter
             hois = hois[interaction_mask, :]
 
             # Filter interactions based on interaction class
-            inter_classes = hicodet.op_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+            inter_classes = hicodet.oa_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
             interaction_mask = (inter_filtering_map[inter_classes] >= 0)
             hois = hois[interaction_mask, :]
 
@@ -359,7 +282,7 @@ def filter_data(split, hicodet: HicoDet, obj_inds, pred_inds, inter_inds, filter
         im_with_interactions = []
         for i, im_data in enumerate(split_data):
             empty = im_data.boxes.size == 0
-            fg_hois = np.any(im_data.hois[:, 1] != hicodet.predicate_index[hicodet.null_interaction])
+            fg_hois = np.any(im_data.hois[:, 1] != hicodet.action_index[hicodet.null_interaction])
             if filter_empty_imgs and empty:
                 continue
             if filter_null_imgs and ~fg_hois:

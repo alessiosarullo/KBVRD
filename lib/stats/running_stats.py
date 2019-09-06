@@ -149,7 +149,7 @@ class RunningStats:
         avg_time_per_batch = time_per_call + time_to_load_per_batch + time_for_stats_per_batch
         est_time_per_epoch = avg_time_per_batch * num_batches
 
-        batch_str = 'batch {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
+        batch_str = 'ex {:5d}/{:5d}'.format(batch, num_batches - 1) if batch is not None else ''
         epoch_str = 'epoch {:2d}'.format(epoch) if epoch is not None else ''
         curr_iter_str = 'iter {:6d}'.format(curr_iter) if curr_iter is not None else ''
         if self.split == Splits.TRAIN:
@@ -160,7 +160,7 @@ class RunningStats:
             else:
                 header = '{:s}. {:s}.'.format(self.split_str, batch_str.capitalize())
 
-        print(header, 'Avg: {:>5s}/batch @ {:>5s}=opt, {:>5s}=load ({:>5s}/load), {:>5s}=stats ({:>5s}/stats).'.format(
+        print(header, 'Avg: {:>5s}/ex @ {:>5s}=opt, {:>5s}=load ({:>5s}/load), {:>5s}=stats ({:>5s}/stats).'.format(
             Timer.format(avg_time_per_batch),
             Timer.format(time_per_call),
             Timer.format(time_to_load_per_batch), Timer.format(time_to_load),

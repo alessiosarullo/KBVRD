@@ -4,14 +4,14 @@ import torch
 from torch import nn
 
 from lib.dataset.hico import HicoSplit
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.hicodet.hicodet_hoi_split import HicoDetHoiSplit
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.dataset.utils import get_noun_verb_adj_mat
 import numpy as np
 
 
 class AbstractGCN(nn.Module):
-    def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True):
+    def __init__(self, dataset: Union[HicoSplit, HicoDetHoiSplit], input_dim=512, gc_dims=(256, 128), train_z=True):
         super().__init__()
         self.input_dim = input_dim
         self.dataset = dataset
