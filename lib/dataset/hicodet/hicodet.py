@@ -43,7 +43,7 @@ class HicoDet:
                            Splits.TEST: self.compute_annotations(Splits.TEST)
                            }  # type: Dict[Splits: List[HicoDetImData]]
 
-        self.split_non_empty_image_ids = {s: [i for i, im_data in enumerate(self.split_data[s]) if im_data.boxes.size == 0]
+        self.split_non_empty_image_ids = {s: [i for i, im_data in enumerate(self.split_data[s]) if im_data.boxes.size > 0]
                                           for s in [Splits.TRAIN, Splits.TEST]}  # empty image = doesn't have annotations
 
     @property
