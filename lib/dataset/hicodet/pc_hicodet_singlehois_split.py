@@ -21,11 +21,11 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         # Filter out zero-shot indices
         #############################################################################################################################
 
-        object_inds = sorted(object_inds)
+        object_inds = sorted(object_inds or range(self.full_dataset.num_objects))
         self.objects = [full_dataset.objects[i] for i in object_inds]
         self.active_objects = np.array(object_inds, dtype=np.int)
 
-        action_inds = sorted(action_inds)
+        action_inds = sorted(action_inds or range(self.full_dataset.num_actions))
         self.actions = [full_dataset.actions[i] for i in action_inds]
         self.active_actions = np.array(action_inds, dtype=np.int)
 
