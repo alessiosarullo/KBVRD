@@ -167,8 +167,6 @@ class SKZSMultiModel(AbstractModel):
                 act_labels[:, self.unseen_inds['act']] = feasible_acts_per_obj.clamp(max=1)[:, self.unseen_inds['act']]  # group across objects
             else:
                 act_emb_sims = self.act_emb_sim.clamp(min=0)
-                if cfg.slboost:
-                    act_emb_sims = 0.5 + act_emb_sims / 2
                 similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
                 similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
                 feasible_similar_acts_per_obj = similar_acts_per_obj * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)

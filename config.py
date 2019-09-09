@@ -46,7 +46,7 @@ class Configs:
 
         # Dataset
         self.val_ratio = 0.1
-        self.hicodet = False  # if True, use HICO-DET. The next option is ignored.
+        self.hicodet = False  # if True, use HICO-DET. In this case, the next option is ignored.
         self.vghoi = False  # use HICO [False] or VGHOI [True]
 
         ##########################################
@@ -64,7 +64,6 @@ class Configs:
         # Architecture
         self.dropout = 0.5
         self.repr_dim = 1024
-        self.small = False
 
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss
@@ -99,16 +98,10 @@ class Configs:
         self.katopgc = False
         self.katoconstz = False
 
-        # BG specific
-        self.filter = False
-
         # ZS specific
         self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
-        self.softl = 0.0
-        self.nullzs = False
         self.lis = False
-        self.slboost=False
-        self.slpure=False
+        self.slpure = False
 
         # ZS GCN specific
         self.gconly = False
@@ -116,7 +109,6 @@ class Configs:
         self.puregc = False
         self.greg = 0.0
         self.greg_margin = 0.3
-        self.vv = False
         self.gcldim = 1024
         self.gcrdim = 1024
 

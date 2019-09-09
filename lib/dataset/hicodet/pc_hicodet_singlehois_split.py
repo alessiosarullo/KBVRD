@@ -13,7 +13,7 @@ from lib.utils import Timer
 
 class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
     def __init__(self, split, full_dataset: HicoDet, image_inds=None, object_inds=None, action_inds=None):
-        if self.split == Splits.TEST:
+        if split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
         super().__init__(split, full_dataset, image_inds=image_inds)
 
