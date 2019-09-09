@@ -73,21 +73,24 @@ class Configs:
 
         # HICO specific
         self.train_null = False
-        #
+        # Soft labels, score, loss, regularisation, cost-sensitive loss
         self.osl = 0.0
         self.osc = 1.0
         self.olc = 1.0
         self.opr = 0.0
+        self.ocs = False
         #
         self.asl = 0.0
         self.asc = 1.0
         self.alc = 1.0
         self.apr = 0.0
+        self.acs = False
         #
         self.hsl = 0.0
         self.hlc = 0.0
         self.hsc = 0.0
         self.hpr = 0.0
+        self.hcs = False
         self.rl_no_norm = False
         self.gc = False
         self.hoigcn = False

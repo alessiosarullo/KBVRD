@@ -115,7 +115,8 @@ class SKZSMultiModel(AbstractModel):
             adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
             self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
 
-        if cfg.csp:
+        self._csp_weights = {}
+        if any([cfg.ocs, cfg.acs, cfg.hcs]):
             if not cfg.train_null:
                 null_interactions = set(np.flatnonzero(self.dataset.full_dataset.interactions[:, 0] == 0).tolist())
                 interactions = np.array(sorted(set(self.dataset.active_interactions.tolist()) - null_interactions))
@@ -125,18 +126,21 @@ class SKZSMultiModel(AbstractModel):
                 actions = self.dataset.active_actions
             all_interactions_hist = np.sum(self.dataset.labels, axis=0)  # Unseen interactions have a value of 0 anyway, but this preserves indices.
 
-            hist = {'obj': all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[:, self.dataset.active_objects],
-                    'act': all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[:, actions],
-                    'hoi': all_interactions_hist[interactions]}
+            hist = {}
+            if cfg.ocs:
+                hist['obj'] = all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[:, self.dataset.active_objects]
+            if cfg.acs:
+                hist['act'] = all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[:, actions]
+            if cfg.hcs:
+                hist['hoi'] = all_interactions_hist[interactions]
 
             csp_weights = {}
             for k, h in hist.items():
                 cost_matrix = np.maximum(1, np.log2(h[None, :] / h[:, None])) * (1 - np.eye(h.size))
                 tot = h.sum()
                 csp_weights[k] = cost_matrix @ h / (tot - h)
-            self.csp_weights = nn.ParameterDict({k: nn.Parameter(torch.from_numpy(v).float(), requires_grad=False) for k, v in csp_weights.items()})
-        else:
-            self.csp_weights = {'obj': None, 'act': None, 'hoi': None}
+            self._csp_weights = nn.ParameterDict({k: nn.Parameter(torch.from_numpy(v).float(), requires_grad=False) for k, v in csp_weights.items()})
+        self._csp_weights = {self._csp_weights.get(k, None) for k in ['obj', 'act', 'hoi']}
 
     def get_soft_labels(self, labels):
         assert cfg.osl or cfg.asl or cfg.hsl
