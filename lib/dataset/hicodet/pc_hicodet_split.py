@@ -186,7 +186,7 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
         assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
 
         _data = self.full_dataset.split_data[self._data_split]
-        self._data = _data[self.image_ids]
+        self._data = [_data[i] for i in self.image_ids]
 
         self.objects = full_dataset.objects
         self.actions = full_dataset.actions
