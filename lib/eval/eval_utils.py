@@ -6,7 +6,7 @@ import numpy as np
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
-from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
+from lib.dataset.hicodet.pc_hicodet_img_split import PrecomputedHicoDetImgSplit
 
 
 class BaseEvaluator:
@@ -93,21 +93,25 @@ class MetricFormatter:
         p = 2
         lines = []
         for k, v in metrics.items():
-            lines += [self.format_metric(k, v, pad, precision=p)]
+            lines += [self.format_metric(k, v, metric_str_len=pad, verbose=verbose, precision=p)]
         format_str = '%{}s %{}s'.format(pad + 1, p + 8)
         if gt_str is not None:
             l1 = format_str % ('%s:' % gt_str, 'IDs')
-            l2 = format_str % ('', '%')
+            l2 = ''
             if verbose:
                 l1 += '[' + ' '.join([('%{:d}d '.format(p + 5)) % i for i in class_inds]) + ']'
+                l2 += format_str % ('', '%')
                 l2 += '[' + ' '.join([self._format_percentage(gt_label_hist[i] / num_gt, precision=p) for i in class_inds]) + ']'
             lines += [l1, l2]
 
         print('\n'.join(lines))
 
-    def format_metric(self, metric_name, data, metric_str_len=None, **kwargs):
+    def format_metric(self, metric_name, data, metric_str_len=None, verbose=False, **kwargs):
         metric_str_len = metric_str_len or len(metric_name)
-        per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x, **kwargs) for x in data]) if data.size > 1 else ''
+        if verbose:
+            per_class_str = ' @ [%s]' % ' '.join([self._format_percentage(x, **kwargs) for x in data]) if data.size > 1 else ''
+        else:
+            per_class_str = ''
         f_str = ('%{}s: %s%s'.format(metric_str_len)) % (metric_name, self._format_percentage(np.mean(data), **kwargs), per_class_str)
         return f_str
 
