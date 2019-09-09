@@ -155,8 +155,10 @@ class Launcher:
         val_loader = self.val_split.get_loader(batch_size=cfg.batch_size)
         test_loader = self.test_split.get_loader(batch_size=1)
 
-        training_stats = RunningStats(split=Splits.TRAIN, num_batches=len(train_loader), batch_size=train_loader.batch_size)
-        val_stats = RunningStats(split=Splits.VAL, num_batches=len(val_loader), batch_size=val_loader.batch_size, history_window=len(val_loader))
+        training_stats = RunningStats(split=Splits.TRAIN, num_batches=len(train_loader),
+                                      batch_size=train_loader.batch_size or train_loader.batch_sampler.batch_size)
+        val_stats = RunningStats(split=Splits.VAL, num_batches=len(val_loader),
+                                 batch_size=val_loader.batch_size or val_loader.batch_sampler.batch_size, history_window=len(val_loader))
         test_stats = RunningStats(split=Splits.TEST, num_batches=len(self.test_split), batch_size=1, history_window=len(self.test_split))
 
         try:
