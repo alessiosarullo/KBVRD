@@ -142,8 +142,8 @@ class PrecomputedFilesHandler:
 class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
     def __init__(self, split, full_dataset: HicoDet, image_inds=None):
         assert split in Splits
-
-        raise NotImplementedError  # TODO cfg.filter_bg_only
+        if cfg.filter_bg_only:
+            raise ValueError('This option is incompatible with ROI-oriented datasets.')
 
         self.split = split
         self.full_dataset = full_dataset  # type: HicoDet
@@ -157,6 +157,7 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
 
         self.pc_image_ids = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'image_ids', load_in_memory=True)
         self.pc_image_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'img_infos', load_in_memory=True)
+        assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
 
         self.pc_boxes_ext = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'boxes_ext', load_in_memory=True)
         self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=False)
@@ -181,8 +182,10 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
         # Define the remaining data
         #############################################################################################################################
 
-        _data = self.full_dataset.split_data[self._data_split]
         self.image_ids = image_inds or sorted(self.pc_image_ids)
+        assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
+
+        _data = self.full_dataset.split_data[self._data_split]
         self._data = _data[self.image_ids]
 
         self.objects = full_dataset.objects
@@ -192,22 +195,11 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
         # Compute mappings to COCO
         self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=full_dataset.objects)
 
-        # Compute HOI triplets. Each is [human, action, object].
-        hoi_triplets = []
-        for im_data in self._data:
-            box_classes, inters = im_data.box_classes, im_data.hois
-            im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
-            assert np.all(im_hois[:, 0] == self.human_class)
-            hoi_triplets.append(im_hois)
-        self.hoi_triplets = np.concatenate(hoi_triplets, axis=0)
-
         #############################################################################################################################
         # Cache variables to speed up loading
         #############################################################################################################################
 
         # Map image IDs to indices over the precomputed image IDs
-        assert len(set(self.image_ids) - set(self.pc_image_ids.tolist())) == 0
-        assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
         self.im_id_to_pc_im_idx = {}
         for im_id in self.image_ids:
             pc_im_idx = np.flatnonzero(self.pc_image_ids == im_id).tolist()  # type: List
