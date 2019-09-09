@@ -140,7 +140,7 @@ class SKZSMultiModel(AbstractModel):
                 tot = h.sum()
                 csp_weights[k] = cost_matrix @ h / (tot - h)
             self._csp_weights = nn.ParameterDict({k: nn.Parameter(torch.from_numpy(v).float(), requires_grad=False) for k, v in csp_weights.items()})
-        self._csp_weights = {self._csp_weights.get(k, None) for k in ['obj', 'act', 'hoi']}
+        self._csp_weights = {self._csp_weights[k] if k in self._csp_weights else None for k in ['obj', 'act', 'hoi']}
 
     def get_soft_labels(self, labels):
         assert cfg.osl or cfg.asl or cfg.hsl
