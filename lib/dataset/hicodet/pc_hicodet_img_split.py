@@ -54,7 +54,7 @@ class PrecomputedHicoDetImgSplit(PrecomputedHicoDetSplit):
 
                 entry.precomp_boxes_ext = self.pc_boxes_ext[start:end, :]
                 entry.precomp_box_feats = self.pc_boxes_feats[start:end, :]
-                assert self.pc_box_labels is not None
+                assert self.pc_box_labels is None
 
                 # HOI data
                 img_hoi_inds = np.flatnonzero(self.pc_ho_im_idxs == pc_im_idx)  # FIXME same as above
