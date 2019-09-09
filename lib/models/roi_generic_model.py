@@ -41,7 +41,7 @@ class GenericModel(AbstractModel):
             vis_output = self.build_visual_output(x, inference)  # type: VisualOutput
 
             if vis_output.ho_infos_np is not None:
-                outputs = self._forward(vis_output, batch=x, epoch=x.epoch, step=x.iter)
+                outputs = self._forward(vis_output, epoch=x.epoch, step=x.iter)
                 outputs = self._refine_output(x, inference, vis_output, outputs)
             else:
                 assert inference
