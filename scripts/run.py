@@ -168,6 +168,7 @@ class Launcher:
                 self.detector.eval()
                 all_predictions = self.eval_epoch(None, test_loader, test_stats)
             else:
+                eval_interval = cfg.eval_interval if cfg.eval_interval > 0 else max(1, (cfg.num_epochs - self.start_epoch) // 20)
                 for epoch in range(self.start_epoch, cfg.num_epochs):
                     print('Epoch %d start.' % epoch)
                     self.detector.train()
@@ -185,11 +186,12 @@ class Launcher:
                         # Scheduler default behaviour is wrong: it gets called with epoch=0 twice, both at the beginning and after the first epoch.
                         scheduler.step(epoch=epoch + 1)
 
-                    all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
+                    if epoch % eval_interval == 0 or epoch + 1 == cfg.num_epochs:
+                        all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
 
-                    if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):
-                        print('Exiting training early.', flush=True)
-                        break
+                    # if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):
+                    #     print('Exiting training early.', flush=True)
+                    #     break
             Timer.get().print()
         finally:
             training_stats.close_tensorboard_logger()
@@ -312,15 +314,15 @@ class Launcher:
         evaluator.save(cfg.eval_res_file)
         metric_dict = evaluator.output_metrics(interactions_to_keep=test_interactions)
         if cfg.seenf >= 0:
-            def get_metrics(_interactions, print_out=True):
+            def get_metrics(_interactions):
                 if test_interactions is not None:
                     _interactions = set(_interactions) & set(test_interactions)
-                return evaluator.output_metrics(interactions_to_keep=sorted(_interactions), print_out=print_out)
+                return evaluator.output_metrics(interactions_to_keep=sorted(_interactions))
 
             detailed_metric_dicts = []
 
             seen_interactions = self.train_split.active_interactions
-            detailed_metric_dicts.append({f'tr_{k}': v for k, v in get_metrics(seen_interactions, print_out=False).items()})
+            detailed_metric_dicts.append({f'tr_{k}': v for k, v in get_metrics(seen_interactions).items()})
 
             print('Zero-shot:')
             unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
@@ -331,13 +333,13 @@ class Launcher:
             unseen_actions = np.array(sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions)))
 
             uo_sa_interactions = set(np.unique(op_mat[unseen_objects, :][:, self.train_split.active_actions]).tolist()) - {-1}
-            detailed_metric_dicts.append({f'zs_uo-sa_{k}': v for k, v in get_metrics(uo_sa_interactions, print_out=False).items()})
+            detailed_metric_dicts.append({f'zs_uo-sa_{k}': v for k, v in get_metrics(uo_sa_interactions).items()})
 
             so_ua_interactions = set(np.unique(op_mat[self.train_split.active_objects, :][:, unseen_actions]).tolist()) - {-1}
-            detailed_metric_dicts.append({f'zs_so-ua_{k}': v for k, v in get_metrics(so_ua_interactions, print_out=False).items()})
+            detailed_metric_dicts.append({f'zs_so-ua_{k}': v for k, v in get_metrics(so_ua_interactions).items()})
 
             uo_ua_interactions = set(np.unique(op_mat[unseen_objects, :][:, unseen_actions]).tolist()) - {-1}
-            detailed_metric_dicts.append({f'zs_uo-ua_{k}': v for k, v in get_metrics(uo_ua_interactions, print_out=False).items()})
+            detailed_metric_dicts.append({f'zs_uo-ua_{k}': v for k, v in get_metrics(uo_ua_interactions).items()})
 
             for d in detailed_metric_dicts:
                 for k, v in d.items():

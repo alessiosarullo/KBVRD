@@ -9,6 +9,10 @@ from lib.dataset.hicodet.pc_hicodet_split import PrecomputedHicoDetSplit, Exampl
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
 
+from config import cfg
+
+# TODO fix
+
 
 class Evaluator(BaseEvaluator):
     def __init__(self, dataset_split: PrecomputedHicoDetSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
@@ -85,7 +89,7 @@ class Evaluator(BaseEvaluator):
         self.metrics['M-mAP'] = ap
         self.metrics['M-rec'] = recall
 
-    def output_metrics(self, sort=False, actions_to_keep=None, print_out=True):
+    def output_metrics(self, sort=False, actions_to_keep=None):
         mf = MetricFormatter()
 
         gt_hoi_triplets = self.dataset_split.hoi_triplets
@@ -98,7 +102,7 @@ class Evaluator(BaseEvaluator):
                                                                      all_classes=list(range(self.full_dataset.num_interactions)),
                                                                      sort=sort,
                                                                      keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, metrics, hoi_class_inds, gt_str='GT HOIs')
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, metrics, hoi_class_inds, gt_str='GT HOIs', verbose=cfg.verbose)
 
         # Same, but with null interaction filtered
         actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_actions)) - {0})
@@ -110,7 +114,8 @@ class Evaluator(BaseEvaluator):
                                                                          all_classes=list(range(self.full_dataset.num_interactions)),
                                                                          sort=sort,
                                                                          keep_inds=interactions_to_keep)
-        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs', print_out=print_out)
+
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, pos_metrics, hoi_class_inds, gt_str='GT HOIs', verbose=cfg.verbose)
 
         for k, v in pos_metrics.items():
             assert k not in metrics.keys()

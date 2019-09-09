@@ -4,6 +4,7 @@ from typing import List, Dict
 import numpy as np
 from sklearn.metrics import average_precision_score
 
+from config import cfg
 from lib.dataset.hico import HicoSplit
 from lib.models.containers import Prediction
 from lib.stats.utils import Timer, sort_and_filter, MetricFormatter, BaseEvaluator
@@ -41,7 +42,7 @@ class HicoEvaluator(BaseEvaluator):
 
         Timer.get('Eval epoch').toc()
 
-    def output_metrics(self, sort=False, interactions_to_keep=None, actions_to_keep=None, print_out=True):
+    def output_metrics(self, sort=False, interactions_to_keep=None, actions_to_keep=None):
         mf = MetricFormatter()
 
         if interactions_to_keep is None and actions_to_keep is not None:
@@ -49,7 +50,7 @@ class HicoEvaluator(BaseEvaluator):
             act_mask[np.array(actions_to_keep).astype(np.int)] = True
             interaction_mask = act_mask[self.full_dataset.interactions[:, 0]]
             interactions_to_keep = sorted(np.flatnonzero(interaction_mask).tolist())
-        metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep, print_out=print_out)
+        metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
 
         # Same, but with null interaction filtered
         actions_to_keep = sorted(set(actions_to_keep or range(self.full_dataset.num_actions)) - {0})
@@ -62,20 +63,19 @@ class HicoEvaluator(BaseEvaluator):
             interaction_mask = np.zeros(self.full_dataset.num_interactions, dtype=bool)
             interaction_mask[np.array(interactions_to_keep).astype(np.int)] = True
             interactions_to_keep = sorted(np.flatnonzero(no_null_interaction_mask & interaction_mask).tolist())
-        pos_metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep, print_out=print_out)
+        pos_metrics = self._output_metrics(mf, sort=sort, interactions_to_keep=interactions_to_keep)
 
         for k, v in pos_metrics.items():
             assert k in metrics.keys()
             metrics[f'p{k}'] = v
         return metrics
 
-    def _output_metrics(self, mf: MetricFormatter, sort, interactions_to_keep, print_out):
+    def _output_metrics(self, mf: MetricFormatter, sort, interactions_to_keep):
         gt_labels_vec = np.where(self.gt_scores)[1]
         gt_hoi_class_hist, hoi_metrics, hoi_class_inds = sort_and_filter(metrics=self.metrics,
                                                                          gt_labels=gt_labels_vec,
                                                                          all_classes=list(range(self.full_dataset.num_interactions)),
                                                                          sort=sort,
                                                                          keep_inds=interactions_to_keep)
-        if print_out:
-            mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs')
+        mf.format_metric_and_gt_lines(gt_hoi_class_hist, hoi_metrics, hoi_class_inds, gt_str='GT HOIs', verbose=cfg.verbose)
         return hoi_metrics

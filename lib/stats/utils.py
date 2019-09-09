@@ -121,7 +121,7 @@ class MetricFormatter:
     def __init__(self):
         super().__init__()
 
-    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str=None, print_out=True):
+    def format_metric_and_gt_lines(self, gt_label_hist, metrics, class_inds, gt_str=None, verbose=False):
         num_gt = sum(gt_label_hist.values())
 
         pad = len(gt_str) if gt_str is not None else 0
@@ -132,14 +132,16 @@ class MetricFormatter:
         lines = []
         for k, v in metrics.items():
             lines += [self.format_metric(k, v, pad, precision=p)]
-        format_str = '%{}s %{}s [%s]'.format(pad + 1, p + 8)
+        format_str = '%{}s %{}s'.format(pad + 1, p + 8)
         if gt_str is not None:
-            lines += [format_str % ('%s:' % gt_str, 'IDs', ' '.join([('%{:d}d '.format(p + 5)) % i for i in class_inds]))]
-            lines += [format_str % ('', '%', ' '.join([self._format_percentage(gt_label_hist[i] / num_gt, precision=p) for i in class_inds]))]
+            l1 = format_str % ('%s:' % gt_str, 'IDs')
+            l2 = format_str % ('', '%')
+            if verbose:
+                l1 += '[' + ' '.join([('%{:d}d '.format(p + 5)) % i for i in class_inds]) + ']'
+                l2 += '[' + ' '.join([self._format_percentage(gt_label_hist[i] / num_gt, precision=p) for i in class_inds]) + ']'
+            lines += [l1, l2]
 
-        if print_out:
-            print('\n'.join(lines))
-        return lines
+        print('\n'.join(lines))
 
     def format_metric(self, metric_name, data, metric_str_len=None, **kwargs):
         metric_str_len = metric_str_len or len(metric_name)

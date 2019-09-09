@@ -21,6 +21,7 @@ class Configs:
         # Print
         self.print_interval = 50
         self.log_interval = 100  # Tensorboard
+        self.eval_interval = 0
         self.verbose = False
 
         # Experiment
