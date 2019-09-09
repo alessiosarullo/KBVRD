@@ -6,9 +6,9 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch, PrecomputedFilesHandler, PrecomputedHicoDetSplit, HicoDet
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedFilesHandler, PrecomputedHicoDetSplit, HicoDet, PrecomputedMinibatch
 from lib.dataset.utils import Splits
-from lib.stats.utils import Timer
+from lib.utils import Timer
 
 
 class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):

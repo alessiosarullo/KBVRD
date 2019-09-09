@@ -7,7 +7,7 @@ import numpy as np
 from config import cfg
 from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import Splits
-from lib.stats.evaluator_hico import HicoEvaluator
+from lib.eval.evaluator_img import EvaluatorImg
 
 
 def main():
@@ -35,7 +35,7 @@ def main():
             splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=pred_inds)
             train_split, val_split, test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
-            evaluator = HicoEvaluator(test_split)
+            evaluator = EvaluatorImg(test_split)
             evaluator.load(cfg.eval_res_file)
 
             # Trained on:

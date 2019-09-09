@@ -16,11 +16,12 @@ from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSi
 from lib.dataset.hoi_dataset_split import HoiDatasetSplit
 from lib.dataset.utils import Splits
 from lib.dataset.vghoi import VGHoiSplit
+from lib.eval.evaluator_img import EvaluatorImg
+from lib.eval.evaluator_roi import EvaluatorROI
 from lib.models.abstract_model import AbstractModel
-from lib.models.det_generic_model import Prediction
-from lib.stats.evaluator_hico import HicoEvaluator
-from lib.stats.running_stats import RunningStats
-from lib.stats.utils import Timer
+from lib.models.roi_generic_model import Prediction
+from lib.running_stats import RunningStats
+from lib.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
 
 
@@ -154,9 +155,9 @@ class Launcher:
         val_loader = self.val_split.get_loader(batch_size=cfg.batch_size)
         test_loader = self.test_split.get_loader(batch_size=1)
 
-        training_stats = RunningStats(split=Splits.TRAIN, data_loader=train_loader)
-        val_stats = RunningStats(split=Splits.VAL, data_loader=val_loader, history_window=len(val_loader))
-        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader))
+        training_stats = RunningStats(split=Splits.TRAIN, num_batches=len(train_loader), batch_size=train_loader.batch_size)
+        val_stats = RunningStats(split=Splits.VAL, num_batches=len(val_loader), batch_size=val_loader.batch_size, history_window=len(val_loader))
+        test_stats = RunningStats(split=Splits.TEST, num_batches=len(self.test_split), batch_size=1, history_window=len(self.test_split))
 
         try:
             cfg.save()
@@ -304,10 +305,9 @@ class Launcher:
 
         test_interactions = None
         if cfg.hicodet:
-            from lib.stats.evaluator import Evaluator
-            evaluator = Evaluator(data_loader.dataset)
+            evaluator = EvaluatorROI(data_loader.dataset)
         else:
-            evaluator = HicoEvaluator(data_loader.dataset)
+            evaluator = EvaluatorImg(data_loader.dataset)
             if cfg.vghoi:
                 test_interactions = sorted(data_loader.dataset.full_dataset.common_interactions)
         evaluator.evaluate_predictions(all_predictions)
@@ -353,8 +353,9 @@ class Launcher:
         return all_predictions
 
     def evaluate(self):
+        test_stats = RunningStats(split=Splits.TEST, num_batches=len(self.test_split), batch_size=1, history_window=len(self.test_split),
+                                  tboard_log=False)
         test_loader = self.test_split.get_loader(batch_size=1)
-        test_stats = RunningStats(split=Splits.TEST, data_loader=test_loader, history_window=len(test_loader), tboard_log=False)
         all_predictions = self.eval_epoch(None, test_loader, test_stats)
         return all_predictions
 

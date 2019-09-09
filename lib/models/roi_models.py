@@ -8,7 +8,7 @@ from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.dataset.utils import get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.containers import VisualOutput
-from lib.models.det_generic_model import GenericModel, Prediction, PrecomputedHicoDetSingleHOIsSplit
+from lib.models.roi_generic_model import GenericModel, Prediction, PrecomputedHicoDetSingleHOIsSplit
 from lib.models.gcns import HicoGCN
 from lib.models.misc import bce_loss, LIS
 
@@ -56,7 +56,7 @@ class BaseModel(GenericModel):
     def final_repr_dim(self):
         return self.act_repr_dim
 
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False, return_obj=False):
+    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, return_repr=False):
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
         hoi_infos = vis_output.ho_infos
@@ -70,10 +70,6 @@ class BaseModel(GenericModel):
         act_repr = self.act_repr_mlp(union_boxes_feats)
 
         hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
-        if return_repr:
-            if return_obj:
-                return hoi_act_repr, ho_obj_repr
-            return hoi_act_repr
 
         output_logits = self.output_mlp(hoi_act_repr)
 
@@ -82,7 +78,11 @@ class BaseModel(GenericModel):
             self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
             self.values_to_monitor['act_repr'] = act_repr
             self.values_to_monitor['output_logits'] = output_logits
-        return output_logits
+
+        if return_repr:
+            return output_logits, hoi_act_repr
+        else:
+            return output_logits
 
 
 class ExtKnowledgeGenericModel(GenericModel):
@@ -133,7 +133,7 @@ class ExtKnowledgeGenericModel(GenericModel):
     def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
         if inference and self.load_backbone:
             action_output, action_labels, reg_loss, unseen_action_labels = outputs
-            pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
+            _, pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
             pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
             action_output[:, self.seen_act_inds] = pretrained_action_output
             outputs = action_output, action_labels, reg_loss, unseen_action_labels
@@ -209,7 +209,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             assert (self.vv_adj.diag()[1:] == 1).all()
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
-        dir_logits, labels, gc_logits, reg_loss = outputs
+        dir_logits, gc_logits, labels, reg_loss = outputs
 
         losses = {}
         if self.zs_enabled:
@@ -230,52 +230,54 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             losses['act_loss'] = bce_loss(dir_logits, labels, pos_weights=self.csp_weights)
 
         if reg_loss is not None:
-            losses['reg_loss'] = reg_loss
+            losses['act_reg_loss'] = reg_loss
         return losses
 
     def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
-        # TODO
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        dir_act_logits, vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, act_class_embs = self.gcn()  # P x E
         # act_predictors = act_class_embs  # P x D
         act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
-        action_logits = vrepr @ act_predictors.t()
+        gcn_act_logits = vrepr @ act_predictors.t()
 
         action_labels = vis_output.action_labels
         if action_labels is not None and self.zs_enabled:
             if cfg.asl > 0:
                 action_labels = self.write_soft_labels(vis_output)
-            else:  # restrict training to seen actions only
-                action_logits = action_logits[:, self.seen_act_inds]  # P x E
 
         reg_loss = None
         if cfg.greg > 0:
-            act_predictors_norm = F.normalize(act_predictors, dim=1)
-            act_predictors_sim = act_predictors_norm @ act_predictors_norm.t()
-            arange = torch.arange(act_predictors_sim.shape[0])
+            adj = self.vv_adj
+            seen = self.seen_act_inds
+            unseen = self.unseen_act_inds
 
-            # Done with argmin/argmax because using min/max directly resulted in NaNs.
-            neigh_mask = torch.full_like(act_predictors_sim, np.inf)
-            neigh_mask[self.vv_adj] = 1
-            argmin_neigh_sim = (act_predictors_sim * neigh_mask.detach()).argmin(dim=1)
-            min_neigh_sim = act_predictors_sim[arange, argmin_neigh_sim]
+            # Detach seen classes predictors
+            all_trainable_predictors = act_predictors
+            predictors_seen = act_predictors[seen, :].detach()
+            predictors_unseen = act_predictors[unseen, :]
+            predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
+            assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
 
-            non_neigh_mask = torch.full_like(act_predictors_sim, -np.inf)
-            non_neigh_mask[~self.vv_adj] = 1
-            argmax_non_neigh_sim = (act_predictors_sim * non_neigh_mask.detach()).argmax(dim=1)
-            max_non_neigh_sim = act_predictors_sim[arange, argmax_non_neigh_sim]
+            predictors_norm = F.normalize(predictors, dim=1)
+            predictors_sim = predictors_norm @ predictors_norm.t()
+            null = ~adj.any(dim=1)
+            arange = torch.arange(predictors_sim.shape[0])
 
-            # Exclude null interaction
-            min_neigh_sim = min_neigh_sim[1:]
-            max_non_neigh_sim = max_non_neigh_sim[1:]
+            predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
+            reg_loss_mat = (cfg.greg_margin - predictors_sim_diff).clamp(min=0)
+            reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
+            reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
+            reg_loss_mat[arange, arange, :] = 0
+            reg_loss_mat[arange, :, arange] = 0
+            reg_loss_mat[:, arange, arange] = 0
+            reg_loss_mat[null, :, :] = 0
+            reg_loss_mat[:, null, :] = 0
+            reg_loss_mat[:, :, null] = 0
 
-            assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
-            assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
+            reg_loss_mat = reg_loss_mat[unseen, :, :]
+            reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum().item()
 
-            reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
-            reg_loss = cfg.greg * reg_loss.mean()
-
-        return action_logits, action_labels, reg_loss
+        return dir_act_logits, gcn_act_logits, action_labels, reg_loss
 
 
 class PeyreModel(GenericModel):

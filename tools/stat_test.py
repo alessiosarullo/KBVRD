@@ -4,7 +4,7 @@ import os
 import numpy as np
 import scipy.stats
 
-from lib.stats.utils import get_runs_data
+from lib.utils import get_runs_data
 
 
 def main():

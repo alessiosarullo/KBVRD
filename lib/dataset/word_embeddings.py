@@ -14,7 +14,6 @@ class WordEmbeddings:
             embeddings: [array] NxD matrix consisting of N D-dimensional embeddings
             vocabulary: [list] the N words composing the vocabulary, sorted according to `embeddings`'s rows
         """
-        # TODO fix docs
 
         self.loaders = {'numberbatch': {'parser': self.parse_numberbatch,
                                         'src_file': 'numberbatch-en.txt',
@@ -48,7 +47,7 @@ class WordEmbeddings:
 
     def embedding(self, word: str, none_on_miss=True):
         try:
-            if word == 'hair drier':  # FIXME hard coded
+            if word == 'hair drier':
                 word = 'hair dryer'
             idx = self.word_index[word]
         except KeyError:

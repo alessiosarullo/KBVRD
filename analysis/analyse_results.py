@@ -14,10 +14,10 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.pc_hicodet_split import HicoDetSplitBuilder, PrecomputedHicoDetSplit, Splits, Example, Minibatch
+from lib.dataset.hicodet.pc_hicodet_split import HicoDetSplitBuilder, PrecomputedHicoDetSplit, Splits, Example
 from lib.models.containers import Prediction
-from lib.stats.evaluator import Evaluator
-from lib.stats.utils import Timer, sort_and_filter, MetricFormatter
+from lib.eval.evaluator_roi import EvaluatorROI
+from lib.eval.eval_utils import sort_and_filter, MetricFormatter
 
 try:
     matplotlib.use('Qt5Agg')
@@ -291,7 +291,7 @@ def _print_confidence_scores(analyser: Analyser, marked_preds=None):
 def evaluate():
     results = _setup_and_load()
     hdtest = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
-    evaluator = Evaluator(dataset_split=hdtest, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator = EvaluatorROI(dataset_split=hdtest, hoi_score_thr=None, num_hoi_thr=None)
 
     # evaluator.evaluate_predictions(results)
     evaluator.load(cfg.eval_res_file)
@@ -338,7 +338,7 @@ def compare():
     sys.argv[1:] = ['--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
     _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
-    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator = EvaluatorROI(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.eval_res_file)
     obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True, return_labels=True)
 
@@ -347,7 +347,7 @@ def compare():
     sys.argv[1:] = ['--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
     _setup_and_load()
     hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
-    evaluator = Evaluator(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
+    evaluator = EvaluatorROI(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.eval_res_file)
     obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True, return_labels=True)
 

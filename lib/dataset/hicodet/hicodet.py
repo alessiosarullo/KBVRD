@@ -158,7 +158,6 @@ class HicoDetDriver:
                             - 'conn' [array]: Cx2 with a pair of human-object indices for each interaction
                 Other entries might be added to this dictionary for caching reasons.
         """
-        # TODO what are the 'id' and 'count' field for?
 
         self.data_dir = os.path.join(cfg.data_root, 'HICO-DET')
         self.path_pickle_annotation_file = os.path.join(self.data_dir, 'annotations.pkl')

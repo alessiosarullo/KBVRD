@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from config import cfg
 from lib.dataset.utils import Splits
-from lib.stats.utils import Timer
+from lib.utils import Timer
 
 from lib.dataset.hoi_dataset import HoiDataset
 

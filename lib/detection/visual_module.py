@@ -135,7 +135,7 @@ class VisualModule(nn.Module):
 
         return boxes_ext, box_labels
 
-    def hoi_gt_assignments(self, ex: Example, boxes_ext, box_labels, resample_bg=False):
+    def hoi_gt_assignments(self, ex: Example, boxes_ext, box_labels):
         bg_ratio = cfg.hoi_bg_ratio
 
         gt_box_classes = ex.gt_obj_classes
@@ -175,9 +175,6 @@ class VisualModule(nn.Module):
         ho_bg_pairs_i = np.stack(np.where(ho_bg_mask), axis=1)
         num_bg_to_sample = max(ho_fg_pairs_i.shape[0], 1) * bg_ratio
         bg_inds = np.random.permutation(ho_bg_pairs_i.shape[0])[:num_bg_to_sample]
-        if resample_bg and bg_inds.size < num_bg_to_sample:  # resample randomly to get to the chosen number
-            # FIXME this doesn't work
-            bg_inds = np.concatenate([bg_inds, np.random.choice(bg_inds, size=num_bg_to_sample - bg_inds.size, replace=True)])
         ho_bg_pairs_i = ho_bg_pairs_i[bg_inds, :]
 
         ho_pairs_i = np.concatenate([ho_fg_pairs_i, ho_bg_pairs_i], axis=0)

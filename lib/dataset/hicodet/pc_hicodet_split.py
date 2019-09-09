@@ -143,7 +143,7 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
     def __init__(self, split, full_dataset: HicoDet, image_inds=None):
         assert split in Splits
 
-        # TODO cfg.filter_bg_only
+        raise NotImplementedError  # TODO cfg.filter_bg_only
 
         self.split = split
         self.full_dataset = full_dataset  # type: HicoDet
@@ -160,7 +160,6 @@ class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
 
         self.pc_boxes_ext = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'boxes_ext', load_in_memory=True)
         self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=False)
-        assert self.pc_boxes_feats.shape[1] == 2048  # FIXME magic constant
         try:
             self.pc_box_labels = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_labels', load_in_memory=True)
         except KeyError:

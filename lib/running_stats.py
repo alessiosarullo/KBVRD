@@ -6,11 +6,10 @@ from typing import Dict
 import numpy as np
 import torch
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader
 
 from config import cfg
 from lib.dataset.utils import Splits
-from lib.stats.utils import Timer
+from lib.utils import Timer
 
 
 class History:
@@ -38,12 +37,13 @@ class History:
 
 
 class RunningStats:
-    def __init__(self, split, data_loader: DataLoader, history_window=None, tboard_log=True, remove_if_exist=False):
+    def __init__(self, split, batch_size, num_batches, history_window=None, tboard_log=True, remove_if_exist=False):
         if history_window is None:
             history_window = cfg.log_interval
 
         self.split = split
-        self.data_loader = data_loader
+        self.batch_size = batch_size
+        self.num_batches = num_batches
         self.history_window = history_window
         self.tb_ignored_keys = ['iter']
 
@@ -99,7 +99,7 @@ class RunningStats:
 
         for k, v in self.smoothed_losses.items():
             loss_name = k.replace('_', ' ').capitalize().replace('hoi', 'HOI').replace('Hoi', 'HOI')
-            loss_value = v.get_average()
+            loss_value = v.get_average().item()
             if 'total' not in loss_name.lower():
                 stats[loss_name] = loss_value
             if verbose:
@@ -132,7 +132,7 @@ class RunningStats:
         Timer.get(self.epoch_str, 'Batch').toc()
 
     def print_times(self, epoch=None, batch=None, curr_iter=None):
-        num_batches = len(self.data_loader)
+        num_batches = self.num_batches
         time_per_call = Timer.get(self.epoch_str, 'Batch', get_only=True).spent(average=True)
         time_to_load = Timer.get('GetBatch', get_only=True).spent(average=True)
         try:
@@ -140,10 +140,7 @@ class RunningStats:
         except (ValueError, ZeroDivisionError):
             time_for_stats = 0
 
-        batch_size = self.data_loader.batch_size
-        if batch_size is None:
-            batches = self.data_loader.batch_sampler.batches
-            batch_size = sum([len(b) for b in batches]) / len(batches)
+        batch_size = self.batch_size
         time_to_load_per_batch = time_to_load * batch_size
         time_for_stats_per_batch = time_for_stats / cfg.log_interval
         avg_time_per_batch = time_per_call + time_to_load_per_batch + time_for_stats_per_batch

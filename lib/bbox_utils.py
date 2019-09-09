@@ -3,20 +3,7 @@ import numpy as np
 import torch
 
 
-# TODO check and possibly update
 def compute_ious(boxes_a, boxes_b):
-    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
-    is simply the intersection over union of two boxes.  Here we operate on
-    ground truth boxes and default boxes.
-    E.g.:
-        A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)
-    Args:
-        boxes_a: (tensor) Ground truth bounding boxes, Shape: [num_objects,4]
-        boxes_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]
-    Return:
-        jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
-    """
-    # FIXME a lot of duplication. Also docs
     if isinstance(boxes_a, np.ndarray):
         assert isinstance(boxes_b, np.ndarray)
         max_xy = np.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])

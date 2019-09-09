@@ -4,7 +4,8 @@ import torch
 from torch import  nn
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit, PrecomputedMinibatch
+from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
+from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
 from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction, VisualOutput
 from lib.models.misc import bce_loss

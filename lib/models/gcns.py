@@ -129,8 +129,6 @@ class HicoHoiGCN(AbstractGCN):
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
 
-        # FIXME seems that normalising the whole matrix (which affects the diagonal, i.e., the contribution of the added identity) leads to poor
-        #  results.
 
         # # This option makes this graph too sparse, isolating too much.
         # if not cfg.link_null:
@@ -140,7 +138,7 @@ class HicoHoiGCN(AbstractGCN):
         # | NN  NV  NA |
         # | VN  VV  VA |
         # | AN  AV  AA |
-        # where N=nouns (objects), V=verbs (actions), A=actions (interactions) [I'm, using Kato notation here, although clashes with the one I
+        # where N=nouns (objects), V=verbs (actions), A=actions (interactions) [I'm, using Kato's notation here, although clashes with the one I
         # normally use for the different semantic of `action`]. Since it is symmetric, NV=VN', NA=AN' and VA=AV'. Also, NN=VV=AA=0 and NV=0
         # (connections are only present between interactions and the rest). Thus, only AN and AV need to be defined.
         # Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is implicitly included by initialising
@@ -155,6 +153,8 @@ class HicoHoiGCN(AbstractGCN):
                          torch.cat([zero_nv.t(), adj_vv, adj_av.t()], dim=1),
                          torch.cat([adj_an, adj_av, adj_aa], dim=1)
                          ], dim=0)
+
+        # Seems that normalising the whole matrix (which affects the diagonal, i.e., the contribution of the added identity) leads to poor results.
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
         return adj
 

@@ -141,9 +141,6 @@ class Configs:
         self.c_lr_gcn = 0.0
 
         # Batch
-        self.group = False  # group HOIs belonging to the same image
-        self.ohtrain = False  # one-hot train for (inter)actions, as opposed to multi-label
-        self.img_batch_size = 8  # only used when grouping
         self.batch_size = 64
         self.hoi_bg_ratio = 3
 
@@ -280,7 +277,7 @@ class Configs:
         import lib.detection.wrappers as pydet
         if pydet.cfg_from_file is None:
             assert pydet.cfg is None and pydet.assert_and_infer_cfg is None
-            self.mask_resolution = 14  # FIXME magic constant
+            self.mask_resolution = 14
             raise ModuleNotFoundError()
         else:
             assert pydet.cfg is not None and pydet.assert_and_infer_cfg is not None
