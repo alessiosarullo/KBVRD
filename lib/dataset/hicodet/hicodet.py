@@ -1,13 +1,12 @@
 import os
 import pickle
+from typing import Dict, List
 
 import numpy as np
 from scipy.io import loadmat
 
-from lib.dataset.utils import Splits
-from typing import Dict, List
-
 from config import cfg
+from lib.dataset.utils import Splits
 
 
 class HicoDetImData:
@@ -43,6 +42,9 @@ class HicoDet:
         self.split_data = {Splits.TRAIN: self.compute_annotations(Splits.TRAIN),
                            Splits.TEST: self.compute_annotations(Splits.TEST)
                            }  # type: Dict[Splits: List[HicoDetImData]]
+
+        self.split_non_empty_image_ids = {s: [i for i, im_data in enumerate(self.split_data[s]) if im_data.boxes.size == 0]
+                                          for s in [Splits.TRAIN, Splits.TEST]}  # empty image = doesn't have annotations
 
     @property
     def human_class(self) -> int:

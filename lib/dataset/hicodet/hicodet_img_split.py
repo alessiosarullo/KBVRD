@@ -36,15 +36,7 @@ class HicoDetImgSplit:
         split_data = self.full_dataset.split_data[split]  # type: List[HicoDetImData]
         image_ids = list(range(len(split_data)))
         if split == Splits.TRAIN:
-            im_with_interactions = []
-            for i, im_data in enumerate(split_data):
-                empty = im_data.boxes.size == 0
-                fg_hois = np.any(im_data.hois[:, 1] != full_dataset.action_index[full_dataset.null_interaction])
-                if empty:  # empty = no boxes
-                    continue
-                if cfg.filter_bg_only and ~fg_hois:
-                    continue
-                im_with_interactions.append(i)
+            im_with_interactions = self.full_dataset.split_non_empty_image_ids[Splits.TRAIN]
             num_old_images, num_new_images = len(image_ids), len(im_with_interactions)
             if num_new_images < num_old_images:
                 print(f'Images have been discarded due to not having objects'

@@ -135,8 +135,8 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
 
         # Split train/val if needed
         if cfg.val_ratio > 0:
+            imgs_inds = np.random.permutation(full_dataset.split_non_empty_image_ids[Splits.TRAIN])
             num_imgs = len(full_dataset.split_data[Splits.TRAIN])
-            imgs_inds = np.random.permutation(num_imgs)
             num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[:num_train_imgs]),
                                        object_inds=obj_inds, action_inds=act_inds)
