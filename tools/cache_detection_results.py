@@ -16,7 +16,7 @@ def save_feats():
     def empty_lists(num, length):
         return ([None for j in range(length)] for i in range(num))
 
-    sys.argv += ['--img_batch_size', '1', '--val_ratio', '0']
+    sys.argv += ['--val_ratio', '0']
     cfg.parse_args(fail_if_missing=False)
 
     if cfg.debug:
