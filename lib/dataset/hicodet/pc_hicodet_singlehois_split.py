@@ -111,7 +111,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
         all_box_inds = all_box_pair_inds.flatten()
         assert all_box_inds.size == 2 * len(pc_hoi_idxs)
 
-        boxes_ext = self.pc_boxes_ext[all_box_inds, :]
+        boxes_ext = self.pc_boxes_ext[all_box_inds, :].copy()
         boxes_ext[:, 0] = np.repeat(arange, 2)
         minibatch.pc_boxes_ext = boxes_ext
         minibatch.pc_box_feats = self.pc_boxes_feats[all_box_inds, :]

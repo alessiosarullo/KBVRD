@@ -52,7 +52,7 @@ class PrecomputedHicoDetImgSplit(PrecomputedHicoDetSplit):
                 start, end = img_box_inds[0], img_box_inds[-1] + 1
                 assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
-                entry.precomp_boxes_ext = self.pc_boxes_ext[start:end, :]
+                entry.precomp_boxes_ext = self.pc_boxes_ext[start:end, :].copy()
                 entry.precomp_box_feats = self.pc_boxes_feats[start:end, :]
                 assert self.pc_box_labels is None
 
@@ -62,7 +62,7 @@ class PrecomputedHicoDetImgSplit(PrecomputedHicoDetSplit):
                     start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
                     assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
 
-                    entry.precomp_hoi_infos = self.pc_ho_infos[start:end, :]
+                    entry.precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
                     entry.precomp_hoi_union_boxes = self.pc_union_boxes[start:end, :]
                     entry.precomp_hoi_union_feats = self.pc_union_boxes_feats[start:end, :]
                     assert self.pc_action_labels is None
