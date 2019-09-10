@@ -22,10 +22,11 @@ class VisualOutput:
     def __init__(self):
         # All Torch tensors except when specified
 
+        self.scale = None  # Scalar
+
         # Object attributes
         self.boxes_ext = None  # N x 85, each [img_id, x1, y1, x2, y2, scores]
         self.box_feats = None  # N x F, where F is the dimensionality of visual features
-        # self.masks = None  # N x M x M (of floats), where M is the mask resolution
 
         # Human-object pair attributes
         self.ho_infos_np = None  # R x 3, each [img_id, human_ind, obj_ind]

@@ -34,12 +34,6 @@ class Configs:
         # Data options                           #
         ##########################################
 
-        # Image
-        self.pixel_mean = None
-        self.pixel_std = None
-        self.im_scale = None
-        self.im_max_size = None
-
         # Null/background
         self.filter_bg_only = False
         self.null_as_bg = False
@@ -55,9 +49,9 @@ class Configs:
         self.model = None
         self.phoi = False  # Predict action [False] or interaction [True]?
 
-        # Detector
+        # Detector. The output dim is usually hardcoded in their files (e.g., `ResNet_roi_conv5_head_for_masks()`), so I can't read it from configs.
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
-        self.mask_resolution = None
+        self.rcnn_output_dim = {'e2e_mask_rcnn_R-50-C4_2x': 2048}[self.rcnn_arch]
         self.hum_thr = 0.7
         self.obj_thr = 0.3
 
@@ -281,10 +275,9 @@ class Configs:
         pydet.cfg.MODEL.NUM_CLASSES = len(pydet.COCO_CLASSES)
         pydet.assert_and_infer_cfg()
 
-        self.pixel_mean = pydet.cfg.PIXEL_MEANS
-        self.im_scale = pydet.cfg.TEST.SCALE
-        self.im_max_size = pydet.cfg.TEST.MAX_SIZE
-        self.mask_resolution = pydet.cfg.MRCNN.RESOLUTION
+        # self.pixel_mean = pydet.cfg.PIXEL_MEANS
+        # self.im_scale = pydet.cfg.TEST.SCALE
+        # self.im_max_size = pydet.cfg.TEST.MAX_SIZE
 
     def save(self, file_path=None):
         file_path = file_path or self.config_file

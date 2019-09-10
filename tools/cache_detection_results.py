@@ -58,9 +58,10 @@ def save_feats():
                 # if im_i != 1951:
                 #     continue
                 ex = ex  # type: Example
-                all_img_infos[im_i] = np.array([*ex.orig_img_size, ex.scale])
 
                 vout = vm(ex, inference)  # type: VisualOutput
+                all_img_infos[im_i] = np.array([ex.image.shape[0], ex.image.shape[1], vout.scale])
+
                 boxes_ext = vout.boxes_ext
                 box_feats = vout.box_feats
                 ho_infos = vout.ho_infos_np

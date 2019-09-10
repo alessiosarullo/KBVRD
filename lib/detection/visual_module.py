@@ -5,7 +5,7 @@ import torch.nn as nn
 from config import cfg
 from lib.bbox_utils import compute_ious, get_union_boxes
 from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit, Example
-from lib.detection.mask_rcnn import MaskRCNN
+from lib.detection.rcnn import GenRCNN
 from lib.models.containers import VisualOutput
 
 
@@ -17,8 +17,7 @@ class VisualModule(nn.Module):
         self.dataset = dataset
 
         self._precomputed = False
-        self.mask_rcnn = MaskRCNN()
-        self.mask_resolution = self.mask_rcnn.mask_resolution
+        self.mask_rcnn = GenRCNN()
         self.vis_feat_dim = self.mask_rcnn.output_feat_dim
 
     # noinspection PyUnresolvedReferences
@@ -29,11 +28,12 @@ class VisualModule(nn.Module):
         training = not inference
 
         with torch.set_grad_enabled(self.training):
-            boxes_ext_np, feat_map = self.mask_rcnn(ex)
+            boxes_ext_np, im_scale, feat_map = self.mask_rcnn(ex.image)
+            output.scale = im_scale
             # `boxes_ext_np` is Bx(1+4+C) where each row is [im_id, bbox_coord, class_scores]. Classes are COCO ones.
 
             if boxes_ext_np.shape[0] > 0 or training:
-                boxes_ext_np, box_feats, ho_infos, box_labels, action_labels = self.process_boxes(ex, inference, feat_map, boxes_ext_np)
+                boxes_ext_np, box_feats, ho_infos, box_labels, action_labels = self.process_boxes(ex, inference, scale, feat_map, boxes_ext_np)
                 output.boxes_ext = torch.tensor(boxes_ext_np, device=feat_map.device, dtype=torch.float32)
                 output.box_feats = box_feats
                 output.box_labels = box_labels
@@ -55,14 +55,14 @@ class VisualModule(nn.Module):
         # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
         return output
 
-    def process_boxes(self, ex: Example, predict, feat_map, boxes_ext_np):
+    def process_boxes(self, ex: Example, predict, scale, feat_map, boxes_ext_np):
         if not predict:
             # Map from COCO classes to HICO ones by swapping columns
             boxes_ext_np = boxes_ext_np[:, np.concatenate([np.arange(5), 5 + self.dataset.hico_to_coco_mapping])]
 
             # NOTE: ho_infos are indices over foreground boxes ONLY
-            boxes_ext_np, box_classes = self.box_gt_assignment(ex, boxes_ext_np)
-            ho_infos, action_labels = self.hoi_gt_assignments(ex, boxes_ext_np, box_classes)
+            boxes_ext_np, box_classes = self.box_gt_assignment(ex, boxes_ext_np, scale)
+            ho_infos, action_labels = self.hoi_gt_assignments(ex, boxes_ext_np, box_classes, scale)
 
             box_labels = torch.tensor(box_classes, device=feat_map.device)
             action_labels = torch.tensor(action_labels, device=feat_map.device)
@@ -84,7 +84,7 @@ class VisualModule(nn.Module):
             ho_infos = self.get_all_pairs(boxes_ext_np, box_classes)
             box_labels = action_labels = None
 
-        # masks = self.mask_rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
+        # masks = self.rcnn.get_masks(fmap=feat_map, rois=boxes_ext_np[:, :5], box_classes=self.dataset.hico_to_coco_mapping[box_classes])
         # assert boxes_ext_np.shape[0] == masks.shape[0]
         box_feats = self.mask_rcnn.get_rois_feats(fmap=feat_map, rois=boxes_ext_np[:, :5])
         assert boxes_ext_np.shape[0] == box_feats.shape[0]
@@ -109,8 +109,8 @@ class VisualModule(nn.Module):
             boxes_ext_np = boxes_ext_np[keep, :]
         return boxes_ext_np
 
-    def box_gt_assignment(self, ex: Example, boxes_ext):
-        gt_rois = np.concatenate([np.full_like(ex.gt_obj_classes, fill_value=0)[:, None], ex.gt_boxes * ex.scale], axis=1)
+    def box_gt_assignment(self, ex: Example, boxes_ext, scale):
+        gt_rois = np.concatenate([np.full_like(ex.gt_obj_classes, fill_value=0)[:, None], ex.gt_boxes * scale], axis=1)
 
         pred_gt_box_ious = self.iou_match_in_img(boxes_ext[:, :5], gt_rois)
         pred_gt_best_match = np.argmax(pred_gt_box_ious, axis=1)  # type: np.ndarray
@@ -135,11 +135,11 @@ class VisualModule(nn.Module):
 
         return boxes_ext, box_labels
 
-    def hoi_gt_assignments(self, ex: Example, boxes_ext, box_labels):
+    def hoi_gt_assignments(self, ex: Example, boxes_ext, box_labels, scale):
         bg_ratio = cfg.hoi_bg_ratio
 
         gt_box_classes = ex.gt_obj_classes
-        gt_resc_boxes = ex.gt_boxes * ex.scale
+        gt_resc_boxes = ex.gt_boxes * scale
         gt_interactions = ex.gt_hois
         predict_boxes = boxes_ext[:, 1:5]
         predict_box_labels = box_labels

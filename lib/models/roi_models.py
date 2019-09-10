@@ -348,7 +348,7 @@ class PeyreModel(GenericModel):
         hoi_obj_loss = bce_loss(hoi_obj_logits, obj_labels_1hot)
         act_loss = bce_loss(hoi_act_logits, action_labels)
         hoi_loss = bce_loss(hoi_logits, hoi_labels)
-        return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'action_loss': act_loss, 'hoi_loss': hoi_loss}
+        return {'hoi_subj_loss': hoi_subj_loss, 'hoi_obj_loss': hoi_obj_loss, 'act_loss': act_loss, 'hoi_loss': hoi_loss}
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs

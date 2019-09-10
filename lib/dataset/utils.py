@@ -1,9 +1,7 @@
 from enum import Enum
 
-import cv2
 import numpy as np
 import torch
-from PIL import ImageOps
 
 from config import cfg
 from lib.detection.wrappers import COCO_CLASSES
@@ -13,44 +11,6 @@ class Splits(Enum):
     TRAIN = 'train'
     VAL = 'val'
     TEST = 'test'
-
-
-class SquarePad:
-    def __call__(self, img, pixel_mean):
-        w, h = img.size
-        img_padded = ImageOps.expand(img, border=(0, 0, max(h - w, 0), max(w - h, 0)),
-                                     fill=(int(pixel_mean[0] * 256), int(pixel_mean[1] * 256), int(pixel_mean[2] * 256)))
-        return img_padded
-
-
-def preprocess_img(im):
-    """
-    Preprocess an image to be used as an input by normalising, converting to float and rescaling to all scales specified in the configurations (
-    rescaling is capped). NOTE: so far only one scale can be specified.
-    :param im [image]: A BGR image in HWC format. Images read with OpenCV's `imread` satisfy these conditions.
-    :return: - processed_im [image]: The transformed image, in CHW format with BGR channels.
-             - im_scale [scalar]: The scale factor that was used.
-    """
-
-    im = im.astype(np.float32, copy=False)
-    im -= cfg.pixel_mean
-    im_scale = calculate_im_scale(im.shape[:2])
-    im_resized = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
-    processed_im = np.transpose(im_resized, axes=(2, 0, 1))  # to CHW
-    return processed_im, im_scale
-
-
-def calculate_im_scale(im_size):
-    """ Calculate target resize scale. """
-    max_size = cfg.im_max_size
-    target_size = cfg.im_scale
-
-    im_size_min = np.min(im_size)
-    im_size_max = np.max(im_size)
-    im_scale = float(target_size) / float(im_size_min)
-    if np.round(im_scale * im_size_max) > max_size:  # Prevent the biggest axis from being more than max_size
-        im_scale = float(max_size) / float(im_size_max)
-    return im_scale
 
 
 def get_hico_to_coco_mapping(hico_objects, split_objects=None):
