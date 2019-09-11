@@ -45,7 +45,7 @@ def load_allowed_rels(version):
 
 def read_from_gt(split, image_index=None):
     with h5py.File(os.path.join('data', 'VG-SGG', 'VG-SGG.h5'), 'r') as db:
-        img_split = db['split'][:]
+        img_split = db['_data_split'][:]
         entity_classes = np.squeeze(db['labels'][:])
         preds = np.squeeze(db['actions'][:])
         rels = np.squeeze(db['relationships'][:])
@@ -62,7 +62,7 @@ def read_from_gt(split, image_index=None):
 
         im_split_idxs = np.flatnonzero(img_split == split)
         if image_index is not None:
-            assert len(set(image_index) - set(im_split_idxs)) == 0  # The given index has to be a subset of the split.
+            assert len(set(image_index) - set(im_split_idxs)) == 0  # The given index has to be a subset of the _data_split.
             print('Dumping %d images.' % len(set(im_split_idxs) - set(image_index)))
             im_split_idxs = image_index
 
@@ -72,7 +72,7 @@ def read_from_gt(split, image_index=None):
         rel_split_mask = np.zeros_like(preds, dtype=np.bool)
         rel_to_split_img = -np.ones_like(preds, dtype=np.int)
         rels_per_split_img = {}
-        im_w_rel_idxmask = np.zeros_like(im_split_idxs, dtype=np.bool)  # Images with relationships in this split
+        im_w_rel_idxmask = np.zeros_like(im_split_idxs, dtype=np.bool)  # Images with relationships in this _data_split
         for i, im_i in enumerate(im_split_idxs):
             if ifr[im_i] >= 0:  # filter images with no relationships
                 assert ifb[im_i] >= 0

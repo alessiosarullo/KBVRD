@@ -114,9 +114,7 @@ def get_runs_data(runs):
         for tag in tags:
             for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
                 values_per_tag.setdefault(tag, []).append([e.value for e in events])
-
-                # This should be true, but it can actually not be when images are filtered AFTER train/val split, as I do when filtering empty ones.
-                # assert len({e.step for e in events}) == 1
+                assert len({e.step for e in events}) == 1
 
                 if len(values_per_tag.keys()) == 1:
                     steps.append(events[0].step)

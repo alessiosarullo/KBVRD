@@ -463,7 +463,7 @@ def zs_stats():
     seen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
 
-    # hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
+    # hdval = HicoDetSplitBuilder.get_split(HicoDetSplit, _data_split=Splits.VAL, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
     # print('Val only interactions:')
     # for p, o in hdval.interactions:
     #     if ~seen_interactions[o, p]:
@@ -602,7 +602,7 @@ def visualise_images():
 
         # if im_fn not in [s.strip() for s in """
         # HICO_test2015_00000003.jpg
-        # """.split('\n')]:
+        # """._data_split('\n')]:
         #     continue
 
         # FIND

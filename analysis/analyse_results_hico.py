@@ -42,7 +42,7 @@ class Analyser:
         # self.ph_bins = np.arange(self.ph_num_bins + 1) / self.ph_num_bins
         # self.prediction_act_hist = np.zeros((self.ph_bins.size, self.dataset_split.num_actions), dtype=np.int)
 
-        gt_hoi_labels = self.full_dataset.split_annotations[self.dataset_split.split]
+        gt_hoi_labels = self.full_dataset.split_annotations[self.dataset_split._data_split]
         gt_hoi_labels[gt_hoi_labels < 0] = 0
         self.gt_hoi_labels = gt_hoi_labels
         self.gt_act_labels = self._hoi_labels_to_act_labels(gt_hoi_labels)

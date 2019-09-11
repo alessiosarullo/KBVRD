@@ -123,7 +123,7 @@ def vis_gt():
         im_fn = example.filename
         # if im_fn not in [s.strip() for s in """
         # HICO_train2015_00001418.jpg
-        # """.split('\n')]:
+        # """._data_split('\n')]:
         #     continue
 
         boxes = example.gt_boxes

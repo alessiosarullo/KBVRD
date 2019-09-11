@@ -10,9 +10,6 @@ def im_detect_boxes(model, img):
 
     nonnms_scores, nonnms_boxes, im_scale, feat_map = im_detect_bbox(model, img, cfg.TEST.SCALE, cfg.TEST.MAX_SIZE)
     assert nonnms_boxes.shape[0] > 0
-    if isinstance(im_scale, list):
-        assert len(im_scale) == 1
-        im_scale = im_scale[0]
     # NOTE: at this point boxes are scaled back to the image size
 
     box_inds, boxes, _, box_scores = _box_results_with_nms_and_limit(nonnms_scores, nonnms_boxes)

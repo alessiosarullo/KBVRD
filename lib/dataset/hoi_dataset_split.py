@@ -43,10 +43,11 @@ class AbstractHoiDatasetSplit(Dataset):
 
 
 class HoiDatasetSplit(AbstractHoiDatasetSplit):
-    def __init__(self, split, full_dataset: HoiDataset, image_inds=None, object_inds=None, action_inds=None):
+    def __init__(self, split, full_dataset: HoiDataset, object_inds=None, action_inds=None):
         self.full_dataset = full_dataset  # type: HoiDataset
         self.split = split
-        self.image_inds = image_inds
+        self._data_split = Splits.TEST if split == Splits.TEST else Splits.TRAIN  # val -> train
+        self.image_inds = None  # This will be set later, if needed.
 
         object_inds = sorted(object_inds) if object_inds is not None else range(self.full_dataset.num_objects)
         self.objects = [full_dataset.objects[i] for i in object_inds]
@@ -74,18 +75,19 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         except OSError:
             self.pc_img_feats = None
 
-        self.labels = self.full_dataset.split_annotations[self.split]
+        self.labels = self.full_dataset.split_annotations[self._data_split]
         if self.active_interactions.size < self.full_dataset.num_interactions:
             all_labels = self.labels
             self.labels = np.zeros_like(all_labels)
             self.labels[:, self.active_interactions] = all_labels[:, self.active_interactions]
 
-        if self.image_inds is None:
-            self.non_empty_imgs = np.flatnonzero(np.any(self.labels, axis=1))
-        else:
-            image_mask = np.zeros(self.full_dataset.split_annotations[self.split].shape[0], dtype=np.bool)
-            image_mask[self.image_inds] = True
-            self.non_empty_imgs = np.flatnonzero(np.any(self.labels, axis=1) & image_mask)
+        self.non_empty_split_imgs = np.flatnonzero(np.any(self.labels, axis=1))
+
+    def filter_imgs(self, image_inds):
+        image_mask = np.zeros(self.full_dataset.split_annotations[self._data_split].shape[0], dtype=np.bool)
+        image_mask[image_inds] = True
+        self.non_empty_split_imgs = np.flatnonzero(np.any(self.labels, axis=1) & image_mask)
+        self.image_inds = image_inds
 
     @property
     def precomputed_visual_feat_dim(self):
@@ -105,7 +107,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
 
     @property
     def num_images(self):
-        return self.full_dataset.split_annotations[self.split].shape[0]
+        return self.full_dataset.split_annotations[self._data_split].shape[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
         # noinspection PyCallingNonCallable,PyUnresolvedReferences
@@ -133,9 +135,13 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
             ds = self
         else:
             if cfg.filter_bg_only:
-                ds = self if self.non_empty_imgs is None else Subset(self, self.non_empty_imgs)
+                ds = Subset(self, self.non_empty_split_imgs)
             else:
-                ds = self if self.image_inds is None else Subset(self, self.image_inds)
+                if self.image_inds is None:
+                    assert self.split != Splits.VAL
+                    ds = self
+                else:
+                    ds = Subset(self, self.image_inds)
         data_loader = torch.utils.data.DataLoader(
             dataset=ds,
             batch_size=batch_size,
@@ -150,12 +156,13 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
 
     def get_img(self, img_id):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        img_fn = os.path.join(self.full_dataset.get_img_dir(self.split), self.full_dataset.split_filenames[self.split][img_id])
+        img_fn = os.path.join(self.full_dataset.get_img_dir(self._data_split), self.full_dataset.split_filenames[self._data_split][img_id])
         img = Image.open(img_fn).convert('RGB')
         img = self.img_transform(img).to(device=device)
         return img
 
     def __getitem__(self, idx):
+        # This should only be used by the data loader (see above).
         return idx
 
     def __len__(self):
@@ -174,24 +181,31 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         full_dataset = cls.get_full_dataset()
 
         # Split train/val if needed
+        train_split = cls(split=Splits.TRAIN, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
         if cfg.val_ratio > 0:
-            num_imgs = len(full_dataset.split_filenames[Splits.TRAIN])
+            if cfg.filter_bg_only:
+                num_imgs = len(train_split.non_empty_split_imgs)
+                image_ids = train_split.non_empty_split_imgs
+            else:
+                num_imgs = len(full_dataset.split_filenames[Splits.TRAIN])
+                image_ids = np.arange(num_imgs)
             num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
-            imgs_inds = np.random.permutation(num_imgs)
-            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[:num_train_imgs]),
-                                       object_inds=obj_inds, action_inds=act_inds)
-            splits[Splits.VAL] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[num_train_imgs:]),
-                                     object_inds=obj_inds, action_inds=act_inds)
-        else:
-            splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
+
+            train_image_ids = np.random.choice(image_ids, size=num_train_imgs, replace=False)
+            train_split.filter_imgs(train_image_ids)
+
+            val_split = cls(split=Splits.VAL, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
+            val_image_ids = np.setdiff1d(image_ids, train_image_ids)
+            val_split.filter_imgs(val_image_ids)
+        splits[Splits.TRAIN] = train_split
         splits[Splits.TEST] = cls(split=Splits.TEST, full_dataset=full_dataset)
 
-        tr = splits[Splits.TRAIN]
+        train_str = Splits.TRAIN.value.capitalize()
         if obj_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} objects ({tr.active_objects.size}):', tr.active_objects.tolist())
+            print(f'{train_str} objects ({train_split.active_objects.size}):', train_split.active_objects.tolist())
         if act_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} actions ({tr.active_actions.size}):', tr.active_actions.tolist())
+            print(f'{train_str} actions ({train_split.active_actions.size}):', train_split.active_actions.tolist())
         if obj_inds is not None or act_inds is not None:
-            print(f'{Splits.TRAIN.value.capitalize()} interactions ({tr.active_interactions.size}):', tr.active_interactions.tolist())
+            print(f'{train_str} interactions ({train_split.active_interactions.size}):', train_split.active_interactions.tolist())
 
         return splits
