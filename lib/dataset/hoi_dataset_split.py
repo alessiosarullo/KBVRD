@@ -197,6 +197,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
             val_split = cls(split=Splits.VAL, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
             val_image_ids = np.setdiff1d(image_ids, train_image_ids)
             val_split.filter_imgs(val_image_ids)
+            splits[Splits.VAL] = val_split
         splits[Splits.TRAIN] = train_split
         splits[Splits.TEST] = cls(split=Splits.TEST, full_dataset=full_dataset)
 
