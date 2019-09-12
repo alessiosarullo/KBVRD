@@ -51,7 +51,9 @@ class Configs:
 
         # Detector. The output dim is usually hardcoded in their files (e.g., `ResNet_roi_conv5_head_for_masks()`), so I can't read it from configs.
         self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
-        self.rcnn_output_dim = {'e2e_mask_rcnn_R-50-C4_2x': 2048}[self.rcnn_arch]  # FIXME leggere da file (dimensione dei dati)
+        self.rcnn_output_dim = {'e2e_mask_rcnn_R-50-C4_2x': 2048}[self.rcnn_arch]
+        self.hum_thr = 0.7
+        self.obj_thr = 0.3
 
         # Architecture
         self.dropout = 0.5
@@ -222,8 +224,12 @@ class Configs:
             raise ValueError('Invalid arguments: %s.' % ' '.join(args[1:]))
         sys.argv = sys.argv[:1]
 
-    @staticmethod
-    def _add_argument(parser, param_name, param_value, fail_if_missing=True):
+        try:
+            self.init_detectron_cfgs()
+        except ModuleNotFoundError:
+            print('Detectron module not found')
+
+    def _add_argument(self, parser, param_name, param_value, fail_if_missing=True):
         if param_name == 'model':
             from scripts.utils import get_all_models_by_name
             all_models_dict = get_all_models_by_name()
@@ -252,6 +258,26 @@ class Configs:
                 assert old_save_dir == self.output_path
         if fail_if_missing and self.model is None:
             raise ValueError('A model is required.')
+
+    def init_detectron_cfgs(self):
+        import lib.detection.wrappers as pydet
+        if pydet.cfg_from_file is None:
+            assert pydet.cfg is None and pydet.assert_and_infer_cfg is None
+            self.mask_resolution = 14
+            raise ModuleNotFoundError()
+        else:
+            assert pydet.cfg is not None and pydet.assert_and_infer_cfg is not None
+
+        cfg_file = f'pydetectron/configs/baselines/{self.rcnn_arch}.yaml'
+        print(f"Loading Detectron's configs from {cfg_file}.")
+        pydet.cfg_from_file(cfg_file)
+        pydet.cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS = False  # Don't need to load imagenet pretrained weights
+        pydet.cfg.MODEL.NUM_CLASSES = len(pydet.COCO_CLASSES)
+        pydet.assert_and_infer_cfg()
+
+        # self.pixel_mean = pydet.cfg.PIXEL_MEANS
+        # self.im_scale = pydet.cfg.TEST.SCALE
+        # self.im_max_size = pydet.cfg.TEST.MAX_SIZE
 
     def save(self, file_path=None):
         file_path = file_path or self.config_file

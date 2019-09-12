@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.pc_hicodet_split import HicoDetSplitBuilder, PrecomputedHicoDetSplit, Splits, Example
+from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
 from lib.models.containers import Prediction
 from lib.eval.evaluator_roi import EvaluatorROI
 from lib.eval.eval_utils import sort_and_filter, MetricFormatter
@@ -56,7 +56,7 @@ except ImportError:
 
 
 class Analyser:
-    def __init__(self, dataset: PrecomputedHicoDetSplit, iou_thresh=0.5, hoi_score_thr=0.05):
+    def __init__(self, dataset: HicoDetSplit, iou_thresh=0.5, hoi_score_thr=0.05):
         super().__init__()
 
         self.iou_thresh = iou_thresh
@@ -218,7 +218,7 @@ class Analyser:
         #         self.act_conf_mat[0, predicted_acts] += 1
 
 
-def compute_cooccs(dataset: PrecomputedHicoDetSplit, gt_iou_thresh=0.5):
+def compute_cooccs(dataset: HicoDetSplit, gt_iou_thresh=0.5):
     act_cooccs = np.zeros((dataset.full_dataset.num_actions, dataset.full_dataset.num_actions))
     for gt_idx in range(len(dataset)):
         gt_entry = dataset.get_img_entry(gt_idx, read_img=False)
@@ -290,7 +290,7 @@ def _print_confidence_scores(analyser: Analyser, marked_preds=None):
 
 def evaluate():
     results = _setup_and_load()
-    hdtest = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = EvaluatorROI(dataset_split=hdtest, hoi_score_thr=None, num_hoi_thr=None)
 
     # evaluator.evaluate_predictions(results)
@@ -337,7 +337,7 @@ def evaluate():
 def compare():
     sys.argv[1:] = ['--save_dir', 'output/base/2019-07-02_16-06-32_vanilla']
     _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = EvaluatorROI(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.eval_res_file)
     obj_metrics1, hoi_metrics1, gt_obj_labels1, gt_hoi_labels1 = evaluator.output_metrics(sort=True, return_labels=True)
@@ -346,7 +346,7 @@ def compare():
 
     sys.argv[1:] = ['--save_dir', 'output/bg/2019-07-04_17-59-58_margin-bgc10']
     _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     evaluator = EvaluatorROI(dataset_split=hds, hoi_score_thr=None, num_hoi_thr=None)
     evaluator.load(cfg.eval_res_file)
     obj_metrics2, hoi_metrics2, gt_obj_labels2, gt_hoi_labels2 = evaluator.output_metrics(sort=True, return_labels=True)
@@ -379,10 +379,10 @@ def stats():
     res_save_path = cfg.res_stats_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    hdtrain = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TRAIN)
+    hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)
     hicodet = hdtrain.full_dataset
 
-    hdtest = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
 
     cache_fn = os.path.join(res_save_path, 'cache.pkl')
     try:
@@ -458,7 +458,7 @@ def zs_stats():
     seen_act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
     seen_obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
-    hdtrain = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
+    hdtrain = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN, obj_inds=seen_obj_inds, pred_inds=seen_act_inds)
     hicodet = hdtrain.full_dataset
     seen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     seen_interactions[hdtrain.interactions[:, 1], hdtrain.interactions[:, 0]] = 1
@@ -471,7 +471,7 @@ def zs_stats():
     # print('Val only objects:', sorted(set(hdval.objects) - set(hdtrain.objects)))
     # print('Val only actions:', sorted(set(hdval.actions) - set(hdtrain.actions)))
 
-    hdtest = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)
+    hdtest = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)
     unseen_interactions = np.zeros((hicodet.num_objects, hicodet.num_actions), dtype=bool)
     unseen_interactions[hdtest.interactions[:, 1], hdtest.interactions[:, 0]] = 1
     unseen_interactions[seen_interactions] = 0
@@ -578,7 +578,7 @@ def visualise_images():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(PrecomputedHicoDetSplit, split=Splits.TEST)  # type: PrecomputedHicoDetSplit
+    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)

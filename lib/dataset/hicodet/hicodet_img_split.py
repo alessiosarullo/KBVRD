@@ -1,102 +1,83 @@
-import os
-from typing import List
-
-import cv2
 import numpy as np
+import torch.utils.data
+from typing import Union
 
-from config import cfg
-from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
-from lib.dataset.utils import Splits, get_hico_to_coco_mapping
-
-
-class Example:
-    def __init__(self, idx_in_split, img_id, filename, split):
-        self.index = idx_in_split
-        self.id = img_id
-        self.filename = filename
-        self.split = split
-
-        self.image = None
-        self.gt_boxes = None
-        self.gt_obj_classes = None
-        self.gt_hois = None
+from lib.dataset.hicodet.hicodet import HicoDet
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit, PrecomputedMinibatch, PrecomputedExample
+from lib.dataset.utils import Splits, Example
+from lib.utils import Timer
 
 
-class HicoDetImgSplit:
+class HicoDetImgSplit(HicoDetSplit):
     def __init__(self, split, full_dataset: HicoDet):
-        assert split in Splits and split != Splits.VAL
+        if split != Splits.TEST:
+            raise ValueError('Use HOI split for training.')
+        super(HicoDetImgSplit, self).__init__(split, full_dataset, image_inds=None)
 
-        self.split = split
-        self.full_dataset = full_dataset  # type: HicoDet
+    def get_loader(self, batch_size, num_workers=0, **kwargs):
+        if batch_size > 1:
+            raise ValueError('Batch size has to be 1 during test.')
 
-        # Initilise data (possibly filter).
-        split_data = self.full_dataset.split_data[split]  # type: List[HicoDetImData]
-        image_ids = list(range(len(split_data)))
-        if split == Splits.TRAIN:
-            im_with_interactions = self.full_dataset.split_non_empty_image_ids[Splits.TRAIN]
-            num_old_images, num_new_images = len(image_ids), len(im_with_interactions)
-            if num_new_images < num_old_images:
-                print(f'Images have been discarded due to not having objects'
-                      f'{" or only having background interactions" if cfg.filter_bg_only else ""}. '
-                      f'Image index has changed (from {num_old_images} images to {num_new_images}).')
-                image_ids = [image_ids[i] for i in im_with_interactions]
-                split_data = [split_data[i] for i in im_with_interactions]
-            assert len(split_data) == len(image_ids)
-            assert image_ids == sorted(image_ids)
-        self.image_ids = image_ids
-        self._data = split_data
+        data_loader = torch.utils.data.DataLoader(
+            dataset=self,
+            batch_size=1,
+            shuffle=False,
+            num_workers=num_workers,
+            collate_fn=lambda x: PrecomputedMinibatch.collate(x),
+            drop_last=False,
+            # pin_memory=True,  # disable this in case of freezes
+            **kwargs,
+        )
+        return data_loader
 
-        # Compute mappings to COCO
-        self.hico_to_coco_mapping = get_hico_to_coco_mapping(hico_objects=self.full_dataset.objects)
-
-        # Compute HOI triplets. Each is [human, action, object].
-        hoi_triplets = []
-        for im_data in self._data:
-            box_classes, inters = im_data.box_classes, im_data.hois
-            im_hois = np.stack([box_classes[inters[:, 0]], inters[:, 1], box_classes[inters[:, 2]]], axis=1)
-            assert np.all(im_hois[:, 0] == self.full_dataset.human_class)
-            hoi_triplets.append(im_hois)
-        self.hoi_triplets = np.concatenate(hoi_triplets, axis=0)
-
-        self.obj_labels = np.concatenate([im_data.box_classes for im_data in self._data])
-
-    @property
-    def human_class(self):
-        return self.full_dataset.human_class
-
-    @property
-    def num_objects(self):
-        return self.full_dataset.num_objects
-
-    @property
-    def num_actions(self):
-        return self.full_dataset.num_actions
-
-    @property
-    def num_interactions(self):
-        return self.full_dataset.num_interactions
-
-    @property
-    def num_images(self):
-        return len(self.image_ids)
-
-    @property
-    def img_dir(self):
-        return self.full_dataset.get_img_dir(self.split)
-
-    def get_img_entry(self, idx, read_img=True) -> Example:
+    def get_image_data(self, idx, precomputed) -> Union[PrecomputedExample, Example]:
+        assert self.split == Splits.TEST
         im_data = self._data[idx]
+        img_id = self.image_ids[idx]
+        if precomputed:
+            pc_im_idx = self.im_id_to_pc_im_idx[img_id]
+            assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
 
-        entry = Example(idx_in_split=idx, img_id=self.image_ids[idx], filename=im_data.filename, split=self.split)
-        entry.gt_boxes = im_data.boxes.astype(np.float, copy=False)
-        entry.gt_obj_classes = im_data.box_classes.copy()
-        entry.gt_hois = im_data.hois.copy()
-        if read_img:
-            entry.image = cv2.imread(os.path.join(self.img_dir, im_data.filename))
+            entry = PrecomputedExample(idx_in_split=idx, img_id=img_id, filename=im_data.filename, split=self.split)
+
+            # Image data
+            img_infos = self.pc_image_infos[pc_im_idx].copy()
+            assert img_infos.shape == (3,)
+            entry.img_size = img_infos[:2]
+            entry.scale = img_infos[2]
+
+            # Object data
+            img_box_inds = np.flatnonzero(self.pc_box_im_idxs == pc_im_idx)  # FIXME so inefficient
+            if img_box_inds.size > 0:
+                start, end = img_box_inds[0], img_box_inds[-1] + 1
+                assert np.all(img_box_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+
+                entry.precomp_boxes_ext = self.pc_boxes_ext[start:end, :].copy()
+                entry.precomp_box_feats = self.pc_boxes_feats[start:end, :]
+                assert self.pc_box_labels is None
+
+                # HOI data
+                img_hoi_inds = np.flatnonzero(self.pc_ho_im_idxs == pc_im_idx)  # FIXME same as above
+                if img_hoi_inds.size > 0:
+                    start, end = img_hoi_inds[0], img_hoi_inds[-1] + 1
+                    assert np.all(img_hoi_inds == np.arange(start, end))  # slicing is much more efficient with H5 files
+
+                    entry.precomp_hoi_infos = self.pc_ho_infos[start:end, :].copy()
+                    entry.precomp_hoi_union_boxes = self.pc_union_boxes[start:end, :]
+                    entry.precomp_hoi_union_feats = self.pc_union_boxes_feats[start:end, :]
+                    assert self.pc_action_labels is None
+        else:
+            entry = Example(idx_in_split=idx, img_id=img_id, filename=im_data.filename, split=self.split)
+            entry.gt_boxes = im_data.boxes.astype(np.float, copy=False)
+            entry.gt_obj_classes = im_data.box_classes.copy()
+            entry.gt_hois = im_data.hois.copy()
         return entry
-
-    def __getitem__(self, idx):
-        return self.get_img_entry(idx)
 
     def __len__(self):
         return self.num_images
+
+    def __getitem__(self, idx) -> PrecomputedExample:
+        Timer.get('GetBatch').tic()
+        entry = self.get_image_data(idx, precomputed=True)
+        Timer.get('GetBatch').toc()
+        return entry

@@ -11,8 +11,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
-from lib.dataset.hicodet.pc_hicodet_img_split import PrecomputedHicoDetImgSplit
-from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
+from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
+from lib.dataset.hicodet.hicodet_singlehois_split import HicoDetSingleHOIsSplit
 from lib.dataset.hoi_dataset_split import HoiDatasetSplit
 from lib.dataset.utils import Splits
 from lib.dataset.vghoi import VGHoiSplit
@@ -86,8 +86,8 @@ class Launcher:
                 obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
         if cfg.hicodet:
-            splits = PrecomputedHicoDetSingleHOIsSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
-            splits[Splits.TEST] = PrecomputedHicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
+            splits = HicoDetSingleHOIsSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
+            splits[Splits.TEST] = HicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
         else:
             if cfg.vghoi:
                 splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)

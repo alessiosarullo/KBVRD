@@ -5,17 +5,17 @@ from typing import List, Dict
 import numpy as np
 
 from lib.bbox_utils import compute_ious
-from lib.dataset.hicodet.hicodet_img_split import Example
-from lib.dataset.hicodet.pc_hicodet_img_split import PrecomputedHicoDetImgSplit
+from lib.dataset.utils import Example
+from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
 from lib.eval.eval_utils import BaseEvaluator
 from lib.models.containers import Prediction
 from lib.utils import Timer
 
 
 class EvaluatorROI(BaseEvaluator):
-    def __init__(self, dataset_split: PrecomputedHicoDetImgSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
+    def __init__(self, dataset_split: HicoDetImgSplit, iou_thresh=0.5, hoi_score_thr=None, num_hoi_thr=None):
         super().__init__(dataset_split)
-        self.dataset_split = dataset_split  # type: PrecomputedHicoDetImgSplit
+        self.dataset_split = dataset_split  # type: HicoDetImgSplit
         self.iou_thresh = iou_thresh
         self.hoi_score_thr = hoi_score_thr
         self.num_hoi_thr = num_hoi_thr

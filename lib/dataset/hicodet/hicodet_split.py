@@ -139,7 +139,7 @@ class PrecomputedFilesHandler:
         return cls.files[file_name][key]
 
 
-class PrecomputedHicoDetSplit(AbstractHoiDatasetSplit):
+class HicoDetSplit(AbstractHoiDatasetSplit):
     def __init__(self, split, full_dataset: HicoDet, image_inds=None):
         assert split in Splits
         if cfg.filter_bg_only:

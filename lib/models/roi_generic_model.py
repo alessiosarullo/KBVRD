@@ -4,8 +4,8 @@ import torch
 from torch import  nn
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_singlehois_split import PrecomputedHicoDetSingleHOIsSplit
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
+from lib.dataset.hicodet.hicodet_singlehois_split import HicoDetSingleHOIsSplit
+from lib.dataset.hicodet.hicodet_split import PrecomputedMinibatch
 from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction, VisualOutput
 from lib.models.misc import bce_loss
@@ -16,10 +16,10 @@ class GenericModel(AbstractModel):
     def get_cline_name(cls) -> str:
         raise NotImplementedError()
 
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         # Instance parameters defined before superclass' constructor's invocation will be updated according to keyword arguments.
         super().__init__(**kwargs)
-        self.dataset = dataset  # type: PrecomputedHicoDetSingleHOIsSplit
+        self.dataset = dataset  # type: HicoDetSingleHOIsSplit
         self.vis_feat_dim = self.dataset.precomputed_visual_feat_dim
 
         if cfg.csp:

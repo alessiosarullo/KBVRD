@@ -4,11 +4,11 @@ from torch import nn
 from torch.nn import functional as F
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedMinibatch
+from lib.dataset.hicodet.hicodet_split import PrecomputedMinibatch
 from lib.dataset.utils import get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.containers import VisualOutput
-from lib.models.roi_generic_model import GenericModel, Prediction, PrecomputedHicoDetSingleHOIsSplit
+from lib.models.roi_generic_model import GenericModel, Prediction, HicoDetSingleHOIsSplit
 from lib.models.gcns import HicoGCN
 from lib.models.misc import bce_loss, LIS
 
@@ -86,7 +86,7 @@ class BaseModel(GenericModel):
 
 
 class ExtKnowledgeGenericModel(GenericModel):
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
 
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
@@ -154,7 +154,7 @@ class ZSBaseModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsb'
 
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         assert self.zs_enabled and cfg.asl > 0
@@ -183,7 +183,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
     def get_cline_name(cls):
         return 'zsgc'
 
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = 1024
@@ -287,7 +287,7 @@ class PeyreModel(GenericModel):
     def get_cline_name(cls):
         return 'peyre'
 
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, **kwargs):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)

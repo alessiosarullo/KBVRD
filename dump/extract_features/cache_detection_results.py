@@ -9,7 +9,7 @@ from config import cfg
 from lib.dataset.hicodet.hicodet import HicoDet
 from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit, Example
 from lib.dataset.utils import Splits
-from lib.detection.visual_module import VisualModule, VisualOutput
+from dump.extract_features.detection.visual_module import VisualModule, VisualOutput
 
 
 def save_feats():

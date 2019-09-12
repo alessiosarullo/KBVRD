@@ -6,12 +6,12 @@ import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.pc_hicodet_split import PrecomputedFilesHandler, PrecomputedHicoDetSplit, HicoDet, PrecomputedMinibatch
+from lib.dataset.hicodet.hicodet_split import PrecomputedFilesHandler, HicoDetSplit, HicoDet, PrecomputedMinibatch
 from lib.dataset.utils import Splits
 from lib.utils import Timer
 
 
-class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
+class HicoDetSingleHOIsSplit(HicoDetSplit):
     def __init__(self, split, full_dataset: HicoDet, image_inds=None, object_inds=None, action_inds=None):
         if split == Splits.TEST:
             raise ValueError('HOI-oriented dataset can only be used during training (labels are required to balance examples).')
@@ -157,7 +157,7 @@ class PrecomputedHicoDetSingleHOIsSplit(PrecomputedHicoDetSplit):
 
 
 class BalancedTripletMLSampler(torch.utils.data.Sampler):
-    def __init__(self, dataset: PrecomputedHicoDetSingleHOIsSplit, hoi_batch_size, drop_last, shuffle):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, hoi_batch_size, drop_last, shuffle):
         super().__init__(dataset)
         if not drop_last:
             raise NotImplementedError()

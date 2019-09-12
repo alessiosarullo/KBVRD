@@ -6,12 +6,12 @@ import numpy as np
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
-from lib.dataset.hicodet.pc_hicodet_img_split import PrecomputedHicoDetImgSplit
+from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
 
 
 class BaseEvaluator:
     def __init__(self, dataset_split, *args, **kwargs):
-        self.dataset_split = dataset_split  # type: Union[PrecomputedHicoDetImgSplit, HicoSplit]
+        self.dataset_split = dataset_split  # type: Union[HicoDetImgSplit, HicoSplit]
         self.full_dataset = dataset_split.full_dataset
         self.metrics = {}  # type: Dict[str, np.ndarray]
 

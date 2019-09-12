@@ -128,11 +128,6 @@ class VisualModule(nn.Module):
             box_labels = np.concatenate([box_labels, unm_gt_box_labels], axis=0)
             boxes_ext = np.concatenate([boxes_ext, unm_gt_boxes_ext], axis=0)
 
-        # Sort by image
-        inds = np.argsort(boxes_ext[:, 0]).astype(np.int64, copy=False)
-        boxes_ext = boxes_ext[inds]
-        box_labels = box_labels[inds]
-
         return boxes_ext, box_labels
 
     def hoi_gt_assignments(self, ex: Example, boxes_ext, box_labels, scale):
