@@ -95,11 +95,13 @@ class WEmbHicoGCN(HicoGCN):
         super().__init__(dataset=dataset, **kwargs)
 
     def _get_initial_z(self):
+        z = super()._get_initial_z()
         self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
         act_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
-        embs = np.concatenate([obj_word_embs, act_word_embs], axis=0)
-        return torch.from_numpy(np.concatenate([embs, np.zeros((embs.shape[0], self.input_dim - embs.shape[1]))], axis=1)).float()
+        embs = torch.from_numpy(np.concatenate([obj_word_embs, act_word_embs], axis=0)).float()
+        z[:, :300] = embs
+        return z
 
 
 class HicoHoiGCN(AbstractGCN):
