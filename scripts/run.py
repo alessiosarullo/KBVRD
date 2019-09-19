@@ -171,7 +171,6 @@ class Launcher:
                 self.detector.eval()
                 all_predictions = self.eval_epoch(None, test_loader, test_stats)
             else:
-                eval_interval = cfg.eval_interval if cfg.eval_interval > 0 else max(1, (cfg.num_epochs - self.start_epoch) // 20)
                 for epoch in range(self.start_epoch, cfg.num_epochs):
                     print('Epoch %d start.' % epoch)
                     self.detector.train()
@@ -189,7 +188,7 @@ class Launcher:
                         # Scheduler default behaviour is wrong: it gets called with epoch=0 twice, both at the beginning and after the first epoch.
                         scheduler.step(epoch=epoch + 1)
 
-                    if epoch % eval_interval == 0 or epoch + 1 == cfg.num_epochs:
+                    if epoch % cfg.eval_interval == 0 or epoch + 1 == cfg.num_epochs:
                         all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
 
                     # if any([pg['lr'] <= 1e-6 for pg in optimizer.param_groups]):
