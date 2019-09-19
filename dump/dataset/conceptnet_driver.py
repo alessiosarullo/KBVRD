@@ -355,18 +355,33 @@ def main():
     print(cnet.nodes[:5])
 
     # cnet.export_to_deepwalk_edge_list()
+    # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
 
     hd_preds = {p.split('_')[0] for p in set(hd.actions) - {hd.null_interaction}}
     hd_nodes = set([obj for obj in hd.objects]) | hd_preds
     print(hd_nodes - set(cnet.nodes))
 
     # cnet.find_relations(hd_nodes, walk_length=1)
-    cnet.find_relations(list(hd_nodes)[:3], walk_length=1)
+    # cnet.find_relations(list(hd_nodes)[:3], walk_length=1)
 
-    # cnet.export_to_rotate_edge_list('../RotatE/data/ConceptNet')
+    def objects_dist_k(verb, k):
+        seed = {verb}
+        frontier = {verb}
+        for i in range(k):
+            frontier = set()
+            for s in seed:
+                frontier.update(set(cnet.neighbours_out(s)))
+            seed = frontier
+        return sorted(frontier & set(hd.objects))
+
+    # 'board' is connected to both "affordable" objects such as 'airplane' and non-verb-related ones such as 'chair'
+    for v in ['board', 'catch']:
+        print(v.capitalize())
+        print(objects_dist_k(verb=v, k=1))
+        print(objects_dist_k(verb=f'{v}/v', k=1))  # 'board' as a verb is only connected to 'train'
+        print(objects_dist_k(verb=v, k=2))
+        print(objects_dist_k(verb=f'{v}/v', k=2))
 
 
 if __name__ == '__main__':
-    raise NotImplementedError()  # Outdated
-    # main()
-    plot()
+    main()

@@ -5,9 +5,8 @@ from torch import nn
 
 from lib.dataset.hico import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.word_embeddings import WordEmbeddings
 from lib.dataset.utils import get_noun_verb_adj_mat
-import numpy as np
+from lib.dataset.word_embeddings import WordEmbeddings
 
 
 class AbstractGCN(nn.Module):
@@ -90,35 +89,18 @@ class HicoGCN(AbstractGCN):
         return obj_embs, act_embs
 
 
-class DetachingHicoGCN(HicoGCN):
-    def __init__(self, dataset, seen_act, unseen_act, **kwargs):
+class WEmbHicoGCN(HicoGCN):
+    def __init__(self, dataset, **kwargs):
         super().__init__(dataset=dataset, **kwargs)
-        self.seen_act = seen_act
-        self.unseen_act = unseen_act
 
-    def _forward(self, input_repr=None):
-        if input_repr is not None:
-            z = input_repr
-        else:
-            z = self.z
-        i_obj = np.arange(self.num_objects)
-        i_act_seen = self.num_objects + self.seen_act
-        i_act_unseen = self.num_objects + self.unseen_act
-
-        adj = self.adj
-        obj_z = z[i_obj, :]
-        act_seen_z = z[i_act_seen, :]
-        act_unseen_z = z[i_act_unseen, :]
-        for gcl in self.gc_layers:
-            po, pas, pau = obj_z, act_seen_z, act_unseen_z
-            new_z_os = adj[:, i_obj] @ po + adj[:, i_act_seen] @ pas
-            new_z_u = adj[:, i_act_unseen] @ pau
-            new_z = new_z_os + new_z_u
-            obj_z = gcl(new_z[i_obj, :])
-            act_seen_z = gcl(new_z[i_act_seen, :])
-            act_unseen_z = gcl((new_z_os.detach() + new_z_u)[i_act_unseen, :])
-        act_z = torch.cat([act_seen_z, act_unseen_z], dim=0)[torch.sort(torch.cat([self.seen_act, self.unseen_act]))[1]]
-        return obj_z, act_z
+    def _get_initial_z(self):
+        self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
+        obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
+        act_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
+        return torch.cat([torch.from_numpy(obj_word_embs).float(),
+                          torch.from_numpy(act_word_embs).float(),
+                          torch.zeros(self.dataset.full_dataset.num_interactions, self.input_dim)
+                          ], dim=0)
 
 
 class HicoHoiGCN(AbstractGCN):
@@ -128,7 +110,6 @@ class HicoHoiGCN(AbstractGCN):
     def _build_adj_matrix(self):
         interactions_to_obj = self.dataset.full_dataset.interaction_to_object_mat
         interactions_to_actions = self.dataset.full_dataset.interaction_to_action_mat
-
 
         # # This option makes this graph too sparse, isolating too much.
         # if not cfg.link_null:

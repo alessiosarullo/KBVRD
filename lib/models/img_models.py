@@ -7,12 +7,12 @@ import torch.nn.functional as F
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
+from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.containers import Prediction
-from lib.models.gcns import HicoGCN, HicoHoiGCN, KatoGCN, DetachingHicoGCN
+from lib.models.gcns import HicoGCN, HicoHoiGCN, KatoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
-from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
 
 
 class SKZSMultiModel(AbstractModel):
@@ -103,7 +103,10 @@ class SKZSMultiModel(AbstractModel):
             if cfg.hoigcn:
                 self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
-                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                if cfg.gcwemb:
+                    self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                else:
+                    self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
 
         # Regularisation
         self.adj = nn.ParameterDict()

@@ -10,7 +10,8 @@ from matplotlib import pyplot as plt
 
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
+from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
+from lib.dataset.utils import Splits
 
 try:
     matplotlib.use('Qt5Agg')
@@ -63,14 +64,16 @@ def stats():
 
 
 def find():
-    cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TRAIN)  # type: HicoDetSplit
+    split = Splits.TRAIN
+    hicodet = HicoDet()
+    split_data = hicodet.split_data[split]
 
     queries_str = [
-        ['cook', 'pizza'],
+        # ['cook', 'pizza'],
         # ['eat', 'sandwich'],
+        ['eat', 'apple'],
     ]
-    queries = [hds.full_dataset.oa_pair_to_interaction[hds.full_dataset.object_index[q[1]], hds.full_dataset.action_index[q[0]]]
+    queries = [hicodet.oa_pair_to_interaction[hicodet.object_index[q[1]], hicodet.action_index[q[0]]]
                for q in queries_str]
     if np.any(np.array(queries) < 0):
         raise ValueError('Unknown interaction(s).')
@@ -79,27 +82,27 @@ def find():
     os.makedirs(output_dir, exist_ok=True)
 
     queries_set = set(queries)
-    for idx in range(len(hds)):
-        example = hds.get_img_entry(idx, read_img=False)  # type: Example
-        im_fn = example.filename
+    for idx, im_data in enumerate(split_data):
+        im_data = im_data  # type: HicoDetImData
+        im_fn = im_data.filename
 
         if idx % 1000 == 0:
             print(idx)
 
-        boxes = example.gt_boxes
-        box_classes = example.gt_obj_classes
-        hois = example.gt_hois
-        gt_interactions = hds.full_dataset.oa_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
+        boxes = im_data.boxes
+        box_classes = im_data.box_classes
+        hois = im_data.hois
+        gt_interactions = hicodet.oa_pair_to_interaction[box_classes[hois[:, 2]], hois[:, 1]]
         misses = queries_set - set(gt_interactions.tolist())
         if misses:
             continue
         ho_pairs = hois[:, [0, 2]]
-        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_actions))
-        action_class_scores[np.arange(action_class_scores.shape[0]), example.gt_hois[:, 1]] = 1
+        action_class_scores = np.zeros((ho_pairs.shape[0], hicodet.num_actions))
+        action_class_scores[np.arange(action_class_scores.shape[0]), hois[:, 1]] = 1
 
-        im = cv2.imread(os.path.join(hds.img_dir, im_fn))
+        im = cv2.imread(os.path.join(hicodet.get_img_dir(split=split), im_fn))
         vis_one_image(
-            hds, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
+            hicodet, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
             boxes=boxes, box_classes=box_classes, box_classes_scores=np.ones_like(box_classes), masks=None,
             ho_pairs=ho_pairs, action_class_scores=action_class_scores,
             output_file_path=os.path.join(output_dir, os.path.splitext(im_fn)[0]),

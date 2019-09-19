@@ -2,11 +2,11 @@ import cv2
 import matplotlib
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib.patches import Polygon
 from matplotlib.colors import LogNorm
+from matplotlib.patches import Polygon
 
 from lib.bbox_utils import rescale_masks_to_img
-from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit
+from lib.dataset.hicodet.hicodet import HicoDet
 
 
 def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **kwargs):
@@ -211,7 +211,7 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, alternate_
     return ax
 
 
-def vis_one_image(dataset: HicoDetSplit, im,
+def vis_one_image(dataset: HicoDet, im,
                   boxes, box_classes, box_classes_scores, masks=None,
                   ho_pairs=None, action_class_scores=None,
                   output_file_path=None, ext='png',

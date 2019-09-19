@@ -11,11 +11,11 @@ from lib.dataset.utils import Splits
 
 class HicoDetImData:
     def __init__(self, filename, boxes, box_classes, hois, wnet_actions):
-        self.filename = filename
-        self.boxes = boxes
-        self.box_classes = box_classes
-        self.hois = hois
-        self.wnet_actions = wnet_actions
+        self.filename = filename  # type: str
+        self.boxes = boxes  # type: np.ndarray  # Nx4 int
+        self.box_classes = box_classes  # type: np.ndarray  # N int
+        self.hois = hois  # type: np.ndarray  # Mx3, [hum_idx, action_id, obj_idx] int
+        self.wnet_actions = wnet_actions  # type: List[str]
 
 
 class HicoDet:
