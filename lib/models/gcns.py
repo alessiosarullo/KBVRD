@@ -97,10 +97,7 @@ class WEmbHicoGCN(HicoGCN):
         self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
         act_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
-        return torch.cat([torch.from_numpy(obj_word_embs).float(),
-                          torch.from_numpy(act_word_embs).float(),
-                          torch.zeros(self.dataset.full_dataset.num_interactions, self.input_dim)
-                          ], dim=0)
+        return torch.cat([torch.from_numpy(obj_word_embs).float(), torch.from_numpy(act_word_embs).float()], dim=0)
 
 
 class HicoHoiGCN(AbstractGCN):
