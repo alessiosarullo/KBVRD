@@ -104,7 +104,7 @@ class SKZSMultiModel(AbstractModel):
                 self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
             else:
                 if cfg.gcwemb:
-                    self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+                    self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, train_z=False, block_norm=cfg.katopadj)
                 else:
                     self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
 

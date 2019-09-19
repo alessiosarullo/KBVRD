@@ -41,6 +41,9 @@ do
     python -u scripts/run.py --model "${NET}" --save_dir "${RUN_NAME}" "${@:6}"
   fi
 done
+
+set +x
+
 if [ "${NUM_RUNS}" -gt 1 ]; then
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')
   EXP_DIR="${OUTPUT_DIR}/${EXP_FULL_NAME}/${DATETIME}_AGGR${NUM_RUNS}"
