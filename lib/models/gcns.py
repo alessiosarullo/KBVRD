@@ -2,6 +2,7 @@ from typing import Union
 
 import torch
 from torch import nn
+import numpy as np
 
 from lib.dataset.hico import HicoSplit
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit
@@ -94,10 +95,11 @@ class WEmbHicoGCN(HicoGCN):
         super().__init__(dataset=dataset, **kwargs)
 
     def _get_initial_z(self):
-        self.word_embs = WordEmbeddings(source='glove', dim=self.input_dim, normalize=True)
+        self.word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.objects, retry='avg')
         act_word_embs = self.word_embs.get_embeddings(self.dataset.full_dataset.actions, retry='avg')
-        return torch.cat([torch.from_numpy(obj_word_embs).float(), torch.from_numpy(act_word_embs).float()], dim=0)
+        embs = np.concatenate([obj_word_embs, act_word_embs], axis=0)
+        return torch.from_numpy(np.concatenate([embs, np.zeros((embs.shape[0], self.input_dim - embs.shape[1]))], axis=1)).float()
 
 
 class HicoHoiGCN(AbstractGCN):
