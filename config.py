@@ -57,13 +57,13 @@ class Configs:
         self.dropout = 0.5
         self.repr_dim = 1024
 
+        # General
+        self.train_null = False
+
         # Loss
         self.fl_gamma = 0.0  # gamma in focal loss
         self.meanc = False  # mean or sum over classes for BCE loss?
         self.csp = False  # Use cost-sensitive coefficients for positive examples
-
-        # HICO specific
-        self.train_null = False
         # Soft labels, score, loss, regularisation, cost-sensitive loss
         self.osl = 0.0
         self.osc = 1.0
@@ -82,9 +82,8 @@ class Configs:
         self.hsc = 0.0
         self.hpr = 0.0
         self.hcs = False
-        self.rl_no_norm = False
-        self.gc = False
-        self.hoigcn = False
+        self.grm = 0.3  # margin in graph regularisation
+
         # Kato specific
         self.katopadj = False
         self.katopgc = False
@@ -96,11 +95,11 @@ class Configs:
         self.slpure = False
 
         # ZS GCN specific
+        self.gc = False
+        self.hoigcn = False
         self.gconly = False
         self.link_null = False
         self.puregc = False
-        self.greg = 0.0
-        self.greg_margin = 0.3
         self.gcldim = 1024
         self.gcrdim = 1024
         self.gcwemb = False

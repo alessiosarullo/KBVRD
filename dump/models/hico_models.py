@@ -489,7 +489,7 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
             assert not torch.isinf(min_neigh_sim).any() and not torch.isinf(max_non_neigh_sim).any()
             assert not torch.isnan(min_neigh_sim).any() and not torch.isnan(max_non_neigh_sim).any()
 
-            reg_loss = F.relu(cfg.greg_margin - min_neigh_sim + max_non_neigh_sim)
+            reg_loss = F.relu(cfg.gr_gamma - min_neigh_sim + max_non_neigh_sim)
             reg_loss = cfg.greg * reg_loss.mean()
 
         return logits, labels, reg_loss

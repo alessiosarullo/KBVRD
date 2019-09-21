@@ -207,16 +207,13 @@ class SKZSMultiModel(AbstractModel):
         predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
         assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
 
-        if cfg.rl_no_norm:
-            predictors_sim = predictors @ predictors.t()
-        else:
-            predictors_norm = F.normalize(predictors, dim=1)
-            predictors_sim = predictors_norm @ predictors_norm.t()
+        predictors_norm = F.normalize(predictors, dim=1)
+        predictors_sim = predictors_norm @ predictors_norm.t()
         null = ~adj.any(dim=1)
         arange = torch.arange(predictors_sim.shape[0])
 
         predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
-        reg_loss_mat = (cfg.greg_margin - predictors_sim_diff).clamp(min=0)
+        reg_loss_mat = (cfg.grm - predictors_sim_diff).clamp(min=0)
         reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
         reg_loss_mat[arange, arange, :] = 0

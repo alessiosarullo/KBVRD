@@ -204,7 +204,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
                                                   )
             self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
-        if cfg.greg > 0:
+        if cfg.apr > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
 
@@ -246,7 +246,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
                 action_labels = self.write_soft_labels(vis_output)
 
         reg_loss = None
-        if cfg.greg > 0:
+        if cfg.apr > 0:
             adj = self.vv_adj
             seen = self.seen_act_inds
             unseen = self.unseen_act_inds
@@ -264,7 +264,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             arange = torch.arange(predictors_sim.shape[0])
 
             predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
-            reg_loss_mat = (cfg.greg_margin - predictors_sim_diff).clamp(min=0)
+            reg_loss_mat = (cfg.grm - predictors_sim_diff).clamp(min=0)
             reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
             reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
             reg_loss_mat[arange, arange, :] = 0
