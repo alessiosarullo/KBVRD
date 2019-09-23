@@ -159,7 +159,7 @@ class HicoDetSplit(AbstractHoiDatasetSplit):
         self.pc_image_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'img_infos', load_in_memory=True)
         assert len(self.pc_image_ids) == len(set(self.pc_image_ids))
 
-        self.pc_boxes_ext = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'boxes_ext', load_in_memory=True)
+        self.pc_boxes_ext = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'boxes_ext', load_in_memory=True).astype(np.float32, copy=False)
         self.pc_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_feats', load_in_memory=False)
         try:
             self.pc_box_labels = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'box_labels', load_in_memory=True)
@@ -167,7 +167,8 @@ class HicoDetSplit(AbstractHoiDatasetSplit):
             self.pc_box_labels = None
 
         self.pc_ho_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'ho_infos', load_in_memory=True).astype(np.int)
-        self.pc_union_boxes = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes', load_in_memory=True)
+        self.pc_union_boxes = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes', load_in_memory=True).astype(np.float32,
+                                                                                                                                copy=False)
         self.pc_union_boxes_feats = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'union_boxes_feats', load_in_memory=False)
         try:
             self.pc_action_labels = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'action_labels', load_in_memory=True)
