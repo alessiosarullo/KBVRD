@@ -153,7 +153,7 @@ class HicoDetSplit(AbstractHoiDatasetSplit):
         # Load precomputed data
         #############################################################################################################################
         self.precomputed_feats_fn = cfg.precomputed_feats_format % ('hicodet', cfg.rcnn_arch, self._data_split.value)
-        print('Loading precomputed feats for %s split from %s.' % (self.split.value, self.precomputed_feats_fn))
+        print(f'Loading precomputed feats for {self.split.value} split.')
 
         self.pc_image_ids = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'image_ids', load_in_memory=True)
         self.pc_image_infos = PrecomputedFilesHandler.get(self.precomputed_feats_fn, 'img_infos', load_in_memory=True)

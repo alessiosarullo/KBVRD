@@ -292,9 +292,9 @@ class PeyreModel(GenericModel):
         ho_pairs = dataset.pc_ho_infos[:, 1:]
         ho_classes = box_labels[ho_pairs]
         pair_idx, act_labels = np.where(action_labels)
-        hoi_triplets = np.concatenate([ho_classes[pair_idx:, 0],
+        hoi_triplets = np.concatenate([ho_classes[pair_idx, 0],
                                        act_labels,
-                                       ho_classes[pair_idx:, 1]], axis=1)
+                                       ho_classes[pair_idx, 1]], axis=1)
         hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
         u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
         non_rare_triplets = u_hoi_triplets[counts >= 10]

@@ -142,7 +142,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
             num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[:num_train_imgs]),
                                        object_inds=obj_inds, action_inds=act_inds)
-            splits[Splits.VAL] = cls(split=Splits.TRAIN, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[num_train_imgs:]),
+            splits[Splits.VAL] = cls(split=Splits.VAL, full_dataset=full_dataset, image_inds=sorted(imgs_inds.tolist()[num_train_imgs:]),
                                      object_inds=obj_inds, action_inds=act_inds)
         else:
             splits[Splits.TRAIN] = cls(split=Splits.TRAIN, full_dataset=full_dataset, object_inds=obj_inds, action_inds=act_inds)
