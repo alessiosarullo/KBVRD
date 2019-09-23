@@ -287,10 +287,7 @@ class PeyreModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        non_rare_triplets = self.dataset.full_dataset.get_triplets(split=self.dataset.split, which='non rare')
-        # self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
-
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         act_word_embs = self.word_embs.get_embeddings(dataset.actions)
 
@@ -299,14 +296,10 @@ class PeyreModel(GenericModel):
         hoi_embs = np.concatenate([person_word_emb,
                                    act_word_embs[interactions[:, 0]],
                                    obj_word_embs[interactions[:, 1]]], axis=1)
-        non_rare_hoi_embs = np.concatenate([person_word_emb,
-                                            act_word_embs[non_rare_triplets[:, 1]],
-                                            obj_word_embs[non_rare_triplets[:, 2]]], axis=1)
 
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         self.act_word_embs = nn.Parameter(torch.from_numpy(act_word_embs), requires_grad=False)
         self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
-        self.non_rare_visual_phrases_embs = nn.Parameter(torch.from_numpy(non_rare_hoi_embs), requires_grad=False)
 
         appearance_dim = 300
         self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
@@ -333,6 +326,22 @@ class PeyreModel(GenericModel):
             self.q_to_w_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
                                                 nn.ReLU(),
                                                 nn.Linear(output_dim, output_dim))
+
+        # Analogy transformation
+        non_rare_triplets = self.dataset.full_dataset.get_triplets(split=self.dataset.split, which='non rare')
+        zero_embs = np.zeros((non_rare_triplets.shape[0], self.word_embs.dim))
+        non_rare_triplet_embs = {'sub': person_word_emb, 'act': act_word_embs[non_rare_triplets[:, 1]], 'obj': obj_word_embs[non_rare_triplets[:, 2]]}
+        self.non_rare_triplet_embs = nn.ModuleDict({k: nn.Parameter(torch.from_numpy(v), requires_grad=False)
+                                                    for k, v in non_rare_triplet_embs.items()})
+        non_rare_triplet_visual_phrase_embs = {'sub': np.concatenate([person_word_emb, zero_embs, zero_embs], axis=1),
+                                               'act': np.concatenate([zero_embs, act_word_embs[non_rare_triplets[:, 1]], zero_embs], axis=1),
+                                               'obj': np.concatenate([zero_embs, zero_embs, obj_word_embs[non_rare_triplets[:, 2]]], axis=1),
+                                               }
+        self.non_rare_triplet_visual_phrase_embs = nn.ModuleDict({k: nn.Parameter(torch.from_numpy(v), requires_grad=False)
+                                                                  for k, v in non_rare_triplet_visual_phrase_embs.items()})
+
+        self.k = 5
+        self.alphas = {'sub': 0.1, 'act': 0.8, 'obj': 0.1}
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs
@@ -410,10 +419,27 @@ class PeyreModel(GenericModel):
         hoi_w = F.normalize(self.q_to_w_mlps['vp'](self.visual_phrases_embs))
         hoi_logits = hoi_v @ hoi_w.t()
 
+        # Analogy transformation
+        # TODO
+        hoi_part_ws = {'sub': subj_w[hoi_hum_inds, :],
+                       'act': hoi_act_w,
+                       'obj': obj_w[hoi_obj_inds, :]
+                       }
+        non_rare_triplet_ws = [F.normalize(self.q_to_w_mlps[k](self.non_rare_triplet_embs[k])) for k in ['sub', 'act', 'obj']]
+        g = sum([self.alphas[k] * (hoi_part_ws[k] @ non_rare_triplet_ws[k].t()).clamp(min=0) for k in ['sub', 'act', 'obj']])
+
+        _, indices = torch.topk(g, k=self.k, dim=1, largest=True, sorted=True)
+        sampled_triplet_inds = indices[torch.arange(indices.shape[0]), torch.randint(low=0, high=self.k, size=(indices.shape[0],)).to(indices)]
+
+        zero_emb = torch.zeros((hoi_w.shape[0], self.word_embs.dim)).to(hoi_w)
+        hoi_part_qs = {'sub': self.obj_word_embs[hoi_hum_inds, :],
+                       'act': hoi_act_w,
+                       'obj': obj_w[hoi_obj_inds, :]
+                       }
+        hoi_vp_ws = {'sub': F.normalize(self.q_to_w_mlps['vp'](torch.cat([self.obj_word_embs, zero_emb, zero_emb], dim=1))),
+                     'act': F.normalize(self.q_to_w_mlps['vp'](torch.cat([zero_emb, self.act_word_embs, zero_emb], dim=1))),
+                     'obj': F.normalize(self.q_to_w_mlps['vp'](torch.cat([zero_emb, zero_emb, self.obj_word_embs], dim=1))),
+                     }
+        non_rare_triplet_vp_ws = [F.normalize(self.q_to_w_mlps['vp'](self.non_rare_triplet_visual_phrase_embs[k])) for k in ['sub', 'act', 'obj']]
+
         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
-
-    def analogy_transformation(self, vis_output: VisualOutput, hoi_w):
-        non_rare_triplets_w = F.normalize(self.q_to_w_mlps['vp'](self.non_rare_visual_phrases_embs))
-        sim = (hoi_w @ non_rare_triplets_w.t()).clamp(min=0)
-
-        # torch.topk(input, k, dim=None, largest=True, sorted=True, out=None)
