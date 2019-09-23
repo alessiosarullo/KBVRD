@@ -291,7 +291,7 @@ class PeyreModel(GenericModel):
         action_labels = dataset.pc_action_labels
         u_im_ids, im_starts = np.unique(dataset.pc_boxes_ext[:, 0], return_index=True)
         im_starting_inds = {i: s for i, s in zip(u_im_ids, im_starts)}
-        ho_classes = np.array([box_labels([im_starting_inds[im_i] + h, im_starting_inds[im_i] + o]) for im_i, h, o in dataset.pc_ho_infos])
+        ho_classes = np.array([box_labels[[im_starting_inds[im_i] + h, im_starting_inds[im_i] + o]] for im_i, h, o in dataset.pc_ho_infos])
         pair_idx, act_labels = np.where(action_labels)
         hoi_triplets = np.stack([ho_classes[pair_idx, 0],
                                  act_labels,
@@ -426,3 +426,4 @@ class PeyreModel(GenericModel):
 
     def analogy_transformation(self, vis_output: VisualOutput, hoi_w):
         non_rare_triplets_w = F.normalize(self.q_to_w_mlps['vp'](self.non_rare_visual_phrases_embs))
+        sim = (hoi_w @ non_rare_triplets_w).clamp(min=0)
