@@ -287,7 +287,7 @@ class PeyreModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        hoi_triplets = self.dataset.full_dataset.get_triplets(split=self.dataset.split, which='non rare')
+        non_rare_triplets = self.dataset.full_dataset.get_triplets(split=self.dataset.split, which='non rare')
         # self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
 
