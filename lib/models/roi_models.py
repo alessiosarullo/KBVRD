@@ -281,14 +281,24 @@ class ZSGCModel(ExtKnowledgeGenericModel):
 
 
 class PeyreModel(GenericModel):
-    # FIXME this is not 0-shot
-
     @classmethod
     def get_cline_name(cls):
         return 'peyre'
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        box_labels = dataset.pc_box_labels
+        action_labels = dataset.pc_action_labels
+        ho_pairs = dataset.pc_ho_infos[:, 1:]
+        ho_classes = box_labels[ho_pairs]
+        pair_idx, act_labels = np.where(action_labels)
+        hoi_triplets = np.concatenate([ho_classes[pair_idx:, 0],
+                                       act_labels,
+                                       ho_classes[pair_idx:, 1]], axis=1)
+        hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
+        u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
+        self.hoi_triplets = nn.Parameter(torch.from_numpy(u_hoi_triplets[counts >= 10]), requires_grad=False)
+
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         act_word_embs = self.word_embs.get_embeddings(dataset.actions)
@@ -310,22 +320,24 @@ class PeyreModel(GenericModel):
         self.spatial_mlp = nn.Sequential(nn.Linear(8, spatial_dim),
                                          nn.Linear(spatial_dim, spatial_dim))
 
+        # Appearance features to latent representation
         output_dim = 1024
-        self.app_to_repr_mlps = nn.ModuleDict()
+        self.x_to_v_mlps = nn.ModuleDict()
         for k in ['sub', 'obj', 'act', 'vp']:
             input_dim = self.vis_feat_dim if k in ['sub', 'obj'] else (appearance_dim * 2 + spatial_dim)
-            self.app_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
-                                                     nn.ReLU(),
-                                                     nn.Dropout(p=0.5),
-                                                     nn.Linear(output_dim, output_dim),
-                                                     )
+            self.x_to_v_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
+                                                nn.ReLU(),
+                                                nn.Dropout(p=0.5),
+                                                nn.Linear(output_dim, output_dim),
+                                                )
 
-        self.wemb_to_repr_mlps = nn.ModuleDict()
+        # Language features to latent representation
+        self.q_to_w_mlps = nn.ModuleDict()
         for k in ['sub', 'obj', 'act', 'vp']:
             input_dim = (3 * self.word_embs.dim) if k == 'vp' else self.word_embs.dim
-            self.wemb_to_repr_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
-                                                      nn.ReLU(),
-                                                      nn.Linear(output_dim, output_dim))
+            self.q_to_w_mlps[k] = nn.Sequential(nn.Linear(input_dim, output_dim),
+                                                nn.ReLU(),
+                                                nn.Linear(output_dim, output_dim))
 
     def _get_losses(self, vis_output: VisualOutput, outputs):
         hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits = outputs
@@ -382,25 +394,28 @@ class PeyreModel(GenericModel):
         hoi_obj_spatial_info = (boxes[hoi_obj_inds, :] - union_origin) / union_areas
         spatial_info = self.spatial_mlp(torch.cat([hoi_hum_spatial_info.detach(), hoi_obj_spatial_info.detach()], dim=1))
 
-        subj_repr = self.app_to_repr_mlps['sub'](box_feats)
-        subj_emb = F.normalize(self.wemb_to_repr_mlps['sub'](self.obj_word_embs))
-        subj_logits = subj_repr @ subj_emb.t()
+        subj_v = self.x_to_v_mlps['sub'](box_feats)
+        subj_w = F.normalize(self.q_to_w_mlps['sub'](self.obj_word_embs))
+        subj_logits = subj_v @ subj_w.t()
         hoi_subj_logits = subj_logits[hoi_hum_inds, :]
 
-        obj_repr = self.app_to_repr_mlps['obj'](box_feats)
-        obj_emb = F.normalize(self.wemb_to_repr_mlps['obj'](self.obj_word_embs))
-        obj_logits = obj_repr @ obj_emb.t()
+        obj_v = self.x_to_v_mlps['obj'](box_feats)
+        obj_w = F.normalize(self.q_to_w_mlps['obj'](self.obj_word_embs))
+        obj_logits = obj_v @ obj_w.t()
         hoi_obj_logits = obj_logits[hoi_obj_inds, :]
 
         hoi_subj_appearance = self.vis_to_app_mlps['sub'](box_feats)[hoi_hum_inds, :]
         hoi_obj_appearance = self.vis_to_app_mlps['obj'](box_feats)[hoi_obj_inds, :]
 
-        hoi_act_repr = self.app_to_repr_mlps['act'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-        hoi_act_emb = F.normalize(self.wemb_to_repr_mlps['act'](self.act_word_embs))
-        hoi_act_logits = hoi_act_repr @ hoi_act_emb.t()
+        hoi_act_v = self.x_to_v_mlps['act'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_act_w = F.normalize(self.q_to_w_mlps['act'](self.act_word_embs))
+        hoi_act_logits = hoi_act_v @ hoi_act_w.t()
 
-        hoi_repr = self.app_to_repr_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
-        hoi_emb = F.normalize(self.wemb_to_repr_mlps['vp'](self.visual_phrases_embs))
-        hoi_logits = hoi_repr @ hoi_emb.t()
+        hoi_v = self.x_to_v_mlps['vp'](torch.cat([hoi_subj_appearance, hoi_obj_appearance, spatial_info], dim=1))
+        hoi_w = F.normalize(self.q_to_w_mlps['vp'](self.visual_phrases_embs))
+        hoi_logits = hoi_v @ hoi_w.t()
 
         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
+
+    def analogy_transformation(self, vis_output: VisualOutput, hoi_w):
+        pass
