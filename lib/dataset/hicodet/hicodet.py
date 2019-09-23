@@ -65,6 +65,24 @@ class HicoDet:
     def get_img_dir(self, split):
         return self.driver.split_img_dir[split]
 
+    def get_triplets(self, split, which='all'):
+        choices = ['all', 'rare', 'non rare']
+        if which not in choices:
+            raise ValueError(f'Incorrect value "{which}". Choose from f{choices}.')
+        data = self.split_data[split]
+        hoi_triplets = np.concatenate([np.stack([imd.box_classes[imd.hois[:, 0]],
+                                                 imd.hois[:, 1],
+                                                 imd.box_classes[imd.hois[:, 2]]], axis=1) for imd in data], axis=0)
+        assert np.all(hoi_triplets[:, 0] == self.human_class)
+        if which != choices[0]:
+            u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
+            if which == choices[1]:
+                hoi_triplets = u_hoi_triplets[counts < 10]
+            else:
+                assert which == choices[2]
+                hoi_triplets = u_hoi_triplets[counts >= 10]
+        return hoi_triplets
+
     def compute_annotations(self, split) -> List[HicoDetImData]:
         annotations = self.driver.split_annotations[split if split == Splits.TEST else Splits.TRAIN]
         split_data = []

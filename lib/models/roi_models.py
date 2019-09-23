@@ -287,19 +287,7 @@ class PeyreModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        box_labels = dataset.pc_box_labels
-        action_labels = dataset.pc_action_labels
-        u_im_ids, im_starts = np.unique(dataset.pc_boxes_ext[:, 0], return_index=True)
-        im_starting_inds = {i: s for i, s in zip(u_im_ids, im_starts)}
-        ho_classes = np.array([box_labels[[im_starting_inds[im_i] + h, im_starting_inds[im_i] + o]] for im_i, h, o in dataset.pc_ho_infos])
-        pair_idx, act_labels = np.where(action_labels)
-        hoi_triplets = np.stack([ho_classes[pair_idx, 0],
-                                 act_labels,
-                                 ho_classes[pair_idx, 1]], axis=1)
-        hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
-        assert np.all(hoi_triplets[:, 0] == dataset.human_class)
-        u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
-        non_rare_triplets = u_hoi_triplets[counts >= 10]
+        hoi_triplets = self.dataset.full_dataset.get_triplets(split=self.dataset.split, which='non rare')
         # self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
 
@@ -426,4 +414,6 @@ class PeyreModel(GenericModel):
 
     def analogy_transformation(self, vis_output: VisualOutput, hoi_w):
         non_rare_triplets_w = F.normalize(self.q_to_w_mlps['vp'](self.non_rare_visual_phrases_embs))
-        sim = (hoi_w @ non_rare_triplets_w).clamp(min=0)
+        sim = (hoi_w @ non_rare_triplets_w.t()).clamp(min=0)
+
+        # torch.topk(input, k, dim=None, largest=True, sorted=True, out=None)
