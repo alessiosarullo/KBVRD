@@ -297,7 +297,8 @@ class PeyreModel(GenericModel):
                                        ho_classes[pair_idx:, 1]], axis=1)
         hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
         u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
-        self.hoi_triplets = nn.Parameter(torch.from_numpy(u_hoi_triplets[counts >= 10]), requires_grad=False)
+        non_rare_triplets = u_hoi_triplets[counts >= 10]
+        self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
 
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
