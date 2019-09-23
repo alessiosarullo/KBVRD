@@ -297,11 +297,12 @@ class PeyreModel(GenericModel):
                                  act_labels,
                                  ho_classes[pair_idx, 1]], axis=1)
         hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
+        assert np.all(hoi_triplets[:, 0] == dataset.human_class)
         u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
         non_rare_triplets = u_hoi_triplets[counts >= 10]
-        self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
-
+        # self.hoi_triplets = nn.Parameter(torch.from_numpy(non_rare_triplets), requires_grad=False)
         self.word_embs = WordEmbeddings(source='word2vec', normalize=True)
+
         obj_word_embs = self.word_embs.get_embeddings(dataset.objects)
         act_word_embs = self.word_embs.get_embeddings(dataset.actions)
 
@@ -310,10 +311,14 @@ class PeyreModel(GenericModel):
         hoi_embs = np.concatenate([person_word_emb,
                                    act_word_embs[interactions[:, 0]],
                                    obj_word_embs[interactions[:, 1]]], axis=1)
+        non_rare_hoi_embs = np.concatenate([person_word_emb,
+                                            act_word_embs[non_rare_triplets[:, 1]],
+                                            obj_word_embs[non_rare_triplets[:, 2]]], axis=1)
 
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_word_embs), requires_grad=False)
         self.act_word_embs = nn.Parameter(torch.from_numpy(act_word_embs), requires_grad=False)
         self.visual_phrases_embs = nn.Parameter(torch.from_numpy(hoi_embs), requires_grad=False)
+        self.non_rare_visual_phrases_embs = nn.Parameter(torch.from_numpy(non_rare_hoi_embs), requires_grad=False)
 
         appearance_dim = 300
         self.vis_to_app_mlps = nn.ModuleDict({k: nn.Linear(self.vis_feat_dim, appearance_dim) for k in ['sub', 'obj']})
@@ -420,4 +425,4 @@ class PeyreModel(GenericModel):
         return hoi_subj_logits, hoi_obj_logits, hoi_act_logits, hoi_logits
 
     def analogy_transformation(self, vis_output: VisualOutput, hoi_w):
-        pass
+        non_rare_triplets_w = F.normalize(self.q_to_w_mlps['vp'](self.non_rare_visual_phrases_embs))
