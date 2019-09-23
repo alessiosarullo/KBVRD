@@ -289,12 +289,13 @@ class PeyreModel(GenericModel):
         super().__init__(dataset, **kwargs)
         box_labels = dataset.pc_box_labels
         action_labels = dataset.pc_action_labels
-        ho_pairs = dataset.pc_ho_infos[:, 1:]
-        ho_classes = box_labels[ho_pairs]
+        u_im_ids, im_starts = np.unique(dataset.pc_boxes_ext[:, 0], return_index=True)
+        im_starting_inds = {i: s for i, s in zip(u_im_ids, im_starts)}
+        ho_classes = np.array([box_labels([im_starting_inds[im_i] + h, im_starting_inds[im_i] + o]) for im_i, h, o in dataset.pc_ho_infos])
         pair_idx, act_labels = np.where(action_labels)
         hoi_triplets = np.stack([ho_classes[pair_idx, 0],
-                                       act_labels,
-                                       ho_classes[pair_idx, 1]], axis=1)
+                                 act_labels,
+                                 ho_classes[pair_idx, 1]], axis=1)
         hoi_triplets = hoi_triplets[np.all(hoi_triplets >= 0, axis=1), :]
         u_hoi_triplets, counts = np.unique(hoi_triplets, axis=0, return_counts=True)
         non_rare_triplets = u_hoi_triplets[counts >= 10]
