@@ -136,7 +136,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
 
         # Split train/val if needed
         if cfg.val_ratio > 0:
-            raise ValueError('Check that no images are actually filtered by precision thresholding, otherwise this has to be changed.')
+            # raise ValueError('Check that no images are actually filtered by precision thresholding, otherwise this has to be changed.')
             imgs_inds = np.random.permutation(full_dataset.split_non_empty_image_ids[Splits.TRAIN])
             num_imgs = len(full_dataset.split_data[Splits.TRAIN])
             num_train_imgs = num_imgs - int(num_imgs * cfg.val_ratio)
