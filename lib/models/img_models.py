@@ -388,7 +388,7 @@ class WEmbModel(AbstractModel):
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
-            feats, orig_labels = x
+            feats, orig_labels, _ = x
             all_logits, all_labels = self._forward(feats, orig_labels)
 
             if not inference:
