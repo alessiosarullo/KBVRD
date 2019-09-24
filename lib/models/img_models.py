@@ -231,7 +231,8 @@ class SKZSMultiModel(AbstractModel):
         with torch.set_grad_enabled(self.training):
 
             feats, orig_labels, other = x
-            epoch, iter = other
+            if not inference:
+                epoch, iter = other
             all_instance_reprs, all_linear_predictors, all_gc_predictors, all_labels = self._forward(feats, orig_labels)
             if cfg.gconly:
                 assert cfg.gc
