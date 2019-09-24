@@ -375,7 +375,7 @@ class WEmbModel(AbstractModel):
                                                 ])
             nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
             nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-            self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(self.word_embs.dim, 600),
+            self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
                                                 nn.ReLU(inplace=True),
                                                 nn.Linear(600, self.repr_dim),
                                                 ])
