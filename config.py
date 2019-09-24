@@ -50,8 +50,8 @@ class Configs:
         self.phoi = False  # Predict action [False] or interaction [True]?
 
         # Detector. The output dim is usually hardcoded in their files (e.g., `ResNet_roi_conv5_head_for_masks()`), so I can't read it from configs.
-        # self.rcnn_arch = 'e2e_faster_rcnn_R_50_FPN_1x'
-        self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
+        self.rcnn_arch = 'e2e_faster_rcnn_R_50_FPN_1x'
+        # self.rcnn_arch = 'e2e_mask_rcnn_R-50-C4_2x'
 
         # Architecture
         self.dropout = 0.5

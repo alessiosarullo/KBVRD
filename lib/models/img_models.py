@@ -282,10 +282,9 @@ class SKZSMultiModel(AbstractModel):
 
                     # Regularisation loss
                     if self.reg_coeffs[k] > 0:
-                        reg_loss = self.get_reg_loss(all_gc_predictors[k], branch=k)
-                        if cfg.grg > 0:
-                            reg_loss = reg_loss * (cfg.grg ** ((epoch + 1) / cfg.num_epochs) - 1)
-                        losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * reg_loss
+                        if cfg.grg == 0 or epoch > cfg.grg:
+                            reg_loss = self.get_reg_loss(all_gc_predictors[k], branch=k)
+                            losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * reg_loss
                 return losses
             else:
                 if self.zs_enabled and cfg.gc:
