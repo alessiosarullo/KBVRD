@@ -8,7 +8,7 @@ def compute_ious(boxes_a, boxes_b):
         assert isinstance(boxes_b, np.ndarray)
         max_xy = np.minimum(boxes_a[:, None, 2:], boxes_b[None, :, 2:])
         min_xy = np.maximum(boxes_a[:, None, :2], boxes_b[None, :, :2])
-        intersection_dims = np.maximum(0, max_xy - min_xy + 1.0)  # A batch B batch 2, where last dim is [width, height]
+        intersection_dims = np.maximum(0, max_xy - min_xy + 1.0)  # A x B x 2, where last dim is [width, height]
         intersections_areas = intersection_dims[:, :, 0] * intersection_dims[:, :, 1]
 
         areas_a = ((boxes_a[:, 2] - boxes_a[:, 0] + 1.0) *

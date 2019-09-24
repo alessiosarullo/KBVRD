@@ -110,7 +110,7 @@ class ExtKnowledgeGenericModel(GenericModel):
                 ckpt = torch.load(cfg.hoi_backbone)
                 self.pretrained_base_model = BaseModel(dataset)
                 self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-                self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P batch D
+                self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
                 assert len(seen_act_inds) == self.pretrained_predictors.shape[0]
 
             if cfg.asl:
@@ -133,7 +133,7 @@ class ExtKnowledgeGenericModel(GenericModel):
         if inference and self.load_backbone:
             action_output, action_labels, reg_loss, unseen_action_labels = outputs
             _, pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-            pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N batch Pt
+            pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
             action_output[:, self.seen_act_inds] = pretrained_action_output
             outputs = action_output, action_labels, reg_loss, unseen_action_labels
         return outputs
@@ -234,9 +234,9 @@ class ZSGCModel(ExtKnowledgeGenericModel):
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
         dir_act_logits, vrepr = self.base_model._forward(vis_output, return_repr=True)
-        _, act_class_embs = self.gcn()  # P batch E
-        # act_predictors = act_class_embs  # P batch D
-        act_predictors = self.emb_to_predictor(act_class_embs)  # P batch D
+        _, act_class_embs = self.gcn()  # P x E
+        # act_predictors = act_class_embs  # P x D
+        act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
         gcn_act_logits = vrepr @ act_predictors.t()
 
         action_labels = vis_output.action_labels

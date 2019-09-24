@@ -31,7 +31,7 @@ def LIS(x, w=None, k=None, T=None):  # defaults are as in the paper
             w, k, T = 10, 12, 8.4
         else:
             assert w is not None and k is not None
-            # This is basically what it is: a normalisation constant for when batch=1.
+            # This is basically what it is: a normalisation constant for when x=1.
             T = 1 + np.exp(k - w).item()
     assert w is not None and k is not None and T is not None
     return T * torch.sigmoid(w * x - k)

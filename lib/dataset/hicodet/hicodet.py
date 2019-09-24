@@ -34,7 +34,7 @@ class HicoDet:
 
         # Interactions
         self.interactions = np.array([[self.action_index[inter['act']], self.object_index[inter['obj']]]
-                                      for inter in self.driver.interaction_list])  # 600 batch [p, o]
+                                      for inter in self.driver.interaction_list])  # 600 x [p, o]
         self.oa_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
         self.oa_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 

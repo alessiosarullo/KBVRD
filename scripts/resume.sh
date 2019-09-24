@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -batch
+set -x
 set -e
 
 export PYTHONUNBUFFERED="True"

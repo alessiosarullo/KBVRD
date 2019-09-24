@@ -66,7 +66,7 @@ def heatmap(data, row_labels, col_labels, ax=None, cbar_kw={}, cbarlabel="", **k
     return im, cbar
 
 
-def annotate_heatmap(im, data=None, valfmt="{batch:.2f}", textcolors=("black", "white"), threshold=None, **textkw):
+def annotate_heatmap(im, data=None, valfmt="{x:.2f}", textcolors=("black", "white"), threshold=None, **textkw):
     """
     A function to annotate a heatmap.
 
@@ -76,7 +76,7 @@ def annotate_heatmap(im, data=None, valfmt="{batch:.2f}", textcolors=("black", "
         data       : Data used to annotate. If None, the image's data is used.
         valfmt     : The format of the annotations inside the heatmap.
                      This should either use the string format method, e.g.
-                     "$ {batch:.2f}", or be a :class:`matplotlib.ticker.Formatter`.
+                     "$ {x:.2f}", or be a :class:`matplotlib.ticker.Formatter`.
         textcolors : A list or array of two color specifications. The first is
                      used for values below a threshold, the second for those
                      above.
@@ -187,7 +187,7 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, alternate_
     maj_tick_labels = ['%d %s' % (i, lbl) for i, lbl in zip(x_inds, x_tick_labels)][::2]
     ax.set_xticks(maj_ticks)
     ax.set_xticklabels(maj_tick_labels, rotation=45, ha='left', rotation_mode='anchor')
-    ax.tick_params(axis='batch', which='major', top=True, labeltop=True, bottom=True, labelbottom=False, labelsize=lfsize)
+    ax.tick_params(axis='x', which='major', top=True, labeltop=True, bottom=True, labelbottom=False, labelsize=lfsize)
 
     min_ticks = x_ticks[1::2]
     ax.set_xticks(min_ticks, minor=True)
@@ -197,7 +197,7 @@ def plot_mat(mat, xticklabels, yticklabels, x_inds=None, y_inds=None, alternate_
     else:
         min_tick_labels = ['%d %s' % (i, lbl) for i, lbl in zip(x_inds, x_tick_labels)][1::2]
         ax.set_xticklabels(min_tick_labels, minor=True, rotation=45, ha='left', rotation_mode='anchor')
-    ax.tick_params(axis='batch', which='minor', top=True, labeltop=not alternate_labels, bottom=True, labelbottom=alternate_labels, labelsize=lfsize)
+    ax.tick_params(axis='x', which='minor', top=True, labeltop=not alternate_labels, bottom=True, labelbottom=alternate_labels, labelsize=lfsize)
 
     if title is not None:
         ax.set_title(title)
