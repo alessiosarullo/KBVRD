@@ -45,7 +45,7 @@ def main():
     else:
         pvalue = scipy.stats.ttest_ind(baseline, results, equal_var=False)[1]
     print(f'{measure:>15s}')
-    print(f'p = {pvalue:15.2e}')
+    print(f'p = {pvalue:11.2e}')
 
 
 if __name__ == '__main__':
