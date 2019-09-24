@@ -119,7 +119,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
             else:
                 labels = None
             Timer.get('GetBatch').toc()
-            return feats, labels
+            return feats, labels, []
 
         if self.pc_img_feats is None:
             raise NotImplementedError('This is only possible with precomputed features.')

@@ -230,7 +230,8 @@ class SKZSMultiModel(AbstractModel):
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
 
-            feats, orig_labels = x
+            feats, orig_labels, other = x
+            epoch, iter = other
             all_instance_reprs, all_linear_predictors, all_gc_predictors, all_labels = self._forward(feats, orig_labels)
             if cfg.gconly:
                 assert cfg.gc
@@ -280,7 +281,10 @@ class SKZSMultiModel(AbstractModel):
 
                     # Regularisation loss
                     if self.reg_coeffs[k] > 0:
-                        losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * self.get_reg_loss(all_gc_predictors[k], branch=k)
+                        reg_loss = self.get_reg_loss(all_gc_predictors[k], branch=k)
+                        if cfg.grg > 0:
+                            reg_loss = reg_loss * (cfg.grg ** ((epoch + 1) / cfg.num_epochs))
+                        losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * reg_loss
                 return losses
             else:
                 if self.zs_enabled and cfg.gc:

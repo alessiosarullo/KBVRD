@@ -2,7 +2,7 @@ import datetime
 import os
 import pickle
 import random
-from typing import Union
+from typing import Union, List
 
 import numpy as np
 import torch
@@ -212,12 +212,13 @@ class Launcher:
         stats.epoch_tic()
         epoch_loss = 0
         for batch_idx, batch in enumerate(data_loader):
-            batch = batch  # type: PrecomputedMinibatch
             try:
+                # type: PrecomputedMinibatch
                 batch.epoch = epoch_idx
                 batch.iter = self.curr_train_iter
             except AttributeError:
-                pass
+                # type: List
+                batch[2].append(epoch_idx, self.curr_train_iter)
 
             stats.batch_tic()
             batch_loss = self.loss_batch(batch, stats, optimizer)
@@ -243,7 +244,7 @@ class Launcher:
         stats.epoch_toc()
         return epoch_loss
 
-    def loss_batch(self, batch: PrecomputedMinibatch, stats: RunningStats, optimizer=None):
+    def loss_batch(self, batch, stats: RunningStats, optimizer=None):
         """ :arg `optimizer` should be None on validation batches. """
 
         losses = self.detector(batch, inference=False)

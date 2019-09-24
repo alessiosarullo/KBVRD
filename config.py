@@ -83,6 +83,7 @@ class Configs:
         self.hpr = 0.0
         self.hcs = False
         self.grm = 0.3  # margin in graph regularisation
+        self.grg = 0  # gamma in graph regularisation
 
         # Kato specific
         self.katopadj = False
