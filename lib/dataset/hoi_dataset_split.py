@@ -70,7 +70,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         ])
 
         try:
-            pc_feats_file = h5py.File(self._get__precomputed_feats_fn(self._data_split), 'r')
+            pc_feats_file = h5py.File(self._get_precomputed_feats_fn(self._data_split), 'r')
             self.pc_img_feats = pc_feats_file['img_feats'][:]
         except OSError:
             self.pc_img_feats = None
@@ -167,7 +167,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
     def __len__(self):
         return self.num_images
 
-    def _get__precomputed_feats_fn(self, split):
+    def _get_precomputed_feats_fn(self, split):
         raise NotImplementedError
 
     @classmethod

@@ -14,8 +14,8 @@ class HicoSplit(HoiDatasetSplit):
     def __init__(self, split, full_dataset, object_inds=None, action_inds=None):
         super(HicoSplit, self).__init__(split, full_dataset, object_inds, action_inds)
 
-    def _get__precomputed_feats_fn(self, split):
-        return cfg.precomputed_feats_format % ('hico', cfg.rcnn_arch, split.value)
+    def _get_precomputed_feats_fn(self, split):
+        return cfg.precomputed_feats_format % ('hico', 'resnet152', split.value)
 
     @classmethod
     def get_full_dataset(cls) -> HoiDataset:

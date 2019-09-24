@@ -59,7 +59,7 @@ def save_feats():
     for split in [Splits.TRAIN, Splits.TEST]:
         hds = splits[split]
 
-        precomputed_feats_fn = cfg.precomputed_feats_format % ('new_cached_file', cfg.rcnn_arch, split.value)
+        precomputed_feats_fn = cfg.precomputed_feats_format % ('new_cached_file', 'resnet152', split.value)
         with h5py.File(precomputed_feats_fn, 'w') as feat_file:
 
             all_img_feats, all_cl_unbounded_scores = [], []
