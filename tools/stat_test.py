@@ -44,8 +44,8 @@ def main():
         pvalue = scipy.stats.ttest_1samp(results, popmean=baseline[0])[1]
     else:
         pvalue = scipy.stats.ttest_ind(baseline, results, equal_var=False)[1]
-    print(f'{measure:>10s}')
-    print(f'{pvalue:10.2e}')
+    print(f'{measure:>15s}')
+    print(f'p = {pvalue:15.2e}')
 
 
 if __name__ == '__main__':
