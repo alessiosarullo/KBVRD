@@ -364,6 +364,7 @@ class WEmbModel(AbstractModel):
 
         # Base model
         self.repr_mlps = nn.ModuleDict()
+        self.wemb_mlps = nn.ModuleDict()
         for k, d in [('obj', dataset.full_dataset.num_objects),
                      ('act', dataset.full_dataset.num_actions),
                      ]:
@@ -374,6 +375,12 @@ class WEmbModel(AbstractModel):
                                                 ])
             nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
             nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+            self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(self.word_embs.dim, 600),
+                                                nn.ReLU(inplace=True),
+                                                nn.Linear(600, self.repr_dim),
+                                                ])
+            nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            nn.init.xavier_normal_(self.wemb_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -413,11 +420,8 @@ class WEmbModel(AbstractModel):
             obj_labels = act_labels = None
         labels = {'obj': obj_labels, 'act': act_labels}
 
-        # Instance representation
-        instance_repr = {k: self.repr_mlps[k](feats) for k in ['obj', 'act']}
-
         # Logits
-        logits = {k: instance_repr[k] @ self.word_embs[k] for k in ['obj', 'act']}
+        logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.self.word_embs[k]).t() for k in ['obj', 'act']}
         return logits, labels
 
 
