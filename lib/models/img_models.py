@@ -421,7 +421,7 @@ class WEmbModel(AbstractModel):
         labels = {'obj': obj_labels, 'act': act_labels}
 
         # Logits
-        logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.self.word_embs[k]).t() for k in ['obj', 'act']}
+        logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.word_embs[k]).t() for k in ['obj', 'act']}
         return logits, labels
 
 
