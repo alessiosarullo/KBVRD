@@ -341,9 +341,9 @@ class WEmbModel(AbstractModel):
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
         act_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
-        self.word_embs = nn.ModuleDict({'obj': nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False),
-                                        'act': nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
-                                        })
+        self.word_embs = nn.ParameterDict({'obj': nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False),
+                                           'act': nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
+                                           })
 
         # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)
@@ -364,7 +364,6 @@ class WEmbModel(AbstractModel):
 
         # Base model
         self.repr_mlps = nn.ModuleDict()
-        self.output_mlps = nn.ModuleDict()
         for k, d in [('obj', dataset.full_dataset.num_objects),
                      ('act', dataset.full_dataset.num_actions),
                      ]:
