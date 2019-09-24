@@ -326,6 +326,119 @@ class SKZSMultiModel(AbstractModel):
         return instance_repr, linear_predictors, predictors, labels
 
 
+class WEmbModel(AbstractModel):
+    @classmethod
+    def get_cline_name(cls):
+        return 'wemb'
+
+    def __init__(self, dataset: HicoSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
+        self.repr_dim = cfg.repr_dim
+        self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
+        self.soft_label_loss_coeffs = {'obj': cfg.osl, 'act': cfg.asl, 'hoi': cfg.hsl}
+        self.reg_coeffs = {'obj': cfg.opr, 'act': cfg.apr, 'hoi': cfg.hpr}
+        self.soft_labels_enabled = any([v > 0 for v in self.soft_label_loss_coeffs.values()])
+
+        # Word embeddings + similarity matrices
+        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
+        act_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
+        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
+        self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
+        self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
+        self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
+        self.act_obj_emb_sim = nn.Parameter(self.act_word_embs @ self.obj_word_embs.t(), requires_grad=False)
+
+        # Seen/unseen indices
+        self.zs_enabled = (cfg.seenf >= 0)
+        assert self.zs_enabled
+        print('Zero-shot enabled.')
+        self.seen_inds = {}
+        self.unseen_inds = {}
+
+        seen_obj_inds = dataset.active_objects
+        unseen_obj_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_objects)) - set(seen_obj_inds.tolist())))
+        self.seen_inds['obj'] = nn.Parameter(torch.tensor(seen_obj_inds), requires_grad=False)
+        self.unseen_inds['obj'] = nn.Parameter(torch.tensor(unseen_obj_inds), requires_grad=False)
+
+        seen_act_inds = dataset.active_actions
+        unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
+        self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
+        self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
+
+        seen_hoi_inds = dataset.active_interactions
+        unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
+        self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
+        self.unseen_inds['hoi'] = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
+
+        # Base model
+        self.repr_mlps = nn.ModuleDict()
+        self.output_mlps = nn.ModuleDict()
+        for k, d in [('obj', dataset.full_dataset.num_objects),
+                     ('act', dataset.full_dataset.num_actions),
+                     ('hoi', dataset.full_dataset.num_interactions)]:
+            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(1024, self.repr_dim),
+                                                ])
+            nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+            self.output_mlps[k] = nn.Linear(self.repr_dim, d, bias=False)
+            torch.nn.init.xavier_normal_(self.output_mlps[k], gain=torch.nn.init.calculate_gain('linear'))
+
+    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+            feats, orig_labels = x
+            all_logits, all_labels = self._forward(feats, orig_labels)
+
+            if not inference:
+                all_labels = {k: v for k, v in all_labels.items()}
+                losses = {}
+                for k in ['obj', 'act', 'hoi']:
+                    logits = all_logits[k]
+                    labels = all_labels[k]
+                    loss_c = self.loss_coeffs[k]
+                    if loss_c == 0:
+                        continue
+
+                    seen, unseen = self.seen_inds[k], self.unseen_inds[k]
+                    if not cfg.train_null:
+                        if k == 'hoi':
+                            raise NotImplementedError()
+                        elif k == 'act':
+                            seen = seen[1:]
+                    losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen])
+                return losses
+            else:
+                prediction = Prediction()
+                interactions = self.dataset.full_dataset.interactions
+                obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
+                act_scores = torch.sigmoid(all_logits['act']).cpu().numpy() ** cfg.asc
+                hoi_scores = torch.sigmoid(all_logits['hoi']).cpu().numpy() ** cfg.hsc
+                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
+                return prediction
+
+    def _forward(self, feats, labels):
+        # Labels
+        if labels is not None:
+            hoi_labels = labels
+            obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
+            act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
+        else:
+            obj_labels = act_labels = hoi_labels = None
+        labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
+
+        # Instance representation
+        instance_repr = {k: self.repr_mlps[k](feats) for k in ['obj', 'act', 'hoi']}
+
+        # Logits
+        logits = {k: self.output_mlps[k](instance_repr[k]) for k in ['obj', 'act', 'hoi']}
+        return logits, labels
+
+
 class KatoModel(AbstractModel):
     @classmethod
     def get_cline_name(cls):
