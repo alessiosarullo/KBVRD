@@ -104,7 +104,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
 
         boxes_ext = self.pc_boxes_ext[all_box_inds, :].copy()
         boxes_ext[:, 0] = np.repeat(arange, 2)
-        minibatch.boxes_ext =  torch.tensor(boxes_ext.boxes_ext, device=device)
+        minibatch.boxes_ext =  torch.tensor(boxes_ext, device=device)
         minibatch.box_feats = torch.tensor(self.pc_boxes_feats[all_box_inds, :], device=device)
         box_labels = self.pc_box_labels[all_box_inds].copy()
 
