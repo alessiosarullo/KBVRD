@@ -380,7 +380,7 @@ class WEmbModel(AbstractModel):
                                                 nn.Linear(600, self.repr_dim),
                                                 ])
             nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-            nn.init.xavier_normal_(self.wemb_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+            nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
