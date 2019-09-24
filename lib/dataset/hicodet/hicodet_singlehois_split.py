@@ -1,12 +1,12 @@
 from typing import List
 
-
 import numpy as np
 import torch
 import torch.utils.data
 
 from config import cfg
-from lib.dataset.hicodet.hicodet_split import PrecomputedFilesHandler, HicoDetSplit, HicoDet, PrecomputedMinibatch
+from lib.dataset.hicodet.hicodet_split import PrecomputedFilesHandler, HicoDetSplit, HicoDet
+from lib.containers import PrecomputedMinibatch
 from lib.dataset.utils import Splits
 from lib.utils import Timer
 
@@ -41,7 +41,6 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
             assert self.split != Splits.TEST
             inactive_actions = np.array(set(range(self.full_dataset.num_actions)) - set(self.active_actions.tolist()))
             self.pc_action_labels[:, inactive_actions] = 0
-
 
         #############################################################################################################################
         # Cache
@@ -81,12 +80,14 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
 
     def collate(self, pc_hoi_idxs):
         minibatch = PrecomputedMinibatch()
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         pc_hoi_idxs = np.array(pc_hoi_idxs)
         arange = np.arange(len(pc_hoi_idxs))
 
         pc_im_idxs = self.pc_ho_im_idxs[pc_hoi_idxs]
         img_infos = self.pc_image_infos[pc_im_idxs, :].copy()
+        minibatch.img_scales = img_infos[:, 2]
 
         for i, pc_hoi_idx in enumerate(pc_hoi_idxs):
             Timer.get('GetBatch').tic()
@@ -94,18 +95,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
             im_idx = self.pc_im_idx_to_im_idx[pc_im_idx]
             img_id = self.image_ids[im_idx]
             assert self.pc_image_ids[pc_im_idx] == img_id, (self.pc_image_ids[pc_im_idx], img_id)
-            minibatch.other_ex_data += [{'index': im_idx,
-                                         'id': img_id,
-                                         'fn': self._data[im_idx].filename,
-                                         'split': self.split,
-                                         'im_size': img_infos[i, :2],  # this is the original one and won't be changed
-                                         'im_scale': img_infos[i, 2],
-                                         }]
             Timer.get('GetBatch').toc()
-
-        img_infos[:, 0] = max(img_infos[:, 0])
-        img_infos[:, 1] = max(img_infos[:, 1])
-        minibatch.img_infos = img_infos
 
         all_box_pair_inds = self.pc_im_box_range_inds[pc_im_idxs, :1] + self.pc_ho_infos[pc_hoi_idxs, 1:]
         assert all_box_pair_inds.shape[1] == 2 and np.all(all_box_pair_inds[:, 1] <= self.pc_im_box_range_inds[pc_im_idxs, 1])
@@ -114,19 +104,32 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
 
         boxes_ext = self.pc_boxes_ext[all_box_inds, :].copy()
         boxes_ext[:, 0] = np.repeat(arange, 2)
-        minibatch.pc_boxes_ext = boxes_ext
-        minibatch.pc_box_feats = self.pc_boxes_feats[all_box_inds, :]
-        minibatch.pc_box_labels = self.pc_box_labels[all_box_inds].copy()
+        minibatch.boxes_ext =  torch.tensor(boxes_ext.boxes_ext, device=device)
+        minibatch.box_feats = torch.tensor(self.pc_boxes_feats[all_box_inds, :], device=device)
+        box_labels = self.pc_box_labels[all_box_inds].copy()
 
-        minibatch.pc_ho_infos = np.stack([arange, 2 * arange, 2 * arange + 1], axis=1)
-        minibatch.pc_ho_union_boxes = self.pc_union_boxes[pc_hoi_idxs, :]
-        minibatch.pc_ho_union_feats = self.pc_union_boxes_feats[pc_hoi_idxs, :]
-        minibatch.pc_action_labels = self.pc_action_labels[pc_hoi_idxs, :].copy()
+        minibatch.ho_infos_np = np.stack([arange, 2 * arange, 2 * arange + 1], axis=1).astype(np.int, copy=False)
+        minibatch.ho_union_boxes = self.pc_union_boxes[pc_hoi_idxs, :]
+        minibatch.ho_union_boxes_feats = torch.tensor(self.pc_union_boxes_feats[pc_hoi_idxs, :], device=device)
+        action_labels = self.pc_action_labels[pc_hoi_idxs, :].copy()
 
-        assert minibatch.pc_boxes_ext.shape[0] == minibatch.pc_box_feats.shape[0] == minibatch.pc_box_labels.shape[0]
-        assert minibatch.pc_ho_infos.shape[0] == minibatch.pc_ho_union_boxes.shape[0] == minibatch.pc_ho_union_feats.shape[0] == \
-               minibatch.pc_action_labels.shape[0]
+        # HOI labels. Requires everything Numpy
+        interactions = self.full_dataset.interactions
+        hoi_obj_labels = box_labels[minibatch.ho_infos_np[:, 2]]
+        obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.full_dataset.num_objects), dtype=np.float32)
+        fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
+        obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
+        hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
 
+        # Checks
+        assert minibatch.boxes_ext.shape[0] == minibatch.box_feats.shape[0] == box_labels.shape[0] > 0
+        assert minibatch.ho_infos_np.shape[0] == minibatch.ho_union_boxes.shape[0] == minibatch.ho_union_boxes_feats.shape[0] == \
+               action_labels.shape[0] > 0
+        assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.full_dataset.num_interactions
+
+        minibatch.box_labels = torch.tensor(box_labels, device=device)
+        minibatch.action_labels = torch.tensor(action_labels, device=device)
+        minibatch.hoi_labels = torch.tensor(hoi_labels, device=device)
         return minibatch
 
     @classmethod

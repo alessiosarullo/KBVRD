@@ -179,7 +179,7 @@ class WordEmbeddings:
     def parse_word2vec(src_file):
         """
         `model`'s parameters are:
-            - vectors [ndarray]: N x vector_size vector of embeddings. N = 3 billion.
+            - vectors [ndarray]: N batch vector_size vector of embeddings. N = 3 billion.
             - vocab [dict(str, Vocab)]: keys are words (the same in `index2word`). Values are objects that have two attributes: 'count' and
                 'index'. Seems like, for some reason, count + index = len(`vocab`), always. Don't understand what they're supposed to represent.
             - vector_size [int]: it's 300.

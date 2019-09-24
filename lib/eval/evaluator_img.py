@@ -6,7 +6,7 @@ from sklearn.metrics import average_precision_score
 
 from lib.dataset.hico import HicoSplit
 from lib.eval.eval_utils import BaseEvaluator
-from lib.models.containers import Prediction
+from lib.containers import Prediction
 from lib.utils import Timer
 
 

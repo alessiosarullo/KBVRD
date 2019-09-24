@@ -110,7 +110,6 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         return self.full_dataset.split_annotations[self._data_split].shape[0]
 
     def get_loader(self, batch_size, num_workers=0, num_gpus=1, shuffle=None, drop_last=True, **kwargs):
-        # noinspection PyCallingNonCallable,PyUnresolvedReferences
         def collate(idx_list):
             Timer.get('GetBatch').tic()
             idxs = np.array(idx_list)

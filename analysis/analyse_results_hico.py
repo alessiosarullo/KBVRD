@@ -13,7 +13,7 @@ from analysis.utils import plot_mat
 from config import cfg
 from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import Splits, interactions_to_mat
-from lib.models.containers import Prediction
+from lib.containers import Prediction
 
 try:
     matplotlib.use('Qt5Agg')

@@ -15,7 +15,7 @@ from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
 from lib.dataset.hicodet.hicodet_split import HicoDetSplitBuilder, HicoDetSplit, Splits, Example
-from lib.models.containers import Prediction
+from lib.containers import Prediction
 from lib.eval.evaluator_roi import EvaluatorROI
 from lib.eval.eval_utils import sort_and_filter, MetricFormatter
 

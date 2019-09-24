@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -x
+set -batch
 set -e
 
 export PYTHONUNBUFFERED="True"
@@ -42,7 +42,7 @@ do
   fi
 done
 
-set +x
+set +batch
 
 if [ "${NUM_RUNS}" -gt 1 ]; then
   DATETIME=$(date +'%Y-%m-%d_%H-%M-%S')

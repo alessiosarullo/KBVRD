@@ -8,7 +8,7 @@ from lib.bbox_utils import compute_ious
 from lib.dataset.utils import Example
 from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
 from lib.eval.eval_utils import BaseEvaluator
-from lib.models.containers import Prediction
+from lib.containers import Prediction
 from lib.utils import Timer
 
 

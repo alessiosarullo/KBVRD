@@ -23,6 +23,7 @@ from lib.models.roi_generic_model import Prediction
 from lib.running_stats import RunningStats
 from lib.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
+from lib.containers import PrecomputedMinibatch
 
 
 class Launcher:
@@ -211,6 +212,7 @@ class Launcher:
         stats.epoch_tic()
         epoch_loss = 0
         for batch_idx, batch in enumerate(data_loader):
+            batch = batch  # type: PrecomputedMinibatch
             try:
                 batch.epoch = epoch_idx
                 batch.iter = self.curr_train_iter
@@ -241,7 +243,7 @@ class Launcher:
         stats.epoch_toc()
         return epoch_loss
 
-    def loss_batch(self, batch, stats: RunningStats, optimizer=None):
+    def loss_batch(self, batch: PrecomputedMinibatch, stats: RunningStats, optimizer=None):
         """ :arg `optimizer` should be None on validation batches. """
 
         losses = self.detector(batch, inference=False)

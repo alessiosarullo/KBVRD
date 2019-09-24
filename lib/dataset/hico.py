@@ -103,10 +103,10 @@ class HicoDriver:
                 wn_pred_dict = d['wn_pred_dict']
                 pred_dict = d['pred_dict']
         except FileNotFoundError:
-            # 'anno_train': 600 x 38118 matrix. Associates to each training set images action labels. Specifically, cell (i,j) can contain one
+            # 'anno_train': 600 batch 38118 matrix. Associates to each training set images action labels. Specifically, cell (i,j) can contain one
             #       of the four values -1, 0, 1 or NaN according to whether action i is a hard negative, a soft negative/positive,
             #       a hard positive or unknown in image j.
-            # 'anno_test': 600 x 9658 matrix. Same format for the training set one.
+            # 'anno_test': 600 batch 9658 matrix. Same format for the training set one.
             # 'list_train' and 'list_set' are respectively 38118- and 9658- dimensional vectors of file names.
             src_anns = loadmat(os.path.join(self.data_dir, 'anno.mat'), squeeze_me=True)
 

@@ -6,11 +6,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from config import cfg
+from lib.containers import Prediction
 from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.containers import Prediction
 from lib.models.gcns import HicoGCN, HicoHoiGCN, KatoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
 
@@ -149,7 +149,7 @@ class SKZSMultiModel(AbstractModel):
         assert cfg.osl or cfg.asl or cfg.hsl
         batch_size = labels.shape[0]
 
-        inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
+        inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N batch I -> N batch O batch P
         ext_inter_mat = inter_mat
 
         obj_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(labels)).clamp(max=1)
@@ -297,16 +297,16 @@ class SKZSMultiModel(AbstractModel):
 
     def _forward(self, feats, labels):
         # Predictors
-        linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act', 'hoi']}  # P x D
+        linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act', 'hoi']}  # P batch D
         if cfg.gc:
             if cfg.hoigcn:
                 hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
             else:
                 hico = self.dataset.full_dataset
-                obj_class_embs, act_class_embs = self.gcn()  # P x E
+                obj_class_embs, act_class_embs = self.gcn()  # P batch E
                 hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
             class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
-            predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
+            predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P batch D
         else:
             predictors = linear_predictors
 

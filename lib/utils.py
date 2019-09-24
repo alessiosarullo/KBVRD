@@ -59,7 +59,7 @@ class Timer:
 
     def _get_lines(self, average):
         sep = ' ' * 4
-        s = ['%s (x%d)' % (self.format(self.spent(average=average)), self.num_instances)]
+        s = ['%s (batch%d)' % (self.format(self.spent(average=average)), self.num_instances)]
         for k, v in self.sub_timers.items():
             try:
                 sub_s = v._get_lines(average)

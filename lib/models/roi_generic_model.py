@@ -1,13 +1,11 @@
 import numpy as np
 import torch
-
-from torch import  nn
+from torch import nn
 
 from config import cfg
+from lib.containers import Prediction, PrecomputedMinibatch
 from lib.dataset.hicodet.hicodet_singlehois_split import HicoDetSingleHOIsSplit
-from lib.dataset.hicodet.hicodet_split import PrecomputedMinibatch
 from lib.models.abstract_model import AbstractModel
-from lib.models.containers import Prediction, VisualOutput
 from lib.models.misc import bce_loss
 
 
@@ -36,24 +34,22 @@ class GenericModel(AbstractModel):
     def final_repr_dim(self):
         raise NotImplementedError()
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
+    def forward(self, batch: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
-            vis_output = self.build_visual_output(x, inference)  # type: VisualOutput
-
-            if vis_output.ho_infos_np is not None:
-                outputs = self._forward(vis_output, epoch=x.epoch, step=x.iter)
-                outputs = self._refine_output(x, inference, vis_output, outputs)
+            if batch.ho_infos_np is not None:
+                outputs = self._forward(batch, epoch=batch.epoch, step=batch.iter)
+                outputs = self._refine_output(batch, inference, outputs)
             else:
                 assert inference
                 outputs = None
 
             if not inference:
-                return self._get_losses(vis_output, outputs)
+                return self._get_losses(batch, outputs)
             else:
                 prediction = Prediction()
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_infos[:, 2]
+                if batch.boxes_ext is not None:
+                    boxes_ext = batch.boxes_ext.cpu().numpy()
+                    im_scales = batch.img_scales
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
@@ -61,21 +57,21 @@ class GenericModel(AbstractModel):
                     prediction.obj_boxes = obj_boxes
                     prediction.obj_scores = boxes_ext[:, 5:]
 
-                    if vis_output.ho_infos_np is not None:
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
+                    if batch.ho_infos_np is not None:
+                        prediction.ho_img_inds = batch.ho_infos_np[:, 0]
+                        prediction.ho_pairs = batch.ho_infos_np[:, 1:]
 
                         assert outputs is not None
-                        self._finalize_prediction(prediction, vis_output, outputs)
+                        self._finalize_prediction(prediction, batch, outputs)
                 return prediction
 
-    def _forward(self, vis_output: VisualOutput, step=None, epoch=None, **kwargs):
+    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
         raise NotImplementedError()
 
-    def _refine_output(self, x: PrecomputedMinibatch, inference, vis_output, outputs):
+    def _refine_output(self, vis_output, inference, outputs):
         return outputs
 
-    def _get_losses(self, vis_output: VisualOutput, outputs):
+    def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
         output = outputs
         if cfg.phoi:
             losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
@@ -83,8 +79,7 @@ class GenericModel(AbstractModel):
             losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
         return losses
 
-    # noinspection PyUnresolvedReferences
-    def _finalize_prediction(self, prediction: Prediction, vis_output: VisualOutput, outputs):
+    def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
         output = outputs
         if cfg.phoi:
             ho_obj_scores = prediction.obj_scores[vis_output.ho_infos_np[:, 2], :]
@@ -97,50 +92,6 @@ class GenericModel(AbstractModel):
                 output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_actions))
                 output[:, self.dataset.active_actions] = restricted_action_output
             prediction.action_scores = torch.sigmoid(output).cpu().numpy()
-
-    # noinspection PyCallingNonCallable
-    def build_visual_output(self, batch: PrecomputedMinibatch, inference):
-        output = VisualOutput()
-        training = not inference
-
-        boxes_ext_np = batch.pc_boxes_ext
-        ho_infos = batch.pc_ho_infos
-
-        if boxes_ext_np.shape[0] > 0 or training:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            output.boxes_ext = torch.tensor(boxes_ext_np, device=device)
-            output.box_feats = torch.tensor(batch.pc_box_feats, device=device)
-            output.hoi_union_boxes = batch.pc_ho_union_boxes
-            output.hoi_union_boxes_feats = torch.tensor(batch.pc_ho_union_feats, device=device)
-
-            if ho_infos.shape[0] > 0:
-                ho_infos = ho_infos.astype(np.int, copy=False)
-                output.ho_infos_np = ho_infos
-
-                if batch.pc_box_labels is not None:
-                    box_labels_np = batch.pc_box_labels
-                    action_labels_np = batch.pc_action_labels
-                    output.box_labels = torch.tensor(box_labels_np, device=device)
-                    output.action_labels = torch.tensor(action_labels_np, device=device)
-                    output.hoi_labels = torch.tensor(self.action_labels_to_hoi_labels(box_labels_np, action_labels_np, ho_infos), device=device)
-            else:
-                assert inference
-
-        # Note that box indices in `ho_infos` are over all boxes, NOT relative to each specific image
-        return output
-
-    def action_labels_to_hoi_labels(self, box_labels, action_labels, ho_infos):
-        # Requires everything Numpy
-        interactions = self.dataset.full_dataset.interactions
-        hoi_obj_labels = box_labels[ho_infos[:, 2]]
-
-        obj_labels_1hot = np.zeros((hoi_obj_labels.shape[0], self.dataset.full_dataset.num_objects), dtype=np.float32)
-        fg_objs = np.flatnonzero(hoi_obj_labels >= 0)
-        obj_labels_1hot[fg_objs, hoi_obj_labels[fg_objs]] = 1
-
-        hoi_labels = obj_labels_1hot[:, interactions[:, 1]] * action_labels[:, interactions[:, 0]]
-        assert hoi_labels.shape[0] == action_labels.shape[0] and hoi_labels.shape[1] == self.dataset.full_dataset.num_interactions
-        return hoi_labels
 
     # def get_geo_feats(self, vis_output: VisualOutput, batch: PrecomputedMinibatch):
     #     boxes_ext = vis_output.boxes_ext

@@ -1,9 +1,11 @@
-import numpy as np
-import torch.utils.data
 from typing import Union
 
+import numpy as np
+import torch.utils.data
+
+from lib.containers import PrecomputedExample, PrecomputedMinibatch
 from lib.dataset.hicodet.hicodet import HicoDet
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit, PrecomputedMinibatch, PrecomputedExample
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.utils import Splits, Example
 from lib.utils import Timer
 
@@ -23,12 +25,33 @@ class HicoDetImgSplit(HicoDetSplit):
             batch_size=1,
             shuffle=False,
             num_workers=num_workers,
-            collate_fn=lambda x: PrecomputedMinibatch.collate(x),
+            collate_fn=lambda x: self.collate(x),
             drop_last=False,
             # pin_memory=True,  # disable this in case of freezes
             **kwargs,
         )
         return data_loader
+
+    def collate(self, examples):  # FIXME this basicaly copies PrecomputedExample into PrecomputedMinibatch. Simplify.
+        assert len(examples) == 1
+        ex = examples[0]  # type: PrecomputedExample
+        minibatch = PrecomputedMinibatch()
+        minibatch.img_scales = np.array([ex.scale], dtype=np.float32)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        boxes_ext = ex.precomp_boxes_ext
+        if boxes_ext is not None:
+            boxes_ext[:, 0] = 0
+            minibatch.boxes_ext = torch.tensor(boxes_ext, device=device)
+            minibatch.box_feats = torch.tensor(ex.precomp_box_feats, device=device)
+
+            hoi_infos = ex.precomp_hoi_infos
+            if hoi_infos is not None:
+                hoi_infos[:, 0] = 0
+                minibatch.ho_infos_np = hoi_infos.astype(np.int, copy=False)
+                minibatch.ho_union_boxes = ex.precomp_hoi_union_boxes
+                minibatch.ho_union_boxes_feats = torch.tensor(ex.precomp_hoi_union_feats, device=device)
+        return minibatch
 
     def get_image_data(self, idx, precomputed) -> Union[PrecomputedExample, Example]:
         assert self.split == Splits.TEST
@@ -43,7 +66,6 @@ class HicoDetImgSplit(HicoDetSplit):
             # Image data
             img_infos = self.pc_image_infos[pc_im_idx].copy()
             assert img_infos.shape == (3,)
-            entry.img_size = img_infos[:2]
             entry.scale = img_infos[2]
 
             # Object data
