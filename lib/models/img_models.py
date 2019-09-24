@@ -368,19 +368,26 @@ class WEmbModel(AbstractModel):
         for k, d in [('obj', dataset.full_dataset.num_objects),
                      ('act', dataset.full_dataset.num_actions),
                      ]:
-            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
+            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 600),
                                                 nn.ReLU(inplace=True),
                                                 nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(1024, self.repr_dim),
+                                                nn.Linear(600, 300),
                                                 ])
             nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
             nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-            self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
-                                                nn.ReLU(inplace=True),
-                                                nn.Linear(600, self.repr_dim),
-                                                ])
-            nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-            nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
+            # self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
+            #                                     nn.ReLU(inplace=True),
+            #                                     nn.Dropout(p=cfg.dropout),
+            #                                     nn.Linear(1024, self.repr_dim),
+            #                                     ])
+            # nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            # nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+            # self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
+            #                                     nn.ReLU(inplace=True),
+            #                                     nn.Linear(600, self.repr_dim),
+            #                                     ])
+            # nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            # nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
 
     def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -421,7 +428,8 @@ class WEmbModel(AbstractModel):
         labels = {'obj': obj_labels, 'act': act_labels}
 
         # Logits
-        logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.word_embs[k]).t() for k in ['obj', 'act']}
+        # logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.word_embs[k]).t() for k in ['obj', 'act']}
+        logits = {k: self.repr_mlps[k](feats) @ self.word_embs[k].t() for k in ['obj', 'act']}
         return logits, labels
 
 
