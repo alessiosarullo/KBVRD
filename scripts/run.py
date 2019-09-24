@@ -218,7 +218,7 @@ class Launcher:
                 batch.iter = self.curr_train_iter
             except AttributeError:
                 # type: List
-                batch[2] += [epoch_idx, self.curr_train_iter]
+                batch[2].extend([epoch_idx, self.curr_train_iter])
 
             stats.batch_tic()
             batch_loss = self.loss_batch(batch, stats, optimizer)
