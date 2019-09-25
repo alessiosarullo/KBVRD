@@ -336,7 +336,7 @@ class Launcher:
             unseen_interactions = set(range(self.train_split.full_dataset.num_interactions)) - set(self.train_split.active_interactions)
             detailed_metric_dicts.append({f'zs_{k}': v for k, v in get_metrics(unseen_interactions).items()})
 
-            op_mat = self.train_split.full_dataset.op_pair_to_interaction
+            op_mat = self.train_split.full_dataset.oa_pair_to_interaction
             unseen_objects = np.array(sorted(set(range(self.train_split.full_dataset.num_objects)) - set(self.train_split.active_objects)))
             unseen_actions = np.array(sorted(set(range(self.train_split.full_dataset.num_actions)) - set(self.train_split.active_actions)))
 

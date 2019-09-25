@@ -14,8 +14,8 @@ class HoiDataset:
 
         # Interactions
         self.interactions = np.array([[self.action_index[act], self.object_index[obj]] for act, obj in interactions_classes])  # [a, o]
-        self.op_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
-        self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
+        self.oa_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
+        self.oa_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
 
     @property
     def num_objects(self):

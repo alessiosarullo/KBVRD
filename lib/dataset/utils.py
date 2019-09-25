@@ -91,7 +91,7 @@ def get_hoi_adjacency_matrix(dataset, isolate_null=None):
 def get_noun_verb_adj_mat(dataset, isolate_null=None):
     if isolate_null is None:
         isolate_null = not cfg.link_null
-    noun_verb_links = torch.from_numpy((dataset.full_dataset.op_pair_to_interaction >= 0).astype(np.float32))
+    noun_verb_links = torch.from_numpy((dataset.full_dataset.oa_pair_to_interaction >= 0).astype(np.float32))
     if isolate_null:
         noun_verb_links[:, 0] = 0
     return noun_verb_links

@@ -57,7 +57,7 @@ class HoiDatasetSplit(AbstractHoiDatasetSplit):
         self.actions = [full_dataset.actions[i] for i in action_inds]
         self.active_actions = np.array(action_inds, dtype=np.int)
 
-        active_op_mat = self.full_dataset.op_pair_to_interaction[self.active_objects, :][:, self.active_actions]
+        active_op_mat = self.full_dataset.oa_pair_to_interaction[self.active_objects, :][:, self.active_actions]
         active_interactions = set(np.unique(active_op_mat).tolist()) - {-1}
         self.active_interactions = np.array(sorted(active_interactions), dtype=np.int)
         self.interactions = self.full_dataset.interactions[self.active_interactions, :]  # original action and object inds
