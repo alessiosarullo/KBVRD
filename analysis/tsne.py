@@ -1,5 +1,7 @@
+import os
 import pickle
 
+import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
@@ -33,9 +35,15 @@ def main():
 
     model.eval()
     _, act_class_embs = model.gcn()
+    act_class_embs = act_class_embs.cpu().numpy()
 
+    np.save(os.path.join(cfg.res_stats_path, 'act_embs'), act_class_embs)
+
+    tsne(act_class_embs)
+
+
+def tsne(act_class_embs):
     act_emb_2d = TSNE().fit_transform(act_class_embs)
-
     plt.scatter(act_emb_2d[:, 0], act_emb_2d[:, 1])
     plt.savefig('tsne.png', dpi=300)
 
