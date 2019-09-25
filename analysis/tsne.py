@@ -1,15 +1,14 @@
 import pickle
-import sys
 
 import torch
+from matplotlib import pyplot as plt
+from sklearn.manifold import TSNE
 
 from config import cfg
 from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import Splits
 from lib.models.abstract_model import AbstractModel
 from scripts.utils import get_all_models_by_name
-
-sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl/asl1/2019-09-25_10-25-31_SINGLE']
 
 
 def main():
@@ -31,6 +30,14 @@ def main():
 
     ckpt = torch.load(cfg.saved_model_file, map_location='cpu')
     model.load_state_dict(ckpt['state_dict'])
+
+    model.eval()
+    _, act_class_embs = model.gcn()
+
+    act_emb_2d = TSNE().fit_transform(act_class_embs)
+
+    plt.scatter(act_emb_2d[:, 0], act_emb_2d[:, 1])
+    plt.savefig('tsne.png', dpi=300)
 
 
 if __name__ == '__main__':
