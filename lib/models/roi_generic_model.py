@@ -72,7 +72,7 @@ class GenericModel(AbstractModel):
         if cfg.phoi:
             losses = {'hoi_loss': bce_loss(output, vis_output.hoi_labels)}
         else:
-            losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
+            losses = {'act_loss': bce_loss(output, vis_output.action_labels)}
         return losses
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
