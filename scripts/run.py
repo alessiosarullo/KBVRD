@@ -143,8 +143,7 @@ class Launcher:
             scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=cfg.lr_decay_period, gamma=cfg.lr_gamma,
                                                         last_epoch=self.start_epoch - 1)
         else:
-            scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=cfg.num_epochs // 5,
-                                          factor=cfg.lr_gamma, verbose=True, threshold_mode='abs', cooldown=cfg.num_epochs // 20)
+            scheduler = None
         return optimizer, scheduler
 
     def train(self):
@@ -172,22 +171,28 @@ class Launcher:
                 self.detector.eval()
                 all_predictions = self.eval_epoch(None, test_loader, test_stats)
             else:
+                lowest_val_loss = np.inf
                 for epoch in range(self.start_epoch, cfg.num_epochs):
                     print('Epoch %d start.' % epoch)
                     self.detector.train()
                     self.loss_epoch(epoch, train_loader, training_stats, optimizer)
-                    torch.save({'epoch': epoch,
-                                'curr_iter': self.curr_train_iter,
-                                'state_dict': self.detector.state_dict()},
-                               cfg.checkpoint_file)
 
                     self.detector.eval()
                     val_loss = self.loss_epoch(epoch, val_loader, val_stats)
-                    try:
-                        scheduler.step(metrics=val_loss)
-                    except TypeError:
-                        # Scheduler default behaviour is wrong: it gets called with epoch=0 twice, both at the beginning and after the first epoch.
-                        scheduler.step(epoch=epoch + 1)
+                    if scheduler is not None:
+                        try:
+                            scheduler.step(metrics=val_loss)
+                        except TypeError:
+                            # Scheduler default behaviour is wrong: it gets called with epoch=0 twice, both at the beginning and after the first epoch
+                            scheduler.step(epoch=epoch + 1)
+
+                    if val_loss < lowest_val_loss:  # save best model only
+                        lowest_val_loss = val_loss
+                        self.detector.train()
+                        torch.save({'epoch': epoch,
+                                    'curr_iter': self.curr_train_iter,
+                                    'state_dict': self.detector.state_dict()},
+                                   cfg.checkpoint_file)
 
                     if epoch % cfg.eval_interval == 0 or epoch + 1 == cfg.num_epochs:
                         all_predictions = self.eval_epoch(epoch, test_loader, test_stats)
