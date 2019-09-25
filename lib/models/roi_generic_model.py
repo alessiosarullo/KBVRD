@@ -30,10 +30,6 @@ class GenericModel(AbstractModel):
         else:
             self.csp_weights = None
 
-    @property
-    def final_repr_dim(self):
-        raise NotImplementedError()
-
     def forward(self, batch: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             if batch.ho_infos_np is not None:

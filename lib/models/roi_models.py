@@ -20,7 +20,7 @@ class BaseModel(GenericModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         hidden_dim = 1024
-        self.act_repr_dim = cfg.repr_dim
+        self.final_repr_dim = cfg.repr_dim
         full_dataset = self.dataset.full_dataset
 
         self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim + full_dataset.num_objects, hidden_dim),
@@ -50,10 +50,6 @@ class BaseModel(GenericModel):
         num_classes = full_dataset.num_interactions if cfg.phoi else full_dataset.num_actions
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
-
-    @property
-    def final_repr_dim(self):
-        return self.act_repr_dim
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, return_repr=False):
         boxes_ext = vis_output.boxes_ext
@@ -185,7 +181,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
-        self.predictor_dim = 1024
+        self.repr_dim = 1024
 
         gcemb_dim = cfg.gcrdim
         latent_dim = cfg.gcldim
