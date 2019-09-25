@@ -76,23 +76,23 @@ class Launcher:
 
         # Data
         # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
-        obj_inds = act_inds = inter_inds = None
+        inds = {k: None for k in ['obj', 'act', 'hoi']}
         if cfg.seenf >= 0:
             inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
-            try:
-                inter_inds = sorted(inds_dict[Splits.TRAIN.value]['inter'].tolist())
-            except KeyError:
-                act_inds = sorted(inds_dict[Splits.TRAIN.value]['act'].tolist())
-                obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
+            for k in ['obj', 'act', 'hoi']:
+                try:
+                    inds[k] = sorted(inds_dict[Splits.TRAIN.value][k].tolist())
+                except KeyError:
+                    pass
 
         if cfg.hicodet:
-            splits = HicoDetSingleHOIsSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
+            splits = HicoDetSingleHOIsSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
             splits[Splits.TEST] = HicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
         else:
             if cfg.vghoi:
-                splits = VGHoiSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
+                splits = VGHoiSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
             else:
-                splits = HicoSplit.get_splits(obj_inds=obj_inds, act_inds=act_inds)
+                splits = HicoSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
         self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
         # Model

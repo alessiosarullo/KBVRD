@@ -133,7 +133,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
         return minibatch
 
     @classmethod
-    def get_splits(cls, act_inds=None, obj_inds=None):
+    def get_splits(cls, obj_inds=None, act_inds=None):
         splits = {}
         full_dataset = HicoDet()
 
