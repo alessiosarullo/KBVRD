@@ -39,7 +39,7 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
             self.pc_box_labels[new_bg_inds] = -1
         if len(self.active_actions) < self.full_dataset.num_actions:
             assert self.split != Splits.TEST
-            inactive_actions = np.array(set(range(self.full_dataset.num_actions)) - set(self.active_actions.tolist()))
+            inactive_actions = np.array(sorted(set(range(self.full_dataset.num_actions)) - set(self.active_actions.tolist())))
             self.pc_action_labels[:, inactive_actions] = 0
 
         #############################################################################################################################
