@@ -7,9 +7,9 @@ from typing import Union, List
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from config import cfg
+from lib.containers import PrecomputedMinibatch
 from lib.dataset.hico import HicoSplit
 from lib.dataset.hicodet.hicodet_img_split import HicoDetImgSplit
 from lib.dataset.hicodet.hicodet_singlehois_split import HicoDetSingleHOIsSplit
@@ -23,7 +23,6 @@ from lib.models.roi_generic_model import Prediction
 from lib.running_stats import RunningStats
 from lib.utils import Timer
 from scripts.utils import print_params, get_all_models_by_name
-from lib.containers import PrecomputedMinibatch
 
 
 class Launcher:

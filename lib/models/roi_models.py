@@ -187,25 +187,19 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = 1024
 
-        gcemb_dim = 1024
-        if cfg.puregc:
-            self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim, self.predictor_dim))
-        else:
-            latent_dim = 200
-            input_dim = self.predictor_dim
-            self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
-                                                  nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.dropout),
-                                                  nn.Linear(600, 800),
-                                                  nn.ReLU(inplace=True),
-                                                  nn.Dropout(p=cfg.dropout),
-                                                  nn.Linear(800, input_dim),
-                                                  )
-            self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+        gcemb_dim = cfg.gcrdim
+        latent_dim = cfg.gcldim
+        hidden_dim = (latent_dim + self.repr_dim) // 2
+        self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, hidden_dim),
+                                              nn.ReLU(inplace=True),
+                                              nn.Dropout(p=cfg.dropout),
+                                              nn.Linear(hidden_dim, self.repr_dim))
+        gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
+        self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
 
         if cfg.apr > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
-            assert (self.vv_adj.diag()[1:] == 1).all()
+        assert (self.vv_adj.diag()[1:] == 1).all()
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
         dir_logits, gc_logits, labels, reg_loss = outputs
