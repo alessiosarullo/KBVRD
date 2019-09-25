@@ -2,7 +2,7 @@ import numpy as np
 
 
 class HoiDataset:
-    def __init__(self, object_classes, action_classes, null_action, interactions_classes, filenames_per_split, annotations_per_split):
+    def __init__(self, object_classes, action_classes, null_action, interactions_classes):
         self.objects = object_classes
         self.object_index = {obj: i for i, obj in enumerate(self.objects)}
 
@@ -16,9 +16,6 @@ class HoiDataset:
         self.interactions = np.array([[self.action_index[act], self.object_index[obj]] for act, obj in interactions_classes])  # [a, o]
         self.op_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
         self.op_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
-
-        self.split_filenames = filenames_per_split
-        self.split_annotations = annotations_per_split
 
     @property
     def num_objects(self):

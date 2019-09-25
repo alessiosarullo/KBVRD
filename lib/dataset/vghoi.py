@@ -55,7 +55,9 @@ class VGHoi(HoiDataset):
         filenames_per_split[Splits.TRAIN], annotations_per_split[Splits.TRAIN] = load_kato_data('VG_train_1A2B.csv')
         filenames_per_split[Splits.TEST], annotations_per_split[Splits.TEST] = load_kato_data('VG_test.csv')
 
-        super(VGHoi, self).__init__(object_classes, action_classes, null_action, interactions_str, filenames_per_split, annotations_per_split)
+        super(VGHoi, self).__init__(object_classes, action_classes, null_action, interactions_str)
+        self.split_filenames = filenames_per_split
+        self.split_annotations = annotations_per_split
 
         with open(os.path.join(kato_dir, 'common_class.csv'), 'r') as f:
             common_interactions = np.array(sorted([int(l.strip()) for l in f.readlines() if l.strip()]))

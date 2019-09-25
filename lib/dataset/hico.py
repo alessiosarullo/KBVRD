@@ -38,9 +38,10 @@ class Hico(HoiDataset):
         test_annotations[np.isnan(test_annotations)] = 0
         test_annotations[test_annotations < 0] = 0
         annotations_per_split = {Splits.TRAIN: train_annotations, Splits.TEST: test_annotations}
-        filenames_per_split = driver.split_filenames
 
-        super(Hico, self).__init__(object_classes, action_classes, null_action, interactions_classes, filenames_per_split, annotations_per_split)
+        super(Hico, self).__init__(object_classes, action_classes, null_action, interactions_classes)
+        self.split_filenames = driver.split_filenames
+        self.split_annotations = annotations_per_split
         self.split_img_dir = driver.split_img_dir
 
     @property

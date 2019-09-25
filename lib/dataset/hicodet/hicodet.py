@@ -7,6 +7,7 @@ from scipy.io import loadmat
 
 from config import cfg
 from lib.dataset.utils import Splits
+from lib.dataset.hoi_dataset import HoiDataset
 
 
 class HicoDetImData:
@@ -18,27 +19,16 @@ class HicoDetImData:
         self.wnet_actions = wnet_actions  # type: List[str]
 
 
-class HicoDet:
+class HicoDet(HoiDataset):
     def __init__(self):
-        self.driver = HicoDetDriver()  # type: HicoDetDriver
-        self.null_interaction = self.driver.null_interaction
+        driver = HicoDetDriver()  # type: HicoDetDriver
+        null_action = driver.null_interaction
+        objects = sorted(set([inter['obj'] for inter in driver.interaction_list]))
+        actions = list(driver.action_dict.keys())
+        interactions_classes = [[inter['act'], inter['obj']] for inter in driver.interaction_list]
 
-        # Objects
-        self.objects = sorted(set([inter['obj'] for inter in self.driver.interaction_list]))
-        self.object_index = {obj: i for i, obj in enumerate(self.objects)}
-
-        # Actions
-        self.actions = list(self.driver.action_dict.keys())
-        self.action_index = {act: i for i, act in enumerate(self.actions)}
-        assert self.action_index[self.null_interaction] == 0
-
-        # Interactions
-        self.interactions = np.array([[self.action_index[inter['act']], self.object_index[inter['obj']]]
-                                      for inter in self.driver.interaction_list])  # 600 x [p, o]
-        self.oa_pair_to_interaction = np.full([self.num_objects, self.num_actions], fill_value=-1, dtype=np.int)
-        self.oa_pair_to_interaction[self.interactions[:, 1], self.interactions[:, 0]] = np.arange(self.num_interactions)
-
-        # Data
+        super().__init__(object_classes=objects, action_classes=actions, null_action=null_action, interactions_classes=interactions_classes)
+        self.driver = driver  # type: HicoDetDriver
         self.split_data = {Splits.TRAIN: self.compute_annotations(Splits.TRAIN),
                            Splits.TEST: self.compute_annotations(Splits.TEST)
                            }  # type: Dict[Splits: List[HicoDetImData]]
