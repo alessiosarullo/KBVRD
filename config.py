@@ -198,8 +198,8 @@ class Configs:
         return os.path.join(self.output_path, 'tboard')
 
     @property
-    def res_stats_path(self):
-        return os.path.join(self.output_path, 'res_stats')
+    def output_analysis_path(self):
+        return os.path.join(self.output_path, 'analysis')
 
     @property
     def eval_only(self):

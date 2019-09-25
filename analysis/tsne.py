@@ -37,7 +37,8 @@ def main():
     _, act_class_embs = model.gcn()
     act_class_embs = act_class_embs.cpu().numpy()
 
-    np.save(os.path.join(cfg.res_stats_path, 'act_embs'), act_class_embs)
+    os.makedirs(cfg.output_analysis_path, exist_ok=True)
+    np.save(os.path.join(cfg.output_analysis_path, 'act_embs'), act_class_embs)
 
     tsne(act_class_embs)
 

@@ -93,7 +93,7 @@ def _setup_and_load():
 
 def zs_stats():
     results = _setup_and_load()
-    res_save_path = cfg.res_stats_path
+    res_save_path = cfg.output_analysis_path
     os.makedirs(res_save_path, exist_ok=True)
 
     inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
