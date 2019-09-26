@@ -10,3 +10,6 @@ do
   python -u tools/stat_test.py "output/skzs/${DIR}" pM-mAP 0.1194
   python -u tools/stat_test.py "output/skzs/${DIR}" zs_pM-mAP 0.075
 done
+
+python -u tools/stat_test.py "output/wemb/hico_zsk_nobg/standard" pM-mAP 0.1194
+python -u tools/stat_test.py "output/wemb/hico_zsk_nobg/standard" zs_pM-mAP 0.075
