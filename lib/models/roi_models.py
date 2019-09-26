@@ -301,9 +301,6 @@ class OldZSGCModel(GenericModel):
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
 
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(get_noun_verb_adj_mat(dataset=dataset), requires_grad=False)
-
         self.base_model = BaseModel(dataset, **kwargs)
         self.predictor_dim = 1024
 
@@ -314,21 +311,13 @@ class OldZSGCModel(GenericModel):
         input_dim = self.predictor_dim
         self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
                                               nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Dropout(p=cfg.dropout),
                                               nn.Linear(600, 800),
                                               nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Dropout(p=cfg.dropout),
                                               nn.Linear(800, input_dim),
                                               )
         self.gcn = HicoGCN(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
-
-        nv_adj = get_noun_verb_adj_mat(self.dataset, isolate_null=True)
-        if cfg.model.greg > 0:
-            self.vv_adj = nn.Parameter((nv_adj.t() @ nv_adj).clamp(max=1).byte(), requires_grad=False)
-            assert (self.vv_adj.diag()[1:] == 1).all()
-
-        if cfg.model.softl:
-            self.obj_act_feasibility = nn.Parameter(nv_adj, requires_grad=False)
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
@@ -381,10 +370,7 @@ class OldZSGCModel(GenericModel):
         action_labels = vis_output.action_labels
         unseen_action_labels = None
         if action_labels is not None:
-            if cfg.model.softl > 0:
-                unseen_action_labels = self.get_soft_labels(vis_output)
-            else:  # restrict training to seen predicates only
-                action_logits = action_logits[:, self.seen_pred_inds]  # P x E
+            action_logits = action_logits[:, self.seen_pred_inds]  # P x E
         reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
