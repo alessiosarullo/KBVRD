@@ -182,15 +182,27 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         super().__init__(dataset, **kwargs)
         self.base_model = BaseModel(dataset, **kwargs)
         self.repr_dim = 1024
-
         gcemb_dim = cfg.gcrdim
-        latent_dim = cfg.gcldim
-        hidden_dim = (latent_dim + self.repr_dim) // 2
-        self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, hidden_dim),
+
+        # latent_dim = cfg.gcldim
+        # hidden_dim = (latent_dim + self.repr_dim) // 2
+        # self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, hidden_dim),
+        #                                       nn.ReLU(inplace=True),
+        #                                       nn.Dropout(p=cfg.dropout),
+        #                                       nn.Linear(hidden_dim, self.repr_dim))
+        # gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
+
+        latent_dim = 200
+        self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
                                               nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.dropout),
-                                              nn.Linear(hidden_dim, self.repr_dim))
-        gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
+                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Linear(600, 800),
+                                              nn.ReLU(inplace=True),
+                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Linear(800, self.repr_dim),
+                                              )
+        gc_dims = (gcemb_dim // 2, latent_dim)
+
         self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
 
         if cfg.apr > 0:
@@ -208,8 +220,9 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             if not cfg.train_null:
                 seen = seen[1:]
 
-            losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
-                                 bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            # losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
+            #                      bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            losses['act_loss'] = bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
             if soft_label_loss_c > 0:
                 losses['act_loss_unseen'] = soft_label_loss_c * bce_loss(gc_logits[:, unseen], labels[:, unseen])
         else:

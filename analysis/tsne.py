@@ -1,5 +1,6 @@
 import os
 import pickle
+import sys
 
 import numpy as np
 import torch
@@ -7,13 +8,13 @@ from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 
 from config import cfg
-from lib.dataset.hico import HicoSplit
+from lib.dataset.hico import HicoSplit, Hico
 from lib.dataset.utils import Splits
 from lib.models.abstract_model import AbstractModel
 from scripts.utils import get_all_models_by_name
 
 
-def main():
+def save():
     cfg.parse_args(fail_if_missing=False)
     cfg.load()
 
@@ -40,14 +41,44 @@ def main():
     os.makedirs(cfg.output_analysis_path, exist_ok=True)
     np.save(os.path.join(cfg.output_analysis_path, 'act_embs'), act_class_embs)
 
-    tsne(act_class_embs)
 
+def show():
+    sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl/asl1/2019-09-25_10-25-31_SINGLE']
+    cfg.parse_args(fail_if_missing=False)
+    cfg.load()
 
-def tsne(act_class_embs):
-    act_emb_2d = TSNE().fit_transform(act_class_embs)
-    plt.scatter(act_emb_2d[:, 0], act_emb_2d[:, 1])
-    plt.savefig('tsne.png', dpi=300)
+    dataset = Hico()
+    n = 10
+    print(' ' * 3, end='  ')
+    for i in range(n):
+        print(f'{i:<20d}', end=' ')
+    for i, a in enumerate(dataset.actions):
+        if i % n == 0:
+            print()
+            print(f'{i // n:3d}', end=': ')
+        print(f'{a:20s}', end=' ')
+    print()
+
+    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    seen_act_inds = np.array(sorted(inds_dict[Splits.TRAIN.value]['act'].tolist()))
+    unseen_act_inds = np.setdiff1d(np.arange(dataset.num_actions), seen_act_inds)
+
+    act_class_embs = np.load(os.path.join(cfg.output_analysis_path, 'act_embs.npy'))
+    act_emb_2d = TSNE(perplexity=30.0).fit_transform(act_class_embs)
+
+    fig, ax = plt.subplots()
+    for ainds, c in [(seen_act_inds, 'b'),
+                     (unseen_act_inds, 'r')]:
+        x, y = act_emb_2d[ainds, 0], act_emb_2d[ainds, 1]
+        ax.scatter(x, y, c=c)
+        for i, txt in enumerate(ainds):
+            ax.annotate(txt, (x[i], y[i]))
+
+    plt.show()
 
 
 if __name__ == '__main__':
-    main()
+    if torch.cuda.is_available():
+        save()
+    else:
+        show()
