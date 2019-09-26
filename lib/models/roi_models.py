@@ -339,7 +339,7 @@ class OldZSGCModel(GenericModel):
 
                 if vis_output.boxes_ext is not None:
                     boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_scales[:, 2]
+                    im_scales = x.img_scales
 
                     obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
                     obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
