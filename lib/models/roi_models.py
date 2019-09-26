@@ -295,8 +295,8 @@ class OldZSGCModel(GenericModel):
         self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        obj_wembs = word_embs.get_embeddings(dataset.hicodet.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.hicodet.predicates, retry='avg')
+        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
+        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
         self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
         self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
         self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
