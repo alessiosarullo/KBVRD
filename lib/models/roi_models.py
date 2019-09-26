@@ -368,6 +368,7 @@ class OldZSGCModel(GenericModel):
         unseen_action_labels = None
         if action_labels is not None:
             action_logits = action_logits[:, self.seen_pred_inds]  # P x E
+            action_labels = action_labels[:, self.seen_pred_inds]  # P x E
         reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
