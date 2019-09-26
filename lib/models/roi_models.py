@@ -290,25 +290,15 @@ class OldZSGCModel(GenericModel):
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super(OldZSGCModel, self).__init__(dataset, **kwargs)
         seen_pred_inds = dataset.active_actions
-        unseen_pred_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_pred_inds.tolist())))
-        self.seen_pred_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
-        self.unseen_pred_inds = nn.Parameter(torch.tensor(unseen_pred_inds), requires_grad=False)
-
-        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
-        obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
-        pred_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        self.pred_word_embs = nn.Parameter(torch.from_numpy(pred_wembs), requires_grad=False)
-        self.pred_emb_sim = nn.Parameter(self.pred_word_embs @ self.pred_word_embs.t(), requires_grad=False)
-
+        self.seen_act_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
         self.base_model = BaseModel(dataset, **kwargs)
-        self.predictor_dim = 1024
+        self.repr_dim = 1024
 
         gcemb_dim = 1024
         # self.gcn = CheatGCNBranch(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, self.predictor_dim))
 
         latent_dim = 200
-        input_dim = self.predictor_dim
+        input_dim = self.repr_dim
         self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
                                               nn.ReLU(inplace=True),
                                               nn.Dropout(p=cfg.dropout),
@@ -319,43 +309,16 @@ class OldZSGCModel(GenericModel):
                                               )
         self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
-    def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-            vis_output = x
+    def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
+        action_output, action_labels, reg_loss, unseen_action_labels = outputs
+        losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+        if reg_loss is not None:
+            losses['reg_loss'] = reg_loss
+        return losses
 
-            if vis_output.ho_infos_np is not None:
-                action_output, action_labels, reg_loss, unseen_action_labels = self._forward(vis_output)
-            else:
-                assert inference
-                action_output = action_labels = None
-
-            if not inference:
-                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
-                if reg_loss is not None:
-                    losses['reg_loss'] = reg_loss
-                return losses
-            else:
-                prediction = Prediction()
-
-                if vis_output.boxes_ext is not None:
-                    boxes_ext = vis_output.boxes_ext.cpu().numpy()
-                    im_scales = x.img_scales
-
-                    obj_im_inds = boxes_ext[:, 0].astype(np.int, copy=False)
-                    obj_boxes = boxes_ext[:, 1:5] / im_scales[obj_im_inds, None]
-                    prediction.obj_im_inds = obj_im_inds
-                    prediction.obj_boxes = obj_boxes
-                    prediction.obj_scores = boxes_ext[:, 5:]
-
-                    if vis_output.ho_infos_np is not None:
-                        assert action_output is not None
-
-                        prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
-                        prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
-
-                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
-
-                return prediction
+    def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
+        action_output, action_labels, reg_loss, unseen_action_labels = outputs
+        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
         _, vrepr = self.base_model._forward(vis_output, return_repr=True)
@@ -367,8 +330,8 @@ class OldZSGCModel(GenericModel):
         action_labels = vis_output.action_labels
         unseen_action_labels = None
         if action_labels is not None:
-            action_logits = action_logits[:, self.seen_pred_inds]  # P x E
-            action_labels = action_labels[:, self.seen_pred_inds]  # P x E
+            action_logits = action_logits[:, self.seen_act_inds]  # P x E
+            action_labels = action_labels[:, self.seen_act_inds]  # P x E
         reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
 
