@@ -220,9 +220,9 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             if not cfg.train_null:
                 seen = seen[1:]
 
-            # losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
-            #                      bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
-            losses['act_loss'] = bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
+                                 bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            # losses['act_loss'] = bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
             if soft_label_loss_c > 0:
                 losses['act_loss_unseen'] = soft_label_loss_c * bce_loss(gc_logits[:, unseen], labels[:, unseen])
         else:
@@ -234,6 +234,11 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         if reg_loss is not None:
             losses['act_reg_loss'] = reg_loss
         return losses
+
+    # TODO
+    # def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
+    #     action_output, action_labels, reg_loss, unseen_action_labels = outputs
+    #     prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
         dir_act_logits, vrepr = self.base_model._forward(vis_output, return_repr=True)
