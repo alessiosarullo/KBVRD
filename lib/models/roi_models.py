@@ -235,10 +235,12 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             losses['act_reg_loss'] = reg_loss
         return losses
 
-    # TODO
-    # def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
-    #     action_output, action_labels, reg_loss, unseen_action_labels = outputs
-    #     prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
+    def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
+        gc_logits, dir_logits, labels, reg_loss = outputs
+        logits = dir_logits
+        if self.zs_enabled:
+            logits[:, self.unseen_act_inds] = gc_logits[:, self.unseen_act_inds]
+        prediction.action_scores = torch.sigmoid(logits).cpu().numpy()
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
         dir_act_logits, vrepr = self.base_model._forward(vis_output, return_repr=True)
