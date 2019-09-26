@@ -317,7 +317,7 @@ class OldZSGCModel(GenericModel):
                                               nn.Dropout(p=cfg.dropout),
                                               nn.Linear(800, input_dim),
                                               )
-        self.gcn = HicoGCN(dataset, input_repr_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
+        self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=(gcemb_dim // 2, latent_dim))
 
     def forward(self, x: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
