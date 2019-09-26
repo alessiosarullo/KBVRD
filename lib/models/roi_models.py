@@ -195,10 +195,10 @@ class ZSGCModel(ExtKnowledgeGenericModel):
         latent_dim = 200
         self.emb_to_predictor = nn.Sequential(nn.Linear(latent_dim, 600),
                                               nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Dropout(p=cfg.dropout),
                                               nn.Linear(600, 800),
                                               nn.ReLU(inplace=True),
-                                              nn.Dropout(p=cfg.model.dropout),
+                                              nn.Dropout(p=cfg.dropout),
                                               nn.Linear(800, self.repr_dim),
                                               )
         gc_dims = (gcemb_dim // 2, latent_dim)

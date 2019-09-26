@@ -64,7 +64,8 @@ def show():
     unseen_act_inds = np.setdiff1d(np.arange(dataset.num_actions), seen_act_inds)
 
     act_class_embs = np.load(os.path.join(cfg.output_analysis_path, 'act_embs.npy'))
-    act_emb_2d = TSNE(perplexity=30.0).fit_transform(act_class_embs)
+    perplexity = 10.0
+    act_emb_2d = TSNE(perplexity=perplexity).fit_transform(act_class_embs)
 
     fig, ax = plt.subplots()
     for ainds, c in [(seen_act_inds, 'b'),
@@ -73,6 +74,7 @@ def show():
         ax.scatter(x, y, c=c)
         for i, txt in enumerate(ainds):
             ax.annotate(txt, (x[i], y[i]))
+    ax.set_title(f'Perplexity = {perplexity}')
 
     plt.show()
 
