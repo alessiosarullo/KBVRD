@@ -210,7 +210,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             assert (self.vv_adj.diag()[1:] == 1).all()
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
-        dir_logits, gc_logits, labels, reg_loss = outputs
+        gc_logits, dir_logits, labels, reg_loss = outputs
 
         losses = {}
         if self.zs_enabled:
@@ -279,7 +279,7 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             reg_loss_mat = reg_loss_mat[unseen, :, :]
             reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum().item()
 
-        return dir_act_logits, gcn_act_logits, action_labels, reg_loss
+        return gcn_act_logits, dir_act_logits, action_labels, reg_loss  # order is important!
 
 
 class OldZSGCModel(GenericModel):
