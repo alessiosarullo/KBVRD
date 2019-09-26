@@ -64,7 +64,7 @@ def show():
     unseen_act_inds = np.setdiff1d(np.arange(dataset.num_actions), seen_act_inds)
 
     act_class_embs = np.load(os.path.join(cfg.output_analysis_path, 'act_embs.npy'))
-    perplexity = 10.0
+    perplexity = 20.0
     act_emb_2d = TSNE(perplexity=perplexity).fit_transform(act_class_embs)
 
     fig, ax = plt.subplots()
