@@ -361,7 +361,7 @@ class OldZSGCModel(GenericModel):
                 return prediction
 
     def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
-        vrepr = self.base_model._forward(vis_output, return_repr=True)
+        _, vrepr = self.base_model._forward(vis_output, return_repr=True)
         _, act_class_embs = self.gcn()  # P x E
         act_predictors = act_class_embs  # P x D
         act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
