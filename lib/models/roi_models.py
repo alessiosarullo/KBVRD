@@ -324,13 +324,15 @@ class OldZSGCModel(GenericModel):
             vis_output = x
 
             if vis_output.ho_infos_np is not None:
-                output = self._forward(vis_output)
+                action_output, action_labels, reg_loss, unseen_action_labels = self._forward(vis_output)
             else:
                 assert inference
-                output = None
+                action_output = action_labels = None
 
             if not inference:
-                losses = {'action_loss': bce_loss(output, vis_output.action_labels)}
+                losses = {'action_loss': F.binary_cross_entropy_with_logits(action_output, action_labels) * action_output.shape[1]}
+                if reg_loss is not None:
+                    losses['reg_loss'] = reg_loss
                 return losses
             else:
                 prediction = Prediction()
@@ -346,17 +348,12 @@ class OldZSGCModel(GenericModel):
                     prediction.obj_scores = boxes_ext[:, 5:]
 
                     if vis_output.ho_infos_np is not None:
-                        assert output is not None
+                        assert action_output is not None
 
                         prediction.ho_img_inds = vis_output.ho_infos_np[:, 0]
                         prediction.ho_pairs = vis_output.ho_infos_np[:, 1:]
 
-                        if output.shape[1] < self.dataset.full_dataset.num_actions:
-                            assert output.shape[1] == self.dataset.actions
-                            restricted_action_output = output
-                            output = restricted_action_output.new_zeros((output.shape[0], self.dataset.full_dataset.num_actions))
-                            output[:, self.dataset.active_actions] = restricted_action_output
-                        prediction.action_scores = torch.sigmoid(output).cpu().numpy()
+                        prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
                 return prediction
 
