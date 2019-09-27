@@ -319,7 +319,7 @@ class SKZSMultiModel(AbstractModel):
                 predictors = {k: v + wemb_predictors.get(k, 0) for k, v in predictors.items()}
         elif cfg.wemb:
             predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
-            predictors['hoi'] = predictors['obj'].new_zeros((0, predictors['obj'].shape[1]))
+            predictors['hoi'] = predictors['obj'].new_zeros((1, predictors['obj'].shape[1]))
         else:
             predictors = linear_predictors
 
