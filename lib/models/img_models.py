@@ -36,11 +36,12 @@ class SKZSMultiModel(AbstractModel):
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
         act_wembs = word_embs.get_embeddings(dataset.full_dataset.actions, retry='avg')
-        self.obj_word_embs = nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False)
-        self.obj_emb_sim = nn.Parameter(self.obj_word_embs @ self.obj_word_embs.t(), requires_grad=False)
-        self.act_word_embs = nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
-        self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
-        self.act_obj_emb_sim = nn.Parameter(self.act_word_embs @ self.obj_word_embs.t(), requires_grad=False)
+        self.word_embs = nn.ParameterDict({'obj': nn.Parameter(torch.from_numpy(obj_wembs), requires_grad=False),
+                                           'act': nn.Parameter(torch.from_numpy(act_wembs), requires_grad=False)
+                                           })
+        self.obj_emb_sim = nn.Parameter(self.word_embs['obj'] @ self.word_embs['obj'].t(), requires_grad=False)
+        self.act_emb_sim = nn.Parameter(self.word_embs['act'] @ self.word_embs['act'].t(), requires_grad=False)
+        self.act_obj_emb_sim = nn.Parameter(self.word_embs['act'] @ self.word_embs['obj'].t(), requires_grad=False)
 
         # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)
@@ -103,6 +104,15 @@ class SKZSMultiModel(AbstractModel):
                     self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
                 else:
                     self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+        if cfg.wemb:
+            self.wemb_mlps = nn.ModuleDict()
+            for k in ['obj', 'act', 'hoi']:
+                self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Linear(600, self.repr_dim),
+                                                    ])
+                nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+                nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         # Regularisation
         self.adj = nn.ParameterDict()
@@ -229,15 +239,12 @@ class SKZSMultiModel(AbstractModel):
             feats, orig_labels, other = x
             if not inference:
                 epoch, iter = other
-            all_instance_reprs, all_linear_predictors, all_gc_predictors, all_labels = self._forward(feats, orig_labels)
-            if cfg.gconly:
-                assert cfg.gc
-                all_linear_predictors = all_gc_predictors
+            all_instance_reprs, all_linear_predictors, all_knowl_predictors, all_labels = self._forward(feats, orig_labels)
             all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act', 'hoi']}
-            if cfg.gc:
-                all_gc_logits = {k: all_instance_reprs[k] @ all_gc_predictors[k].t() for k in ['obj', 'act', 'hoi']}
+            if cfg.gc or cfg.wemb:
+                all_knowl_logits = {k: all_instance_reprs[k] @ all_knowl_predictors[k].t() for k in ['obj', 'act', 'hoi']}
             else:
-                all_gc_logits = {}
+                all_knowl_logits = {}
 
             if not inference:
                 all_labels = {k: v for k, v in all_labels.items()}
@@ -258,11 +265,11 @@ class SKZSMultiModel(AbstractModel):
                                 raise NotImplementedError()
                             elif k == 'act':
                                 seen = seen[1:]
-                        if cfg.gc:
+                        if len(all_knowl_logits) > 0:
                             losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights[k]) + \
-                                                  loss_c * bce_loss(all_gc_logits[k][:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
+                                                  loss_c * bce_loss(all_knowl_logits[k][:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
                             if soft_label_loss_c > 0:
-                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_gc_logits[k][:, unseen], labels[:, unseen])
+                                losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_knowl_logits[k][:, unseen], labels[:, unseen])
                         else:
                             losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
                             if soft_label_loss_c > 0:
@@ -279,14 +286,14 @@ class SKZSMultiModel(AbstractModel):
                     # Regularisation loss
                     if self.reg_coeffs[k] > 0:
                         if cfg.grg == 0 or epoch > cfg.grg:
-                            reg_loss = self.get_reg_loss(all_gc_predictors[k], branch=k)
+                            reg_loss = self.get_reg_loss(all_knowl_predictors[k], branch=k)
                             losses[f'{k}_reg_loss'] = self.reg_coeffs[k] * reg_loss
                 return losses
             else:
-                if self.zs_enabled and cfg.gc:
+                if self.zs_enabled and len(all_knowl_logits) > 0:
                     for k in all_logits.keys():
                         unseen = self.unseen_inds[k]
-                        all_logits[k][:, unseen] = all_gc_logits[k][:, unseen]
+                        all_logits[k][:, unseen] = all_knowl_logits[k][:, unseen]
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
                 obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
@@ -307,6 +314,11 @@ class SKZSMultiModel(AbstractModel):
                 hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
             class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
             predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
+            if cfg.wemb:
+                wemb_predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
+                predictors = {k: v + wemb_predictors.get(k, 0) for k, v in predictors.items()}
+        elif cfg.wemb:
+            predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
         else:
             predictors = linear_predictors
 

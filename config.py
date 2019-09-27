@@ -93,6 +93,7 @@ class Configs:
         # ZS specific
         self.lis = False
         self.slpure = False
+        self.wemb = False
 
         # ZS GCN specific
         self.gc = False
