@@ -91,7 +91,6 @@ class Configs:
         self.katoconstz = False
 
         # ZS specific
-        self.hoi_backbone = ''  # Path to the model final file, e.g. 'output/base/2019-06-05_17-43-04_vanilla/final.tar'
         self.lis = False
         self.slpure = False
 
@@ -104,6 +103,7 @@ class Configs:
         self.gcldim = 1024
         self.gcrdim = 1024
         self.gcwemb = False
+        self.vv = False
 
         ##########################################
         # Optimiser options                      #

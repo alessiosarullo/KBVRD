@@ -33,7 +33,7 @@ class GenericModel(AbstractModel):
     def forward(self, batch: PrecomputedMinibatch, inference=True, **kwargs):
         with torch.set_grad_enabled(self.training):
             if batch.ho_infos_np is not None:
-                outputs = self._forward(batch, epoch=batch.epoch, step=batch.iter)
+                outputs = self._forward(batch)
                 outputs = self._refine_output(batch, inference, outputs)
             else:
                 assert inference
@@ -61,7 +61,7 @@ class GenericModel(AbstractModel):
                         self._finalize_prediction(prediction, batch, outputs)
                 return prediction
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
+    def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
         raise NotImplementedError()
 
     def _refine_output(self, vis_output, inference, outputs):

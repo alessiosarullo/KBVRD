@@ -90,6 +90,29 @@ class HicoGCN(AbstractGCN):
         return obj_embs, act_embs
 
 
+class HicoVerbGCN(AbstractGCN):
+    def __init__(self, dataset, **kwargs):
+        super().__init__(dataset=dataset, **kwargs)
+
+    def _build_adj_matrix(self):
+        # Normalised adjacency matrix.
+        nv = get_noun_verb_adj_mat(dataset=self.dataset)
+        adj = (nv.t() @ nv).clamp(max=1).float()
+        assert (adj.diag()[1:] == 1).all()
+        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+        return adj
+
+    def _forward(self, input_repr=None):
+        if input_repr is not None:
+            z = input_repr
+        else:
+            z = self.z
+        for gcl in self.gc_layers:
+            z = gcl(self.adj @ z)
+        act_embs = z
+        return act_embs
+
+
 class WEmbHicoGCN(HicoGCN):
     def __init__(self, dataset, **kwargs):
         super().__init__(dataset=dataset, **kwargs)

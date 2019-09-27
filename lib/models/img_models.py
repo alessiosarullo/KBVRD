@@ -44,7 +44,6 @@ class SKZSMultiModel(AbstractModel):
 
         # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)
-        self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
             self.seen_inds = {}
@@ -64,9 +63,6 @@ class SKZSMultiModel(AbstractModel):
             unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
             self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
             self.unseen_inds['hoi'] = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
-
-            if self.load_backbone:
-                raise NotImplementedError('Not currently supported.')
 
             if self.soft_labels_enabled:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)

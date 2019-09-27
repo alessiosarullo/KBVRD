@@ -329,6 +329,7 @@ class Launcher:
 
             detailed_metric_dicts = []
 
+            print('Trained on:')
             seen_interactions = self.train_split.active_interactions
             detailed_metric_dicts.append({f'tr_{k}': v for k, v in get_metrics(seen_interactions).items()})
 

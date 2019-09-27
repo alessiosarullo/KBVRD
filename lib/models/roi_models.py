@@ -7,18 +7,18 @@ from config import cfg
 from lib.dataset.utils import get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.containers import PrecomputedMinibatch
-from lib.models.gcns import HicoGCN
+from lib.models.gcns import HicoGCN, HicoVerbGCN
 from lib.models.misc import bce_loss, LIS
 from lib.models.roi_generic_model import GenericModel, Prediction, HicoDetSingleHOIsSplit
 
 
-class BaseModel(GenericModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'base'
+class ExtKnowledgeGenericModel(GenericModel):
+    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
+        super().__init__(dataset, **kwargs)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        ########################################################
+        # Base model
+        ########################################################
         hidden_dim = 1024
         self.final_repr_dim = cfg.repr_dim
         full_dataset = self.dataset.full_dataset
@@ -51,39 +51,9 @@ class BaseModel(GenericModel):
         self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
         torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, return_repr=False):
-        boxes_ext = vis_output.boxes_ext
-        box_feats = vis_output.box_feats
-        hoi_infos = vis_output.ho_infos
-        union_boxes_feats = vis_output.ho_union_boxes_feats
-
-        subj_ho_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
-        obj_ho_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
-
-        ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
-        ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
-        act_repr = self.act_repr_mlp(union_boxes_feats)
-
-        hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
-
-        output_logits = self.output_mlp(hoi_act_repr)
-
-        if cfg.monitor:
-            self.values_to_monitor['ho_subj_repr'] = ho_subj_repr
-            self.values_to_monitor['ho_obj_repr'] = ho_obj_repr
-            self.values_to_monitor['act_repr'] = act_repr
-            self.values_to_monitor['output_logits'] = output_logits
-
-        if return_repr:
-            return output_logits, hoi_act_repr
-        else:
-            return output_logits
-
-
-class ExtKnowledgeGenericModel(GenericModel):
-    def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-
+        ########################################################
+        # Zero-shot
+        ########################################################
         self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
@@ -94,20 +64,12 @@ class ExtKnowledgeGenericModel(GenericModel):
         self.act_emb_sim = nn.Parameter(self.act_word_embs @ self.act_word_embs.t(), requires_grad=False)
 
         self.zs_enabled = (cfg.seenf >= 0)
-        self.load_backbone = len(cfg.hoi_backbone) > 0
         if self.zs_enabled:
             print('Zero-shot enabled.')
             seen_act_inds = dataset.active_actions
             unseen_act_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_actions)) - set(seen_act_inds.tolist())))
             self.seen_act_inds = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_act_inds = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
-
-            if self.load_backbone:
-                ckpt = torch.load(cfg.hoi_backbone)
-                self.pretrained_base_model = BaseModel(dataset)
-                self.pretrained_base_model.load_state_dict(ckpt['state_dict'])
-                self.pretrained_predictors = nn.Parameter(self.pretrained_base_model.output_mlp.weight.detach(), requires_grad=False)  # P x D
-                assert len(seen_act_inds) == self.pretrained_predictors.shape[0]
 
             if cfg.asl:
                 self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
@@ -125,14 +87,21 @@ class ExtKnowledgeGenericModel(GenericModel):
         action_labels[:, self.unseen_act_inds] = unseen_action_labels.detach()
         return action_labels
 
-    def _refine_output(self, vis_output, inference, outputs):
-        if inference and self.load_backbone:
-            action_output, action_labels, reg_loss, unseen_action_labels = outputs
-            _, pretrained_vrepr = self.pretrained_base_model._forward(vis_output, return_repr=True).detach()
-            pretrained_action_output = pretrained_vrepr @ self.pretrained_predictors.t()  # N x Pt
-            action_output[:, self.seen_act_inds] = pretrained_action_output
-            outputs = action_output, action_labels, reg_loss, unseen_action_labels
-        return outputs
+    def get_visual_representation(self, vis_output: PrecomputedMinibatch, return_obj=False):
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        hoi_infos = vis_output.ho_infos
+        union_boxes_feats = vis_output.ho_union_boxes_feats
+
+        ho_subj_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
+        ho_obj_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
+
+        ho_subj_repr = self.ho_subj_repr_mlp(ho_subj_feats)
+        ho_obj_repr = self.ho_obj_repr_mlp(ho_obj_feats)
+        act_repr = self.act_repr_mlp(union_boxes_feats)
+
+        hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
+        return hoi_act_repr
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
         raise NotImplementedError
@@ -144,43 +113,45 @@ class ExtKnowledgeGenericModel(GenericModel):
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
 
-class ZSBaseModel(ExtKnowledgeGenericModel):
+class BaseModel(ExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zsb'
+        return 'base'
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.base_model = BaseModel(dataset, **kwargs)
-        assert self.zs_enabled and cfg.asl > 0
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
         logits, labels = outputs
 
-        seen, unseen = self.seen_act_inds, self.unseen_act_inds
-        if not cfg.train_null:
-            seen = seen[1:]
-
-        losses = {'act_loss': bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights),
-                  'act_loss_unseen': cfg.asl * bce_loss(logits[:, unseen], labels[:, unseen])}
+        if self.zs_enabled:
+            assert cfg.asl > 0
+            seen, unseen = self.seen_act_inds, self.unseen_act_inds
+            if not cfg.train_null:
+                seen = seen[1:]
+            losses = {'act_loss': bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights),
+                      'act_loss_unseen': cfg.asl * bce_loss(logits[:, unseen], labels[:, unseen])}
+        else:
+            losses = {'act_loss': bce_loss(logits, labels, pos_weights=self.csp_weights)}
         return losses
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
-        action_logits = self.base_model._forward(vis_output)
+    def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
+        hoi_act_repr = self.get_visual_representation(vis_output)
+        action_logits = self.output_mlp(hoi_act_repr)
         action_labels = vis_output.action_labels
-        if action_labels is not None:
+        if action_labels is not None and self.zs_enabled:
+            assert cfg.asl > 0
             action_labels = self.write_soft_labels(vis_output)
         return action_logits, action_labels
 
 
-class ZSGCModel(ExtKnowledgeGenericModel):
+class GCModel(ExtKnowledgeGenericModel):
     @classmethod
     def get_cline_name(cls):
-        return 'zsgc'
+        return 'gc'
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.base_model = BaseModel(dataset, **kwargs)
         self.repr_dim = 1024
         gcemb_dim = cfg.gcrdim
 
@@ -203,7 +174,10 @@ class ZSGCModel(ExtKnowledgeGenericModel):
                                               )
         gc_dims = (gcemb_dim // 2, latent_dim)
 
-        self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+        if cfg.vv:
+            self.gcn = HicoVerbGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+        else:
+            self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
 
         if cfg.apr > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
@@ -242,9 +216,13 @@ class ZSGCModel(ExtKnowledgeGenericModel):
             logits[:, self.unseen_act_inds] = gc_logits[:, self.unseen_act_inds]
         prediction.action_scores = torch.sigmoid(logits).cpu().numpy()
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
-        dir_act_logits, vrepr = self.base_model._forward(vis_output, return_repr=True)
-        _, act_class_embs = self.gcn()  # P x E
+    def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
+        vrepr = self.get_visual_representation(vis_output)
+        dir_act_logits = self.output_mlp(vrepr)
+        if cfg.vv:
+            act_class_embs = self.gcn()  # P x E
+        else:
+            _, act_class_embs = self.gcn()  # P x E
         # act_predictors = act_class_embs  # P x D
         act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
         gcn_act_logits = vrepr @ act_predictors.t()
@@ -296,9 +274,47 @@ class OldZSGCModel(GenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super(OldZSGCModel, self).__init__(dataset, **kwargs)
+
+        ########################################################
+        # Base model
+        ########################################################
+        hidden_dim = 1024
+        self.final_repr_dim = cfg.repr_dim
+        full_dataset = self.dataset.full_dataset
+
+        self.ho_subj_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim + full_dataset.num_objects, hidden_dim),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(hidden_dim, self.final_repr_dim),
+                                                ])
+        nn.init.xavier_normal_(self.ho_subj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.ho_subj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+        self.ho_obj_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim + full_dataset.num_objects, hidden_dim),
+                                               nn.ReLU(inplace=True),
+                                               nn.Dropout(p=cfg.dropout),
+                                               nn.Linear(hidden_dim, self.final_repr_dim),
+                                               ])
+        nn.init.xavier_normal_(self.ho_obj_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.ho_obj_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+        self.act_repr_mlp = nn.Sequential(*[nn.Linear(self.vis_feat_dim, hidden_dim),
+                                            nn.ReLU(inplace=True),
+                                            nn.Dropout(p=cfg.dropout),
+                                            nn.Linear(hidden_dim, self.final_repr_dim),
+                                            ])
+        nn.init.xavier_normal_(self.act_repr_mlp[0].weight, gain=torch.nn.init.calculate_gain('relu'))
+        nn.init.xavier_normal_(self.act_repr_mlp[3].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+        num_classes = full_dataset.num_interactions if cfg.phoi else full_dataset.num_actions
+        self.output_mlp = nn.Linear(self.final_repr_dim, num_classes, bias=False)
+        torch.nn.init.xavier_normal_(self.output_mlp.weight, gain=1.0)
+
+        ########################################################
+        # Zero-shot
+        ########################################################
         seen_pred_inds = dataset.active_actions
         self.seen_act_inds = nn.Parameter(torch.tensor(seen_pred_inds), requires_grad=False)
-        self.base_model = BaseModel(dataset, **kwargs)
         self.repr_dim = 1024
 
         gcemb_dim = 1024
@@ -327,8 +343,8 @@ class OldZSGCModel(GenericModel):
         action_output, action_labels, reg_loss, unseen_action_labels = outputs
         prediction.action_scores = torch.sigmoid(action_output).cpu().numpy()
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
-        _, vrepr = self.base_model._forward(vis_output, return_repr=True)
+    def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
+        vrepr = self.get_visual_representation(vis_output)
         _, act_class_embs = self.gcn()  # P x E
         act_predictors = act_class_embs  # P x D
         act_predictors = self.emb_to_predictor(act_class_embs)  # P x D
@@ -341,6 +357,23 @@ class OldZSGCModel(GenericModel):
             action_labels = action_labels[:, self.seen_act_inds]  # P x E
         reg_loss = None
         return action_logits, action_labels, reg_loss, unseen_action_labels
+
+    def get_visual_representation(self, vis_output: PrecomputedMinibatch):
+        boxes_ext = vis_output.boxes_ext
+        box_feats = vis_output.box_feats
+        hoi_infos = vis_output.ho_infos
+        union_boxes_feats = vis_output.ho_union_boxes_feats
+
+        subj_ho_feats = torch.cat([box_feats[hoi_infos[:, 1], :], boxes_ext[hoi_infos[:, 1], 5:]], dim=1)
+        obj_ho_feats = torch.cat([box_feats[hoi_infos[:, 2], :], boxes_ext[hoi_infos[:, 2], 5:]], dim=1)
+
+        ho_subj_repr = self.ho_subj_repr_mlp(subj_ho_feats)
+        ho_obj_repr = self.ho_obj_repr_mlp(obj_ho_feats)
+        act_repr = self.act_repr_mlp(union_boxes_feats)
+
+        hoi_act_repr = ho_subj_repr + ho_obj_repr + act_repr
+        return hoi_act_repr
+
 
 class PeyreModel(GenericModel):
     @classmethod
@@ -440,7 +473,7 @@ class PeyreModel(GenericModel):
 
         prediction.hoi_scores = hoi_overall_scores
 
-    def _forward(self, vis_output: PrecomputedMinibatch, step=None, epoch=None, **kwargs):
+    def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
 
         boxes_ext = vis_output.boxes_ext
         box_feats = vis_output.box_feats
