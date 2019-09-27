@@ -99,7 +99,7 @@ class HicoVerbGCN(AbstractGCN):
         nv = get_noun_verb_adj_mat(dataset=self.dataset)
         adj = (nv.t() @ nv).clamp(max=1).float()
         assert (adj.diag()[1:] == 1).all()
-        adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())
+        adj = torch.diag(1 / adj.sum(dim=1).clamp(min=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).clamp(min=1).sqrt())
         return adj
 
     def _forward(self, input_repr=None):
