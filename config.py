@@ -104,6 +104,7 @@ class Configs:
         self.gcrdim = 1024
         self.gcwemb = False
         self.vv = False
+        self.gcsingle = False
 
         ##########################################
         # Optimiser options                      #

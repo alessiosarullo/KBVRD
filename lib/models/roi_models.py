@@ -172,7 +172,10 @@ class GCModel(ExtKnowledgeGenericModel):
                                               nn.Dropout(p=cfg.dropout),
                                               nn.Linear(800, self.repr_dim),
                                               )
-        gc_dims = (gcemb_dim // 2, latent_dim)
+        if cfg.gcsingle:
+            gc_dims = (latent_dim,)
+        else:
+            gc_dims = (gcemb_dim // 2, latent_dim)
 
         if cfg.vv:
             self.gcn = HicoVerbGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
