@@ -105,6 +105,7 @@ class Configs:
         self.gcwemb = False
         self.vv = False
         self.gcsingle = False
+        self.gcdropout = 0.5
 
         ##########################################
         # Optimiser options                      #

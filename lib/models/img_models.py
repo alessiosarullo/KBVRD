@@ -91,7 +91,7 @@ class SKZSMultiModel(AbstractModel):
             hidden_dim = (latent_dim + self.repr_dim) // 2
             self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
                                                                   nn.ReLU(inplace=True),
-                                                                  nn.Dropout(p=cfg.dropout),
+                                                                  nn.Dropout(p=cfg.gcdropout),
                                                                   nn.Linear(hidden_dim, self.repr_dim),
                                                                   ) for k in ['obj', 'act', 'hoi']})
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)

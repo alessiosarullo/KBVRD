@@ -9,6 +9,8 @@ from lib.dataset.hicodet.hicodet_split import HicoDetSplit
 from lib.dataset.utils import get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 
+from config import cfg
+
 
 class AbstractGCN(nn.Module):
     def __init__(self, dataset: Union[HicoSplit, HicoDetSplit], input_dim=512, gc_dims=(256, 128), train_z=True):
@@ -48,7 +50,8 @@ class AbstractGCN(nn.Module):
             if i < num_gc_layers - 1:
                 gc_layers.append(nn.Sequential(nn.Linear(in_dim, out_dim),
                                                nn.ReLU(inplace=True),
-                                               nn.Dropout(p=0.5)))
+                                               nn.Dropout(p=cfg.gcdropout))
+                                 )
             else:
                 gc_layers.append(nn.Linear(in_dim, out_dim))
         return gc_layers
