@@ -315,7 +315,11 @@ class SKZSMultiModel(AbstractModel):
             class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
             predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
             if cfg.wemb:
-                wemb_predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
+                if cfg.wemb_oo:
+                    branches = ['obj']
+                else:
+                    branches = ['obj', 'act']
+                wemb_predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in branches}
                 predictors = {k: v + wemb_predictors.get(k, 0) for k, v in predictors.items()}
         elif cfg.wemb:
             predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}

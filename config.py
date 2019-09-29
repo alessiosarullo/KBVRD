@@ -94,6 +94,7 @@ class Configs:
         self.lis = False
         self.slpure = False
         self.wemb = False
+        self.wemb_oo = False  # object only
 
         # ZS GCN specific
         self.gc = False
