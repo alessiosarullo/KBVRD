@@ -44,8 +44,9 @@ def save():
 
 def show():
     # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl/asl1/2019-09-25_10-25-31_SINGLE']
-    sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_Ra/Ra-10-03/2019-09-25_10-25-51_SINGLE/']
-    # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/asl1_Ra-10-03/2019-09-25_14-21-33_SINGLE']
+    # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_Ra/Ra-10-03/2019-09-25_10-25-51_SINGLE/']
+    sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/asl1_Ra-10-03/2019-09-25_14-21-33_SINGLE']
+    print(sys.argv)
     cfg.parse_args(fail_if_missing=False)
     cfg.load()
 
@@ -76,7 +77,9 @@ def show():
         ax.scatter(x, y, c=c)
         for i, txt in enumerate(ainds):
             ax.annotate(txt, (x[i], y[i]))
-    ax.set_title(f'Perplexity = {perplexity}')
+    # ax.set_title(f'Perplexity = {perplexity}')
+    ax.axis('off')
+    print(f'Perplexity = {perplexity}')
 
     plt.show()
 

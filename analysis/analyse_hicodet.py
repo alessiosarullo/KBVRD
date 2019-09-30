@@ -1,7 +1,8 @@
 import argparse
 import os
-import sys
 import pickle
+import sys
+from typing import List
 
 import cv2
 import matplotlib
@@ -16,8 +17,8 @@ from lib.dataset.utils import Splits
 try:
     matplotlib.use('Qt5Agg')
     # sys.argv[1:] = ['vis']
-    # sys.argv[1:] = ['stats']
     sys.argv[1:] = ['find']
+    # sys.argv[1:] = ['stats']
 except ImportError:
     pass
 
@@ -71,7 +72,8 @@ def find():
     queries_str = [
         # ['cook', 'pizza'],
         # ['eat', 'sandwich'],
-        ['eat', 'apple'],
+        # ['eat', 'apple'],
+        ['stab', 'person'],
     ]
     queries = [hicodet.oa_pair_to_interaction[hicodet.object_index[q[1]], hicodet.action_index[q[0]]]
                for q in queries_str]
@@ -116,26 +118,28 @@ def find():
 
 def vis_gt():
     cfg.parse_args(fail_if_missing=False, reset=True)
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
+    split = Splits.TRAIN
+    hd = HicoDet()
+    hds = hd.split_data[split]  # type: List[HicoDetImData]
 
     output_dir = os.path.join('analysis', 'output', 'vis', 'gt')
     os.makedirs(output_dir, exist_ok=True)
 
     for idx in range(len(hds)):
-        example = hds.get_img_entry(idx, read_img=False)  # type: Example
+        example = hds[idx]
         im_fn = example.filename
         # if im_fn not in [s.strip() for s in """
         # HICO_train2015_00001418.jpg
         # """._data_split('\n')]:
         #     continue
 
-        boxes = example.gt_boxes
-        box_classes = example.gt_obj_classes
-        ho_pairs = example.gt_hois[:, [0, 2]]
-        action_class_scores = np.zeros((ho_pairs.shape[0], hds.num_actions))
-        action_class_scores[np.arange(action_class_scores.shape[0]), example.gt_hois[:, 1]] = 1
+        boxes = example.boxes
+        box_classes = example.box_classes
+        ho_pairs = example.hois[:, [0, 2]]
+        action_class_scores = np.zeros((ho_pairs.shape[0], hd.num_actions))
+        action_class_scores[np.arange(action_class_scores.shape[0]), example.hois[:, 1]] = 1
 
-        im = cv2.imread(os.path.join(hds.img_dir, im_fn))
+        im = cv2.imread(os.path.join(hd.get_img_dir(split), im_fn))
         vis_one_image(
             hds, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
             boxes=boxes, box_classes=box_classes, box_classes_scores=np.ones_like(box_classes), masks=None,

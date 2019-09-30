@@ -207,11 +207,12 @@ class SKZSMultiModel(AbstractModel):
         unseen = self.unseen_inds[branch]
 
         # Detach seen classes predictors
-        all_trainable_predictors = predictors
-        predictors_seen = predictors[seen, :].detach()
-        predictors_unseen = predictors[unseen, :]
-        predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
-        assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
+        if not cfg.grseen:
+            all_trainable_predictors = predictors
+            predictors_seen = predictors[seen, :].detach()
+            predictors_unseen = predictors[unseen, :]
+            predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
+            assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
 
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
