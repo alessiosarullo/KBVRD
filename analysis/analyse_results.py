@@ -2,9 +2,8 @@ import argparse
 import os
 import pickle
 import sys
-from typing import List, Dict
-
 from collections import Counter
+from typing import List, Dict
 
 import cv2
 import matplotlib
@@ -14,11 +13,13 @@ from matplotlib import pyplot as plt
 from analysis.utils import vis_one_image, plot_mat
 from config import cfg
 from lib.bbox_utils import compute_ious
+from lib.containers import Prediction
+from lib.dataset.hico import Hico
+from lib.dataset.hicodet.hicodet import HicoDet, HicoDetImData
 from lib.dataset.hicodet.hicodet_split import HicoDetSplit, Splits
 from lib.dataset.utils import Example
-from lib.containers import Prediction
-from lib.eval.evaluator_roi import EvaluatorROI
 from lib.eval.eval_utils import sort_and_filter, MetricFormatter
+from lib.eval.evaluator_roi import EvaluatorROI
 
 try:
     matplotlib.use('Qt5Agg')
@@ -49,9 +50,11 @@ try:
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-21_12-04-36_sl1-lis']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_11-37-28_sl1-nolis-avg']
     # sys.argv[1:] = ['zs', '--save_dir', 'output/zsb/2019-07-22_12-53-55_sl1-nolis-sigm']
-    sys.argv[1:] = ['zs', '--save_dir', 'output/zss/2019-07-22_16-28-13_vanilla']
+    # sys.argv[1:] = ['zs', '--save_dir', 'output/zss/2019-07-22_16-28-13_vanilla']
 
-    # sys.argv[1:] = ['vis', '--save_dir', 'output/base/2019-06-05_17-43-04_vanilla']
+    # sys.argv[1:] = ['vis_img', '--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl/asl1/2019-09-25_10-25-31_SINGLE']
+    sys.argv[1:] = ['vis_img', '--save_dir', 'output/skzs/hico_zsk_gc_nobg_Ra/Ra-10-03/2019-09-25_10-25-51_SINGLE']
+    # sys.argv[1:] = ['vis_img', '--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/asl1_Ra-10-03/2019-09-25_14-21-33_SINGLE']
 except ImportError:
     pass
 
@@ -575,20 +578,22 @@ def zs_stats():
     # plt.show()
 
 
-def visualise_images():
+def visualise_image_rois():
     act_thr = 0.1
 
     results = _setup_and_load()
-    hds = HicoDetSplitBuilder.get_split(HicoDetSplit, split=Splits.TEST)  # type: HicoDetSplit
+
+    split = Splits.TEST  # this should not be changed, or results might be incompatible
+    hd = HicoDet()
+    hds = hd.split_data[split]  # type: List[HicoDetImData]
 
     output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.output_path.split('/')[1:]))
     os.makedirs(output_dir, exist_ok=True)
 
-    for b_idx in range(len(hds)):
-        entry = hds.get_img_entry(b_idx, read_img=False)  # type: Example
-        im_fn = entry.filename
+    for idx in range(len(hds)):
+        im_fn = hds[idx].filename
 
-        prediction_dict = results[b_idx]
+        prediction_dict = results[idx]
         prediction = Prediction(prediction_dict)
 
         boxes = prediction.obj_boxes
@@ -601,19 +606,13 @@ def visualise_images():
         box_classes = np.argmax(obj_scores, axis=1)
         box_class_scores = obj_scores[np.arange(boxes.shape[0]), box_classes]
 
-        # if im_fn not in [s.strip() for s in """
-        # HICO_test2015_00000003.jpg
-        # """._data_split('\n')]:
-        #     continue
-
         # FIND
         # if act_scores[box_classes[ho_pairs[:, 1]] == 18, 9].size == 0 or np.all(act_scores[box_classes[ho_pairs[:, 1]] == 18, 9] < act_thr):
         #     continue
         # print(im_fn)
 
-        im = cv2.imread(os.path.join(hds.img_dir, im_fn))
-        assert np.all(boxes[:, [0, 2]] < im.shape[1]) and np.all(boxes[:, [1, 3]] < im.shape[0]), b_idx
-        continue
+        im = cv2.imread(os.path.join(hd.get_img_dir(split), im_fn))
+        assert np.all(boxes[:, [0, 2]] < im.shape[1]) and np.all(boxes[:, [1, 3]] < im.shape[0]), idx
         vis_one_image(
             hds, im[:, :, [2, 1, 0]],  # BGR -> RGB for visualization
             boxes=boxes, box_classes=box_classes, box_classes_scores=box_class_scores, masks=None,
@@ -624,17 +623,73 @@ def visualise_images():
             dpi=400, fontsize=2,
         )
 
-        if b_idx >= 0:
-            break
+        # if idx >= 0:
+        #     break
+
+
+def visualise_images():
+    hoi_thr = 0.2
+
+    results = _setup_and_load()
+    split = Splits.TEST  # this should not be changed, or results might be incompatible
+    hd = Hico()
+    hds_fns = hd.split_filenames[split]
+
+    assert cfg.seenf >= 0
+    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
+    act_inds = sorted(inds_dict[Splits.TRAIN.value]['act'].tolist())
+
+    train_str = Splits.TRAIN.value.capitalize()
+    if obj_inds is not None:
+        print(f'{train_str} objects ({len(obj_inds)}):', [hd.objects[i] for i in obj_inds])
+    if act_inds is not None:
+        print(f'{train_str} actions ({len(act_inds)}):', [hd.actions[i] for i in act_inds])
+
+    output_dir = os.path.join('analysis', 'output', 'vis', *(cfg.output_path.split('/')[1:]))
+    os.makedirs(output_dir, exist_ok=True)
+
+    seen_objs = set(obj_inds)
+    seen_acts = set(act_inds)
+    for idx, im_fn in enumerate(hds_fns):
+        img_id = int(im_fn.split('_')[-1].split('.')[0])
+        prediction_dict = results[idx]
+        prediction = Prediction(prediction_dict)
+
+        hoi_scores = np.squeeze(prediction.hoi_scores, axis=0)
+
+        hoi_str = []
+        for i, s in enumerate(hoi_scores):
+            act_ind = hd.interactions[i, 0]
+            obj_ind = hd.interactions[i, 1]
+            if s >= hoi_thr and act_ind > 0:
+                act_str = ('*' if act_ind not in seen_acts else '') + hd.actions[act_ind]
+                obj_str = ('*' if obj_ind not in seen_objs else '') + hd.objects[obj_ind]
+                hit = '#' if hd.split_annotations[split][idx, i] > 0 else ''
+                hoi_str.append(f'{act_str} {obj_str} ({s * 100:.2f}{hit})')
+        print(f'{img_id:5d}', ', '.join(hoi_str))
+
+        # im = cv2.imread(os.path.join(hd.get_img_dir(split), im_fn))
+        # dpi = 400
+        # fig = plt.figure(frameon=False)
+        # fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
+        # ax = plt.Axes(fig, [0., 0., 1., 1.])
+        # ax.axis('off')
+        # fig.add_axes(ax)
+        # ax.imshow(im)
+        # fig.savefig(os.path.join(output_dir, os.path.splitext(im_fn)[0] + '.png'), dpi=dpi)
+        # plt.close('all')
 
 
 def main():
-    funcs = {'vis': visualise_images,
-             'stats': stats,
-             'zs': zs_stats,
-             'eval': evaluate,
-             'compare': compare,
-             }
+    funcs = {
+        'vis_img': visualise_images,
+        'vis_roi': visualise_image_rois,
+        'stats': stats,
+        'zs': zs_stats,
+        'eval': evaluate,
+        'compare': compare,
+    }
     print(sys.argv)
     parser = argparse.ArgumentParser()
     parser.add_argument('func', type=str, choices=funcs.keys())

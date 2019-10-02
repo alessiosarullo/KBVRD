@@ -72,19 +72,23 @@ def main():
         data[split] = {'i': interaction_inds, 'a': actions_inds, 'o': objects_inds}
 
     # Prints and checks
+    # Objects
     obj_1 = set(data['1A']['o'].tolist()) | set(data['1B']['o'].tolist())
     obj_2 = set(data['2A']['o'].tolist()) | set(data['2B']['o'].tolist())
     print([len(data[split]['o']) for split in ['1A', '1B', '2A', '2B']], len(obj_1), len(obj_2), len(obj_1 | obj_2))
+    # Actions
     act_1 = set(data['1A']['a'].tolist()) | set(data['2A']['a'].tolist())
     act_2 = set(data['1B']['a'].tolist()) | set(data['2B']['a'].tolist())
     print([len(data[split]['a']) for split in ['1A', '1B', '2A', '2B']], len(act_1), len(act_2), len(act_1 | act_2))
-    print(sum([len(data[split]['i']) for split in ['1A', '1B', '2A', '2B']]))
+    # Interactions
+    split_num_inters = [len(data[split]['i']) for split in ['1A', '1B', '2A', '2B']]
+    print(split_num_inters, sum(split_num_inters), '=', len({x for split in ['1A', '1B', '2A', '2B'] for x in data[split]['i']}))
 
     # Write zero-shot file
     seen_obj = data['1A']['o']
     seen_act = np.array(sorted(set(data['1A']['a'].tolist()) | {0}))
-    with open(zs_output_file, 'wb') as f:
-        pickle.dump({'train': {'obj': seen_obj, 'act': seen_act}}, f)
+    # with open(zs_output_file, 'wb') as f:
+    #     pickle.dump({'train': {'obj': seen_obj, 'act': seen_act}}, f)
 
     # Check label consistency
     # This doesn't work for VG because there is some overlap of both objects and actions between 1A and 2B

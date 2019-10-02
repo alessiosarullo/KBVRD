@@ -107,7 +107,7 @@ def get_runs_data(runs):
         summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
         tags = summary_iterators[0].Tags()['scalars']
         for it in summary_iterators:
-            assert it.Tags()['scalars'] == tags
+            assert it.Tags()['scalars'] == tags, (it.Tags()['scalars'], tags)
 
         values_per_tag = {}
         steps = []
