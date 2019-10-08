@@ -124,7 +124,7 @@ class SKZSMultiModel(AbstractModel):
                 adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
                 self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
         else:
-            self.reg_margin = self.act_emb_sim.unsqueeze(dim=2) - self.act_emb_sim.unsqueeze(dim=1)
+            self.reg_margin = nn.Parameter(self.act_emb_sim.unsqueeze(dim=2) - self.act_emb_sim.unsqueeze(dim=1), requires_grad=False)
 
         self._csp_weights = {}
         if any([cfg.ocs, cfg.acs, cfg.hcs]):
