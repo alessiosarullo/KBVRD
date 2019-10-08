@@ -14,6 +14,7 @@ from lib.models.abstract_model import AbstractModel
 from lib.models.branches import get_noun_verb_adj_mat, CheatGCNBranch, CheatHoiGCNBranch, KatoGCNBranch
 from lib.models.containers import Prediction
 from lib.models.misc import bce_loss, LIS, interactions_to_actions, interactions_to_objects, interactions_to_mat
+from torch import nn as nn
 
 
 class HicoBaseModel(AbstractModel):
@@ -495,21 +496,32 @@ class HicoZSGCModel(HicoExtKnowledgeGenericModel):
         return logits, labels, reg_loss
 
 
-class KatoModel(HicoExtKnowledgeGenericModel):
+class KatoModel(AbstractModel):
     @classmethod
     def get_cline_name(cls):
         return 'kato'
 
     def __init__(self, dataset: HicoSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        self.hoi_repr_dim = 512
-        vis_feat_dim = self.dataset.precomputed_visual_feat_dim
+        super().__init__(dataset, **kwargs)
+        self.dataset = dataset
 
-        self.img_repr_mlp = nn.Linear(vis_feat_dim, self.hoi_repr_dim)
+        assert cfg.seenf >= 0  # ZS enabled
+        seen_hoi_inds = dataset.active_interactions
+        unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
+        if not cfg.train_null:
+            raise NotImplementedError  # TODO
+        self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
+        self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
 
+        img_feats_reduced_dim = 512
+        img_feats_dim = self.dataset.precomputed_visual_feat_dim
         gc_dims = (512, 200)
-        self.gcn_branch = KatoGCNBranch(dataset, gc_dims=(512, 200))
-        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + self.hoi_repr_dim, 512),
+
+        self.img_repr_mlp = nn.Linear(img_feats_dim, img_feats_reduced_dim)
+        self.gcn_branch = KatoGCN(dataset, input_dim=200, gc_dims=(512, 200),
+                                  train_z=not cfg.katoconstz, paper_adj=cfg.katopadj, paper_gc=cfg.katopgc)
+        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + img_feats_reduced_dim, 512),
                                        nn.ReLU(inplace=True),
                                        nn.Dropout(p=0.5),
                                        nn.Linear(512, 200),
@@ -518,12 +530,26 @@ class KatoModel(HicoExtKnowledgeGenericModel):
                                        nn.Linear(200, 1)
                                        )
 
+    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
+        with torch.set_grad_enabled(self.training):
+
+            feats, labels = x
+            logits, labels = self._forward(feats, labels)
+
+            if not inference:
+                losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
+                return losses
+            else:
+                prediction = Prediction()
+                prediction.hoi_scores = torch.sigmoid(logits).cpu().numpy()
+                return prediction
+
     def _forward(self, feats, labels):
         hoi_repr = self.img_repr_mlp(feats)
-        z_a, z_v, z_n = self.gcn_branch()
+        z_n, z_v, z_a = self.gcn_branch()
         hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
                                                z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
                                               dim=2))
         assert hoi_logits.shape[2] == 1
         hoi_logits = hoi_logits.squeeze(dim=2)
-        return hoi_logits, labels, None
+        return hoi_logits, labels

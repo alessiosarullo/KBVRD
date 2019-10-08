@@ -94,20 +94,15 @@ class Configs:
         # ZS specific
         self.lis = False
         self.slpure = False
-        self.wemb = False
-        self.wemb_oo = False  # object only
+        self.no_wemb = False
+        self.wemb_a = False
 
         # ZS GCN specific
-        self.gc = False
-        self.hoigcn = False
-        self.gconly = False
+        self.no_gc = False
         self.link_null = False
-        self.puregc = False
         self.gcldim = 1024
         self.gcrdim = 1024
         self.gcwemb = False
-        self.vv = False
-        self.gcsingle = False
         self.gcdropout = 0.5
 
         ##########################################

@@ -9,7 +9,7 @@ from lib.models.abstract_model import AbstractModel
 from lib.models.misc import bce_loss
 
 
-class GenericModel(AbstractModel):
+class RoiGenericModel(AbstractModel):
     @classmethod
     def get_cline_name(cls) -> str:
         raise NotImplementedError()

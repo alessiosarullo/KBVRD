@@ -11,7 +11,7 @@ from lib.dataset.hico import HicoSplit
 from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
-from lib.models.gcns import HicoGCN, HicoHoiGCN, KatoGCN, WEmbHicoGCN
+from lib.models.gcns import HicoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
 
 
@@ -80,13 +80,15 @@ class SKZSMultiModel(AbstractModel):
             nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
 
         # Predictors
+        self.use_gc = not cfg.no_gc
+        self.use_wemb = not cfg.no_wemb
         self.linear_predictors = nn.ParameterDict()
         for k, d in [('obj', dataset.full_dataset.num_objects),
                      ('act', dataset.full_dataset.num_actions),
                      ('hoi', dataset.full_dataset.num_interactions)]:
             self.linear_predictors[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
             torch.nn.init.xavier_normal_(self.linear_predictors[k], gain=1.0)
-        if cfg.gc:
+        if self.use_gc:
             gcemb_dim = cfg.gcrdim
             latent_dim = cfg.gcldim
             hidden_dim = (latent_dim + self.repr_dim) // 2
@@ -97,14 +99,11 @@ class SKZSMultiModel(AbstractModel):
                                                                   ) for k in ['obj', 'act', 'hoi']})
             gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
 
-            if cfg.hoigcn:
-                self.gcn = HicoHoiGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+            if cfg.gcwemb:
+                self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
             else:
-                if cfg.gcwemb:
-                    self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-                else:
-                    self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-        if cfg.wemb:
+                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
+        if self.use_wemb:
             self.wemb_mlps = nn.ModuleDict()
             for k in ['obj', 'act', 'hoi']:
                 self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
@@ -242,7 +241,7 @@ class SKZSMultiModel(AbstractModel):
                 epoch, iter = other
             all_instance_reprs, all_linear_predictors, all_knowl_predictors, all_labels = self._forward(feats, orig_labels)
             all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act', 'hoi']}
-            if cfg.gc or cfg.wemb:
+            if self.use_gc or self.use_wemb:
                 all_knowl_logits = {k: all_instance_reprs[k] @ all_knowl_predictors[k].t() for k in ['obj', 'act', 'hoi']}
             else:
                 all_knowl_logits = {}
@@ -306,23 +305,19 @@ class SKZSMultiModel(AbstractModel):
     def _forward(self, feats, labels):
         # Predictors
         linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act', 'hoi']}  # P x D
-        if cfg.gc:
-            if cfg.hoigcn:
-                hoi_class_embs, act_class_embs, obj_class_embs = self.gcn()
-            else:
-                hico = self.dataset.full_dataset
-                obj_class_embs, act_class_embs = self.gcn()  # P x E
-                hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
+        if self.use_gc:
+            hico = self.dataset.full_dataset
+            obj_class_embs, act_class_embs = self.gcn()  # P x E
+            hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
             class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
             predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
-            if cfg.wemb:
-                if cfg.wemb_oo:
-                    branches = ['obj']
-                else:
-                    branches = ['obj', 'act']
+            if self.use_wemb:
+                branches = ['obj']
+                if cfg.wemb_a:
+                    branches.append('act')
                 wemb_predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in branches}
                 predictors = {k: v + wemb_predictors.get(k, 0) for k, v in predictors.items()}
-        elif cfg.wemb:
+        elif self.use_wemb:
             predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
             predictors['hoi'] = predictors['obj'].new_zeros((self.dataset.full_dataset.num_interactions, predictors['obj'].shape[1]))
         else:
@@ -441,62 +436,3 @@ class WEmbModel(AbstractModel):
         # Logits
         logits = {k: self.repr_mlps[k](feats) @ self.wemb_mlps[k](self.word_embs[k]).t() for k in ['obj', 'act']}
         return logits, labels
-
-
-class KatoModel(AbstractModel):
-    @classmethod
-    def get_cline_name(cls):
-        return 'kato'
-
-    def __init__(self, dataset: HicoSplit, **kwargs):
-        super().__init__(dataset, **kwargs)
-        super().__init__(dataset, **kwargs)
-        self.dataset = dataset
-
-        assert cfg.seenf >= 0  # ZS enabled
-        seen_hoi_inds = dataset.active_interactions
-        unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
-        if not cfg.train_null:
-            raise NotImplementedError  # TODO
-        self.seen_hoi_inds = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
-        self.unseen_hoi_inds = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
-
-        img_feats_reduced_dim = 512
-        img_feats_dim = self.dataset.precomputed_visual_feat_dim
-        gc_dims = (512, 200)
-
-        self.img_repr_mlp = nn.Linear(img_feats_dim, img_feats_reduced_dim)
-        self.gcn_branch = KatoGCN(dataset, input_dim=200, gc_dims=(512, 200),
-                                  train_z=not cfg.katoconstz, paper_adj=cfg.katopadj, paper_gc=cfg.katopgc)
-        self.score_mlp = nn.Sequential(nn.Linear(gc_dims[-1] + img_feats_reduced_dim, 512),
-                                       nn.ReLU(inplace=True),
-                                       nn.Dropout(p=0.5),
-                                       nn.Linear(512, 200),
-                                       nn.ReLU(inplace=True),
-                                       nn.Dropout(p=0.5),
-                                       nn.Linear(200, 1)
-                                       )
-
-    def forward(self, x: List[torch.Tensor], inference=True, **kwargs):
-        with torch.set_grad_enabled(self.training):
-
-            feats, labels = x
-            logits, labels = self._forward(feats, labels)
-
-            if not inference:
-                losses = {'hoi_loss': bce_loss(logits[:, self.seen_hoi_inds], labels[:, self.seen_hoi_inds])}
-                return losses
-            else:
-                prediction = Prediction()
-                prediction.hoi_scores = torch.sigmoid(logits).cpu().numpy()
-                return prediction
-
-    def _forward(self, feats, labels):
-        hoi_repr = self.img_repr_mlp(feats)
-        z_n, z_v, z_a = self.gcn_branch()
-        hoi_logits = self.score_mlp(torch.cat([hoi_repr.unsqueeze(dim=1).expand(-1, z_a.shape[0], -1),
-                                               z_a.unsqueeze(dim=0).expand(hoi_repr.shape[0], -1, -1)],
-                                              dim=2))
-        assert hoi_logits.shape[2] == 1
-        hoi_logits = hoi_logits.squeeze(dim=2)
-        return hoi_logits, labels
