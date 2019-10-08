@@ -115,13 +115,16 @@ class SKZSMultiModel(AbstractModel):
 
         # Regularisation
         self.adj = nn.ParameterDict()
-        if self.reg_coeffs['obj'] > 0:
-            self.adj['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
-        if self.reg_coeffs['act'] > 0:
-            self.adj['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
-        if self.reg_coeffs['hoi'] > 0:
-            adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
-            self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
+        if not cfg.sgr:
+            if self.reg_coeffs['obj'] > 0:
+                self.adj['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
+            if self.reg_coeffs['act'] > 0:
+                self.adj['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
+            if self.reg_coeffs['hoi'] > 0:
+                adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
+                self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
+        else:
+            self.reg_margin = self.act_emb_sim.unsqueeze(dim=2) - self.act_emb_sim.unsqueeze(dim=1)
 
         self._csp_weights = {}
         if any([cfg.ocs, cfg.acs, cfg.hcs]):
@@ -201,7 +204,6 @@ class SKZSMultiModel(AbstractModel):
         return obj_labels, act_labels, hoi_labels
 
     def get_reg_loss(self, predictors, branch):
-        adj = self.adj[branch]
         seen = self.seen_inds[branch]
         unseen = self.unseen_inds[branch]
 
@@ -215,20 +217,27 @@ class SKZSMultiModel(AbstractModel):
 
         predictors_norm = F.normalize(predictors, dim=1)
         predictors_sim = predictors_norm @ predictors_norm.t()
-        null = ~adj.any(dim=1)
+        predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)  # neighbours along axis 1, non-neighbours along 2
         arange = torch.arange(predictors_sim.shape[0])
 
-        predictors_sim_diff = predictors_sim.unsqueeze(dim=2) - predictors_sim.unsqueeze(dim=1)
-        reg_loss_mat = (cfg.grm - predictors_sim_diff).clamp(min=0)
-        reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
-        reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
+        if cfg.sgr:
+            if branch != 'act':
+                raise NotImplementedError()
+            reg_loss_mat = (self.reg_margin - predictors_sim_diff).clamp(min=0)
+        else:
+            adj = self.adj[branch]
+            null = ~adj.any(dim=1)
+
+            reg_loss_mat = (cfg.grm - predictors_sim_diff).clamp(min=0)
+            reg_loss_mat[~adj.unsqueeze(dim=2).expand_as(reg_loss_mat)] = 0
+            reg_loss_mat[adj.unsqueeze(dim=1).expand_as(reg_loss_mat)] = 0
+            reg_loss_mat[null, :, :] = 0
+            reg_loss_mat[:, null, :] = 0
+            reg_loss_mat[:, :, null] = 0
+
         reg_loss_mat[arange, arange, :] = 0
         reg_loss_mat[arange, :, arange] = 0
         reg_loss_mat[:, arange, arange] = 0
-        reg_loss_mat[null, :, :] = 0
-        reg_loss_mat[:, null, :] = 0
-        reg_loss_mat[:, :, null] = 0
-
         reg_loss_mat = reg_loss_mat[unseen, :, :]
         reg_loss = reg_loss_mat.sum() / (reg_loss_mat != 0).sum().item()
         return reg_loss

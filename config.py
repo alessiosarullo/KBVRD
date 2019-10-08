@@ -82,9 +82,11 @@ class Configs:
         self.hsc = 0.0
         self.hpr = 0.0
         self.hcs = False
+        # Regularisation
         self.grm = 0.3  # margin in graph regularisation
         self.grg = 0  # gamma in graph regularisation
         self.grseen = False
+        self.sgr = False  # similarity-based regularisation
 
         # Kato specific
         self.katopadj = False
