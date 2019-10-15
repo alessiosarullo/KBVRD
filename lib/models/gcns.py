@@ -62,10 +62,10 @@ class AbstractGCN(nn.Module):
 
 class HicoGCN(AbstractGCN):
     def __init__(self, dataset, oa_adj, **kwargs):
-        super().__init__(dataset=dataset, **kwargs)
         if not cfg.link_null:
             oa_adj[:, 0] = 0
         self.oa_adj = oa_adj
+        super().__init__(dataset=dataset, **kwargs)
 
     def _build_adj_matrix(self):
         # Normalised adjacency matrix. Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is
