@@ -64,34 +64,3 @@ def interactions_to_mat(hois, hico, np2np=False):
         return inter_mat
     else:
         return torch.from_numpy(inter_mat).to(hois)
-
-
-def get_hoi_adjacency_matrix(dataset, isolate_null=None):
-    if isolate_null is None:
-        isolate_null = not cfg.link_null
-    interactions = dataset.full_dataset.interactions
-    inter_obj_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_objects))
-    inter_obj_adj[np.arange(interactions.shape[0]), interactions[:, 0]] = 1
-
-    inter_act_adj = np.zeros((dataset.full_dataset.num_interactions, dataset.full_dataset.num_actions))
-    inter_act_adj[np.arange(interactions.shape[0]), interactions[:, 1]] = 1
-
-    adj = inter_obj_adj @ inter_obj_adj.T + inter_act_adj @ inter_act_adj.T
-    adj = torch.from_numpy(adj).clamp(max=1).float()
-
-    if isolate_null:
-        null_hois = np.flatnonzero(np.any(inter_act_adj[:, 1:], axis=1))
-        adj[null_hois, :] = 0
-        adj[:, null_hois] = 0
-        return adj
-    else:
-        return adj
-
-
-def get_noun_verb_adj_mat(dataset, isolate_null=None):
-    if isolate_null is None:
-        isolate_null = not cfg.link_null
-    noun_verb_links = torch.from_numpy((dataset.full_dataset.oa_pair_to_interaction >= 0).astype(np.float32))
-    if isolate_null:
-        noun_verb_links[:, 0] = 0
-    return noun_verb_links

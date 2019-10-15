@@ -1,15 +1,13 @@
 from typing import Union
 
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
-
-from lib.dataset.hico import HicoSplit
-from lib.dataset.hicodet.hicodet_split import HicoDetSplit
-from lib.dataset.utils import get_noun_verb_adj_mat
-from lib.dataset.word_embeddings import WordEmbeddings
 
 from config import cfg
+from lib.dataset.hico import HicoSplit
+from lib.dataset.hicodet.hicodet_split import HicoDetSplit
+from lib.dataset.word_embeddings import WordEmbeddings
 
 
 class AbstractGCN(nn.Module):
@@ -62,8 +60,6 @@ class AbstractGCN(nn.Module):
 
 class HicoGCN(AbstractGCN):
     def __init__(self, dataset, oa_adj, **kwargs):
-        if not cfg.link_null:
-            oa_adj[:, 0] = 0
         self.oa_adj = oa_adj
         super().__init__(dataset=dataset, **kwargs)
 
@@ -71,7 +67,6 @@ class HicoGCN(AbstractGCN):
         # Normalised adjacency matrix. Note: the identity matrix that is supposed to be added for the "renormalisation trick" (Kipf 2016) is
         # implicitly included by initialising the adjacency matrix to an identity instead of zeros.
         adj = torch.eye(self.num_objects + self.num_actions).float()
-
         adj[:self.num_objects, self.num_objects:] = self.oa_adj  # top right
         adj[self.num_objects:, :self.num_objects] = self.oa_adj.t()  # bottom left
         adj = torch.diag(1 / adj.sum(dim=1).sqrt()) @ adj @ torch.diag(1 / adj.sum(dim=0).sqrt())

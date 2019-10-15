@@ -8,11 +8,12 @@ import torch.nn.functional as F
 from config import cfg
 from lib.containers import Prediction
 from lib.dataset.hico import HicoSplit
-from lib.dataset.utils import interactions_to_mat, get_noun_verb_adj_mat
+from lib.dataset.utils import interactions_to_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.gcns import HicoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
+from lib.dataset.ext_knowledge.get_ext_interactions import get_interactions_from_ext_src
 
 
 class SKZSMultiModel(AbstractModel):
@@ -46,10 +47,11 @@ class SKZSMultiModel(AbstractModel):
         elif cfg.no_ext:
             interactions = self.dataset.interactions
         else:
-            interactions = self.dataset.interactions
-            # TODO
+            ext_interactions = get_interactions_from_ext_src(self.dataset)
+            interactions = np.unique(np.concatenate([self.dataset.interactions, ext_interactions], axis=0), axis=0)
         oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)
         oa_adj[interactions[:, 1], interactions[:, 0]] = 1
+        oa_adj[:, 0] = 0
         oa_adj = torch.from_numpy(oa_adj)
 
         # Base model
@@ -96,9 +98,6 @@ class SKZSMultiModel(AbstractModel):
                                                     ])
                 nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
                 nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        # Regardless of GCN connectivity, now we do not want the null action to be connected.
-        oa_adj[:, 0] = 0
 
         # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)

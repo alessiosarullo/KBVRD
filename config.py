@@ -92,7 +92,6 @@ class Configs:
 
         # ZS GCN specific
         self.no_gc = False
-        self.link_null = False
         self.gcldim = 1024
         self.gcrdim = 1024
         self.gcwemb = False

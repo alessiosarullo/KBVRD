@@ -5,7 +5,6 @@ from torch.nn import functional as F
 
 from config import cfg
 from lib.containers import PrecomputedMinibatch
-from lib.dataset.utils import get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.gcns import HicoGCN
 from lib.models.misc import bce_loss, LIS
@@ -58,7 +57,19 @@ class ExtKnowledgeGenericModel(RoiGenericModel):
         ########################################################
         # Zero-shot
         ########################################################
-        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
+        # Object-action adjacency matrix
+        if cfg.oracle:
+            interactions = self.dataset.full_dataset.interactions
+        elif cfg.no_ext:
+            interactions = self.dataset.interactions
+        else:
+            interactions = self.dataset.interactions
+            # TODO
+            raise NotImplementedError()
+        oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)
+        oa_adj[interactions[:, 1], interactions[:, 0]] = 1
+        oa_adj[:, 0] = 0
+        self.oa_adj = torch.from_numpy(oa_adj)
 
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
         obj_wembs = word_embs.get_embeddings(dataset.full_dataset.objects, retry='avg')
@@ -76,7 +87,7 @@ class ExtKnowledgeGenericModel(RoiGenericModel):
             self.unseen_act_inds = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
             if cfg.asl:
-                self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
+                self.obj_act_feasibility = nn.Parameter(self.oa_adj, requires_grad=False)
 
     def write_soft_labels(self, vis_output: PrecomputedMinibatch):
         action_labels = vis_output.action_labels
@@ -181,10 +192,10 @@ class GCModel(ExtKnowledgeGenericModel):
                                               )
         gc_dims = (gcemb_dim // 2, latent_dim)
 
-        self.gcn = HicoGCN(dataset, oa_adj=self.dataset.full_dataset.interactions, input_dim=gcemb_dim, gc_dims=gc_dims)  # FIXME ext inters
+        self.gcn = HicoGCN(dataset, oa_adj=self.oa_adj, input_dim=gcemb_dim, gc_dims=gc_dims)
 
         if cfg.apr > 0:
-            self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
+            self.vv_adj = nn.Parameter((self.oa_adj.t() @ self.oa_adj).clamp(max=1).byte(), requires_grad=False)
             assert (self.vv_adj.diag()[1:] == 1).all()
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):

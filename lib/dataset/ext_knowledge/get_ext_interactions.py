@@ -203,7 +203,7 @@ def compute_isolated(all_interactions, uncovered_interactions, idx, num_classes)
     return isolated
 
 
-def get_interactions_from_ext_src(hico):
+def get_interactions_from_ext_src(hico: Hico):
     hcvrd = HCVRD()
     imsitu = ImSitu()
     vg_interactions = get_interactions_from_vg(hico)
