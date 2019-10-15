@@ -76,28 +76,19 @@ class Configs:
         self.alc = 1.0
         self.apr = 0.0
         self.acs = False
-        #
-        self.hsl = 0.0
-        self.hlc = 0.0
-        self.hsc = 0.0
-        self.hpr = 0.0
-        self.hcs = False
         # Regularisation
         self.grm = 0.3  # margin in graph regularisation
         self.grg = 0  # gamma in graph regularisation
         self.grseen = False
         self.sgr = False  # similarity-based regularisation
 
-        # Kato specific
-        self.katopadj = False
-        self.katopgc = False
-        self.katoconstz = False
-
         # ZS specific
         self.lis = False
         self.slpure = False
         self.no_wemb = False
         self.wemb_a = False
+        self.oracle = False  # Use full dataset's interactions (including test set)
+        self.no_ext = False  # [Only used if previous is False] Do not add interactions from external sources (i.e., use train only).
 
         # ZS GCN specific
         self.no_gc = False

@@ -7,10 +7,10 @@ from typing import Dict, Tuple
 import numpy as np
 
 from config import cfg
-from lib.dataset.hicodet.hicodet import HicoDet
+from lib.dataset.hico import Hico, HicoDriver
 
 
-class ImSituKnowledgeExtractor:
+class ImSitu:
     def __init__(self):
         self.cache_file = os.path.join(cfg.cache_root, 'imsitu_dobjs.pkl')
 
@@ -24,7 +24,7 @@ class ImSituKnowledgeExtractor:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_freq_matrix(self, dataset: HicoDet, return_known_mask=False):
+    def extract_freq_matrix(self, dataset: Hico, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d actions out of %d.' % (len(pred_verb_matches), len(dataset.actions)))
@@ -159,13 +159,14 @@ class ImSituKnowledgeExtractor:
                                    for verb, instance_ids in concrete_dobjs_per_verb.items()}
         return concrete_dobjs_per_verb
 
-    def match_preds_with_verbs(self, dataset: HicoDet):
+    def match_preds_with_verbs(self, dataset: Hico):
+        hico_driver = HicoDriver()
         verb_dict = self.imsitu.verbs
         pred_verb_matches = {}
         for orig_pred in dataset.actions:
-            ing = dataset.driver.action_dict[orig_pred]['ing']
+            ing = hico_driver.predicate_dict[orig_pred]['ing']
             pred = orig_pred
-            if pred != dataset.null_interaction:
+            if pred != dataset.null_action:
                 pred = pred.replace('_', ' ')
                 ing = ing.replace('_', ' ').split()[0]
 
@@ -188,8 +189,8 @@ class ImSituKnowledgeExtractor:
     def match_objects(dataset, concrete_dobjs_per_verb: Dict[str, Counter]):
         # TODO instead of only matching objects in hico-det some more refined procedure could be applied. For example, matching considering
         # embedding similarity or definitions
-        hd_obj_set = set(dataset.objects)
-        matching_dobjs_per_verb = {verb: {instance: count for instance, count in instances.items() if instance in hd_obj_set}
+        hico_obj_set = set(dataset.objects)
+        matching_dobjs_per_verb = {verb: {instance: count for instance, count in instances.items() if instance in hico_obj_set}
                                    for verb, instances in concrete_dobjs_per_verb.items()}
         return matching_dobjs_per_verb
 
@@ -292,9 +293,9 @@ def main():
     # imsitu = ImSituDriver()
     # imsitu._print_verb_entry('riding')
 
-    imsitu_ke = ImSituKnowledgeExtractor()
-    hd = HicoDet()
-    imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hd, return_known_mask=True)
+    imsitu_ke = ImSitu()
+    hico = Hico()
+    imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hico, return_known_mask=True)
 
 
 if __name__ == '__main__':

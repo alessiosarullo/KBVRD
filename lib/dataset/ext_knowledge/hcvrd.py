@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from lib.dataset.hicodet.hicodet import HicoDet
+from lib.dataset.hico import Hico
 
 
 class HCVRD:
@@ -37,7 +37,7 @@ class HCVRD:
 
         self.triplets = np.array([[self.object_index[s], self.predicate_index[p], self.object_index[o]] for s, p, o in triplets_str])
 
-    def match(self, hd: HicoDet):
+    def match(self, hico: Hico, remove_unmatched=False):
         hcvrd_obj_index = {}
         for orig in self.objects:
             obj = orig
@@ -47,10 +47,10 @@ class HCVRD:
                 obj = 'dryer'
             hcvrd_obj_index[obj] = self.object_index[orig]
 
-        hd_to_hcvrd_obj_match = {}
-        for orig in hd.objects:
+        hico_to_hcvrd_obj_match = {}
+        for orig in hico.objects:
             obj = orig.replace('_', ' ')
-            hd_to_hcvrd_obj_match[orig] = hcvrd_obj_index.get(obj, hcvrd_obj_index.get(obj.split()[-1], None))
+            hico_to_hcvrd_obj_match[orig] = hcvrd_obj_index.get(obj, hcvrd_obj_index.get(obj.split()[-1], None))
 
         hcvrd_pred_index = {}
         for orig in self.predicates:
@@ -70,36 +70,39 @@ class HCVRD:
             p = ' '.join([p] + orig.split()[1:])
             hcvrd_pred_index[p] = self.predicate_index[orig]
 
-        hd_to_hcvrd_pred_match = {}
-        for orig in hd.actions[1:]:
-            hd_to_hcvrd_pred_match[orig] = hcvrd_pred_index.get(orig.replace('_', ' '), None)
+        hico_to_hcvrd_pred_match = {}
+        for orig in hico.actions[1:]:
+            hico_to_hcvrd_pred_match[orig] = hcvrd_pred_index.get(orig.replace('_', ' '), None)
 
-        return hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match
+        if remove_unmatched:
+            hico_to_hcvrd_pred_match = {k: v for k, v in hico_to_hcvrd_pred_match.items() if v is not None}
+            hico_to_hcvrd_obj_match = {k: v for k, v in hico_to_hcvrd_obj_match.items() if v is not None}
+        return hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match
 
-    def get_hoi_freq(self, hd: HicoDet):
-        hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match = self.match(hd)
+    def get_hoi_freq(self, hico: Hico):
+        hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match = self.match(hico)
 
-        hcvrd_to_hd_obj = {v: hd.object_index[k] for k, v in hd_to_hcvrd_obj_match.items() if v is not None}
-        hcvrd_to_hd_pred = {v: hd.action_index[k] for k, v in hd_to_hcvrd_pred_match.items() if v is not None}
+        hcvrd_to_hico_obj = {v: hico.object_index[k] for k, v in hico_to_hcvrd_obj_match.items() if v is not None}
+        hcvrd_to_hico_pred = {v: hico.action_index[k] for k, v in hico_to_hcvrd_pred_match.items() if v is not None}
         human_classes = set(self.human_classes)
 
-        op_mat = np.zeros((len(hd.objects), len(hd.actions)))
+        op_mat = np.zeros((len(hico.objects), len(hico.actions)))
         for s, p, o in self.triplets:
-            if s in human_classes and p in hcvrd_to_hd_pred.keys() and o in hcvrd_to_hd_obj.keys():
-                op_mat[hcvrd_to_hd_obj[o], hcvrd_to_hd_pred[p]] += 1
+            if s in human_classes and p in hcvrd_to_hico_pred.keys() and o in hcvrd_to_hico_obj.keys():
+                op_mat[hcvrd_to_hico_obj[o], hcvrd_to_hico_pred[p]] += 1
 
         return op_mat
 
 
 def main():
     hcvrd = HCVRD()
-    hd = HicoDet()
+    hico = Hico()
 
     print(hcvrd.human_classes)
     print('\n'.join(hcvrd.objects))
 
-    hd_to_hcvrd_pred_match, hd_to_hcvrd_obj_match = hcvrd.match(hd)
-    mp, mo = sorted([k for k, v in hd_to_hcvrd_pred_match.items() if v is None]), sorted([k for k, v in hd_to_hcvrd_obj_match.items() if v is None])
+    hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match = hcvrd.match(hico)
+    mp, mo = sorted([k for k, v in hico_to_hcvrd_pred_match.items() if v is None]), sorted([k for k, v in hico_to_hcvrd_obj_match.items() if v is None])
     print(mp)
     print(mo)
 

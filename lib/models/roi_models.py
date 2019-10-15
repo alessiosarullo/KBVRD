@@ -181,7 +181,7 @@ class GCModel(ExtKnowledgeGenericModel):
                                               )
         gc_dims = (gcemb_dim // 2, latent_dim)
 
-        self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+        self.gcn = HicoGCN(dataset, oa_adj=self.dataset.full_dataset.interactions, input_dim=gcemb_dim, gc_dims=gc_dims)  # FIXME ext inters
 
         if cfg.apr > 0:
             self.vv_adj = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)

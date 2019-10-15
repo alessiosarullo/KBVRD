@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from config import cfg
 from lib.containers import Prediction
 from lib.dataset.hico import HicoSplit
-from lib.dataset.utils import interactions_to_mat, get_hoi_adjacency_matrix, get_noun_verb_adj_mat
+from lib.dataset.utils import interactions_to_mat, get_noun_verb_adj_mat
 from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.gcns import HicoGCN, WEmbHicoGCN
@@ -24,13 +24,10 @@ class SKZSMultiModel(AbstractModel):
         super().__init__(dataset, **kwargs)
         self.dataset = dataset
         self.repr_dim = cfg.repr_dim
-        self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc, 'hoi': cfg.hlc}
-        self.soft_label_loss_coeffs = {'obj': cfg.osl, 'act': cfg.asl, 'hoi': cfg.hsl}
-        self.reg_coeffs = {'obj': cfg.opr, 'act': cfg.apr, 'hoi': cfg.hpr}
+        self.loss_coeffs = {'obj': cfg.olc, 'act': cfg.alc}
+        self.soft_label_loss_coeffs = {'obj': cfg.osl, 'act': cfg.asl}
+        self.reg_coeffs = {'obj': cfg.opr, 'act': cfg.apr}
         self.soft_labels_enabled = any([v > 0 for v in self.soft_label_loss_coeffs.values()])
-
-        # Object-action (or noun-verb) adjacency matrix
-        self.nv_adj = get_noun_verb_adj_mat(dataset=dataset, isolate_null=True)
 
         # Word embeddings + similarity matrices
         word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
@@ -42,6 +39,66 @@ class SKZSMultiModel(AbstractModel):
         self.obj_emb_sim = nn.Parameter(self.word_embs['obj'] @ self.word_embs['obj'].t(), requires_grad=False)
         self.act_emb_sim = nn.Parameter(self.word_embs['act'] @ self.word_embs['act'].t(), requires_grad=False)
         self.act_obj_emb_sim = nn.Parameter(self.word_embs['act'] @ self.word_embs['obj'].t(), requires_grad=False)
+
+        # Object-action adjacency matrix
+        if cfg.oracle:
+            interactions = self.dataset.full_dataset.interactions
+        elif cfg.no_ext:
+            interactions = self.dataset.interactions
+        else:
+            interactions = self.dataset.interactions
+            # TODO
+        oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)
+        oa_adj[interactions[:, 1], interactions[:, 0]] = 1
+        oa_adj = torch.from_numpy(oa_adj)
+
+        # Base model
+        self.repr_mlps = nn.ModuleDict()
+        for k in ['obj', 'act']:
+            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
+                                                nn.ReLU(inplace=True),
+                                                nn.Dropout(p=cfg.dropout),
+                                                nn.Linear(1024, self.repr_dim),
+                                                ])
+            nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+            nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+        # Predictors
+        self.use_gc = not cfg.no_gc
+        self.use_wemb = not cfg.no_wemb
+        self.linear_predictors = nn.ParameterDict()
+        for k, d in [('obj', dataset.full_dataset.num_objects),
+                     ('act', dataset.full_dataset.num_actions),
+                     ]:
+            self.linear_predictors[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
+            torch.nn.init.xavier_normal_(self.linear_predictors[k], gain=1.0)
+        if self.use_gc:
+            gcemb_dim = cfg.gcrdim
+            latent_dim = cfg.gcldim
+            hidden_dim = (latent_dim + self.repr_dim) // 2
+            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
+                                                                  nn.ReLU(inplace=True),
+                                                                  nn.Dropout(p=cfg.gcdropout),
+                                                                  nn.Linear(hidden_dim, self.repr_dim),
+                                                                  ) for k in ['obj', 'act']})
+            gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
+
+            if cfg.gcwemb:
+                self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims)
+            else:
+                self.gcn = HicoGCN(dataset, oa_adj=oa_adj, input_dim=gcemb_dim, gc_dims=gc_dims)
+        if self.use_wemb:
+            self.wemb_mlps = nn.ModuleDict()
+            for k in ['obj', 'act']:
+                self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
+                                                    nn.ReLU(inplace=True),
+                                                    nn.Linear(600, self.repr_dim),
+                                                    ])
+                nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
+                nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
+
+        # Regardless of GCN connectivity, now we do not want the null action to be connected.
+        oa_adj[:, 0] = 0
 
         # Seen/unseen indices
         self.zs_enabled = (cfg.seenf >= 0)
@@ -60,74 +117,22 @@ class SKZSMultiModel(AbstractModel):
             self.seen_inds['act'] = nn.Parameter(torch.tensor(seen_act_inds), requires_grad=False)
             self.unseen_inds['act'] = nn.Parameter(torch.tensor(unseen_act_inds), requires_grad=False)
 
-            seen_hoi_inds = dataset.active_interactions
-            unseen_hoi_inds = np.array(sorted(set(range(self.dataset.full_dataset.num_interactions)) - set(seen_hoi_inds.tolist())))
-            self.seen_inds['hoi'] = nn.Parameter(torch.tensor(seen_hoi_inds), requires_grad=False)
-            self.unseen_inds['hoi'] = nn.Parameter(torch.tensor(unseen_hoi_inds), requires_grad=False)
-
             if self.soft_labels_enabled:
-                self.obj_act_feasibility = nn.Parameter(self.nv_adj, requires_grad=False)
-
-        # Base model
-        self.repr_mlps = nn.ModuleDict()
-        for k in ['obj', 'act', 'hoi']:
-            self.repr_mlps[k] = nn.Sequential(*[nn.Linear(self.dataset.precomputed_visual_feat_dim, 1024),
-                                                nn.ReLU(inplace=True),
-                                                nn.Dropout(p=cfg.dropout),
-                                                nn.Linear(1024, self.repr_dim),
-                                                ])
-            nn.init.xavier_normal_(self.repr_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-            nn.init.xavier_normal_(self.repr_mlps[k][3].weight, gain=torch.nn.init.calculate_gain('linear'))
-
-        # Predictors
-        self.use_gc = not cfg.no_gc
-        self.use_wemb = not cfg.no_wemb
-        self.linear_predictors = nn.ParameterDict()
-        for k, d in [('obj', dataset.full_dataset.num_objects),
-                     ('act', dataset.full_dataset.num_actions),
-                     ('hoi', dataset.full_dataset.num_interactions)]:
-            self.linear_predictors[k] = nn.Parameter(torch.empty(d, self.repr_dim), requires_grad=True)
-            torch.nn.init.xavier_normal_(self.linear_predictors[k], gain=1.0)
-        if self.use_gc:
-            gcemb_dim = cfg.gcrdim
-            latent_dim = cfg.gcldim
-            hidden_dim = (latent_dim + self.repr_dim) // 2
-            self.predictor_mlps = nn.ModuleDict({k: nn.Sequential(nn.Linear(latent_dim, hidden_dim),
-                                                                  nn.ReLU(inplace=True),
-                                                                  nn.Dropout(p=cfg.gcdropout),
-                                                                  nn.Linear(hidden_dim, self.repr_dim),
-                                                                  ) for k in ['obj', 'act', 'hoi']})
-            gc_dims = ((gcemb_dim + latent_dim) // 2, latent_dim)
-
-            if cfg.gcwemb:
-                self.gcn = WEmbHicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-            else:
-                self.gcn = HicoGCN(dataset, input_dim=gcemb_dim, gc_dims=gc_dims, block_norm=cfg.katopadj)
-        if self.use_wemb:
-            self.wemb_mlps = nn.ModuleDict()
-            for k in ['obj', 'act', 'hoi']:
-                self.wemb_mlps[k] = nn.Sequential(*[nn.Linear(word_embs.dim, 600),
-                                                    nn.ReLU(inplace=True),
-                                                    nn.Linear(600, self.repr_dim),
-                                                    ])
-                nn.init.xavier_normal_(self.wemb_mlps[k][0].weight, gain=torch.nn.init.calculate_gain('relu'))
-                nn.init.xavier_normal_(self.wemb_mlps[k][2].weight, gain=torch.nn.init.calculate_gain('linear'))
+                self.obj_act_feasibility = nn.Parameter(oa_adj, requires_grad=False)
 
         # Regularisation
         self.adj = nn.ParameterDict()
         if not cfg.sgr:
             if self.reg_coeffs['obj'] > 0:
-                self.adj['obj'] = nn.Parameter((self.nv_adj @ self.nv_adj.t()).clamp(max=1).byte(), requires_grad=False)
+                self.adj['obj'] = nn.Parameter((oa_adj @ oa_adj.t()).clamp(max=1).byte(), requires_grad=False)
             if self.reg_coeffs['act'] > 0:
-                self.adj['act'] = nn.Parameter((self.nv_adj.t() @ self.nv_adj).clamp(max=1).byte(), requires_grad=False)
-            if self.reg_coeffs['hoi'] > 0:
-                adj = get_hoi_adjacency_matrix(self.dataset, isolate_null=True)
-                self.adj['hoi'] = nn.Parameter(adj.byte(), requires_grad=False)
+                self.adj['act'] = nn.Parameter((oa_adj.t() @ oa_adj).clamp(max=1).byte(), requires_grad=False)
         else:
             self.reg_margin = nn.Parameter(self.act_emb_sim.unsqueeze(dim=2) - self.act_emb_sim.unsqueeze(dim=1), requires_grad=False)
 
         self._csp_weights = {}
-        if any([cfg.ocs, cfg.acs, cfg.hcs]):
+        if any([cfg.ocs, cfg.acs]):
+            raise NotImplementedError('Check that the use of HICO interactions is ok for ZS.')
             if not cfg.train_null:
                 null_interactions = set(np.flatnonzero(self.dataset.full_dataset.interactions[:, 0] == 0).tolist())
                 interactions = np.array(sorted(set(self.dataset.active_interactions.tolist()) - null_interactions))
@@ -142,8 +147,6 @@ class SKZSMultiModel(AbstractModel):
                 hist['obj'] = all_interactions_hist @ self.dataset.full_dataset.interaction_to_object_mat[:, self.dataset.active_objects]
             if cfg.acs:
                 hist['act'] = all_interactions_hist @ self.dataset.full_dataset.interaction_to_action_mat[:, actions]
-            if cfg.hcs:
-                hist['hoi'] = all_interactions_hist[interactions]
 
             csp_weights = {}
             for k, h in hist.items():
@@ -151,10 +154,10 @@ class SKZSMultiModel(AbstractModel):
                 tot = h.sum()
                 csp_weights[k] = cost_matrix @ h / (tot - h)
             self._csp_weights = nn.ParameterDict({k: nn.Parameter(torch.from_numpy(v).float(), requires_grad=False) for k, v in csp_weights.items()})
-        self.csp_weights = {k: self._csp_weights[k] if k in self._csp_weights else None for k in ['obj', 'act', 'hoi']}
+        self.csp_weights = {k: self._csp_weights[k] if k in self._csp_weights else None for k in ['obj', 'act']}
 
     def get_soft_labels(self, labels):
-        assert cfg.osl or cfg.asl or cfg.hsl
+        assert cfg.osl or cfg.asl
         batch_size = labels.shape[0]
 
         inter_mat = interactions_to_mat(labels, hico=self.dataset.full_dataset)  # N x I -> N x O x P
@@ -185,23 +188,7 @@ class SKZSMultiModel(AbstractModel):
                                                          self.unseen_inds['act']]  # group across objects
         act_labels = act_labels.detach()
 
-        hoi_labels = labels
-        if cfg.hsl:
-            obj_emb_sim = self.obj_emb_sim.clamp(min=0)
-            similar_obj_per_act = torch.bmm(ext_inter_mat.transpose(1, 2), obj_emb_sim.unsqueeze(dim=0).expand(batch_size, -1, -1)).transpose(2, 1)
-            similar_obj_per_act = similar_obj_per_act / ext_inter_mat.sum(dim=1, keepdim=True).clamp(min=1)
-
-            act_emb_sims = self.act_emb_sim.clamp(min=0)
-            similar_acts_per_obj = torch.bmm(ext_inter_mat, act_emb_sims.unsqueeze(dim=0).expand(batch_size, -1, -1))
-            similar_acts_per_obj = similar_acts_per_obj / ext_inter_mat.sum(dim=2, keepdim=True).clamp(min=1)
-
-            similar_hois = (similar_obj_per_act + similar_acts_per_obj) * self.obj_act_feasibility.unsqueeze(dim=0).expand(batch_size, -1, -1)
-
-            interactions = self.dataset.full_dataset.interactions  # FIXME should do based on graph instead of oracle
-            hoi_labels[:, self.unseen_inds['hoi']] = similar_hois[:, interactions[:, 1], interactions[:, 0]][:, self.unseen_inds['hoi']]
-        hoi_labels = hoi_labels.detach()
-
-        return obj_labels, act_labels, hoi_labels
+        return obj_labels, act_labels
 
     def get_reg_loss(self, predictors, branch):
         seen = self.seen_inds[branch]
@@ -249,16 +236,16 @@ class SKZSMultiModel(AbstractModel):
             if not inference:
                 epoch, iter = other
             all_instance_reprs, all_linear_predictors, all_knowl_predictors, all_labels = self._forward(feats, orig_labels)
-            all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act', 'hoi']}
+            all_logits = {k: all_instance_reprs[k] @ all_linear_predictors[k].t() for k in ['obj', 'act']}
             if self.use_gc or self.use_wemb:
-                all_knowl_logits = {k: all_instance_reprs[k] @ all_knowl_predictors[k].t() for k in ['obj', 'act', 'hoi']}
+                all_knowl_logits = {k: all_instance_reprs[k] @ all_knowl_predictors[k].t() for k in ['obj', 'act']}
             else:
                 all_knowl_logits = {}
 
             if not inference:
                 all_labels = {k: v for k, v in all_labels.items()}
                 losses = {}
-                for k in ['obj', 'act', 'hoi']:
+                for k in ['obj', 'act']:
                     logits = all_logits[k]
                     labels = all_labels[k]
                     loss_c = self.loss_coeffs[k]
@@ -270,9 +257,7 @@ class SKZSMultiModel(AbstractModel):
                         seen, unseen = self.seen_inds[k], self.unseen_inds[k]
                         soft_label_loss_c = self.soft_label_loss_coeffs[k]
                         if not cfg.train_null:
-                            if k == 'hoi':
-                                raise NotImplementedError()
-                            elif k == 'act':
+                            if k == 'act':
                                 seen = seen[1:]
                         if len(all_knowl_logits) > 0:
                             losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights[k]) + \
@@ -285,9 +270,7 @@ class SKZSMultiModel(AbstractModel):
                                 losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(logits[:, unseen], labels[:, unseen])
                     else:
                         if not cfg.train_null:
-                            if k == 'hoi':
-                                raise NotImplementedError()
-                            elif k == 'act':
+                            if k == 'act':
                                 labels = labels[:, 1:]
                                 logits = logits[:, 1:]
                         losses[f'{k}_loss'] = loss_c * bce_loss(logits, labels, pos_weights=self.csp_weights[k])
@@ -307,19 +290,16 @@ class SKZSMultiModel(AbstractModel):
                 interactions = self.dataset.full_dataset.interactions
                 obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc
                 act_scores = torch.sigmoid(all_logits['act']).cpu().numpy() ** cfg.asc
-                hoi_scores = torch.sigmoid(all_logits['hoi']).cpu().numpy() ** cfg.hsc
-                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]] * hoi_scores
+                prediction.hoi_scores = obj_scores[:, interactions[:, 1]] * act_scores[:, interactions[:, 0]]
                 return prediction
 
     def _forward(self, feats, labels):
         # Predictors
-        linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act', 'hoi']}  # P x D
+        linear_predictors = {k: self.linear_predictors[k] for k in ['obj', 'act']}  # P x D
         if self.use_gc:
-            hico = self.dataset.full_dataset
             obj_class_embs, act_class_embs = self.gcn()  # P x E
-            hoi_class_embs = F.normalize(obj_class_embs[hico.interactions[:, 1]] + act_class_embs[hico.interactions[:, 0]], dim=1)
-            class_embs = {'obj': obj_class_embs, 'act': act_class_embs, 'hoi': hoi_class_embs}
-            predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act', 'hoi']}  # P x D
+            class_embs = {'obj': obj_class_embs, 'act': act_class_embs}
+            predictors = {k: self.predictor_mlps[k](class_embs[k]) for k in ['obj', 'act']}  # P x D
             if self.use_wemb:
                 branches = ['obj']
                 if cfg.wemb_a:
@@ -328,23 +308,21 @@ class SKZSMultiModel(AbstractModel):
                 predictors = {k: v + wemb_predictors.get(k, 0) for k, v in predictors.items()}
         elif self.use_wemb:
             predictors = {k: self.wemb_mlps[k](self.word_embs[k]) for k in ['obj', 'act']}
-            predictors['hoi'] = predictors['obj'].new_zeros((self.dataset.full_dataset.num_interactions, predictors['obj'].shape[1]))
         else:
             predictors = linear_predictors
 
         # Instance representation
-        instance_repr = {k: self.repr_mlps[k](feats) for k in ['obj', 'act', 'hoi']}
+        instance_repr = {k: self.repr_mlps[k](feats) for k in ['obj', 'act']}
 
         # Labels
         if labels is not None:
-            hoi_labels = labels
-            obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
-            act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
+            obj_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(labels)).clamp(max=1).detach()
+            act_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(labels)).clamp(max=1).detach()
             if self.soft_labels_enabled:
-                obj_labels, act_labels, hoi_labels = self.get_soft_labels(labels)
+                obj_labels, act_labels = self.get_soft_labels(labels)
         else:
-            obj_labels = act_labels = hoi_labels = None
-        labels = {'obj': obj_labels, 'act': act_labels, 'hoi': hoi_labels}
+            obj_labels = act_labels = None
+        labels = {'obj': obj_labels, 'act': act_labels}
         return instance_repr, linear_predictors, predictors, labels
 
 
@@ -435,9 +413,8 @@ class WEmbModel(AbstractModel):
     def _forward(self, feats, labels):
         # Labels
         if labels is not None:
-            hoi_labels = labels
-            obj_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(hoi_labels)).clamp(max=1).detach()
-            act_labels = (hoi_labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(hoi_labels)).clamp(max=1).detach()
+            obj_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_object_mat).to(labels)).clamp(max=1).detach()
+            act_labels = (labels @ torch.from_numpy(self.dataset.full_dataset.interaction_to_action_mat).to(labels)).clamp(max=1).detach()
         else:
             obj_labels = act_labels = None
         labels = {'obj': obj_labels, 'act': act_labels}
