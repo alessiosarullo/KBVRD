@@ -144,17 +144,17 @@ def get_interactions_from_triplet_dataset(hoi_ds: HoiDataset, triplet_ds):
     assert len(vgg_pred_to_hoi_actions) == len(hoi_ds_to_vgsgg_pred_match)
 
     humans = set(triplet_ds.human_classes)
-    subj_filtering = np.array([-1 if s not in humans else s for s in range(len(triplet_ds.objects))])
+    subj_mapping = np.array([-1 if s not in humans else hoi_ds.object_index.get(s, hoi_ds.object_index['person'])
+                             for s in range(len(triplet_ds.objects))])
     pred_mapping = np.array([vgg_pred_to_hoi_actions.get(p, -1) for p in range(len(triplet_ds.predicates))])
     obj_mapping = np.array([vgg_obj_to_hoi_objects.get(o, -1) for o in range(len(triplet_ds.objects))])
-    assert all([obj_mapping[h] == -1 for h in humans if h != triplet_ds.object_index['person']])
-    obj_mapping[np.array(triplet_ds.human_classes)] = subj_filtering[np.array(triplet_ds.human_classes)]
+    obj_mapping[np.array(triplet_ds.human_classes)] = subj_mapping[np.array(triplet_ds.human_classes)]
 
     vgg_triplets = np.unique(triplet_ds.triplets, axis=0)
-    mapped_vgg_triplets = np.stack([subj_filtering[vgg_triplets[:, 0]],
-                                     pred_mapping[vgg_triplets[:, 1]],
-                                     obj_mapping[vgg_triplets[:, 2]]],
-                                    axis=1)
+    mapped_vgg_triplets = np.stack([subj_mapping[vgg_triplets[:, 0]],
+                                    pred_mapping[vgg_triplets[:, 1]],
+                                    obj_mapping[vgg_triplets[:, 2]]],
+                                   axis=1)
     vgg_triplets_to_interactions = mapped_vgg_triplets[np.all(mapped_vgg_triplets >= 0, axis=1), 1:]
 
     # ts = [s.split('###') for s in sorted({'###'.join(t) for t in vgg.triplet_str})]
