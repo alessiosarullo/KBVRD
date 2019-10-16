@@ -8,13 +8,13 @@ from config import cfg
 from lib.dataset.ext_knowledge.hcvrd import HCVRD
 from lib.dataset.ext_knowledge.imsitu import ImSitu
 from lib.dataset.ext_knowledge.vgsgg import VGSGG
-from lib.dataset.hico import Hico
+from lib.dataset.hoi_dataset import HoiDataset
 
 
 # FIXME the whole thing is coded terribly (dataset classes as well)
 
 
-def parse_captions(captions, hico):
+def parse_captions(captions, hoi_ds: HoiDataset):
     from nltk.corpus import wordnet as wn
     from nltk.tag import pos_tag
     from nltk.tokenize import word_tokenize
@@ -30,9 +30,9 @@ def parse_captions(captions, hico):
                     'audience', 'catcher', 'carrier', 'classroom', 'couple', 'cowboy', 'crowd', 'driver', 'friend', 'guard', 'little girl',
                     'player', 'rider', 'skateboarder', 'skater', 'skier', 'small child', 'snowboarder', 'surfer', 'tennis player'}
 
-    action_verbs = [hico.actions[0]] + [p.split('_')[0] for p in hico.actions[1:]]
+    action_verbs = [hoi_ds.actions[0]] + [p.split('_')[0] for p in hoi_ds.actions[1:]]
     action_set = set(action_verbs)
-    objs_per_action = {p: set() for p in hico.actions}
+    objs_per_action = {p: set() for p in hoi_ds.actions}
     for i_cap, caption in enumerate(captions):
         if i_cap % 1000 == 0:
             print(i_cap, '/', len(captions))
@@ -75,7 +75,7 @@ def parse_captions(captions, hico):
         else:
             p_obj = ' '.join(p_obj_sentence)
 
-        for i_pred, orig_p in enumerate(hico.actions):
+        for i_pred, orig_p in enumerate(hoi_ds.actions):
             if action_verbs[i_pred] == verb:
                 p_tokens = orig_p.split('_')
                 if len(p_tokens) > 1 and (preposition is None or preposition != p_tokens[1]):
@@ -88,7 +88,7 @@ def parse_captions(captions, hico):
     return objs_per_action
 
 
-def get_interactions_from_vg(hico):
+def get_interactions_from_vg(hoi_ds: HoiDataset):
     data_dir = os.path.join(cfg.data_root, 'VG')
     try:
         with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'rb') as f:
@@ -105,17 +105,17 @@ def get_interactions_from_vg(hico):
         print('\n'.join(region_descr[:10]))
         print()
 
-        objs_per_actions = parse_captions(region_descr, hico)
+        objs_per_actions = parse_captions(region_descr, hoi_ds)
         with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'wb') as f:
             pickle.dump(objs_per_actions, f)
         print(len(region_descr))
 
-    interactions = np.array([[hico.action_index.get(a, -1), hico.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
+    interactions = np.array([[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
     interactions = interactions[np.all(interactions >= 0, axis=1), :]
     return interactions
 
 
-def get_interactions_from_vcap(hico):
+def get_interactions_from_vcap(hoi_ds: HoiDataset):
     try:
         with open(os.path.join(cfg.cache_root, 'vcap_predicate_objects.pkl'), 'rb') as f:
             objs_per_actions = pickle.load(f)
@@ -125,69 +125,67 @@ def get_interactions_from_vcap(hico):
         print('\n'.join(captions[:10]))
         print()
 
-        objs_per_actions = parse_captions(captions, hico)
+        objs_per_actions = parse_captions(captions, hoi_ds)
         with open(os.path.join(cfg.cache_root, 'vcap_predicate_objects.pkl'), 'wb') as f:
             pickle.dump(objs_per_actions, f)
-    interactions = np.array([[hico.action_index.get(a, -1), hico.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
+    interactions = np.array([[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
     interactions = interactions[np.all(interactions >= 0, axis=1), :]
     return interactions
 
 
-def get_interactions_from_triplet_dataset(hico, tds):
-    hico_to_vgsgg_pred_match, hico_to_vgsgg_obj_match = tds.match(hico, remove_unmatched=True)
-    vgg_pred_to_hico = {v: hico.action_index[k] for k, v in hico_to_vgsgg_pred_match.items()}
-    vgg_obj_to_hico = {}
-    for k, v in hico_to_vgsgg_obj_match.items():
-        if v in vgg_obj_to_hico and len(k.split('_')) > 1:
+def get_interactions_from_triplet_dataset(hoi_ds: HoiDataset, triplet_ds):
+    hoi_ds_to_vgsgg_pred_match, hoi_ds_to_vgsgg_obj_match = triplet_ds.match(hoi_ds, remove_unmatched=True)
+    vgg_pred_to_hoi_actions = {v: hoi_ds.action_index[k] for k, v in hoi_ds_to_vgsgg_pred_match.items()}
+    vgg_obj_to_hoi_objects = {}
+    for k, v in hoi_ds_to_vgsgg_obj_match.items():
+        if v in vgg_obj_to_hoi_objects and len(k.split('_')) > 1:
             continue
-        vgg_obj_to_hico[v] = hico.object_index[k]
-    assert len(vgg_pred_to_hico) == len(hico_to_vgsgg_pred_match)
+        vgg_obj_to_hoi_objects[v] = hoi_ds.object_index[k]
+    assert len(vgg_pred_to_hoi_actions) == len(hoi_ds_to_vgsgg_pred_match)
 
-    humans = set(tds.human_classes)
-    subj_mapping = np.array([-1 if s not in humans else hico.human_class for s in range(len(tds.objects))])
-    pred_mapping = np.array([vgg_pred_to_hico.get(p, -1) for p in range(len(tds.predicates))])
-    obj_mapping = np.array([vgg_obj_to_hico.get(o, -1) for o in range(len(tds.objects))])
-    assert obj_mapping[tds.object_index['person']] == subj_mapping[tds.object_index['person']]
-    assert all([obj_mapping[h] == -1 for h in humans if h != tds.object_index['person']])
-    obj_mapping[np.array(tds.human_classes)] = subj_mapping[np.array(tds.human_classes)]
+    humans = set(triplet_ds.human_classes)
+    subj_filtering = np.array([-1 if s not in humans else s for s in range(len(triplet_ds.objects))])
+    pred_mapping = np.array([vgg_pred_to_hoi_actions.get(p, -1) for p in range(len(triplet_ds.predicates))])
+    obj_mapping = np.array([vgg_obj_to_hoi_objects.get(o, -1) for o in range(len(triplet_ds.objects))])
+    assert all([obj_mapping[h] == -1 for h in humans if h != triplet_ds.object_index['person']])
+    obj_mapping[np.array(triplet_ds.human_classes)] = subj_filtering[np.array(triplet_ds.human_classes)]
 
-    vgg_triplets = np.unique(tds.triplets, axis=0)
-    vgg_triplets_to_hico = np.stack([subj_mapping[vgg_triplets[:, 0]],
+    vgg_triplets = np.unique(triplet_ds.triplets, axis=0)
+    mapped_vgg_triplets = np.stack([subj_filtering[vgg_triplets[:, 0]],
                                      pred_mapping[vgg_triplets[:, 1]],
                                      obj_mapping[vgg_triplets[:, 2]]],
                                     axis=1)
-    vgg_triplets_to_hico = vgg_triplets_to_hico[np.all(vgg_triplets_to_hico >= 0, axis=1), :]
+    vgg_triplets_to_interactions = mapped_vgg_triplets[np.all(mapped_vgg_triplets >= 0, axis=1), 1:]
 
     # ts = [s.split('###') for s in sorted({'###'.join(t) for t in vgg.triplet_str})]
     # inds = [i for i, s in enumerate(ts) if 'wear' in s[1] and 'phone' in s[2]]
     # strs = [' '.join(ts[i]) for i in inds]
     # print('\n'.join(strs))
 
-    assert np.all(vgg_triplets_to_hico[:, 0] == hico.human_class)
-    return vgg_triplets_to_hico[:, 1:]
+    return vgg_triplets_to_interactions
 
 
-def get_interactions_from_imsitu(hico, imsitu: ImSitu):
-    op_mat = imsitu.extract_freq_matrix(hico)
+def get_interactions_from_imsitu(hoi_ds: HoiDataset, imsitu: ImSitu):
+    op_mat = imsitu.extract_freq_matrix(hoi_ds)
     o, p = np.where(op_mat > 0)
     interactions = np.stack([p, o], axis=1)
     return interactions
 
 
-def get_seen_interactions(hico: Hico, seenf=0):
+def get_seen_interactions(hoi_ds: HoiDataset, seenf=0):
     cfg.seenf = seenf
     inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
     obj_inds = sorted(inds_dict['train']['obj'].tolist())
     act_inds = sorted(inds_dict['train']['act'].tolist())
-    interactions_inds = np.setdiff1d(np.unique(hico.oa_pair_to_interaction[obj_inds, :][:, act_inds]), np.array([-1]))
-    interactions = hico.interactions[interactions_inds, :]
+    interactions_inds = np.setdiff1d(np.unique(hoi_ds.oa_pair_to_interaction[obj_inds, :][:, act_inds]), np.array([-1]))
+    interactions = hoi_ds.interactions[interactions_inds, :]
     return interactions
 
 
-def get_uncovered_interactions(hico_interactions, *ext_interactions, include_null=False):
-    hico_set = {tuple(x) for x in hico_interactions}
+def get_uncovered_interactions(hoi_ds_interactions, *ext_interactions, include_null=False):
+    hoi_ds_set = {tuple(x) for x in hoi_ds_interactions}
     ext_set = {tuple(x) for e_inters in ext_interactions for x in e_inters}
-    uncovered_interactions = np.array(sorted([x for x in hico_set - ext_set]))
+    uncovered_interactions = np.array(sorted([x for x in hoi_ds_set - ext_set]))
     if not include_null:
         uncovered_interactions = uncovered_interactions[uncovered_interactions[:, 0] > 0, :]
     return uncovered_interactions
@@ -203,18 +201,19 @@ def compute_isolated(all_interactions, uncovered_interactions, idx, num_classes)
     return isolated
 
 
-def get_interactions_from_ext_src(hico: Hico):
+def get_interactions_from_ext_src(hoi_ds: HoiDataset):
     hcvrd = HCVRD()
     imsitu = ImSitu()
-    vg_interactions = get_interactions_from_vg(hico)
-    vcap_interactions = get_interactions_from_vcap(hico)
-    hcvrd_interactions = get_interactions_from_triplet_dataset(hico, hcvrd)
-    imsitu_interactions = get_interactions_from_imsitu(hico, imsitu)
+    vg_interactions = get_interactions_from_vg(hoi_ds)
+    vcap_interactions = get_interactions_from_vcap(hoi_ds)
+    hcvrd_interactions = get_interactions_from_triplet_dataset(hoi_ds, hcvrd)
+    imsitu_interactions = get_interactions_from_imsitu(hoi_ds, imsitu)
     ext_interactions = np.concatenate([vg_interactions, vcap_interactions, hcvrd_interactions, imsitu_interactions], axis=0)
     return ext_interactions
 
 
 def main():
+    from lib.dataset.hico import Hico
     hico = Hico()
 
     train_interactions = get_seen_interactions(hico, seenf=0)
