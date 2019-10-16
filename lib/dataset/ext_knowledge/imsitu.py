@@ -5,9 +5,10 @@ from collections import Counter
 from typing import Dict, Tuple
 
 import numpy as np
+from nltk.corpus import wordnet as wn
 
 from config import cfg
-from lib.dataset.hico import Hico, HicoDriver
+from lib.dataset.hoi_dataset import HoiDataset
 
 
 class ImSitu:
@@ -159,18 +160,15 @@ class ImSitu:
                                    for verb, instance_ids in concrete_dobjs_per_verb.items()}
         return concrete_dobjs_per_verb
 
-    def match_preds_with_verbs(self, dataset: Hico):
-        hico_driver = HicoDriver()
+    def match_preds_with_verbs(self, dataset: HoiDataset):
         verb_dict = self.imsitu.verbs
         pred_verb_matches = {}
         for orig_pred in dataset.actions:
-            ing = hico_driver.predicate_dict[orig_pred]['ing']
             pred = orig_pred
             if pred != dataset.null_action:
                 pred = pred.replace('_', ' ')
-                ing = ing.replace('_', ' ').split()[0]
 
-            matches_in_key = list(set([verb for verb in verb_dict.keys() if ing == verb]))
+            matches_in_key = list(set([verb for verb in verb_dict.keys() if pred == wn.morphy(verb, wn.VERB)]))
             match = None
             if not matches_in_key:
                 matches_in_abstract = [verb for verb, ventry in verb_dict.items() if ' ' + pred.split()[0] in ventry['abstract']]
@@ -290,6 +288,7 @@ class ImSituDriver:
 
 
 def main():
+    from lib.dataset.hico import Hico
     # imsitu = ImSituDriver()
     # imsitu._print_verb_entry('riding')
 

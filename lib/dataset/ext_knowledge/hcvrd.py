@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from lib.dataset.hico import Hico
+from lib.dataset.hoi_dataset import HoiDataset
 
 
 class HCVRD:
@@ -37,7 +37,7 @@ class HCVRD:
 
         self.triplets = np.array([[self.object_index[s], self.predicate_index[p], self.object_index[o]] for s, p, o in triplets_str])
 
-    def match(self, hico: Hico, remove_unmatched=False):
+    def match(self, hoi_ds: HoiDataset, remove_unmatched=False):
         hcvrd_obj_index = {}
         for orig in self.objects:
             obj = orig
@@ -48,7 +48,7 @@ class HCVRD:
             hcvrd_obj_index[obj] = self.object_index[orig]
 
         hico_to_hcvrd_obj_match = {}
-        for orig in hico.objects:
+        for orig in hoi_ds.objects:
             obj = orig.replace('_', ' ')
             hico_to_hcvrd_obj_match[orig] = hcvrd_obj_index.get(obj, hcvrd_obj_index.get(obj.split()[-1], None))
 
@@ -71,7 +71,7 @@ class HCVRD:
             hcvrd_pred_index[p] = self.predicate_index[orig]
 
         hico_to_hcvrd_pred_match = {}
-        for orig in hico.actions[1:]:
+        for orig in hoi_ds.actions[1:]:
             hico_to_hcvrd_pred_match[orig] = hcvrd_pred_index.get(orig.replace('_', ' '), None)
 
         if remove_unmatched:
@@ -79,14 +79,14 @@ class HCVRD:
             hico_to_hcvrd_obj_match = {k: v for k, v in hico_to_hcvrd_obj_match.items() if v is not None}
         return hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match
 
-    def get_hoi_freq(self, hico: Hico):
-        hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match = self.match(hico)
+    def get_hoi_freq(self, hoi_ds: HoiDataset):
+        hico_to_hcvrd_pred_match, hico_to_hcvrd_obj_match = self.match(hoi_ds)
 
-        hcvrd_to_hico_obj = {v: hico.object_index[k] for k, v in hico_to_hcvrd_obj_match.items() if v is not None}
-        hcvrd_to_hico_pred = {v: hico.action_index[k] for k, v in hico_to_hcvrd_pred_match.items() if v is not None}
+        hcvrd_to_hico_obj = {v: hoi_ds.object_index[k] for k, v in hico_to_hcvrd_obj_match.items() if v is not None}
+        hcvrd_to_hico_pred = {v: hoi_ds.action_index[k] for k, v in hico_to_hcvrd_pred_match.items() if v is not None}
         human_classes = set(self.human_classes)
 
-        op_mat = np.zeros((len(hico.objects), len(hico.actions)))
+        op_mat = np.zeros((len(hoi_ds.objects), len(hoi_ds.actions)))
         for s, p, o in self.triplets:
             if s in human_classes and p in hcvrd_to_hico_pred.keys() and o in hcvrd_to_hico_obj.keys():
                 op_mat[hcvrd_to_hico_obj[o], hcvrd_to_hico_pred[p]] += 1
@@ -95,6 +95,7 @@ class HCVRD:
 
 
 def main():
+    from lib.dataset.hico import Hico
     hcvrd = HCVRD()
     hico = Hico()
 
