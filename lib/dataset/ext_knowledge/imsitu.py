@@ -167,11 +167,12 @@ class ImSitu:
             pred = orig_pred
             if pred != dataset.null_action:
                 pred = pred.replace('_', ' ')
+            pred_verb = pred.split()[0]
 
-            matches_in_key = list(set([verb for verb in verb_dict.keys() if pred == wn.morphy(verb, wn.VERB)]))
+            matches_in_key = list(set([verb for verb in verb_dict.keys() if pred_verb == wn.morphy(verb, wn.VERB)]))
             match = None
             if not matches_in_key:
-                matches_in_abstract = [verb for verb, ventry in verb_dict.items() if ' ' + pred.split()[0] in ventry['abstract']]
+                matches_in_abstract = [verb for verb, ventry in verb_dict.items() if (' ' + pred_verb) in ventry['abstract']]
                 if matches_in_abstract:
                     assert len(matches_in_abstract) == 1
                     match = matches_in_abstract[0]
