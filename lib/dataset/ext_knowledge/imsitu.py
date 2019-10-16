@@ -168,6 +168,8 @@ class ImSitu:
             if pred != dataset.null_action:
                 pred = pred.replace('_', ' ')
             pred_verb = pred.split()[0]
+            if  wn.morphy(pred_verb, wn.VERB) == 'be':
+                continue
 
             matches_in_key = list(set([verb for verb in verb_dict.keys() if pred_verb == wn.morphy(verb, wn.VERB)]))
             match = None
