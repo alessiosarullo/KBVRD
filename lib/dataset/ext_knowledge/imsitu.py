@@ -25,7 +25,7 @@ class ImSitu:
         self.abstract_dobj_per_verb = self.get_abstract_dobj_per_verb(dobj_tokens_in_verb_abstracts, sorted(self.imsitu.verbs.keys()))
         self.concrete_dobjs_count_per_verb = self.get_dobj_instances_per_verb(self.abstract_dobj_per_verb)
 
-    def extract_freq_matrix(self, dataset: Hico, return_known_mask=False):
+    def extract_freq_matrix(self, dataset: HoiDataset, return_known_mask=False):
         pred_verb_matches = self.match_preds_with_verbs(dataset)
         # print()
         # print('Matched: %d actions out of %d.' % (len(pred_verb_matches), len(dataset.actions)))
