@@ -168,15 +168,12 @@ class ImSitu:
             if pred != dataset.null_action:
                 pred = pred.replace('_', ' ')
             pred_verb = pred.split()[0]
-            if  wn.morphy(pred_verb, wn.VERB) == 'be':
-                continue
 
             matches_in_key = list(set([verb for verb in verb_dict.keys() if pred_verb == wn.morphy(verb, wn.VERB)]))
             match = None
             if not matches_in_key:
                 matches_in_abstract = [verb for verb, ventry in verb_dict.items() if (' ' + pred_verb) in ventry['abstract']]
-                if matches_in_abstract:
-                    assert len(matches_in_abstract) == 1
+                if matches_in_abstract and len(matches_in_abstract) == 1:
                     match = matches_in_abstract[0]
             else:
                 assert len(matches_in_key) == 1
