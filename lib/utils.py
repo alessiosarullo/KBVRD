@@ -4,7 +4,6 @@ from typing import Dict
 
 import numpy as np
 import torch
-from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 
 class Timer:
@@ -102,6 +101,8 @@ def get_runs_data(runs):
     :return: data: dict with one entry per split. Each entry is `split`: {'values': dict, 'steps': list}. Values is another dict in the form
         `metric`: NumPy array [num_runs, num_steps]. Example: data['Train']['values']['Act_loss'][0, :].
     """
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
     data = {'Train': {}, 'Val': {}, 'Test': {}}
     for split in data.keys():
         summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
