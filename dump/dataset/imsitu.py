@@ -289,12 +289,12 @@ class ImSituDriver:
 
 def main():
     from lib.dataset.hico import Hico
-    # imsitu = ImSituDriver()
-    # imsitu._print_verb_entry('riding')
+    imsitu = ImSituDriver()
+    imsitu._print_verb_entry('riding')
 
-    imsitu_ke = ImSitu()
-    hico = Hico()
-    imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hico, return_known_mask=True)
+    # imsitu_ke = ImSitu()
+    # hico = Hico()
+    # imsitu_op_mat, known_objects, known_predicates = imsitu_ke.extract_freq_matrix(hico, return_known_mask=True)
 
 
 if __name__ == '__main__':

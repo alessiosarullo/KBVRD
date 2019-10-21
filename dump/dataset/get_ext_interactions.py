@@ -5,8 +5,7 @@ import pickle
 import numpy as np
 
 from config import cfg
-from lib.dataset.ext_knowledge.ext_source import HCVRD, VG, ActivityNetCaptions
-from lib.dataset.ext_knowledge.imsitu import ImSitu
+from lib.dataset.ext_knowledge.ext_source import HCVRD, ImSitu, ActivityNetCaptions
 from lib.dataset.hoi_dataset import HoiDataset
 
 # FIXME the whole thing is coded terribly (dataset classes as well)
@@ -91,33 +90,6 @@ def parse_captions(captions, hoi_ds: HoiDataset):
     return objs_per_action
 
 
-def get_interactions_from_vg(hoi_ds: HoiDataset):
-    data_dir = os.path.join(cfg.data_root, 'VG')
-    try:
-        with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'rb') as f:
-            objs_per_actions = pickle.load(f)
-    except FileNotFoundError:
-        try:
-            with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
-                region_descr = [l.strip() for l in f.readlines()]
-        except FileNotFoundError:
-            region_descr = json.load(open(os.path.join(data_dir, 'region_descriptions.json'), 'r'))
-            region_descr = [r['phrase'] for rd in region_descr for r in rd['regions']]
-            with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
-                f.write('\n'.join(region_descr))
-        print('\n'.join(region_descr[:10]))
-        print()
-
-        objs_per_actions = parse_captions(region_descr, hoi_ds)
-        with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'wb') as f:
-            pickle.dump(objs_per_actions, f)
-        print(len(region_descr))
-
-    interactions = np.array([[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
-    interactions = np.unique(interactions[np.all(interactions >= 0, axis=1), :], axis=0)
-    return interactions
-
-
 def get_interactions_from_vcap(hoi_ds: HoiDataset):
     try:
         with open(os.path.join(cfg.cache_root, 'vcap_predicate_objects.pkl'), 'rb') as f:
@@ -178,7 +150,7 @@ def get_interactions_from_ext_src(hoi_ds: HoiDataset):
     vg_interactions = get_interactions_from_vg(hoi_ds)
     vcap_interactions = get_interactions_from_vcap(hoi_ds)
     hcvrd_interactions = hcvrd.get_interactions_for(hoi_ds)
-    imsitu_interactions = get_interactions_from_imsitu(hoi_ds, imsitu)
+    imsitu_interactions = imsitu.get_interactions_for(hoi_ds)
     ext_interactions = np.concatenate([vg_interactions, vcap_interactions, hcvrd_interactions, imsitu_interactions], axis=0)
     return ext_interactions
 
@@ -204,7 +176,7 @@ def check():
     print('%15s' % 'HCVRD-train', get_uncovered_interactions(hico.interactions, train_interactions, hcvrd_interactions).shape[0])
 
     imsitu = ImSitu()
-    imsitu_interactions = get_interactions_from_imsitu(hico, imsitu)
+    imsitu_interactions = imsitu.get_interactions_for(hico)
     print('%15s' % 'ImSitu', get_uncovered_interactions(hico.interactions, imsitu_interactions).shape[0])
     print('%15s' % 'ImSitu-train', get_uncovered_interactions(hico.interactions, train_interactions, imsitu_interactions).shape[0])
 
@@ -232,15 +204,6 @@ def main():
     # vg_interactions_old = get_interactions_from_vg(hico)
     # vgcaptions = VGCaptions(required_words={o.split('_')[-1] for o in hico.objects} | {a.split('_')[0] for a in hico.actions[1:]})
     # vg_interactions = vgcaptions.get_interactions_for(hico)
-    # sep = '###'
-    # vgo = {f'{a}{sep}{o}' for a, o in vg_interactions_old}
-    # vg = {f'{a}{sep}{o}' for a, o in vg_interactions}
-    # print(len(vg - vgo), len(vgo - vg))
-    # print()
-
-    # vg = VG()
-    # vg_interactions = vg.get_interactions_for(hico)
-    # vg_interactions_old = get_interactions_from_vg(hico)
     # sep = '###'
     # vgo = {f'{a}{sep}{o}' for a, o in vg_interactions_old}
     # vg = {f'{a}{sep}{o}' for a, o in vg_interactions}

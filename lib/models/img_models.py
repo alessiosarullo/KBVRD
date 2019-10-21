@@ -13,7 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.gcns import HicoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
-from lib.dataset.ext_knowledge.get_ext_interactions import get_interactions_from_ext_src
+from lib.dataset.ext_source import get_interactions_from_ext_src
 
 
 class SKZSMultiModel(AbstractModel):
