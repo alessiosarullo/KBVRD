@@ -95,7 +95,7 @@ class Timer:
         return '%s%s' % (s, unit)
 
 
-def get_runs_data(runs):
+def get_runs_data(runs, warn=True):
     """
     :param runs: list of directories, each representing a run
     :return: data: dict with one entry per split. Each entry is `split`: {'values': dict, 'steps': list}. Values is another dict in the form
@@ -115,7 +115,7 @@ def get_runs_data(runs):
         for tag in tags:
             for events in zip(*[acc.Scalars(tag) for acc in summary_iterators]):
                 values_per_tag.setdefault(tag, []).append([e.value for e in events])
-                if len({e.step for e in events}) > 1:
+                if len({e.step for e in events}) > 1 and warn:
                     print("!!!!!!!!!!! Different steps!", sorted({e.step for e in events}))
 
                 if len(values_per_tag.keys()) == 1:

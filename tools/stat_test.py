@@ -24,7 +24,7 @@ def main():
             runs.append(os.path.join(dir, run_dir))
     runs = sorted(runs)
 
-    exp_data = get_runs_data(runs)
+    exp_data = get_runs_data(runs, warn=False)
 
     # Result obtained at the lowest validation action loss.
     assert np.all(exp_data['Val']['steps'] == exp_data['Test']['steps'])

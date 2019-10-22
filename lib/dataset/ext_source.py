@@ -544,6 +544,6 @@ def check():
 
 
 if __name__ == '__main__':
-    VGCaptions()
+    # VGCaptions()
     ActivityNetCaptions()
     # check()
