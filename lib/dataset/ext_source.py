@@ -437,18 +437,23 @@ class ActivityNetCaptions(ExtSource):
         return triplets_str
 
 
-def get_interactions_from_ext_src(hoi_ds: HoiDataset):
+def get_interactions_from_ext_src(hoi_ds: HoiDataset, include_vg):
     hcvrd = HCVRD()
     imsitu = ImSitu()
-    vg = VG()
     anet = ActivityNetCaptions()
 
     hcvrd_interactions = hcvrd.get_interactions_for(hoi_ds)
     imsitu_interactions = imsitu.get_interactions_for(hoi_ds)
-    vg_interactions = vg.get_interactions_for(hoi_ds)
     anet_interactions = anet.get_interactions_for(hoi_ds)
 
-    ext_interactions = np.concatenate([vg_interactions, hcvrd_interactions, imsitu_interactions, anet_interactions], axis=0)
+    ext_interactions = np.concatenate([hcvrd_interactions, imsitu_interactions, anet_interactions], axis=0)
+
+    if include_vg:
+        vg = VG()
+        vgcap = VGCaptions()
+        vg_interactions = vg.get_interactions_for(hoi_ds)
+        vgcap_interactions = vgcap.get_interactions_for(hoi_ds)
+        ext_interactions = np.concatenate([ext_interactions, vg_interactions, vgcap_interactions], axis=0)
     return ext_interactions
 
 
