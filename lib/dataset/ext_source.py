@@ -437,6 +437,15 @@ class ActivityNetCaptions(ExtSource):
         return triplets_str
 
 
+def get_interactions_from_old_vgcap(hoi_ds: HoiDataset):
+    with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'rb') as f:
+        objs_per_actions = pickle.load(f)
+    interactions = np.array(
+        [[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
+    interactions = interactions[np.all(interactions >= 0, axis=1), :]
+    return interactions
+
+
 def get_interactions_from_ext_src(hoi_ds: HoiDataset, include_vg):
     hcvrd = HCVRD()
     imsitu = ImSitu()
@@ -450,9 +459,13 @@ def get_interactions_from_ext_src(hoi_ds: HoiDataset, include_vg):
 
     if include_vg:
         vg = VG()
-        vgcap = VGCaptions()
         vg_interactions = vg.get_interactions_for(hoi_ds)
-        vgcap_interactions = vgcap.get_interactions_for(hoi_ds)
+
+        # vgcap = VGCaptions()
+        # vgcap_interactions = vgcap.get_interactions_for(hoi_ds)
+
+        vgcap_interactions = get_interactions_from_old_vgcap(hoi_ds)
+
         ext_interactions = np.concatenate([ext_interactions, vg_interactions, vgcap_interactions], axis=0)
     return ext_interactions
 
@@ -485,14 +498,6 @@ def check():
         assert np.all(num_links >= 0)
         isolated = np.flatnonzero(num_links == 0)
         return isolated
-
-    def get_interactions_from_old_vgcap(hoi_ds: HoiDataset):
-        with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'rb') as f:
-            objs_per_actions = pickle.load(f)
-        interactions = np.array(
-            [[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
-        interactions = interactions[np.all(interactions >= 0, axis=1), :]
-        return interactions
 
     def get_interactions(triplet_ds, hoi_ds: HoiDataset, hoi_ds_train_interactions, triplet_ds_name):
         triplet_ds_interactions = triplet_ds.get_interactions_for(hoi_ds)
@@ -550,5 +555,5 @@ def check():
 
 if __name__ == '__main__':
     # VGCaptions()
-    ActivityNetCaptions()
-    # check()
+    # ActivityNetCaptions()
+    check()
