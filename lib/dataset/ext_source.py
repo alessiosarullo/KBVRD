@@ -130,7 +130,7 @@ class ExtSource:
                         break
                 else:
                     if 'drink' in verb_base_forms and len(pred_split) == 2 and pred_split[1] == 'from':  # drink_from -> drink_with
-                        pred_mapping[i] = hoi_ds_action_index['drink with']
+                        pred_mapping[i] = hoi_ds_action_index.get('drink with', -1)
 
         # Object mapping
         fixes = {"ski's": 'skis',
@@ -470,9 +470,7 @@ def get_interactions_from_ext_src(hoi_ds: HoiDataset, include_vg):
     return ext_interactions
 
 
-def check():
-    from lib.dataset.hico import Hico
-
+def check(hoi_ds: HoiDataset):
     def get_seen_interactions(hoi_ds: HoiDataset, seenf=0):
         cfg.seenf = seenf
         inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
@@ -492,7 +490,9 @@ def check():
 
     def compute_isolated(all_interactions, uncovered_interactions, idx, num_classes):
         ids, num_links = np.unique(all_interactions[:, idx], return_counts=True)
-        assert np.all(ids == np.arange(num_classes))
+        if not np.all(ids == np.arange(num_classes)):
+            assert np.all(ids == np.arange(1, num_classes))  # if there is no null in data
+            num_links = np.concatenate([np.zeros(1), num_links])
         for x in uncovered_interactions[:, idx]:
             num_links[x] -= 1
         assert np.all(num_links >= 0)
@@ -506,54 +506,59 @@ def check():
                                                                               triplet_ds_interactions).shape[0])
         return triplet_ds_interactions
 
-    hico = Hico()
+    print(f'Num total interactions: {hoi_ds.num_interactions}')
 
-    train_interactions = get_seen_interactions(hico, seenf=0)
-    print('%15s' % 'Train', get_uncovered_interactions(hico.interactions, train_interactions).shape[0])
+    train_interactions = get_seen_interactions(hoi_ds, seenf=0)
+    print('%15s' % 'Train', get_uncovered_interactions(hoi_ds.interactions, train_interactions).shape[0])
 
-    vg_interactions = get_interactions(triplet_ds=VG(), hoi_ds=hico, hoi_ds_train_interactions=train_interactions, triplet_ds_name='VG')
-    hcvrd_interactions = get_interactions(triplet_ds=HCVRD(), hoi_ds=hico, hoi_ds_train_interactions=train_interactions, triplet_ds_name='HCVRD')
-    imsitu_interactions = get_interactions(triplet_ds=ImSitu(), hoi_ds=hico, hoi_ds_train_interactions=train_interactions, triplet_ds_name='ImSitu')
-    anet_interactions = get_interactions(triplet_ds=ActivityNetCaptions(), hoi_ds=hico, hoi_ds_train_interactions=train_interactions,
-                                         triplet_ds_name='ANet')
-    vgcap_interactions = get_interactions(triplet_ds=VGCaptions(), hoi_ds=hico, hoi_ds_train_interactions=train_interactions,
-                                          triplet_ds_name='VGCaptions')
-
-    uncovered_interactions = get_uncovered_interactions(hico.interactions, train_interactions, vg_interactions, hcvrd_interactions)
+    mined_interactions = []
+    if not cfg.vghoi:
+        mined_interactions += [get_interactions(triplet_ds=VG(), hoi_ds=hoi_ds, hoi_ds_train_interactions=train_interactions, triplet_ds_name='VG')]
+    mined_interactions += [get_interactions(triplet_ds=HCVRD(), hoi_ds=hoi_ds, hoi_ds_train_interactions=train_interactions, triplet_ds_name='HCVRD')]
+    uncovered_interactions = get_uncovered_interactions(hoi_ds.interactions, train_interactions, *mined_interactions)
     print('Triplet DS', uncovered_interactions.shape[0])
 
-    uncovered_interactions = get_uncovered_interactions(hico.interactions, train_interactions, vg_interactions, hcvrd_interactions,
-                                                        imsitu_interactions)
+    mined_interactions += [get_interactions(triplet_ds=ImSitu(), hoi_ds=hoi_ds, hoi_ds_train_interactions=train_interactions,
+                                            triplet_ds_name='ImSitu')]
+    uncovered_interactions = get_uncovered_interactions(hoi_ds.interactions, train_interactions, *mined_interactions)
     print('Triplet DS + ImSitu', uncovered_interactions.shape[0])
 
-    uncovered_interactions = get_uncovered_interactions(hico.interactions, train_interactions, vg_interactions, hcvrd_interactions,
-                                                        imsitu_interactions, anet_interactions)
+    mined_interactions += [get_interactions(triplet_ds=ActivityNetCaptions(), hoi_ds=hoi_ds, hoi_ds_train_interactions=train_interactions,
+                                            triplet_ds_name='ANet')]
+    uncovered_interactions = get_uncovered_interactions(hoi_ds.interactions, train_interactions, *mined_interactions)
     print('Triplet DS + ImSitu + ANet', uncovered_interactions.shape[0])
 
-    vgcap_old = get_interactions_from_old_vgcap(hico)
-    uncovered_interactions = get_uncovered_interactions(hico.interactions, train_interactions, vg_interactions, hcvrd_interactions,
-                                                        imsitu_interactions, anet_interactions, vgcap_old)
-    print('All-old', uncovered_interactions.shape[0])
-    isolated_actions = compute_isolated(hico.interactions, uncovered_interactions, idx=0, num_classes=hico.num_actions)
-    print('Isolated actions:', [hico.actions[a] for a in isolated_actions])
-    # ['hop_on', 'hunt', 'lose', 'stab', 'toast'].
+    if not cfg.vghoi:
+        vgcap_old = get_interactions_from_old_vgcap(hoi_ds)
+        uncovered_interactions = get_uncovered_interactions(hoi_ds.interactions, train_interactions, vgcap_old, *mined_interactions)
+        print('All-old', uncovered_interactions.shape[0])
+        isolated_actions = compute_isolated(hoi_ds.interactions, uncovered_interactions, idx=0, num_classes=hoi_ds.num_actions)
+        print(f'Isolated actions ({len(isolated_actions)}):', [hoi_ds.actions[a] for a in isolated_actions])
+        # ['hop_on', 'hunt', 'lose', 'stab', 'toast'].
 
-    uncovered_interactions = get_uncovered_interactions(hico.interactions, train_interactions, vg_interactions, hcvrd_interactions,
-                                                        imsitu_interactions, anet_interactions, vgcap_interactions)
-    print('All', uncovered_interactions.shape[0])
+        vgcap_interactions = get_interactions(triplet_ds=VGCaptions(), hoi_ds=hoi_ds, hoi_ds_train_interactions=train_interactions,
+                                              triplet_ds_name='VGCaptions')
+        uncovered_interactions = get_uncovered_interactions(hoi_ds.interactions, train_interactions, vgcap_interactions, *mined_interactions)
+        print('All', uncovered_interactions.shape[0])
 
-    isolated_actions = compute_isolated(hico.interactions, uncovered_interactions, idx=0, num_classes=hico.num_actions)
-    print('Isolated actions:', [hico.actions[a] for a in isolated_actions])
+    isolated_actions = compute_isolated(hoi_ds.interactions, uncovered_interactions, idx=0, num_classes=hoi_ds.num_actions)
+    print(f'Isolated actions ({len(isolated_actions)}):', [hoi_ds.actions[a] for a in isolated_actions])
     # ['hop_on', 'hunt', 'lose', 'pay', 'point', 'sign', 'stab', 'toast'].
     # 'hop_on' and 'sign' (and maybe 'point') could probably be found through synonyms. The others are too niche/hard to find (hunt, stab, lose)
     # or even borderline incorrect ("toast wine glass").
     # FIXME ['control', 'grind', 'hop_on', 'hunt', 'light', 'lose', 'operate', 'park', 'run', 'stab', 'toast', 'wave']
 
-    isolated_objects = compute_isolated(hico.interactions, uncovered_interactions, idx=1, num_classes=hico.num_objects)
-    print('Isolated objects:', [hico.objects[o] for o in isolated_objects])
+    isolated_objects = compute_isolated(hoi_ds.interactions, uncovered_interactions, idx=1, num_classes=hoi_ds.num_objects)
+    print(f'Isolated objects ({len(isolated_objects)}):', [hoi_ds.objects[o] for o in isolated_objects])
 
 
 if __name__ == '__main__':
+    from lib.dataset.vghoi import VGHoi
+
     # VGCaptions()
     # ActivityNetCaptions()
-    check()
+
+    # check(Hico())
+
+    cfg.vghoi = True
+    check(VGHoi())
