@@ -18,6 +18,81 @@ HUMAN_CLASSES = {'person', 'man', 'woman', 'boy', 'girl', 'child', 'kid', 'baby'
                  'friend', 'guard', 'small child', 'little girl', 'cowboy', 'carrier', 'driver', }
 
 
+def _old_parse_captions(captions, hoi_ds: HoiDataset):
+    from nltk.corpus import wordnet as wn
+    from nltk.tag import pos_tag
+    from nltk.tokenize import word_tokenize
+
+    # If not downloaded already, run:
+    # nltk.download('punkt')
+    # nltk.download('averaged_perceptron_tagger')
+    # nltk.download('universal_tagset')
+    # nltk.download('wordnet')
+
+    # stop_words = stopwords.words('english') + list(get_stop_words('en'))
+
+    action_verbs = [hoi_ds.actions[0]] + [p.split('_')[0] for p in hoi_ds.actions[1:]]
+    action_set = set(action_verbs)
+    objs_per_action = {p: set() for p in hoi_ds.actions}
+    for i_cap, caption in enumerate(captions):
+        if i_cap % 1000 == 0:
+            print(i_cap, '/', len(captions))
+
+        tokens = word_tokenize(caption)
+        tagged_tokens = pos_tag(tokens, tagset='universal')
+
+        # Find person and verb
+        person_found = False
+        for i_tokens, w in enumerate(tokens):
+            if wn.morphy(w, wn.NOUN) in HUMAN_CLASSES:
+                person_found = True
+            else:
+                verb = wn.morphy(w, wn.VERB)
+                if verb in action_set:
+                    break
+        else:
+            continue
+
+        # Either no human or no object. Skip this iteration.
+        if not person_found or i_tokens + 1 == len(tokens):
+            continue
+
+        # If there is a preposition, it will be counted as part of the predicate and thus removed from the words that follow.
+        following_tagged_tokens = tagged_tokens[i_tokens + 1:]
+        if following_tagged_tokens[0][1] == 'ADP':
+            preposition = following_tagged_tokens[0][0]
+            following_tagged_tokens = following_tagged_tokens[1:]
+        else:
+            preposition = None
+
+        # Find object phrase. This basically keeps going as long as it finds adjectives and similar, until it finds either nouns (success) or
+        # something else such as verbs (failure).
+        p_obj_sentence = []
+        for w, pos in following_tagged_tokens:
+            if pos == 'NOUN' and w not in ['front', 'top']:
+                p_obj_sentence.append(w)
+            elif pos in {'NOUN', 'PRON', 'ADJ', 'DET'}:
+                continue
+            else:
+                break
+        if not p_obj_sentence:
+            continue
+        else:
+            p_obj = ' '.join(p_obj_sentence)
+
+        for i_pred, orig_a in enumerate(hoi_ds.actions):
+            if action_verbs[i_pred] == verb:
+                p_tokens = orig_a.split('_')
+                if len(p_tokens) > 1 and (preposition is None or preposition != p_tokens[1]):
+                    continue
+                objs_per_action[orig_a].add(p_obj)
+
+    for p, objs in objs_per_action.items():
+        print('%20s:' % p, sorted(objs))
+
+    return objs_per_action
+
+
 def _parse_sentences(sentences, required_words=None):
     from allennlp.predictors.predictor import Predictor
 
@@ -501,8 +576,8 @@ def check(hoi_ds: HoiDataset):
 
     def get_interactions(triplet_ds, hoi_ds: HoiDataset, hoi_ds_train_interactions, triplet_ds_name):
         triplet_ds_interactions = triplet_ds.get_interactions_for(hoi_ds)
-        print('%15s' % triplet_ds_name, get_uncovered_interactions(hoi_ds.interactions, triplet_ds_interactions).shape[0])
-        print('%15s' % f'{triplet_ds_name}-train', get_uncovered_interactions(hoi_ds.interactions, hoi_ds_train_interactions,
+        print('%20s' % triplet_ds_name, get_uncovered_interactions(hoi_ds.interactions, triplet_ds_interactions).shape[0])
+        print('%20s' % f'{triplet_ds_name}-train', get_uncovered_interactions(hoi_ds.interactions, hoi_ds_train_interactions,
                                                                               triplet_ds_interactions).shape[0])
         return triplet_ds_interactions
 
@@ -553,12 +628,10 @@ def check(hoi_ds: HoiDataset):
 
 
 if __name__ == '__main__':
-    from lib.dataset.vghoi import VGHoi
+    from lib.dataset.hico import Hico
 
     # VGCaptions()
     # ActivityNetCaptions()
-
-    # check(Hico())
-
-    cfg.vghoi = True
-    check(VGHoi())
+    check(Hico())
+    # cfg.vghoi = True
+    # check(VGHoi())
