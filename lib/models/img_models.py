@@ -51,7 +51,7 @@ class SKZSMultiModel(AbstractModel):
         else:
             ext_interactions = get_interactions_from_ext_src(self.dataset.full_dataset, include_vg=not cfg.vghoi)
             interactions = np.unique(np.concatenate([self.dataset.interactions, ext_interactions], axis=0), axis=0)
-            print(f'Num interactions: {interactions.shape[0]} = {self.dataset.num_interactions} (train) + {ext_interactions.shape[0]} (ext)')
+            print(f'Num interactions: {interactions.shape[0]} = {self.dataset.num_interactions} (train) & {ext_interactions.shape[0]} (ext)')
         oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)
         oa_adj[interactions[:, 1], interactions[:, 0]] = 1
         oa_adj[:, 0] = 0

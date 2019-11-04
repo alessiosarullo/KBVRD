@@ -45,10 +45,13 @@ def save():
 def show():
     # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl/asl1/2019-09-25_10-25-31_SINGLE']
     # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_Ra/Ra-10-03/2019-09-25_10-25-51_SINGLE/']
-    sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/asl1_Ra-10-03/2019-09-25_14-21-33_SINGLE']
+    # sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/asl1_Ra-10-03/2019-09-25_14-21-33_SINGLE']
+    sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra/wemboo_asl1_Ra-10-03_grseen/2019-10-24_11-59-36_RUN1']
     print(sys.argv)
     cfg.parse_args(fail_if_missing=False)
     cfg.load()
+
+    np.random.seed(3)
 
     dataset = Hico()
     n = 10
