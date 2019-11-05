@@ -26,9 +26,12 @@ def main():
 
     exp_data = get_runs_data(runs, warn=False)
 
-    # Result obtained at the lowest validation action loss.
-    assert np.all(exp_data['Val']['steps'] == exp_data['Test']['steps'])
-    best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
+    if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
+        # Result obtained at the lowest validation action loss.
+        best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
+    else:
+        # FIXME steps should be mapped, instead of just taking the last one
+        best_val_loss_step_per_run = -1
     test_data = exp_data['Test']['values'][measure]
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
     sp = max([len(r) for r in runs])
