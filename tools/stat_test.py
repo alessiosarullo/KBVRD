@@ -31,6 +31,7 @@ def main():
         best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
     else:
         # FIXME steps should be mapped, instead of just taking the last one
+        print('TAKING LAST STEP!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         best_val_loss_step_per_run = -1
     test_data = exp_data['Test']['values'][measure]
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
