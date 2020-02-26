@@ -96,6 +96,7 @@ class Configs:
         self.gcrdim = 1024
         self.gcwemb = False
         self.gcdropout = 0.5
+        self.no_dir = False  # Only use GCN's representations
 
         ##########################################
         # Optimiser options                      #

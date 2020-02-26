@@ -262,8 +262,9 @@ class SKZSMultiModel(AbstractModel):
                             if k == 'act':
                                 seen = seen[1:]
                         if len(all_knowl_logits) > 0:
-                            losses[f'{k}_loss'] = loss_c * bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights[k]) + \
-                                                  loss_c * bce_loss(all_knowl_logits[k][:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
+                            losses[f'{k}_loss'] = loss_c * bce_loss(all_knowl_logits[k][:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
+                            if not cfg.no_dir:
+                                losses[f'{k}_loss'] += loss_c * bce_loss(logits[:, seen], labels[:, seen], pos_weights=self.csp_weights[k])
                             if soft_label_loss_c > 0:
                                 losses[f'{k}_loss_unseen'] = loss_c * soft_label_loss_c * bce_loss(all_knowl_logits[k][:, unseen], labels[:, unseen])
                         else:
@@ -286,8 +287,11 @@ class SKZSMultiModel(AbstractModel):
             else:
                 if self.zs_enabled and len(all_knowl_logits) > 0:
                     for k in all_logits.keys():
-                        unseen = self.unseen_inds[k]
-                        all_logits[k][:, unseen] = all_knowl_logits[k][:, unseen]
+                        if cfg.no_dir:
+                            all_logits[k] = all_knowl_logits[k]
+                        else:
+                            unseen = self.unseen_inds[k]
+                            all_logits[k][:, unseen] = all_knowl_logits[k][:, unseen]
                 prediction = Prediction()
                 interactions = self.dataset.full_dataset.interactions
                 obj_scores = torch.sigmoid(all_logits['obj']).cpu().numpy() ** cfg.osc

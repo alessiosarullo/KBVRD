@@ -18,6 +18,8 @@ class ExtKnowledgeGenericModel(RoiGenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
+        if cfg.no_dir:
+            raise NotImplementedError
 
         ########################################################
         # Base model

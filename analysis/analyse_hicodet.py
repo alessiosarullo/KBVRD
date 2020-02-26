@@ -65,7 +65,7 @@ def stats():
 
 
 def find():
-    split = Splits.TRAIN
+    split = Splits.TEST
     hicodet = HicoDet()
     split_data = hicodet.split_data[split]
 
@@ -73,7 +73,8 @@ def find():
         # ['cook', 'pizza'],
         # ['eat', 'sandwich'],
         # ['eat', 'apple'],
-        ['stab', 'person'],
+        # ['stab', 'person'],
+        ['hug', 'cat'],
     ]
     queries = [hicodet.oa_pair_to_interaction[hicodet.object_index[q[1]], hicodet.action_index[q[0]]]
                for q in queries_str]
