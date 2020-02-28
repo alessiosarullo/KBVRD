@@ -41,9 +41,14 @@ def main():
         # Result obtained at the lowest validation action loss.
         best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
     else:
-        # FIXME steps should be mapped, instead of just taking the last one
-        print('TAKING LAST STEP!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        best_val_loss_step_per_run = -1
+        val_steps = exp_data['Val']['steps']
+        test_steps = exp_data['Test']['steps']
+        valid_val_steps_inds = []
+        for ts in test_steps:
+            inds = np.flatnonzero(val_steps == ts)
+            valid_val_steps_inds.append(inds.item())
+        valid_val_steps_inds = np.array(valid_val_steps_inds)
+        best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'][:, valid_val_steps_inds], axis=1)
     test_data = exp_data['Test']['values'][measure]
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
     sp = max([len(r) for r in runs])
