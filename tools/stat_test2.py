@@ -36,6 +36,7 @@ def main():
         if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
             best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
         else:
+            print(f"{exp_data['Val']['steps'].size} val steps, but only {exp_data['Test']['steps'].size} test steps.")
             val_steps = exp_data['Val']['steps']
             test_steps = exp_data['Test']['steps']
             valid_val_steps_inds = []

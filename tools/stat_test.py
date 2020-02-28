@@ -41,6 +41,7 @@ def main():
         # Result obtained at the lowest validation action loss.
         best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
     else:
+        print(f"{exp_data['Val']['steps'].size} val steps, but only {exp_data['Test']['steps'].size} test steps.")
         val_steps = exp_data['Val']['steps']
         test_steps = exp_data['Test']['steps']
         valid_val_steps_inds = []
