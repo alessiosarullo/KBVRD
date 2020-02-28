@@ -33,8 +33,9 @@ def main():
     test_accs = []
     for exp_data in all_exp_data:
         test_data = exp_data['Test']['values'][measure]
+        val_loss = exp_data['Val']['values']['Act_loss']
         if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
-            best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'], axis=1)
+            best_val_loss_step_per_run = np.argmin(val_loss, axis=1)
         else:
             print(f"{exp_data['Val']['steps'].size} val steps, but only {exp_data['Test']['steps'].size} test steps.")
             val_steps = exp_data['Val']['steps']
@@ -44,7 +45,7 @@ def main():
                 inds = np.flatnonzero(val_steps == ts)
                 valid_val_steps_inds.append(inds.item())
             valid_val_steps_inds = np.array(valid_val_steps_inds)
-            best_val_loss_step_per_run = np.argmin(exp_data['Val']['values']['Act_loss'][:, valid_val_steps_inds], axis=1)
+            best_val_loss_step_per_run = np.argmin(val_loss[:, valid_val_steps_inds], axis=1)
         test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
         sp = max([len(r) for r in runs])
         print(f'{"Mean":>{sp}s} {np.mean(test_accuracy_per_run):8.5f}')
