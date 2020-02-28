@@ -12,10 +12,21 @@ def main():
     parser.add_argument('dir')
     parser.add_argument('measure')
     parser.add_argument('baseline', type=float)
+    parser.add_argument('--debug', action='store_true')
     args = parser.parse_args()
     dir = args.dir
     measure = args.measure
     baseline = args.baseline
+
+    if args.debug:
+        try:  # PyCharm debugging
+            print('Starting remote debugging (resume from debug server)')
+            import pydevd_pycharm
+            pydevd_pycharm.settrace('130.88.195.105', port=16003, stdoutToServer=True, stderrToServer=True)
+            print('Remote debugging activated.')
+        except:
+            print('Remote debugging failed.')
+            raise
 
     print(dir)
     runs = []
