@@ -33,7 +33,11 @@ def main():
     test_accs = []
     for exp_data in all_exp_data:
         test_data = exp_data['Test']['values'][measure]
-        val_loss = exp_data['Val']['values']['Act_loss']
+        val_loss = 0
+        for k in exp_data['Val']['values']:
+            if 'Act' in k and 'loss' in k:
+                val_loss += exp_data['Val']['values'][k]
+        
         if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
             best_val_loss_step_per_run = np.argmin(val_loss, axis=1)
         else:

@@ -36,7 +36,10 @@ def main():
     runs = sorted(runs)
 
     exp_data = get_runs_data(runs, warn=False)
-    val_loss = exp_data['Val']['values']['Act_loss']
+    val_loss = 0
+    for k in exp_data['Val']['values']:
+        if 'Act' in k and 'loss' in k:
+            val_loss += exp_data['Val']['values'][k]
 
     if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
         # Result obtained at the lowest validation action loss.
