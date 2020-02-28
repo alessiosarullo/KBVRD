@@ -36,7 +36,8 @@ def main():
     runs = sorted(runs)
 
     exp_data = get_runs_data(runs, warn=False)
-    val_losses = np.stack([v for k, v in exp_data['Val']['values'].items() if 'Act' in k and 'loss' in k], axis=0)
+    # val_losses = np.stack([v for k, v in exp_data['Val']['values'].items() if 'Act' in k and 'loss' in k], axis=0)
+    val_losses = exp_data['Val']['values']['Act loss']
 
     # Result obtained at the lowest validation action loss.
     if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
@@ -50,10 +51,10 @@ def main():
             inds = np.flatnonzero(val_steps == ts)
             valid_val_steps_inds.append(inds.item())
         valid_val_steps_inds = np.array(valid_val_steps_inds)
-        val_losses = val_losses[:, :, valid_val_steps_inds]
+        val_losses = val_losses[..., valid_val_steps_inds]
 
-    # best_val_loss_step_per_run = np.argmin(val_losses, axis=1)
-    best_val_loss_step_per_run = np.argmin(rank(val_losses).mean(axis=0), axis=1)
+    best_val_loss_step_per_run = np.argmin(val_losses, axis=1)
+    # best_val_loss_step_per_run = np.argmin(rank(val_losses).mean(axis=0), axis=1)
 
     test_data = exp_data['Test']['values'][measure]
     test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
