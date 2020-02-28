@@ -1,5 +1,6 @@
 import os
 import time
+import warnings
 from typing import Dict
 
 import numpy as np
@@ -101,7 +102,9 @@ def get_runs_data(runs, warn=True):
     :return: data: dict with one entry per split. Each entry is `split`: {'values': dict, 'steps': list}. Values is another dict in the form
         `metric`: NumPy array [num_runs, num_steps]. Example: data['Train']['values']['Act_loss'][0, :].
     """
-    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
     data = {'Train': {}, 'Val': {}, 'Test': {}}
     for split in data.keys():
