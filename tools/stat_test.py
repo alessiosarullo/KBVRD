@@ -50,7 +50,7 @@ def main():
             inds = np.flatnonzero(val_steps == ts)
             valid_val_steps_inds.append(inds.item())
         valid_val_steps_inds = np.array(valid_val_steps_inds)
-        val_losses = val_losses[:, valid_val_steps_inds, :]
+        val_losses = val_losses[:, :, valid_val_steps_inds]
 
     # best_val_loss_step_per_run = np.argmin(val_losses, axis=1)
     best_val_loss_step_per_run = np.argmin(rank(val_losses).mean(axis=0), axis=1)
