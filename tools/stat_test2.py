@@ -4,7 +4,7 @@ import os
 import numpy as np
 import scipy.stats
 
-from lib.utils import get_runs_data
+from lib.utils import get_runs_data, rank
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
     test_accs = []
     for exp_data in all_exp_data:
         test_data = exp_data['Test']['values'][measure]
-        val_losses = np.stack([v for k, v in exp_data['Val']['values'].items() if 'Act' in k and 'loss' in k], axis=2)
+        val_losses = np.stack([v for k, v in exp_data['Val']['values'].items() if 'Act' in k and 'loss' in k], axis=0)
 
         if np.all(exp_data['Val']['steps'] == exp_data['Test']['steps']):
             val_losses = val_losses
@@ -49,7 +49,7 @@ def main():
             val_losses = val_losses[:, valid_val_steps_inds, :]
 
         # best_val_loss_step_per_run = np.argmin(val_losses, axis=1)
-        best_val_loss_step_per_run = np.argsort(val_losses, axis=1).mean(axis=2)[:, 0]
+        best_val_loss_step_per_run = np.argmin(rank(val_losses).mean(axis=0), axis=1)
 
         test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
         sp = max([len(r) for r in runs])

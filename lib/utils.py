@@ -128,3 +128,13 @@ def get_runs_data(runs, warn=True):
 
         data[split] = {'values': values_per_tag, 'steps': steps}
     return data
+
+
+def rank(a):
+    # measures x runs x epochs
+    ranks = np.empty_like(a)
+    for i, m in enumerate(a):
+        for j, r in enumerate(m):
+            inds = np.argsort(r)
+            ranks[i, j, inds] = np.arange(r.size)
+    return ranks
