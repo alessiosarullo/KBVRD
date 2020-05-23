@@ -45,8 +45,9 @@ def save():
 
 
 def show():
-    exp = ''
-    fig_fn = f'/home/alex/Dropbox/PhD Docs/My stuff/Conferences/Second paper/v8/images/tsne{"_" if exp else ""}{exp}.png'
+    exp = 'glove'
+    fig_fn = f'/home/alex/Dropbox/PhD Docs/My stuff/Conferences/Second paper/' +\
+             f'v8.4 (Submitted ECCV - Rebuttal long)/images/tsne{"_" if exp else ""}{exp}.png'
 
     groups = {}
     offsets = {}
@@ -417,12 +418,10 @@ def show():
     elif exp == 'sl_ra_ext':
         sys.argv[1:] = ['--save_dir', 'output/skzs/hico_zsk_gc_nobg_sl_Ra_ext2/wemboo_asl1_Ra-10-03_grseen/2019-10-24_13-32-02_RUN2']
         # perplexity = 40.0
+    elif exp == 'glove':
+        pass
     else:
         raise NotImplementedError
-
-    print(sys.argv)
-    cfg.parse_args(fail_if_missing=False)
-    cfg.load()
 
     dataset = Hico()
     n = 10
@@ -436,12 +435,24 @@ def show():
         print(f'{a:20s}', end=' ')
     print()
 
-    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    if exp != 'glove':
+        print(sys.argv)
+        cfg.parse_args(fail_if_missing=False)
+        cfg.load()
+        inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    else:
+        inds_dict = pickle.load(open('zero-shot_inds/seen_inds_0.pkl.push', 'rb'))
+
     seen_act_inds = np.array(sorted(inds_dict[Splits.TRAIN.value]['act'].tolist()))
     unseen_act_inds = np.setdiff1d(np.arange(dataset.num_actions), seen_act_inds)
     seen_act_inds = np.setdiff1d(seen_act_inds, np.array([0]))  # remove null
 
-    act_class_embs = np.load(os.path.join(cfg.output_analysis_path, 'act_embs.npy'))
+    if exp == 'glove':
+        from lib.dataset.word_embeddings import WordEmbeddings
+        word_embs = WordEmbeddings(source='glove', dim=300, normalize=True)
+        act_class_embs = word_embs.get_embeddings(dataset.actions, retry='avg')
+    else:
+        act_class_embs = np.load(os.path.join(cfg.output_analysis_path, 'act_embs.npy'))
     act_emb_2d = TSNE(perplexity=perplexity).fit_transform(act_class_embs)
 
     fig, ax = plt.subplots(figsize=(14.4, 9))
@@ -480,7 +491,7 @@ def show():
 
 
 if __name__ == '__main__':
-    if torch.cuda.is_available():
-        save()
-    else:
-        show()
+    # if torch.cuda.is_available():
+    #     save()
+    # else:
+    show()

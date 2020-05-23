@@ -8,7 +8,7 @@ from config import cfg
 
 
 class WordEmbeddings:
-    def __init__(self, source='numberbatch', dim=None, normalize=False):
+    def __init__(self, source='glove', dim=None, normalize=False):
         """
         Attributes:
             embeddings: [array] NxD matrix consisting of N D-dimensional embeddings

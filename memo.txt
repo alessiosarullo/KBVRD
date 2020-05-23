@@ -1,0 +1,4 @@
+- Previous experiments on HICO-DET use a seen class file (denoted "f1" in experiments' name) that
+    has been deleted. See previous versions of the file (before 2020/05/23) to recover it.
+    - "f2" has been deleted as well, but that is just `seen_inds_0.pkl.push` with all objects as seen. It
+        has now been recreated under the name `seen_inds_10.pkl.push`.
