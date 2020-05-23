@@ -74,25 +74,45 @@ class Launcher:
         torch.cuda.manual_seed(seed)
         print('RNG seed:', seed)
 
+        if cfg.hicodet:
+            ds_split_class = HicoDetSingleHOIsSplit
+        else:
+            if cfg.vghoi:
+                ds_split_class = VGHoiSplit
+            else:
+                ds_split_class = HicoSplit
+
         # Data
         # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
-        inds = {k: None for k in ['obj', 'act', 'hoi']}
+        inds = {k: None for k in ['obj', 'act']}
         if cfg.seenf >= 0:
             inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
-            for k in ['obj', 'act', 'hoi']:
+            for k in inds.keys():
                 try:
                     inds[k] = sorted(inds_dict[Splits.TRAIN.value][k].tolist())
                 except KeyError:
                     pass
 
-        if cfg.hicodet:
-            splits = HicoDetSingleHOIsSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
-            splits[Splits.TEST] = HicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
-        else:
-            if cfg.vghoi:
-                splits = VGHoiSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
+        if cfg.unseen_ratio < 1:
+            full_ds = ds_split_class.get_full_dataset()
+            if cfg.unseen_ratio == 0:
+                inds['obj'] = inds['act'] = None
             else:
-                splits = HicoSplit.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
+                if inds['obj'] is None:
+                    inds['obj'] = sorted(range(full_ds.num_objects))
+                unseen_objs = set(range(full_ds.num_objects)) - set(inds['obj'])
+                new_seen_objs = random.sample(unseen_objs, int(len(unseen_objs) * cfg.unseen_ratio))
+                inds['obj'] = sorted(set(inds['obj']) | set(new_seen_objs))
+
+                if inds['act'] is None:
+                    inds['act'] = sorted(range(full_ds.num_actions))
+                unseen_acts = set(range(full_ds.num_actions)) - set(inds['act'])
+                new_seen_acts = random.sample(unseen_acts, int(len(unseen_acts) * cfg.unseen_ratio))
+                inds['act'] = sorted(set(inds['act']) | set(new_seen_acts))
+
+        splits = ds_split_class.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
+        if cfg.hicodet:
+            splits[Splits.TEST] = HicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
         self.train_split, self.val_split, self.test_split = splits[Splits.TRAIN], splits[Splits.VAL], splits[Splits.TEST]
 
         # Model

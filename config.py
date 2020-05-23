@@ -89,6 +89,7 @@ class Configs:
         self.wemb_a = False
         self.oracle = False  # Use full dataset's interactions (including test set)
         self.no_ext = False  # [Only used if previous is False] Do not add interactions from external sources (i.e., use train only).
+        self.unseen_ratio = 1.0  # Whether to filter out some unseen classes or use all of them. Used for ablation for ECCV reviewer1.
 
         # ZS GCN specific
         self.no_gc = False
