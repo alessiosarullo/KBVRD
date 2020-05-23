@@ -12,7 +12,7 @@ def mean_confidence_interval(data, confidence=0.95):
     n = len(a)
     m, sem = np.mean(a), scipy.stats.sem(a)
     h = sem * scipy.stats.t.ppf((1 + confidence) / 2., n - 1)
-    return m, m - h, m + h
+    return m, h, m - h, m + h
 
 def main():
     parser = argparse.ArgumentParser()
@@ -82,8 +82,9 @@ def main():
     print(f'p = {pvalue:11.2e}')
 
     significance_level = 0.99
-    _, lower, upper = mean_confidence_interval(data=results, confidence=significance_level)
-    print(f'{significance_level * 100:.0f}% confidence interval: [{lower:8.5f}, {upper:8.5f}].')
+    m, h, lower, upper = mean_confidence_interval(data=results, confidence=significance_level)
+    print(f'{significance_level * 100:.0f}% confidence interval: [{lower:8.5f}, {upper:8.5f}] = {m:8.5f} ± {h:8.5f}.')
+
 
 if __name__ == '__main__':
     main()
