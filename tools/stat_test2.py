@@ -18,16 +18,16 @@ def main():
     measure = args.measure
 
     print(dir1, dir2)
-    runs = []
+    runs_sets = []
     for wd in [dir1, dir2]:
         runs_wd = []
         for run_dir in os.listdir(wd):
             if 'RUN' in run_dir:
                 runs_wd.append(os.path.join(wd, run_dir))
         runs_wd = sorted(runs_wd)
-        runs.append(runs_wd)
+        runs_sets.append(runs_wd)
 
-    all_exp_data = [get_runs_data(run) for run in runs]
+    all_exp_data = [get_runs_data(runs) for runs in runs_sets]
 
     # Result obtained at the lowest validation action loss.
     test_accs = []
@@ -53,7 +53,7 @@ def main():
         # best_val_loss_step_per_run = np.argmin(rank(val_losses).mean(axis=0), axis=1)
 
         test_accuracy_per_run = test_data[np.arange(test_data.shape[0]), best_val_loss_step_per_run]
-        sp = max([len(r) for r in runs])
+        sp = max([len(r) for r in runs_sets])
         print(f'{"Mean":>{sp}s} {np.mean(test_accuracy_per_run):8.5f}')
         print(f'{"Std":>{sp}s} {np.std(test_accuracy_per_run):8.5f}')
         test_accs.append(test_accuracy_per_run)

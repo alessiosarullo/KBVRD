@@ -7,6 +7,13 @@ import scipy.stats
 from lib.utils import get_runs_data, rank
 
 
+def mean_confidence_interval(data, confidence=0.95):
+    a = np.array(data).astype(dtype=np.float, copy=False)
+    n = len(a)
+    m, sem = np.mean(a), scipy.stats.sem(a)
+    h = sem * scipy.stats.t.ppf((1 + confidence) / 2., n - 1)
+    return m, m - h, m + h
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
@@ -74,6 +81,9 @@ def main():
     print(f'{measure:>15s}')
     print(f'p = {pvalue:11.2e}')
 
+    significance_level = 0.99
+    _, lower, upper = mean_confidence_interval(data=results, confidence=significance_level)
+    print(f'{significance_level * 100:.0f}% confidence interval: [{lower:8.5f}, {upper:8.5f}].')
 
 if __name__ == '__main__':
     main()
