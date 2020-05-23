@@ -93,23 +93,6 @@ class Launcher:
                 except KeyError:
                     pass
 
-        if cfg.unseen_ratio < 1:
-            full_ds = ds_split_class.get_full_dataset()
-            if cfg.unseen_ratio == 0:
-                inds['obj'] = inds['act'] = None
-            else:
-                if inds['obj'] is None:
-                    inds['obj'] = sorted(range(full_ds.num_objects))
-                unseen_objs = set(range(full_ds.num_objects)) - set(inds['obj'])
-                new_seen_objs = random.sample(unseen_objs, int(len(unseen_objs) * (1 - cfg.unseen_ratio)))
-                inds['obj'] = sorted(set(inds['obj']) | set(new_seen_objs))
-
-                if inds['act'] is None:
-                    inds['act'] = sorted(range(full_ds.num_actions))
-                unseen_acts = set(range(full_ds.num_actions)) - set(inds['act'])
-                new_seen_acts = random.sample(unseen_acts, int(len(unseen_acts) * (1 - cfg.unseen_ratio)))
-                inds['act'] = sorted(set(inds['act']) | set(new_seen_acts))
-
         splits = ds_split_class.get_splits(obj_inds=inds['obj'], act_inds=inds['act'])
         if cfg.hicodet:
             splits[Splits.TEST] = HicoDetImgSplit(split=Splits.TEST, full_dataset=splits[Splits.TRAIN].full_dataset)
