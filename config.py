@@ -89,6 +89,7 @@ class Configs:
         self.wemb_a = False
         self.oracle = False  # Use full dataset's interactions (including test set)
         self.no_ext = False  # [Only used if previous is False] Do not add interactions from external sources (i.e., use train only).
+        self.extgraphf = -1  # [Only used if previous two are False] ID of graph file. If -1 the graph will be computed rather than loaded.
 
         # ZS GCN specific
         self.no_gc = False
@@ -179,12 +180,22 @@ class Configs:
         return os.path.join(self.output_path, 'ds_inds.pkl')
 
     @property
-    def active_classes_file(self):
+    def zs_dir(self):
+        return 'zero_shot_files'
+
+    @property
+    def seen_classes_file(self):
         assert self.seenf >= 0
         if self.vghoi:
-            return os.path.join('zero-shot_inds', 'seen_inds_vghoi.pkl.push')
+            return os.path.join(self.zs_dir, 'seen_inds_vghoi.pkl.push')
         else:
-            return os.path.join('zero-shot_inds', f'seen_inds_{self.seenf}.pkl.push')
+            return os.path.join(self.zs_dir, f'seen_inds_{self.seenf}.pkl.push')
+
+    @property
+    def ext_graph_file(self):
+        assert self.extgraphf >= 0
+        assert not self.vghoi  # not supported (yet?)
+        return os.path.join(self.zs_dir, f'ext_graph_{self.extgraphf}.pkl.push')
 
     @property
     def tensorboard_dir(self):

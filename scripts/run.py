@@ -86,7 +86,7 @@ class Launcher:
         # Load inds from configs. Note that these might be None after this step, which means all possible indices will be used.
         inds = {k: None for k in ['obj', 'act']}
         if cfg.seenf >= 0:
-            inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+            inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
             for k in inds.keys():
                 try:
                     inds[k] = sorted(inds_dict[Splits.TRAIN.value][k].tolist())

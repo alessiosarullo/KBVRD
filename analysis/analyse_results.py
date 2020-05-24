@@ -458,7 +458,7 @@ def zs_stats():
     res_save_path = cfg.output_analysis_path
     os.makedirs(res_save_path, exist_ok=True)
 
-    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
     seen_act_inds = sorted(inds_dict[Splits.TRAIN.value]['pred'].tolist())
     seen_obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
 
@@ -636,7 +636,7 @@ def visualise_images():
     hds_fns = hd.split_filenames[split]
 
     assert cfg.seenf >= 0
-    inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+    inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
     obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
     act_inds = sorted(inds_dict[Splits.TRAIN.value]['act'].tolist())
 

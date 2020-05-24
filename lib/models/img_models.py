@@ -13,7 +13,7 @@ from lib.dataset.word_embeddings import WordEmbeddings
 from lib.models.abstract_model import AbstractModel
 from lib.models.gcns import HicoGCN, WEmbHicoGCN
 from lib.models.misc import bce_loss
-from lib.dataset.ext_source import get_interactions_from_ext_src
+import pickle
 
 
 class SKZSMultiModel(AbstractModel):
@@ -49,7 +49,14 @@ class SKZSMultiModel(AbstractModel):
             interactions = self.dataset.interactions
             print(f'Num interactions: {interactions.shape[0]} (train)')
         else:
-            ext_interactions = get_interactions_from_ext_src(self.dataset.full_dataset, include_vg=not cfg.vghoi)
+            if cfg.extgraphf < 0:
+                from lib.dataset.ext_source import get_interactions_from_ext_src
+                print('Mining affordance graph from external sources.')
+                ext_interactions = get_interactions_from_ext_src(self.dataset.full_dataset, include_vg=not cfg.vghoi)
+            else:
+                print(f'Loading affordance graph from file {cfg.ext_graph_file}.')
+                with open(cfg.ext_graph_file, 'rb') as f:
+                    ext_interactions = pickle.load(f)
             interactions = np.unique(np.concatenate([self.dataset.interactions, ext_interactions], axis=0), axis=0)
             print(f'Num interactions: {interactions.shape[0]} = {self.dataset.num_interactions} (train) & {ext_interactions.shape[0]} (ext)')
         oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)

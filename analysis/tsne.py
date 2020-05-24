@@ -21,7 +21,7 @@ def save():
     cfg.load()
 
     if cfg.seenf >= 0:
-        inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+        inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
         act_inds = sorted(inds_dict[Splits.TRAIN.value]['act'].tolist())
         obj_inds = sorted(inds_dict[Splits.TRAIN.value]['obj'].tolist())
     else:
@@ -439,7 +439,7 @@ def show():
         print(sys.argv)
         cfg.parse_args(fail_if_missing=False)
         cfg.load()
-        inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+        inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
     else:
         inds_dict = pickle.load(open('zero-shot_inds/seen_inds_0.pkl.push', 'rb'))
 

@@ -548,7 +548,7 @@ def get_interactions_from_ext_src(hoi_ds: HoiDataset, include_vg):
 def check(hoi_ds: HoiDataset):
     def get_seen_interactions(hoi_ds: HoiDataset, seenf=0):
         cfg.seenf = seenf
-        inds_dict = pickle.load(open(cfg.active_classes_file, 'rb'))
+        inds_dict = pickle.load(open(cfg.seen_classes_file, 'rb'))
         obj_inds = sorted(inds_dict['train']['obj'].tolist())
         act_inds = sorted(inds_dict['train']['act'].tolist())
         interactions_inds = np.setdiff1d(np.unique(hoi_ds.oa_pair_to_interaction[obj_inds, :][:, act_inds]), np.array([-1]))
