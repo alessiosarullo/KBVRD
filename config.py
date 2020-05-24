@@ -181,7 +181,7 @@ class Configs:
 
     @property
     def zs_dir(self):
-        return 'zero_shot_files'
+        return 'zero-shot_files'
 
     @property
     def seen_classes_file(self):
