@@ -14,6 +14,7 @@ def mean_confidence_interval(data, confidence=0.95):
     h = sem * scipy.stats.t.ppf((1 + confidence) / 2., n - 1)
     return m, h, m - h, m + h
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('dir')
