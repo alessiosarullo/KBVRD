@@ -36,11 +36,8 @@ class HicoDetSingleHOIsSplit(HicoDetSplit):
         if self.active_objects.size < self.full_dataset.num_objects:
             inactive_objects = set(range(self.full_dataset.num_objects)) - set(self.active_objects.tolist())
             new_bg_inds = np.array([i for i, l in enumerate(self.pc_box_labels) if l in inactive_objects])
-            try:
+            if new_bg_inds.size > 0:
                 self.pc_box_labels[new_bg_inds] = -1
-            except IndexError:
-                print(new_bg_inds.shape, new_bg_inds.dtype)
-                raise
         if len(self.active_actions) < self.full_dataset.num_actions:
             assert self.split != Splits.TEST
             inactive_actions = np.array(sorted(set(range(self.full_dataset.num_actions)) - set(self.active_actions.tolist())))
