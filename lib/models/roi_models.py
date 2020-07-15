@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -65,9 +66,15 @@ class ExtKnowledgeGenericModel(RoiGenericModel):
         elif cfg.no_ext:
             interactions = self.dataset.interactions
         else:
-            interactions = self.dataset.interactions
-            # TODO
-            raise NotImplementedError()
+            if cfg.extgraphf < 0:
+                # TODO
+                raise NotImplementedError()
+            else:
+                print(f'Loading affordance graph from file {cfg.ext_graph_file}.')
+                with open(cfg.ext_graph_file, 'rb') as f:
+                    ext_interactions = pickle.load(f)
+            interactions = np.unique(np.concatenate([self.dataset.interactions, ext_interactions], axis=0), axis=0)
+            print(f'Num interactions: {interactions.shape[0]} = {self.dataset.num_interactions} (train) & {ext_interactions.shape[0]} (ext)')
         oa_adj = np.zeros([self.dataset.full_dataset.num_objects, self.dataset.full_dataset.num_actions], dtype=np.float32)
         oa_adj[interactions[:, 1], interactions[:, 0]] = 1
         oa_adj[:, 0] = 0
