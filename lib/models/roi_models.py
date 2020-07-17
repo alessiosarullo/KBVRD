@@ -205,7 +205,6 @@ class GCModel(ExtKnowledgeGenericModel):
 
         if cfg.apr > 0:
             self.vv_adj = nn.Parameter((self.oa_adj.t() @ self.oa_adj).clamp(max=1).byte(), requires_grad=False)
-            assert (self.vv_adj.diag()[1:] == 1).all()
 
     def _get_losses(self, vis_output: PrecomputedMinibatch, outputs):
         gc_logits, dir_logits, labels, reg_loss = outputs
