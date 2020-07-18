@@ -259,11 +259,14 @@ class GCModel(ExtKnowledgeGenericModel):
             unseen = self.unseen_act_inds
 
             # Detach seen classes predictors
-            all_trainable_predictors = act_predictors
-            predictors_seen = act_predictors[seen, :].detach()
-            predictors_unseen = act_predictors[unseen, :]
-            predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
-            assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
+            if cfg.grseen:
+                predictors = act_predictors
+            else:
+                all_trainable_predictors = act_predictors
+                predictors_seen = act_predictors[seen, :].detach()
+                predictors_unseen = act_predictors[unseen, :]
+                predictors = torch.cat([predictors_seen, predictors_unseen], dim=0)[torch.sort(torch.cat([seen, unseen]))[1]]
+                assert (all_trainable_predictors[seen] == predictors[seen]).all() and (all_trainable_predictors[unseen] == predictors[unseen]).all()
 
             predictors_norm = F.normalize(predictors, dim=1)
             predictors_sim = predictors_norm @ predictors_norm.t()
