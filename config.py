@@ -136,6 +136,10 @@ class Configs:
         return 'cache'
 
     @property
+    def cache_ext_root(self):
+        return os.path.join(self.cache_root, 'ext')
+
+    @property
     def embedding_dir(self):
         return os.path.join(self.data_root, 'embeddings')
 

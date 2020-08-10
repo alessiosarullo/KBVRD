@@ -276,7 +276,7 @@ class VG(ExtSource):
 
     def _load(self):
         try:
-            with open(os.path.join(cfg.cache_root, 'vg_parsed_rels.pkl'), 'rb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'vg_parsed_rels.pkl'), 'rb') as f:
                 triplets_str = pickle.load(f)
         except FileNotFoundError:
             d = json.load(open('data/VG/relationships.json', 'r'))
@@ -360,7 +360,7 @@ class ImSitu(ExtSource):
         self.nouns, self.verbs, verb_instances_per_subj = self._load_raw_data()
 
         try:
-            with open(os.path.join(cfg.cache_root, 'imsitu_triplets.pkl'), 'rb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'imsitu_triplets.pkl'), 'rb') as f:
                 triplets_str = pickle.load(f)
         except FileNotFoundError:
             triplets_str = []
@@ -372,7 +372,7 @@ class ImSitu(ExtSource):
                         o = self.nouns[wn_o]['gloss'][0]
                         triplets_str.append([s, v, o])
 
-            with open(os.path.join(cfg.cache_root, 'imsitu_triplets.pkl'), 'wb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'imsitu_triplets.pkl'), 'wb') as f:
                 pickle.dump(triplets_str, f)
         return triplets_str
 
@@ -470,21 +470,21 @@ class VGCaptions(ExtSource):
 
     def _load(self):
         try:
-            with open(os.path.join(cfg.cache_root, 'vg_triplets.pkl'), 'rb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'vg_triplets.pkl'), 'rb') as f:
                 triplets_str = pickle.load(f)
         except FileNotFoundError:
             try:
-                with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'r') as f:
+                with open(os.path.join(cfg.cache_ext_root, 'vg_region_descriptions.txt'), 'r') as f:
                     captions = [l.strip() for l in f.readlines()]
             except FileNotFoundError:
                 assert False  # FIXME remove
                 captions = json.load(open(os.path.join(cfg.data_root, 'region_descriptions.json'), 'r'))
                 captions = [r['phrase'] for rd in captions for r in rd['regions']]
-                with open(os.path.join(cfg.cache_root, 'vg_region_descriptions.txt'), 'w') as f:
+                with open(os.path.join(cfg.cache_ext_root, 'vg_region_descriptions.txt'), 'w') as f:
                     f.write('\n'.join(captions))
 
             triplets_str = self._normalise_triplets(_parse_sentences(captions, required_words=self.required_words))
-            with open(os.path.join(cfg.cache_root, 'vg_triplets.pkl'), 'wb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'vg_triplets.pkl'), 'wb') as f:
                 pickle.dump(triplets_str, f)
         return triplets_str
 
@@ -496,7 +496,7 @@ class ActivityNetCaptions(ExtSource):
 
     def _load(self):
         try:
-            with open(os.path.join(cfg.cache_root, 'anet_triplets.pkl'), 'rb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'anet_triplets.pkl'), 'rb') as f:
                 triplets_str = pickle.load(f)
         except FileNotFoundError:
             d = json.load(open(os.path.join(cfg.data_root, 'VideoCaptions', 'train.json'), 'r'))
@@ -505,7 +505,7 @@ class ActivityNetCaptions(ExtSource):
             parsed_triplets = _parse_sentences(captions, required_words=self.required_words)
             triplets_str = self._normalise_triplets(parsed_triplets)
 
-            with open(os.path.join(cfg.cache_root, 'anet_triplets.pkl'), 'wb') as f:
+            with open(os.path.join(cfg.cache_ext_root, 'anet_triplets.pkl'), 'wb') as f:
                 pickle.dump(triplets_str, f)
 
         triplets_str = [[s, p, o] for s, p, o in triplets_str if s and p and o]
@@ -513,7 +513,7 @@ class ActivityNetCaptions(ExtSource):
 
 
 def get_interactions_from_old_vgcap(hoi_ds: HoiDataset):
-    with open(os.path.join(cfg.cache_root, 'vg_action_objects.pkl'), 'rb') as f:
+    with open(os.path.join(cfg.cache_ext_root, 'vg_action_objects.pkl'), 'rb') as f:
         objs_per_actions = pickle.load(f)
     interactions = np.array(
         [[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
