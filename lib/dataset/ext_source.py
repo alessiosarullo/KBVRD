@@ -513,7 +513,7 @@ class ActivityNetCaptions(ExtSource):
 
 
 def get_interactions_from_old_vgcap(hoi_ds: HoiDataset):
-    with open(os.path.join(cfg.cache_ext_root, 'vg_action_objects.pkl'), 'rb') as f:
+    with open(os.path.join(cfg.cache_ext_root, 'vg_action_objects_old.pkl'), 'rb') as f:
         objs_per_actions = pickle.load(f)
     interactions = np.array(
         [[hoi_ds.action_index.get(a, -1), hoi_ds.object_index.get(o, -1)] for a, objs in objs_per_actions.items() for o in objs])
