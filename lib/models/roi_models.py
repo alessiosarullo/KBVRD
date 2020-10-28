@@ -19,9 +19,6 @@ class ExtKnowledgeGenericModel(RoiGenericModel):
 
     def __init__(self, dataset: HicoDetSingleHOIsSplit, **kwargs):
         super().__init__(dataset, **kwargs)
-        if cfg.no_dir:
-            raise NotImplementedError
-
         ########################################################
         # Base model
         ########################################################
@@ -217,12 +214,13 @@ class GCModel(ExtKnowledgeGenericModel):
             if not cfg.train_null:
                 seen = seen[1:]
 
-            losses['act_loss'] = bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights) + \
-                                 bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
-            # losses['act_loss'] = bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            losses['act_loss'] = bce_loss(gc_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
+            if not cfg.no_dir:
+                losses['act_loss'] += bce_loss(dir_logits[:, seen], labels[:, seen], pos_weights=self.csp_weights)
             if soft_label_loss_c > 0:
                 losses['act_loss_unseen'] = soft_label_loss_c * bce_loss(gc_logits[:, unseen], labels[:, unseen])
         else:
+            assert not cfg.no_dir
             if not cfg.train_null:
                 labels = labels[:, 1:]
                 dir_logits = dir_logits[:, 1:]
@@ -234,9 +232,12 @@ class GCModel(ExtKnowledgeGenericModel):
 
     def _finalize_prediction(self, prediction: Prediction, vis_output: PrecomputedMinibatch, outputs):
         gc_logits, dir_logits, labels, reg_loss = outputs
-        logits = dir_logits
-        if self.zs_enabled:
-            logits[:, self.unseen_act_inds] = gc_logits[:, self.unseen_act_inds]
+        if cfg.no_dir:
+            logits = gc_logits
+        else:
+            logits = dir_logits
+            if self.zs_enabled:
+                logits[:, self.unseen_act_inds] = gc_logits[:, self.unseen_act_inds]
         prediction.action_scores = torch.sigmoid(logits).cpu().numpy()
 
     def _forward(self, vis_output: PrecomputedMinibatch, **kwargs):
