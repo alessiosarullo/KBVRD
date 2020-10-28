@@ -109,9 +109,13 @@ def get_runs_data(runs, warn=True):
     data = {'Train': {}, 'Val': {}, 'Test': {}}
     for split in data.keys():
         summary_iterators = [EventAccumulator(os.path.join(p, 'tboard', split)).Reload() for p in runs]
-        tags = summary_iterators[0].Tags()['scalars']
+        tags = None
         for it in summary_iterators:
-            assert it.Tags()['scalars'] == tags, (it.Tags()['scalars'], tags)
+            _tags = summary_iterators[0].Tags()['scalars']
+            if _tags:
+                tags = _tags
+                assert it.Tags()['scalars'] == tags, (it.Tags()['scalars'], tags)
+        assert tags is not None
 
         values_per_tag = {}
         steps = []
